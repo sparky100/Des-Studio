@@ -132,9 +132,9 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, profile
   };
   return (
     <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={openFromKeyboard} aria-label={`Open model ${model.name}`}
-      style={{ background: C.panel, border: `1px solid ${C.border}`, borderLeft: `3px solid ${model.visibility === "public" ? C.green : C.accent}`, borderRadius: 8, padding: 16, cursor: "pointer", display: "flex", flexDirection: "column", gap: 10, textAlign: "left", color: "inherit", width: "100%" }}
-      onMouseEnter={e => e.currentTarget.style.borderColor = C.accent}
-      onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
+      style={{ background: C.panel, border: `1px solid ${C.border}`, borderLeft: `3px solid ${model.visibility === "public" ? C.green : C.accent}`, borderRadius: 8, padding: 16, cursor: "pointer", display: "flex", flexDirection: "column", gap: 10, textAlign: "left", color: "inherit", width: "100%", transition: "border-color 0.1s" }}
+      onMouseEnter={e => { e.currentTarget.style.borderRightColor = C.accent; e.currentTarget.style.borderTopColor = C.accent; e.currentTarget.style.borderBottomColor = C.accent; }}
+      onMouseLeave={e => { e.currentTarget.style.borderRightColor = C.border; e.currentTarget.style.borderTopColor = C.border; e.currentTarget.style.borderBottomColor = C.border; }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: C.text, fontFamily: FONT, lineHeight: 1.3 }}>
           {model.name}
@@ -525,7 +525,7 @@ export function ModelLibrary({
             </div>
             {visible.length === 0
               ? <div style={{ color: C.muted, fontSize: 12, padding: "24px 0", textAlign: "center" }}>No templates match your search.</div>
-              : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 10 }}>
+              : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
                 {visible.map(t => {
                   const dc = DOMAIN_COLORS[t.domain] || C.accent;
                   const startTemplate = () => {
@@ -539,20 +539,22 @@ export function ModelLibrary({
                   return (
                     <div key={t.id} role="button" tabIndex={0} aria-label={`Try ${t.name}`}
                       onClick={startTemplate} onKeyDown={e => { if (e.key === "Enter") startTemplate(); }}
-                      style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, cursor: "pointer", display: "flex", flexDirection: "column", gap: 6 }}
-                      onMouseEnter={e => e.currentTarget.style.borderColor = dc + "88"} onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 4 }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>{t.name}</div>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: dc, background: dc + "22", borderRadius: 8, padding: "2px 6px", whiteSpace: "nowrap", flexShrink: 0 }}>{t.domain}</div>
+                      style={{ background: C.panel, border: `1px solid ${C.border}`, borderLeft: `3px solid ${dc}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 8, transition: "border-color 0.1s" }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = dc}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>{t.name}</div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: dc, background: dc + "22", borderRadius: 8, padding: "2px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>{t.domain}</div>
                       </div>
-                      {t.templateMeta?.scenarioType && <div style={{ fontSize: 10, color: C.accent, fontWeight: 600 }}>{t.templateMeta.scenarioType}</div>}
-                      <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.description}</div>
+                      {t.templateMeta?.scenarioType && (
+                        <div style={{ fontSize: 11, color: C.accent, fontWeight: 600, lineHeight: 1.2 }}>{t.templateMeta.scenarioType}</div>
+                      )}
+                      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.description}</div>
                       {t.templateMeta?.keyMacros?.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: "auto", paddingTop: 4 }}>
                           {t.templateMeta.keyMacros.map(m => <span key={m} style={{ fontSize: 9, color: C.muted, background: C.border + "66", borderRadius: 3, padding: "1px 5px", fontFamily: "monospace" }}>{m}</span>)}
                         </div>
                       )}
-                      <div style={{ fontSize: 9, color: dc, fontWeight: 600, marginTop: "auto" }}>▶ Start from template</div>
                     </div>
                   );
                 })}
