@@ -188,11 +188,13 @@ export function getRunAdmission(model, options = {}) {
     ));
   }
 
-  const effectiveCollectTimeSeries = requestedCollectTimeSeries && (
-    (RISK_ORDER[complexityEstimate.riskLevel] ?? 0) >= (RISK_ORDER[tierPolicy.disableTimeSeriesAt || "large"] ?? 2)
-  )
-    ? false
-    : requestedCollectTimeSeries;
+  // Gate time series on the actual cost of snapLite (O(entities) per B-event cycle),
+  // not on overall risk level which is dominated by C-event scan count. A model with
+  // many C-events but few in-flight entities is cheap to snapshot; a high-volume
+  // low-complexity model can be expensive. Threshold: ~100M iterations per rep.
+  const estimatedBEventFirings = complexityEstimate.estimatedCEventScans / Math.max(1, complexityEstimate.cEventCount);
+  const estimatedSnapLiteCost = complexityEstimate.expectedEntities * estimatedBEventFirings;
+  const effectiveCollectTimeSeries = requestedCollectTimeSeries && estimatedSnapLiteCost <= 100_000_000;
   if (requestedCollectTimeSeries && !effectiveCollectTimeSeries) {
     warnings.push(makeDecisionIssue(
       "RA13",

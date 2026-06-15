@@ -299,7 +299,7 @@ export function ExperimentControls({
                 <div style={{ display: "flex", gap: 2, background: C.bg, borderRadius: 5, padding: 2, width: "fit-content" }}>
                   {[
                     { value: "minimal", label: "Minimal" },
-                    { value: "compact", label: "Compact" },
+                    { value: "compact", label: "Standard" },
                     { value: "full",    label: "Full" },
                   ].map(opt => (
                     <button
@@ -314,8 +314,8 @@ export function ExperimentControls({
               </div>
             </div>
             <div style={{ ...helperStyle, marginTop: 8, maxWidth: 420 }}>
-              <strong style={{ color: C.text }}>Minimal</strong> — summary stats only, fastest save.{" "}
-              <strong style={{ color: C.text }}>Compact</strong> — adds chart data sampled to 200 points (default).{" "}
+              <strong style={{ color: C.text }}>Minimal</strong> — summary stats only, chart skeleton (150 points).{" "}
+              <strong style={{ color: C.text }}>Standard</strong> — chart data (200 points) + per-replication summaries (default).{" "}
               <strong style={{ color: C.text }}>Full</strong> — keeps per-entity log, trace, and raw wait distributions; slowest save.
             </div>
           </div>
