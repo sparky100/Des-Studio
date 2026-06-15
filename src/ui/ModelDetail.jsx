@@ -22,6 +22,7 @@ import { SimPyExportModal } from "./editors/SimPyExportModal.jsx";
 import { ResultsWorkspace } from "./results/ResultsWorkspace.jsx";
 import { buildLLMBundle } from "../llm/bundleExport.js";
 import { ModelHistoryTab } from "./ModelHistoryTab.jsx";
+import { ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
 import { ModelCard, NewModelModal } from "./ModelLibrary.jsx";
 
 // Lazy-loaded so @xyflow/react is not included in the initial bundle.
@@ -452,6 +453,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
   const [resultsReportGenerating,setResultsReportGenerating]=useState(false);
   const [exportMenuOpen,setExportMenuOpen]=useState(false);
+  const [showResultsSnapshot,setShowResultsSnapshot]=useState(false);
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const runWithPatchRef = useRef(null);
   const fitAllRef = useRef(null);
@@ -1373,20 +1375,24 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           <div style={{display:"flex",flexDirection:"column",gap:0,minWidth:0}}>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
               {[
-                {id:"summary",label:"Summary"},
-                {id:"log",label:"Log"},
-                {id:"entities",label:"Entities"},
-                {id:"history",label:"History"},
+                {id:"summary",label:"Summary",disabled:false},
+                {id:"log",label:"Log",disabled:!latestLog?.length},
+                {id:"entities",label:"Entities",disabled:!latestResults?.entitySummary?.length&&!latestResults?.entitySummaryCompact?.length},
+                {id:"history",label:"History",disabled:false},
               ].map(sub=>(
                 <Btn
                   key={sub.id}
                   small
                   variant={resultsView===sub.id?"primary":"ghost"}
-                  onClick={()=>setResultsView(sub.id)}
+                  disabled={sub.disabled}
+                  onClick={()=>!sub.disabled&&setResultsView(sub.id)}
                 >
                   {sub.label}
                 </Btn>
               ))}
+              {latestResults?._model_snapshot && (
+                <Btn small variant="ghost" onClick={() => setShowResultsSnapshot(true)}>View Model</Btn>
+              )}
               {latestResults && (
                 <div style={{ position: "relative" }}>
                   <Btn small variant="ghost" onClick={() => setExportMenuOpen(v => !v)}>Export ▾</Btn>
@@ -1644,6 +1650,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           } : null}
           onClose={()=>{setAiSidebarOpen(false);setAiAction(null);}}
         />
+      )}
+      {showResultsSnapshot && latestResults?._model_snapshot && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 16 }}>
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, width: "min(680px, 100%)", maxHeight: "85vh", overflowY: "auto" }}>
+            <ModelDiffPreview
+              currentModel={model}
+              proposedModel={latestResults._model_snapshot}
+              onDiscard={() => setShowResultsSnapshot(false)}
+              readOnly
+            />
+          </div>
+        </div>
       )}
       {showExplorePanel&&(
         <AdaptiveBatchPanel
