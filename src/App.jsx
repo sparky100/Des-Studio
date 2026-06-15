@@ -256,6 +256,7 @@ export default function App({ onThemeChange }){
   const handleOpenModel = useCallback((model) => {
     setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
     setSignedInThisSession(false);
+    welcomeShownRef.current = true;
     if (model.owner_id !== uid && model.visibility === 'public') {
       setModelToFork(model);
       setShowForkConfirm(true);
@@ -579,11 +580,13 @@ export default function App({ onThemeChange }){
               onOpenScenario: (scenario) => {
                 setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: false });
                 setSignedInThisSession(false);
+                welcomeShownRef.current = true;
                 setOpenId(scenario.id);
               },
               onOpenParent: parentModel ? () => {
                 setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: false });
                 setSignedInThisSession(false);
+                welcomeShownRef.current = true;
                 setOpenId(parentModel.id);
               } : undefined,
               onExitToTemplates: () => {

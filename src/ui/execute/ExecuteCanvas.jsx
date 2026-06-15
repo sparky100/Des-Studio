@@ -71,8 +71,13 @@ function KpiSlot({ metricKey, snap, entities, summary, totals, onEdit }) {
 
   return (
     <div
-      style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10,
-        textAlign: "center", position: "relative" }}
+      style={{
+        background: C.panel, border: `1px solid ${C.border}`,
+        borderTop: `3px solid ${meta.color}`,
+        borderRadius: 8, padding: "10px 12px",
+        textAlign: "center", position: "relative",
+        display: "flex", flexDirection: "column", justifyContent: "center",
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setEditing(false); }}
     >
@@ -80,8 +85,8 @@ function KpiSlot({ metricKey, snap, entities, summary, totals, onEdit }) {
         <button
           aria-label={`Change ${meta.label} slot`}
           onClick={() => setEditing(e => !e)}
-          style={{ position: "absolute", top: 3, right: 4, background: "none",
-            border: "none", color: C.muted, cursor: "pointer", fontSize: 10, padding: 2 }}
+          style={{ position: "absolute", top: 4, right: 6, background: "none",
+            border: "none", color: C.muted, cursor: "pointer", fontSize: 11, padding: 2, lineHeight: 1 }}
         >
           ✎
         </button>
@@ -89,7 +94,7 @@ function KpiSlot({ metricKey, snap, entities, summary, totals, onEdit }) {
       {editing && (
         <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 20,
           background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6,
-          padding: 4, minWidth: 110, boxShadow: "0 4px 16px rgba(0,0,0,0.35)" }}>
+          padding: 4, minWidth: 120, boxShadow: "0 4px 16px rgba(0,0,0,0.35)" }}>
           {Object.entries(KPI_METRICS).map(([k, m]) => (
             <div key={k}
               onClick={() => { onEdit(k); setEditing(false); }}
@@ -101,10 +106,10 @@ function KpiSlot({ metricKey, snap, entities, summary, totals, onEdit }) {
           ))}
         </div>
       )}
-      <div style={{ fontSize: 9, color: C.label, fontWeight: 700, marginBottom: 4 }}>
+      <div style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: "0.8px", marginBottom: 6, fontFamily: FONT }}>
         {meta.label.toUpperCase()}
       </div>
-      <div style={{ fontSize: 20, color: meta.color, fontWeight: 700 }}>{value}</div>
+      <div style={{ fontSize: 24, color: meta.color, fontWeight: 700, lineHeight: 1, fontFamily: FONT }}>{value}</div>
     </div>
   );
 }
@@ -756,19 +761,19 @@ export function ExecuteCanvas({
       )}
 
       {snap && (
-        <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 16, alignItems: "stretch" }}>
-          <div style={{ background: C.bg, border: `2px solid ${C.purple}44`, borderRadius: 12, padding: "8px 12px", textAlign: "center", minWidth: 70, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-            <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 2, marginBottom: 4 }}>SIM CLOCK</div>
-            <div style={{ fontSize: 24, fontWeight: 300, color: C.text, fontFamily: FONT, lineHeight: 1 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 10, alignItems: "stretch" }}>
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderTop: `3px solid ${C.purple}`, borderRadius: 8, padding: "10px 14px", textAlign: "center", minWidth: 80, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: "0.8px", fontWeight: 600, marginBottom: 6 }}>SIM CLOCK</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: C.purple, fontFamily: FONT, lineHeight: 1 }}>
               {parseFloat(snap.clock).toFixed(0)}
             </div>
             {wallClock && (
-              <div style={{ marginTop: 4, fontSize: 11, color: C.accent, fontFamily: FONT, fontWeight: 600, lineHeight: 1.4 }}>
+              <div style={{ marginTop: 5, fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.4 }}>
                 {wallClock}
               </div>
             )}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10 }}>
             {kpiSlots.slice(0, 5).map((key, i) => (
               <KpiSlot
                 key={i}
