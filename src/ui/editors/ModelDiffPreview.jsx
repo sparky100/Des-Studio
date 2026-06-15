@@ -71,8 +71,17 @@ function ChangeList({ title, items, color, renderItem }) {
   );
 }
 
+function isShiftSchedule(arr) {
+  return Array.isArray(arr) && arr.length > 0 && typeof arr[0] === "object" && "capacity" in arr[0];
+}
+
 function friendlyValue(value) {
-  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  if (Array.isArray(value)) {
+    if (isShiftSchedule(value)) {
+      return value.map(p => `t=${p.time}: ${p.capacity}`).join(", ");
+    }
+    return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
   if (value && typeof value === "object") {
     if (value.dist || value.type) {
       const dist = value.dist || value.type;
@@ -100,6 +109,15 @@ function renderItemSummary(item) {
   return item.name || item.id || "Unnamed";
 }
 
+function shiftPeriodDeltas(beforeSched, afterSched) {
+  const beforeMap = new Map((beforeSched || []).map(p => [String(p.time), p.capacity]));
+  const afterMap = new Map((afterSched || []).map(p => [String(p.time), p.capacity]));
+  const allTimes = Array.from(new Set([...beforeMap.keys(), ...afterMap.keys()]));
+  return allTimes
+    .filter(t => beforeMap.get(t) !== afterMap.get(t))
+    .map(t => ({ time: t, from: beforeMap.get(t) ?? "—", to: afterMap.get(t) ?? "—" }));
+}
+
 function ModifiedSummaryItem({ item }) {
   const { C } = useTheme();
   const before = item.before || {};
@@ -110,14 +128,32 @@ function ModifiedSummaryItem({ item }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       <div style={{ color: C.text, fontWeight: 700 }}>{title}</div>
-      {fields.slice(0, 5).map(field => (
-        <div key={field} style={{ color: C.muted, display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ color: C.amber, fontWeight: 700 }}>{field}</span>
-          <span>{friendlyValue(before[field])}</span>
-          <span style={{ color: C.accent }}>to</span>
-          <span style={{ color: C.text }}>{friendlyValue(after[field])}</span>
-        </div>
-      ))}
+      {fields.slice(0, 5).map(field => {
+        if (field === "shiftSchedule" && isShiftSchedule(before[field]) && isShiftSchedule(after[field])) {
+          const deltas = shiftPeriodDeltas(before[field], after[field]);
+          return (
+            <div key={field} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{ color: C.amber, fontWeight: 700, fontSize: 10 }}>SHIFT CAPACITIES</span>
+              {deltas.map(d => (
+                <div key={d.time} style={{ color: C.muted, display: "flex", alignItems: "baseline", gap: 6 }}>
+                  <span>t={d.time}:</span>
+                  <span>{d.from}</span>
+                  <span style={{ color: C.accent }}>→</span>
+                  <span style={{ color: C.text }}>{d.to}</span>
+                </div>
+              ))}
+            </div>
+          );
+        }
+        return (
+          <div key={field} style={{ color: C.muted, display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ color: C.amber, fontWeight: 700 }}>{field}</span>
+            <span>{friendlyValue(before[field])}</span>
+            <span style={{ color: C.accent }}>→</span>
+            <span style={{ color: C.text }}>{friendlyValue(after[field])}</span>
+          </div>
+        );
+      })}
       {fields.length > 5 && <div style={{ color: C.muted }}>{fields.length - 5} more field changes</div>}
     </div>
   );
