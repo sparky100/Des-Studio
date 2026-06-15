@@ -93,9 +93,9 @@ const QueueEditor = ({queues=[], entityTypes=[], sections=[], errorFilter=null, 
         </div>
       )}
       <InfoBox color={C.cEvent}>
-        Configure named waiting lines and which arriving entity type each queue accepts. Arrival dropdowns use this binding, so only compatible
-        entity-to-queue combinations are offered. Set <em>capacity</em> for bounded queues (blank = unlimited).{' '}
-        <strong>Discipline:</strong> FIFO (default), LIFO, or Priority.
+        <strong style={{color:C.cEvent}}>Queues</strong> are named waiting lines — each accepts a specific entity type, so only compatible entity-to-queue combinations appear in arrival dropdowns.{" "}
+        <strong style={{color:C.cEvent}}>Capacity</strong> limits how many entities can wait (blank = unlimited).{" "}
+        <strong style={{color:C.cEvent}}>Discipline:</strong> FIFO (default), LIFO, or Priority.
       </InfoBox>
       {queues.length===0&&(
         <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:"40px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
