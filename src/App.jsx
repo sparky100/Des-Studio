@@ -530,6 +530,7 @@ export default function App({ onThemeChange }){
     const canEdit = isOwner || model?.access?.[uid] === 'editor';
     const isLocal = !session && model?.id?.startsWith('local_');
     const parentModel = model?.parentModelId ? models.find(m => m.id === model.parentModelId) : null;
+    const childScenarios = models.filter(m => m.parentModelId === openId);
     return(
       <div style={{background:C.bg,minHeight:'100vh'}}>
         <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -576,6 +577,18 @@ export default function App({ onThemeChange }){
               onFork: session ? confirmFork : undefined,
               onSaveAsBaseline: session && isOwner ? handleSaveAsBaseline : undefined,
               parentModelName: parentModel?.name || null,
+              parentModel: parentModel || null,
+              childScenarios,
+              onOpenScenario: (scenario) => {
+                setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: false });
+                setSignedInThisSession(false);
+                setOpenId(scenario.id);
+              },
+              onOpenParent: parentModel ? () => {
+                setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: false });
+                setSignedInThisSession(false);
+                setOpenId(parentModel.id);
+              } : undefined,
               onExitToTemplates: () => {
                 setOpenId(null);
                 setLocalModel(null);

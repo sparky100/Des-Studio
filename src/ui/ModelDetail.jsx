@@ -34,6 +34,7 @@ import { ModelDetailHeader } from "./ModelDetailHeader.jsx";
 import { ModelTabBar }       from "./ModelTabBar.jsx";
 import { SaveBanner }        from "./SaveBanner.jsx";
 import { VersionHistoryPanel } from "./VersionHistoryPanel.jsx";
+import { ScenariosSection } from "./ScenariosSection.jsx";
 import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, buildSchedulesMap, saveSimulationRun, saveAiInsights } from "../db/models.js";
 import { generateReport, sanitizeFilename, buildModelDefinitionHtml } from "../reports/index.js";
 import { fetchLocalRunHistory } from "../db/local.js";
@@ -1122,12 +1123,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </div>
               </div>
             )}
-            {model.parentModelId && (
-              <div style={{background:`${C.accent}0d`,border:`1px solid ${alpha(C.accent,0.25)}`,borderRadius:6,padding:"8px 14px",display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:12,color:C.accent,fontFamily:"Inter,'Segoe UI',Arial,sans-serif"}}>
-                  Scenario based on <strong>{overrides.parentModelName||"another model"}</strong>
-                </span>
-              </div>
+            {(model.parentModelId || (overrides.childScenarios||[]).length > 0) && (
+              <ScenariosSection
+                model={model}
+                parentModel={overrides.parentModel||null}
+                childScenarios={overrides.childScenarios||[]}
+                onOpenScenario={overrides.onOpenScenario}
+                onOpenParent={overrides.onOpenParent}
+              />
             )}
 
             {/* Name + description as a document-style header */}

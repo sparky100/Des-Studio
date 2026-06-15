@@ -113,7 +113,7 @@ function FilterEmpty({ onClear }) {
 
 // --- ModelCard ---
 
-export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, profiles = [], currentUserId, currentVersion }) => {
+export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, profiles = [], currentUserId, currentVersion, scenarioCount = 0, isScenario = false }) => {
   const { C, FONT } = useTheme();
   const owner = (profiles || []).find(p => p.id === model.owner_id) || null;
   const fmtDate = iso => { try { return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { return ''; } };
@@ -144,6 +144,8 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, profile
           {isOwner && onDelete && <Btn small variant="danger" onClick={e => { e.stopPropagation(); onDelete(model); }}>Delete</Btn>}
           <Tag label={model.visibility} color={model.visibility === "public" ? C.green : C.accent} />
           {currentVersion > 0 && <Tag label={`V${currentVersion}`} color={C.purple} />}
+          {isScenario && <Tag label="Scenario" color={C.purple} />}
+          {scenarioCount > 0 && <Tag label={`${scenarioCount} scenario${scenarioCount !== 1 ? "s" : ""}`} color={C.purple} />}
         </div>
       </div>
       <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>{model.description}</div>
@@ -406,6 +408,10 @@ function ModelGrid({
   if (source.length === 0) {
     return firstRun ? null : <Empty icon={emptyIcon} msg={emptyMsg} />;
   }
+  const scenarioCounts = {};
+  for (const m of source) {
+    if (m.parentModelId) scenarioCounts[m.parentModelId] = (scenarioCounts[m.parentModelId] || 0) + 1;
+  }
   return (
     <div>
       <LibraryControls models={source} filter={filter} onFilterChange={onFilterChange} />
@@ -420,7 +426,9 @@ function ModelGrid({
               onTagClick={onTagClick}
               currentUserId={currentUserId}
               profiles={profiles}
-              currentVersion={m.latestVersion} />
+              currentVersion={m.latestVersion}
+              scenarioCount={scenarioCounts[m.id] || 0}
+              isScenario={!!m.parentModelId} />
           ))}
         </div>
       }
