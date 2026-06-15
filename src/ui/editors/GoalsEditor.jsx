@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { alpha } from "../shared/tokens.js";
-import { Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { Btn, InfoBox } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
@@ -65,18 +65,8 @@ function operatorsFor(metricValue) {
   return OPERATORS;
 }
 
-function collapsedSummary(g, def) {
-  if (!def) return g.label || g.metric || "Goal";
-  const scopePart = g.scope?.name ? `${g.scope.name} · ` : "";
-  const opPart = g.operator?.startsWith("p")
-    ? `${g.operator.toUpperCase()} < ${g.target}`
-    : `${g.operator} ${g.target}`;
-  return `${scopePart}${def.label} · ${opPart} ${def.unit}`;
-}
-
 export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [], containerTypes = [] }) {
   const { C, FONT } = useTheme();
-  const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState(new Set());
 
   const toggle = (id) => setExpanded(prev => {
@@ -157,22 +147,16 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
     padding: "5px 8px", outline: "none",
   });
 
-  const q = filter.trim().toLowerCase();
-  const visible = goals.filter(g => {
-    if (!q) return true;
-    const normMetric = normaliseMetric(g.metric);
-    const def = METRIC_BY_VALUE[normMetric];
-    return (g.label || "").toLowerCase().includes(q)
-      || (def?.label || "").toLowerCase().includes(q)
-      || (g.scope?.name || "").toLowerCase().includes(q);
-  });
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: SANS }}>Performance Goals</div>
-          <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, marginTop: 2 }}>Target KPIs for AI analysis and result judgement</div>
+          <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, marginTop: 2 }}>
+            {goals.length > 0
+              ? `${goals.length} target${goals.length !== 1 ? "s" : ""}`
+              : "Target KPIs for AI analysis and result judgement"}
+          </div>
         </div>
         <Btn variant="primary" onClick={add}>+ Add Goal</Btn>
       </div>
@@ -181,19 +165,6 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
         these targets when generating insights. Time metrics support percentile operators (e.g. p90 {"<"} 10 means
         the 90th percentile is below the target).
       </InfoBox>
-
-      {goals.length > 0 && (
-        <input
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          placeholder="Filter by name…"
-          style={{
-            background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4,
-            color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px",
-            outline: "none", width: "100%", boxSizing: "border-box",
-          }}
-        />
-      )}
 
       {goals.length === 0 && (
         <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "40px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
@@ -204,7 +175,7 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
         </div>
       )}
 
-      {visible.map((g) => {
+      {goals.map((g) => {
         const i = goals.indexOf(g);
         const normMetric = normaliseMetric(g.metric);
         const def = METRIC_BY_VALUE[normMetric];
@@ -215,41 +186,42 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
         const scopeOpts = scopeList(scope);
         const needsScope = scope && (scope === "resource" || scope === "container");
         const isOpen = expanded.has(g.id);
-        const summary = collapsedSummary(g, def);
+        const opPart = g.operator?.startsWith("p")
+          ? `${g.operator.toUpperCase()} < ${g.target}`
+          : `${g.operator} ${g.target}`;
 
         return (
           <div key={g.id} style={{
-            background: C.bg, border: `1px solid ${alpha(C.purple, 0.27)}`,
-            borderRadius: 6, overflow: "hidden",
+            background: C.bg,
+            border: `1px solid ${alpha(C.purple, 0.27)}`,
+            borderLeft: `3px solid ${C.purple}`,
+            borderRadius: 6,
           }}>
-            {/* Header row — always visible */}
+            {/* Always-visible header */}
             <div
               onClick={() => toggle(g.id)}
-              style={{
-                display: "flex", alignItems: "center", gap: 8, padding: "9px 12px",
-                cursor: "pointer", userSelect: "none",
-              }}
+              style={{ padding: "10px 12px", display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer", userSelect: "none" }}
             >
-              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, flexShrink: 0, minWidth: 10 }}>
+              <button style={{ background: "none", border: "none", cursor: "pointer", color: isOpen ? C.purple : C.muted, fontSize: 11, padding: "2px 3px", flexShrink: 0, marginTop: 1 }}>
                 {isOpen ? "▾" : "▸"}
-              </span>
-              {g.label && (
-                <span style={{ fontSize: 12, fontWeight: 600, color: C.purple, fontFamily: FONT, flexShrink: 0 }}>
-                  {g.label}
-                </span>
-              )}
-              {g.label && (
-                <span style={{ fontSize: 11, color: alpha(C.muted, 0.5), fontFamily: FONT, flexShrink: 0 }}>·</span>
-              )}
-              <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {summary}
-              </span>
-              <span style={{ flex: 1 }} />
+              </button>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                {g.label && (
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.purple, fontFamily: FONT }}>{g.label}</div>
+                )}
+                <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>{def?.label || g.metric}</div>
+                {g.scope?.name && (
+                  <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>{g.scope.name}</div>
+                )}
+                <div style={{ fontSize: 13, fontWeight: 700, color: isValid ? C.amber : C.muted, fontFamily: FONT, marginTop: 2 }}>
+                  {opPart} {def?.unit || ""}
+                </div>
+              </div>
               <span
                 onClick={e => { e.stopPropagation(); rem(i, g.id); }}
                 role="button"
                 aria-label={`Remove goal ${i + 1}`}
-                style={{ fontSize: 11, color: C.muted, cursor: "pointer", padding: "2px 4px", borderRadius: 3, flexShrink: 0 }}
+                style={{ fontSize: 11, color: C.muted, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}
               >
                 ✕
               </span>
@@ -321,12 +293,6 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
           </div>
         );
       })}
-
-      {q && visible.length === 0 && goals.length > 0 && (
-        <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, textAlign: "center", padding: 12 }}>
-          No goals match "{filter}"
-        </div>
-      )}
     </div>
   );
 }

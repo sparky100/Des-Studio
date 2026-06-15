@@ -462,6 +462,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [focusScheduleId,setFocusScheduleId]=useState(null);
   const [schedulesVersion,setSchedulesVersion]=useState(0);
   const [resultsView,setResultsView]=useState("summary");
+  const [overviewHistory,setOverviewHistory]=useState([]);
   const [showExplorePanel,setShowExplorePanel]=useState(false);
   const [aiAction,setAiAction]=useState(null);
   const [collabQuery,setCollabQuery]=useState("");
@@ -930,6 +931,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     {id:"cevents",label:"C-Events"},
     {id:"sections",label:"Sections"},
     {id:"schedules",label:"Schedules"},
+    {id:"goals",label:"Goals"},
     {id:"state",label:"Model Data"},
     {id:"validate",label:"Model Health"},
     {id:"execute",label:"Run"},
@@ -961,7 +963,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
   const contextualTabs = useMemo(() => {
     if (activeMode?.id === "overview") return ["overview"];
-    if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "sections", "schedules", "state", "validate"];
+    if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "sections", "schedules", "goals", "state", "validate"];
     if (activeMode?.id === "execute") return ["execute"];
     if (activeMode?.id === "results") return ["results"];
     if (activeMode?.id === "access") return ["access"];
@@ -1019,6 +1021,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   },[]);
+
+  useEffect(()=>{
+    if(tab!=="overview")return;
+    runHistoryFetcher({ archived: false }).then(rows=>{
+      setOverviewHistory((rows||[]).slice(0,3));
+    }).catch(()=>{});
+  },[tab,modelId,runHistoryFetcher]);
 
   useEffect(()=>{
     if(tab!=="results")return;
@@ -1094,7 +1103,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
         <SaveBanner canEdit={canEdit} dirty={dirty} visualPending={visualPending} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
         {saveError&&<div role="alert" style={{background:C.errorBg,border:`1px solid ${C.danger}`,borderRadius:6,padding:'8px 12px',color:C.error,fontFamily:FONT,fontSize:12,marginBottom:8}}>{saveError}</div>}
-        {tab==="overview" && <ModelHealthPanel model={model} validation={healthValidation} isStarterBlank={isStarterBlank} tab={tab} setTab={setTab} latestResults={latestResults} onGoToHistory={() => { setTab("results"); setResultsView("history"); }}/>}
         <ErrorBoundary
           key={tab}
           title="Model panel crashed"
@@ -1140,57 +1148,93 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </div>
               </div>
             )}
-            {/* Name + description as a document-style header */}
+
+            {/* Name + version + description */}
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {canEdit
-                ? <input
-                    value={model.name||""}
-                    onChange={e=>setField("name",e.target.value)}
-                    placeholder="Model name"
-                    style={{background:"transparent",border:"none",borderBottom:`2px solid ${C.border}`,borderRadius:0,color:C.text,fontFamily:"Inter,'Segoe UI',Arial,sans-serif",fontSize:22,fontWeight:700,padding:"4px 0",outline:"none",width:"100%"}}
-                    onFocus={e=>e.target.style.borderBottomColor=C.accent}
-                    onBlur={e=>e.target.style.borderBottomColor=C.border}
-                  />
-                : <div style={{fontSize:22,fontWeight:700,color:C.text,fontFamily:"Inter,'Segoe UI',Arial,sans-serif",lineHeight:1.2}}>{model.name}</div>
-              }
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                {canEdit
+                  ? <input
+                      value={model.name||""}
+                      onChange={e=>setField("name",e.target.value)}
+                      placeholder="Model name"
+                      style={{background:"transparent",border:"none",borderBottom:`2px solid ${C.border}`,borderRadius:0,color:C.text,fontFamily:SANS,fontSize:22,fontWeight:700,padding:"4px 0",outline:"none",flex:1,minWidth:0}}
+                      onFocus={e=>e.target.style.borderBottomColor=C.accent}
+                      onBlur={e=>e.target.style.borderBottomColor=C.border}
+                    />
+                  : <div style={{fontSize:22,fontWeight:700,color:C.text,fontFamily:SANS,lineHeight:1.2}}>{model.name}</div>
+                }
+                {currentVersion && (
+                  <span style={{fontSize:11,fontWeight:700,color:C.muted,fontFamily:FONT,background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:"2px 8px",whiteSpace:"nowrap",flexShrink:0}}>v{currentVersion}</span>
+                )}
+              </div>
               {canEdit
                 ? <textarea
                     value={model.description||""}
                     onChange={e=>setField("description",e.target.value)}
                     placeholder="Describe what this model represents — context, scope, key assumptions…"
                     rows={6}
-                    style={{background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,borderRadius:0,color:C.muted,fontFamily:"Inter,'Segoe UI',Arial,sans-serif",fontSize:14,lineHeight:1.8,padding:"8px 0",outline:"none",width:"100%",resize:"vertical"}}
+                    style={{background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,borderRadius:0,color:C.muted,fontFamily:SANS,fontSize:14,lineHeight:1.8,padding:"8px 0",outline:"none",width:"100%",resize:"vertical"}}
                     onFocus={e=>e.target.style.borderBottomColor=C.accent}
                     onBlur={e=>e.target.style.borderBottomColor=C.border}
                   />
-                : <div style={{fontSize:14,color:C.muted,fontFamily:"Inter,'Segoe UI',Arial,sans-serif",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{model.description}</div>
+                : <div style={{fontSize:14,color:C.muted,fontFamily:SANS,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{model.description}</div>
               }
-              <div style={{display:"flex",justifyContent:"flex-end",paddingTop:2}}>
-                <Btn small variant="ghost" onClick={()=>{
-                  const html = buildModelDefinitionHtml(model);
-                  const win = window.open("","_blank");
-                  if(!win) return;
-                  win.document.write(html);
-                  win.document.close();
-                  win.focus();
-                }}>View definition</Btn>
-              </div>
             </div>
 
-            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18}}>
-              <GoalsEditor goals={model.goals||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
-            </div>
-
-            {canEdit && overrides.onSaveAsBaseline && (
-              <div style={{background:C.panel,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.purple||C.accent}`,borderRadius:8,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-                <div>
-                  <div style={{fontSize:13,fontWeight:700,color:C.text,fontFamily:FONT,marginBottom:4}}>Create a scenario variant</div>
-                  <div style={{fontSize:12,color:C.muted,fontFamily:"Inter,'Segoe UI',Arial,sans-serif",lineHeight:1.6}}>Make a linked copy of this model to explore a "what-if" — e.g. more staff, different routing. Run both and compare results side by side.</div>
+            {/* Key metrics from last run */}
+            {overviewHistory.length > 0 && (() => {
+              const lastRow = overviewHistory[0];
+              const res = hydrateResultsFromHistoryRow(lastRow);
+              const s = res?.summary;
+              if (!s) return null;
+              const metrics = [
+                s.served != null && { label: "Served", value: s.served, fmt: v => Math.round(v).toLocaleString() },
+                s.avgWait != null && { label: "Avg wait", value: s.avgWait, fmt: v => `${v.toFixed(1)} ${model.timeUnit||"min"}` },
+                s.avgSojourn != null && { label: "Avg time in system", value: s.avgSojourn, fmt: v => `${v.toFixed(1)} ${model.timeUnit||"min"}` },
+                s.servedRatio != null && { label: "Completion rate", value: s.servedRatio, fmt: v => `${(v*100).toFixed(1)}%` },
+              ].filter(Boolean);
+              if (!metrics.length) return null;
+              return (
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.muted,fontFamily:FONT,letterSpacing:"1px",textTransform:"uppercase"}}>Last Run</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8}}>
+                    {metrics.map(m=>(
+                      <div key={m.label} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:"10px 12px"}}>
+                        <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:"0.8px",marginBottom:4}}>{m.label.toUpperCase()}</div>
+                        <div style={{fontSize:16,fontWeight:700,color:C.text,fontFamily:FONT}}>{m.fmt(m.value)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{fontSize:11,color:C.muted,fontFamily:FONT}}>
+                    {lastRow.run_label||"Unnamed run"} · {new Date(lastRow.ran_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}
+                    {" · "}<span style={{cursor:"pointer",color:C.accent,textDecoration:"underline"}} onClick={()=>{openResultsForRun(lastRow);}}>View full results</span>
+                  </div>
                 </div>
-                <Btn small variant="ghost" onClick={()=>{setBaselineName(`Scenario from ${model.name||"this model"}`);setShowBaselineModal(true);}}>Create variant</Btn>
+              );
+            })()}
+
+            {/* Recent runs */}
+            {overviewHistory.length > 0 && (
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.muted,fontFamily:FONT,letterSpacing:"1px",textTransform:"uppercase"}}>Recent Runs</div>
+                  <span style={{fontSize:11,color:C.accent,cursor:"pointer",fontFamily:FONT,textDecoration:"underline"}} onClick={()=>{setTab("results");setResultsView("history");}}>View all</span>
+                </div>
+                {overviewHistory.map(row=>(
+                  <div key={row.id}
+                    onClick={()=>{ if(hasResultsPayload(row)) openResultsForRun(row); }}
+                    style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,cursor:hasResultsPayload(row)?"pointer":"default",opacity:hasResultsPayload(row)?1:0.6}}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600,color:C.text,fontFamily:FONT}}>{row.run_label||"Unnamed run"}</div>
+                      <div style={{fontSize:11,color:C.muted,fontFamily:FONT,marginTop:2}}>{new Date(row.ran_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+                    </div>
+                    {row.replications > 1 && <span style={{fontSize:10,color:C.muted,fontFamily:FONT,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,padding:"2px 6px"}}>{row.replications} reps</span>}
+                  </div>
+                ))}
               </div>
             )}
 
+            {/* Scenarios */}
             {(model.parentModelId || (overrides.childScenarios||[]).length > 0) && (
               <ScenariosSection
                 model={model}
@@ -1300,6 +1344,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><TabErrors tabId="bevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}} errorFilter={errorFilter?.tab==="bevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
         {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><TabErrors tabId="cevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}} errorFilter={errorFilter?.tab==="cevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
         {tab==="sections"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><SectionEditor sections={model.sections||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} bEvents={model.bEvents||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("sections",v):()=>{}}/></div>)}
+        {tab==="goals"&&renderAuthoringShell(<div style={{maxWidth:760,margin:"0 auto"}}><GoalsEditor goals={model.goals||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/></div>)}
         {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} dataSources={model.dataSources||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
           setModel(next);
