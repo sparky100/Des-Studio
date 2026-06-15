@@ -254,6 +254,7 @@ export default function App({ onThemeChange }){
 
   const handleOpenModel = useCallback((model) => {
     setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
+    setSignedInThisSession(false);
     if (model.owner_id !== uid && model.visibility === 'public') {
       setModelToFork(model);
       setShowForkConfirm(true);

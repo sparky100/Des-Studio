@@ -449,9 +449,11 @@ export function ModelLibrary({
   const [tmplDomain, setTmplDomain] = useState("All");
   const [showPatternsGuide, setShowPatternsGuide] = useState(false);
   const pendingTemplateDraftRef = useRef(null);
+  const welcomeShownRef = useRef(false);
 
   useEffect(() => {
-    if (!modelsLoading && signedInThisSession) {
+    if (!modelsLoading && signedInThisSession && !welcomeShownRef.current) {
+      welcomeShownRef.current = true;
       onWelcomeShown?.();
       setShowWelcome(true);
     }
