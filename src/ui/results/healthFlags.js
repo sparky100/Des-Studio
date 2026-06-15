@@ -43,12 +43,17 @@ export function evaluateResultsHealth(results = {}, model = {}) {
   const totalWip = (ts?.waitingAtEnd ?? 0) + (ts?.servingAtEnd ?? 0);
   const wipPct = ts?.wipPct;
   if (Number.isFinite(wipPct) && wipPct > 0) {
+    const tsServing = ts?.servingAtEnd ?? 0;
+    const tsWaiting = ts?.waitingAtEnd ?? 0;
+    const splitNote = totalWip > 0 && (tsServing > 0 || tsWaiting > 0)
+      ? ` (${tsServing} serving, ${tsWaiting} waiting)`
+      : "";
     if (wipPct >= 20) {
       flags.push({ code: "H3", severity: "critical",
-        message: `${wipPct}% of arrivals (≈${totalWip} entities) still in system at end of run — large unfinished backlog, results may be unreliable.` });
+        message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run — large unfinished backlog, results may be unreliable.` });
     } else if (wipPct >= 10) {
       flags.push({ code: "H3", severity: "warning",
-        message: `${wipPct}% of arrivals (≈${totalWip} entities) still in system at end of run — completion rate is understated.` });
+        message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run — completion rate is understated.` });
     }
   }
 

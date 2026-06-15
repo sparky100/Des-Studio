@@ -433,41 +433,58 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           </div>
         ))}
       </div>
-      {summary.terminatingState && (() => {
-        const serving = summary.terminatingState.servingAtEnd;
-        const waiting = summary.terminatingState.waitingAtEnd;
-        const totalWip = serving + waiting;
-        const totalArrived = summary.total ?? (summary.served + summary.reneged + totalWip);
-        const wipPct = summary.terminatingState.wipPct ?? (totalArrived > 0 ? Math.round((totalWip / totalArrived) * 100) : 0);
-        if (totalWip === 0) return null;
-        const isCritical = wipPct > 25;
-        const isConcern = wipPct > 10 && serving > 0;
-        if (!isCritical && !isConcern) return null;
-        const wipSplitPct = totalWip > 0 ? {
-          serving: Math.round((serving / totalWip) * 100),
-          waiting: Math.round((waiting / totalWip) * 100),
-        } : null;
-        const wipLabel = isMultiRep
-          ? `~${Math.round(totalWip / repCount)}/run (${wipPct}% of arrivals) are WIP`
-          : `${totalWip} entit${totalWip === 1 ? "y" : "ies"} still in progress (${wipPct}% of arrivals) are WIP`;
-        const splitLabel = serving > 0
-          ? ` — ${isMultiRep ? `~${Math.round(serving / repCount)}/run` : serving} serving (${wipSplitPct?.serving ?? 0}%), ${isMultiRep ? `~${Math.round(waiting / repCount)}/run` : waiting} waiting (${wipSplitPct?.waiting ?? 0}%)`
-          : ` — all ${isMultiRep ? `~${Math.round(waiting / repCount)}/run` : waiting} waiting`;
+
+      {(() => {
+        const goals = model.goals || [];
+        if (!goals.length) return null;
+        const storedAgg = results?.aggregateStats && Object.keys(results.aggregateStats).length > 0
+          ? results.aggregateStats : null;
+        const summary = { ...(results?.summary || {}), waitDist: results?.waitDist };
+        const aggForGoals = storedAgg || (() => {
+          const s = summary;
+          const pt = v => (v != null && Number.isFinite(Number(v)) ? { mean: Number(v), n: 1 } : null);
+          const out = {};
+          if (pt(s.avgWait))    out['summary.avgWait']    = pt(s.avgWait);
+          if (pt(s.avgSvc))     out['summary.avgSvc']     = pt(s.avgSvc);
+          if (pt(s.avgSojourn)) out['summary.avgSojourn'] = pt(s.avgSojourn);
+          if (pt(s.avgWIP))     out['summary.avgWIP']     = pt(s.avgWIP);
+          if (pt(s.maxWIP))     out['summary.maxWIP']     = pt(s.maxWIP);
+          if (pt(s.served))     out['summary.served']     = pt(s.served);
+          if (pt(s.reneged))    out['summary.reneged']    = pt(s.reneged);
+          if (pt(s.totalCost))  out['summary.totalCost']  = pt(s.totalCost);
+          if (pt(s.costPerServed)) out['summary.costPerServed'] = pt(s.costPerServed);
+          return out;
+        })();
+        const gaps = buildGoalGaps(model, aggForGoals, summary);
+        if (!gaps?.length) return null;
         return (
-        <div style={{
-          background: isCritical ? C.errorBg : C.warmup,
-          border: `1px solid ${isCritical ? C.danger + "88" : C.amber + "88"}`,
-          borderRadius: 6, padding: "12px 14px", marginTop: 8, marginBottom: 8,
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: isCritical ? C.errorLight : C.warnBg, fontFamily: FONT }}>
-            {wipLabel}{splitLabel}
-          </div>
-          <div style={{ fontSize: 12, color: isCritical ? C.errorLight : C.warnBg, fontFamily: FONT, lineHeight: 1.5, marginTop: 4 }}>
-            {isCritical
-              ? "Large unfinished backlog — results may be unreliable. Carefully review the model to identify where bottlenecks are forming. Consider increasing max simulation time or enabling the purge period in Run Setup."
-              : "Service time may be understated — shorter tasks finish first. Review the model for bottleneck resources."}
-          </div>
-        </div>
+          <>
+            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+              GOALS
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 6 }}>
+              {gaps.map(g => {
+                const pass = g.current != null && g.met;
+                const chipColor = g.current == null ? C.muted : pass ? C.green : C.red;
+                const chipLabel = g.current == null ? 'UNKNOWN' : pass ? '✓ PASS' : '✗ FAIL';
+                const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
+                const opLabel = isPercentile
+                  ? `${g.operator.replace("p", "")}th %ile <`
+                  : g.operator;
+                return (
+                  <div key={g.metric + (g.scope?.id || "")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
+                    <div style={{ flex: 1, fontFamily: FONT, fontSize: 12, color: C.text }}>{g.label}</div>
+                    <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
+                      {g.current != null ? `${Number(g.current).toFixed(1)} ${opLabel} ${g.target}` : "n/a"}
+                    </div>
+                    <div style={{ padding: "2px 8px", borderRadius: 4, background: chipColor + "22", border: `1px solid ${chipColor}55`, fontFamily: FONT, fontSize: 10, fontWeight: 700, color: chipColor, letterSpacing: 0.5 }}>
+                      {chipLabel}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         );
       })()}
       {outcomeEntries.length > 0 && (
@@ -560,59 +577,6 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
             )}
           </div>
         </>
-        );
-      })()}
-      {(() => {
-        const goals = model.goals || [];
-        if (!goals.length) return null;
-        const storedAgg = results?.aggregateStats && Object.keys(results.aggregateStats).length > 0
-          ? results.aggregateStats : null;
-        const summary = { ...(results?.summary || {}), waitDist: results?.waitDist };
-        const aggForGoals = storedAgg || (() => {
-          const s = summary;
-          const pt = v => (v != null && Number.isFinite(Number(v)) ? { mean: Number(v), n: 1 } : null);
-          const out = {};
-          if (pt(s.avgWait))    out['summary.avgWait']    = pt(s.avgWait);
-          if (pt(s.avgSvc))     out['summary.avgSvc']     = pt(s.avgSvc);
-          if (pt(s.avgSojourn)) out['summary.avgSojourn'] = pt(s.avgSojourn);
-          if (pt(s.avgWIP))     out['summary.avgWIP']     = pt(s.avgWIP);
-          if (pt(s.maxWIP))     out['summary.maxWIP']     = pt(s.maxWIP);
-          if (pt(s.served))     out['summary.served']     = pt(s.served);
-          if (pt(s.reneged))    out['summary.reneged']    = pt(s.reneged);
-          if (pt(s.totalCost))  out['summary.totalCost']  = pt(s.totalCost);
-          if (pt(s.costPerServed)) out['summary.costPerServed'] = pt(s.costPerServed);
-          return out;
-        })();
-        const gaps = buildGoalGaps(model, aggForGoals, summary);
-        if (!gaps?.length) return null;
-        return (
-          <>
-            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
-              GOALS
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 6 }}>
-              {gaps.map(g => {
-                const pass = g.current != null && g.met;
-                const chipColor = g.current == null ? C.muted : pass ? C.green : C.red;
-                const chipLabel = g.current == null ? 'UNKNOWN' : pass ? '✓ PASS' : '✗ FAIL';
-                const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
-                const opLabel = isPercentile
-                  ? `${g.operator.replace("p", "")}th %ile <`
-                  : g.operator;
-                return (
-                  <div key={g.metric + (g.scope?.id || "")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
-                    <div style={{ flex: 1, fontFamily: FONT, fontSize: 12, color: C.text }}>{g.label}</div>
-                    <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
-                      {g.current != null ? `${Number(g.current).toFixed(1)} ${opLabel} ${g.target}` : "n/a"}
-                    </div>
-                    <div style={{ padding: "2px 8px", borderRadius: 4, background: chipColor + "22", border: `1px solid ${chipColor}55`, fontFamily: FONT, fontSize: 10, fontWeight: 700, color: chipColor, letterSpacing: 0.5 }}>
-                      {chipLabel}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
         );
       })()}
     </section>
