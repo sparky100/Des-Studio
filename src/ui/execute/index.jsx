@@ -1583,10 +1583,27 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       )}
 
       {executeSection === "saved-experiments" && (
-      <div style={{ maxWidth: 1120, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1120, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT }}>Experiments</div>
+          <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, marginTop: 2 }}>Saved run configurations to replay or compare</div>
+        </div>
+        {userId && (
+          <Btn variant="primary" onClick={() => {
+            setExpEditId(null); setExpFormName(""); setExpFormDesc(""); setExpFormOverrides([]);
+            setExpFormPickerOpen(false);
+            if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
+            setExpFormOpen(true);
+          }}>+ New Experiment</Btn>
+        )}
+      </div>
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
 
-        {/* Header: filter + New Experiment */}
+        {/* Filter row */}
+        <div style={{ padding: "12px 16px", display: "flex", gap: 8, alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
+          <input
+            value={expFilterText}
         <div style={{ padding: "12px 16px", display: "flex", gap: 8, alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
           <input
             value={expFilterText}
@@ -1599,19 +1616,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               <Btn small variant="ghost" onClick={() => setExpandedExpIds(new Set(experiments.map(e => e.id)))}>Expand all</Btn>
               <Btn small variant="ghost" onClick={() => { setExpandedExpIds(new Set()); setExpEditId(null); }}>Collapse all</Btn>
             </>
-          )}
-          {userId && (
-            <Btn small variant="primary" onClick={() => {
-              setExpEditId(null);
-              setExpFormName("");
-              setExpFormDesc("");
-              setExpFormOverrides([]);
-              setExpFormPickerOpen(false);
-              if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
-              setExpFormOpen(true);
-            }}>
-              + New
-            </Btn>
           )}
         </div>
 
@@ -1683,7 +1687,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             <span style={{ padding: 16, fontSize: 12, color: C.red, fontFamily: FONT }}>{experimentsError}</span>
           )}
           {experimentsStatus === "loaded" && experiments.length === 0 && !expFormOpen && (
-            <span style={{ padding: 16, fontSize: 12, color: C.muted, fontFamily: FONT }}>No saved experiments yet. Click "+ New" to create one.</span>
+            <div style={{ padding: "40px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+              <div style={{ fontSize: 32, lineHeight: 1 }}>🧪</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: FONT }}>No saved experiments yet</div>
+              <div style={{ fontSize: 13, color: C.muted, fontFamily: FONT, lineHeight: 1.6, maxWidth: 380 }}>Save a named configuration — replications, seed, run length, and parameter overrides — to replay or compare later.</div>
+              <span style={{ fontSize: 0 }}></span>
+            </div>
           )}
           {(() => {
             const lcFilter = expFilterText.toLowerCase();
@@ -1858,31 +1867,26 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         </div>
       </div>
       </div>
+      </div>
       )}
 
       {executeSection === "experiments" && (
-      <div style={{ maxWidth: 1120, margin: "0 auto" }}>
-      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
-        <div
-          onClick={() => {
-            if (!sweepOpen) setSweepParams(enumerateSweepableParams(model));
-            setSweepOpen(o => !o);
-          }}
-          style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, userSelect: "none" }}>
-          <span style={{ fontSize: 14, color: sweepOpen ? C.accent : C.muted }}>{sweepOpen ? "▼" : "▶"}</span>
-          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STUDIES</span>
-          {sweepStatus === "running" && (
-            <span style={{ fontSize: 10, color: C.amber, fontFamily: FONT }}>Running experiment...</span>
-          )}
-          {sweepStatus === "complete" && (
-            <span style={{ fontSize: 10, color: C.green, fontFamily: FONT }}>Complete ({sweepResults?.length} points)</span>
-          )}
-          {sweepStatus === "error" && (
-            <span style={{ fontSize: 10, color: C.red, fontFamily: FONT }}>Error</span>
-          )}
+      <div style={{ maxWidth: 1120, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT }}>Studies</div>
+          <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, marginTop: 2 }}>Parametric sweep and adaptive batch exploration</div>
         </div>
-        {sweepOpen && (
-          <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 12, borderTop: `1px solid ${C.border}` }}>
+      </div>
+      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+        {(sweepStatus === "running" || sweepStatus === "complete" || sweepStatus === "error") && (
+          <div style={{ padding: "8px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 8 }}>
+            {sweepStatus === "running" && <span style={{ fontSize: 11, color: C.amber, fontFamily: FONT }}>Running experiment…</span>}
+            {sweepStatus === "complete" && <span style={{ fontSize: 11, color: C.green, fontFamily: FONT }}>Complete — {sweepResults?.length} points</span>}
+            {sweepStatus === "error" && <span style={{ fontSize: 11, color: C.red, fontFamily: FONT }}>Error</span>}
+          </div>
+        )}
+        <div style={{ padding: "16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
               Vary one or two parameters across a range to see how KPIs respond. Each point runs multiple replications for statistical confidence. Results are shown in charts and tables but are not saved to run history.
             </div>
@@ -2302,7 +2306,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               </div>
             )}
           </div>
-        )}
+      </div>
       </div>
       </div>
       )}

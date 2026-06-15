@@ -953,7 +953,7 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], dataSo
           <div style={{ fontSize: 32, lineHeight: 1 }}>📅</div>
           <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: SANS }}>No schedules yet</div>
           <div style={{ fontSize: 13, color: C.muted, fontFamily: SANS, lineHeight: 1.6, maxWidth: 380 }}>
-            Create a named timetable to store arrival data separately from the DES logic — switch schedules at run time.
+            Create a named timetable to store arrival data separately from the simmodlr model — switch timetables at run time.
           </div>
           {canEdit && !showNewForm && (
             <Btn variant="primary" onClick={() => setShowNewForm(true)}>Create first schedule</Btn>

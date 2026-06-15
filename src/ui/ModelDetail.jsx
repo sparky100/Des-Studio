@@ -1258,44 +1258,48 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           />
         )}
         {tab==="state"&&renderAuthoringShell(
-          <div style={{maxWidth:920,margin:"0 auto",display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{maxWidth:920,margin:"0 auto",display:"flex",flexDirection:"column",gap:24}}>
             <TabErrors tabId="state" validation={validation}/>
-            <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Time unit</label>
-              <select
-                value={model.timeUnit||"minutes"}
-                onChange={canEdit?(e=>setField("timeUnit",e.target.value)):undefined}
-                disabled={!canEdit}
-                style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:12,padding:"5px 8px",width:160}}
-              >
-                <option value="seconds">Seconds</option>
-                <option value="minutes">Minutes</option>
-                <option value="hours">Hours</option>
-                <option value="days">Days</option>
-              </select>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Real-world start date and time</label>
-              <input
-                type="datetime-local"
-                value={(model.epoch||"").slice(0,16)}
-                onChange={canEdit?(e=>setField("epoch", e.target.value ? new Date(e.target.value).toISOString() : "")):undefined}
-                disabled={!canEdit}
-                style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:12,padding:"5px 8px",width:220}}
-              />
-              <span style={{fontSize:10,color:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif"}}>
-                Optional. Use this if simulation time should map to real calendar dates and times. Required for CSV timestamp import.
-              </span>
-            </div>
-            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
-              <div style={{fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.6,marginBottom:8}}>
-                Connect external schedules or live updates to this model.
+            {/* Time Configuration */}
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Time Configuration</div>
+                <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Simulation time unit and real-world calendar alignment</div>
               </div>
-              <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
+              <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:"16px 18px",display:"flex",flexDirection:"column",gap:14}}>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  <label style={{fontSize:12,fontWeight:600,color:C.text,fontFamily:SANS}}>Time unit</label>
+                  <select
+                    value={model.timeUnit||"minutes"}
+                    onChange={canEdit?(e=>setField("timeUnit",e.target.value)):undefined}
+                    disabled={!canEdit}
+                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:SANS,fontSize:12,padding:"6px 10px",width:180}}
+                  >
+                    <option value="seconds">Seconds</option>
+                    <option value="minutes">Minutes</option>
+                    <option value="hours">Hours</option>
+                    <option value="days">Days</option>
+                  </select>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  <label style={{fontSize:12,fontWeight:600,color:C.text,fontFamily:SANS}}>Real-world start date and time</label>
+                  <input
+                    type="datetime-local"
+                    value={(model.epoch||"").slice(0,16)}
+                    onChange={canEdit?(e=>setField("epoch", e.target.value ? new Date(e.target.value).toISOString() : "")):undefined}
+                    disabled={!canEdit}
+                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:SANS,fontSize:12,padding:"6px 10px",width:240}}
+                  />
+                  <span style={{fontSize:11,color:C.muted,fontFamily:SANS,lineHeight:1.5}}>
+                    Optional — use if simulation time should map to real calendar dates. Required for CSV timestamp import.
+                  </span>
+                </div>
+              </div>
             </div>
-            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
-              <StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/>
-            </div>
+            {/* Model Data */}
+            <StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/>
+            {/* Data Sources */}
+            <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
           </div>
         )}
         {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><TabErrors tabId="bevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}} errorFilter={errorFilter?.tab==="bevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
@@ -1581,14 +1585,20 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="access"&&isOwner&&(
           <div style={{maxWidth:700,margin:"0 auto",display:"flex",flexDirection:"column",gap:18}}>
             <section aria-label="Sharing settings" style={{display:"flex",flexDirection:"column",gap:10}}>
-              <SH label="Sharing"/>
+              <div>
+                <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Sharing</div>
+                <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Control who can discover this model</div>
+              </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"private").then(onRefresh);}} small>🔒 Private</Btn>
                 <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"public").then(onRefresh);}} small>🌐 Public</Btn>
               </div>
             </section>
             <section aria-label="Export model" style={{display:"flex",flexDirection:"column",gap:10}}>
-              <SH label="Export"/>
+              <div>
+                <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Export</div>
+                <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Download the model in portable formats</div>
+              </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12}}>
                 <div>
                   <div style={{fontSize:12,color:C.text,fontFamily:FONT,fontWeight:700,marginBottom:4}}>Model JSON</div>
@@ -1631,12 +1641,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                           {u.initials&&<div style={{fontSize:11,color:C.muted,fontFamily:SANS}}>{u.initials}</div>}
                         </div>
                         <select value={model.access?.[u.id]||"viewer"}
-                          onChange={e=>{const a={...(model.access||{}),[u.id]:e.target.value};if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(onRefresh);}}
+                          onChange={e=>{const a={...(model.access||{}),[u.id]:e.target.value};setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}
                           style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
                           <option value="viewer">Viewer</option>
                           <option value="editor">Editor</option>
                         </select>
-                        <Btn small variant="ghost" onClick={()=>{const a={...(model.access||{}),[u.id]:"none"};if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(onRefresh);}}>Remove</Btn>
+                        <Btn small variant="ghost" onClick={()=>{const a={...(model.access||{}),[u.id]:"none"};setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}>Remove</Btn>
                       </div>
                     ))}
                   </div>
@@ -1677,7 +1687,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         <Btn small variant="primary" onClick={()=>{
                           const role=pendingRoles[u.id]||"viewer";
                           const a={...(model.access||{}),[u.id]:role};
-                          if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(()=>{setCollabQuery("");onRefresh();});
+                          setModel(m=>({...m,access:a}));
+                          setCollabQuery("");
+                          overrides.onSetAccess?.(modelId,a);
                         }}>Add</Btn>
                       </div>
                     ))}
