@@ -322,7 +322,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
   const meanRange = maxMean - minMean || 1;
 
   const colorFor = (mean) => {
-    if (!Number.isFinite(mean)) return "transparent";
+    if (!Number.isFinite(mean)) return alpha(C.border, 0.4);
     const t = (mean - minMean) / meanRange;
     return t < 0.5
       ? lerpColor(C.accent, C.amber, t * 2)
@@ -335,7 +335,6 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
     : [];
   const feasibleCount = feasibleCells.length;
 
-  // Best feasible cell (lowest mean, or highest for served)
   const isHigherBetter = metric.includes("served");
   const bestCell = feasibleCells.length
     ? feasibleCells.reduce((best, r) => {
@@ -345,78 +344,140 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
       })
     : null;
 
+  const orderedCells = valueAs.flatMap(va => valueBs.map(vb => getCell(va, vb)));
+
+  const chipStyle = (color) => ({
+    display: "inline-block",
+    background: alpha(color, 0.12), border: `1px solid ${alpha(color, 0.3)}`,
+    borderRadius: 20, padding: "3px 10px",
+    fontSize: 11, fontWeight: 700, color, whiteSpace: "nowrap",
+    fontFamily: FONT,
+  });
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+      {/* Summary dot strip */}
       {hasGoals && (
-        <div style={{ fontSize: 10, fontFamily: FONT, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ color: feasibleCount > 0 ? C.green : C.red }}>
-            {feasibleCount}/{results.length} cells satisfy all goals
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontFamily: FONT }}>
+          <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+            {orderedCells.map((cell, i) => {
+              const f = cell ? pointIsFeasible(goals, cell.aggregateStats) : null;
+              return (
+                <div key={i} title={f === true ? "Meets all goals" : f === false ? "Misses a goal" : "No data"} style={{
+                  width: 10, height: 10, borderRadius: 3,
+                  background: f === true ? C.green : f === false ? C.red : C.border,
+                }} />
+              );
+            })}
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: feasibleCount > 0 ? C.green : C.red }}>
+            {feasibleCount} / {results.length} meet all goals
           </span>
-          {bestCell && (
-            <span style={{ color: C.green }}>
-              Best feasible: {paramLabelA}={bestCell.valueA}, {paramLabelB}={bestCell.valueB},
-              {" "}{METRIC_LABELS[metric] || metric}={fmt(bestCell.aggregateStats[metric]?.mean)}
-            </span>
-          )}
-          <span style={{ color: C.muted }}>
-            ✗ = infeasible (misses a goal)
-          </span>
+          <span style={{ fontSize: 11, color: C.muted }}>· red = misses a goal</span>
         </div>
       )}
+
+      {/* Grid */}
       <div style={{ overflowX: "auto" }}>
-        <table style={{ borderCollapse: "collapse", color: C.text, fontSize: 11, textAlign: "center" }}>
-          <thead>
-            <tr>
-              <th scope="col" style={{ padding: "6px 8px", color: C.muted, fontSize: 11 }}>{paramLabelA} \ {paramLabelB}</th>
-              {valueBs.map(vb => (
-                <th key={vb} scope="col" style={{ padding: "6px 8px", color: C.muted, fontSize: 11 }}>{fmt(vb)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {valueAs.map(va => (
-              <tr key={va}>
-                <td style={{ padding: "6px 8px", color: C.amber, fontWeight: 700, fontSize: 10 }}>{fmt(va)}</td>
-                {valueBs.map(vb => {
-                  const cell = getCell(va, vb);
-                  const mean = cell?.aggregateStats[metric]?.mean;
-                  const feasible = hasGoals && cell ? pointIsFeasible(goals, cell.aggregateStats) : null;
-                  const isBest = hasGoals && cell && cell === bestCell;
-                  return (
-                    <td key={vb}
-                      onClick={() => onCellClick?.(cell)}
-                      title={hasGoals && feasible === false ? "Infeasible — misses one or more goals" : undefined}
-                      style={{
-                        padding: "8px 10px",
-                        background: colorFor(mean),
-                        color: C.bg,
-                        fontWeight: isBest ? 900 : 700,
-                        minWidth: 60,
-                        cursor: onCellClick ? "pointer" : "default",
-                        border: isBest ? `2px solid ${C.green}` : "2px solid transparent",
-                        opacity: feasible === false ? 0.35 : 1,
-                        position: "relative",
-                        transition: "border-color 0.15s",
-                      }}
-                      onMouseEnter={e => { if (onCellClick) e.currentTarget.style.borderColor = C.text; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = isBest ? C.green : "transparent"; }}>
-                      {feasible === false ? (
-                        <span style={{ display: "block", fontSize: 9, opacity: 0.7 }}>✗ {fmt(mean)}</span>
-                      ) : fmt(mean)}
-                      {isBest && <span style={{ display: "block", fontSize: 8, color: C.green }}>★ best</span>}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: `auto ${valueBs.map(() => "minmax(76px, 1fr)").join(" ")}`,
+          gap: 4,
+        }}>
+          {/* Corner cell */}
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "flex-start", padding: "4px 8px 4px 0", gap: 3, minWidth: 80 }}>
+            <span style={{ fontSize: 10, color: C.amber, fontFamily: FONT, fontWeight: 600, lineHeight: 1.2 }}>{paramLabelA}</span>
+            <div style={{ width: "100%", height: 1, background: C.border }} />
+            <span style={{ fontSize: 10, color: C.accent, fontFamily: FONT, fontWeight: 600, lineHeight: 1.2 }}>{paramLabelB}</span>
+          </div>
+
+          {/* Column headers */}
+          {valueBs.map(vb => (
+            <div key={`ch-${vb}`} style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", padding: "4px 2px" }}>
+              <div style={chipStyle(C.accent)}>{fmt(vb)}</div>
+            </div>
+          ))}
+
+          {/* Data rows */}
+          {valueAs.flatMap(va => [
+            /* Row header */
+            <div key={`rh-${va}`} style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "2px 8px 2px 0" }}>
+              <div style={chipStyle(C.amber)}>{fmt(va)}</div>
+            </div>,
+            /* Cells */
+            ...valueBs.map(vb => {
+              const cell = getCell(va, vb);
+              const mean = cell?.aggregateStats[metric]?.mean;
+              const ci = cell?.aggregateStats[metric];
+              const halfWidth = (ci?.lower != null && ci?.upper != null && Number.isFinite(ci.lower) && Number.isFinite(ci.upper))
+                ? Math.abs((ci.upper - ci.lower) / 2)
+                : null;
+              const feasible = hasGoals && cell ? pointIsFeasible(goals, cell.aggregateStats) : null;
+              const isBest = hasGoals && cell && cell === bestCell;
+              return (
+                <div key={`${va}-${vb}`}
+                  onClick={() => onCellClick?.(cell)}
+                  title={hasGoals && feasible === false ? "Infeasible — misses one or more goals" : undefined}
+                  style={{
+                    background: colorFor(mean),
+                    borderRadius: 6,
+                    minHeight: 68,
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    cursor: onCellClick ? "pointer" : "default",
+                    border: isBest ? `2px solid ${C.green}` : "2px solid transparent",
+                    position: "relative",
+                    transition: "border-color 0.15s, transform 0.12s",
+                    padding: "10px 8px",
+                  }}
+                  onMouseEnter={e => { if (onCellClick) { e.currentTarget.style.borderColor = C.text; e.currentTarget.style.transform = "scale(1.04)"; } }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = isBest ? C.green : "transparent"; e.currentTarget.style.transform = "scale(1)"; }}
+                >
+                  {/* Infeasible badge */}
+                  {feasible === false && (
+                    <div style={{
+                      position: "absolute", top: 4, right: 4,
+                      width: 13, height: 13, borderRadius: "50%",
+                      background: C.red, border: "1.5px solid rgba(0,0,0,0.25)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 7, color: "#fff", fontWeight: 900, lineHeight: 1,
+                    }}>✕</div>
+                  )}
+                  {/* Best badge */}
+                  {isBest && (
+                    <div style={{
+                      position: "absolute", top: 3, left: 3,
+                      background: C.green, borderRadius: 3,
+                      fontSize: 8, color: "#fff", fontWeight: 900,
+                      padding: "1px 4px", letterSpacing: "0.5px", lineHeight: 1.5,
+                    }}>BEST</div>
+                  )}
+                  {/* Main value */}
+                  <div style={{ fontSize: 20, fontWeight: 800, color: C.bg, lineHeight: 1, fontFamily: FONT }}>
+                    {Number.isFinite(mean) ? fmt(mean) : "—"}
+                  </div>
+                  {/* CI half-width */}
+                  {halfWidth != null && halfWidth > 0 && (
+                    <div style={{ fontSize: 9, color: alpha(C.bg, 0.6), marginTop: 3, fontFamily: FONT, lineHeight: 1 }}>
+                      ±{fmt(halfWidth)}
+                    </div>
+                  )}
+                </div>
+              );
+            }),
+          ])}
+        </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.muted, fontFamily: FONT }}>
-        <span>Low</span>
-        <div style={{ width: 120, height: 10, background: `linear-gradient(to right, ${C.accent}, ${C.amber}, ${C.red})`, borderRadius: 2 }} />
-        <span>High</span>
-        <span style={{ marginLeft: 8 }}>{METRIC_LABELS[metric] || metric}</span>
+
+      {/* Color legend */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT }}>
+        <span style={{ fontSize: 11, color: C.muted }}>Low</span>
+        <div style={{
+          flex: 1, maxWidth: 160, height: 8, borderRadius: 4,
+          background: `linear-gradient(to right, ${C.accent}, ${C.amber}, ${C.red})`,
+        }} />
+        <span style={{ fontSize: 11, color: C.muted }}>High</span>
+        <span style={{ fontSize: 11, color: C.muted, marginLeft: 4 }}>{METRIC_LABELS[metric] || metric}</span>
       </div>
     </div>
   );
