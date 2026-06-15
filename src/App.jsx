@@ -555,6 +555,7 @@ export default function App({ onThemeChange }){
             onBack={()=>{
               setOpenId(null);
               setLocalModel(null);
+              welcomeShownRef.current = true;
               setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
             }}
             onRefresh={loadData}

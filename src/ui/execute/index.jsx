@@ -1605,27 +1605,25 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           }}>+ New Experiment</Btn>
         )}
       </div>
-      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+      {/* Filter row */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input
+          value={expFilterText}
+          onChange={e => setExpFilterText(e.target.value)}
+          placeholder="Filter by name…"
+          style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
+        />
+        {experiments.length > 1 && (
+          <>
+            <Btn small variant="ghost" onClick={() => setExpandedExpIds(new Set(experiments.map(e => e.id)))}>Expand all</Btn>
+            <Btn small variant="ghost" onClick={() => { setExpandedExpIds(new Set()); setExpEditId(null); }}>Collapse all</Btn>
+          </>
+        )}
+      </div>
 
-        {/* Filter row */}
-        <div style={{ padding: "12px 16px", display: "flex", gap: 8, alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
-          <input
-            value={expFilterText}
-            onChange={e => setExpFilterText(e.target.value)}
-            placeholder="Filter by name…"
-            style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
-          />
-          {experiments.length > 1 && (
-            <>
-              <Btn small variant="ghost" onClick={() => setExpandedExpIds(new Set(experiments.map(e => e.id)))}>Expand all</Btn>
-              <Btn small variant="ghost" onClick={() => { setExpandedExpIds(new Set()); setExpEditId(null); }}>Collapse all</Btn>
-            </>
-          )}
-        </div>
-
-        {/* New experiment inline card */}
-        {expFormOpen && !expEditId && (
-          <div style={{ padding: 16, borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* New experiment form */}
+      {expFormOpen && !expEditId && (
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
             <span style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>NEW EXPERIMENT</span>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Name *</span>
@@ -1679,30 +1677,31 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               }}>{expFormSaving ? "Saving…" : "Save"}</Btn>
               <Btn small variant="ghost" onClick={() => setExpFormOpen(false)}>Cancel</Btn>
             </div>
-          </div>
-        )}
+        </div>
+      )}
 
-        {/* Experiment list */}
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {experimentsStatus === "loading" && (
-            <span style={{ padding: 16, fontSize: 12, color: C.muted, fontFamily: FONT }}>Loading…</span>
-          )}
-          {experimentsStatus === "error" && (
-            <span style={{ padding: 16, fontSize: 12, color: C.red, fontFamily: FONT }}>{experimentsError}</span>
-          )}
-          {experimentsStatus === "loaded" && experiments.length === 0 && !expFormOpen && (
-            <div style={{ padding: "40px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-              <div style={{ fontSize: 32, lineHeight: 1 }}>🧪</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: FONT }}>No saved experiments yet</div>
-              <div style={{ fontSize: 13, color: C.muted, fontFamily: FONT, lineHeight: 1.6, maxWidth: 380 }}>Save a named configuration — replications, seed, run length, and parameter overrides — to replay or compare later.</div>
-              <span style={{ fontSize: 0 }}></span>
-            </div>
-          )}
-          {(() => {
-            const lcFilter = expFilterText.toLowerCase();
-            const filtered = lcFilter ? experiments.filter(e => e.name.toLowerCase().includes(lcFilter)) : experiments;
-            return filtered.map((exp, idx) => {
-              const isExpanded = expandedExpIds.has(exp.id);
+      {/* Status + empty state */}
+      {experimentsStatus === "loading" && (
+        <span style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>Loading…</span>
+      )}
+      {experimentsStatus === "error" && (
+        <span style={{ fontSize: 12, color: C.red, fontFamily: FONT }}>{experimentsError}</span>
+      )}
+      {experimentsStatus === "loaded" && experiments.length === 0 && !expFormOpen && (
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "40px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 32, lineHeight: 1 }}>🧪</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: FONT }}>No saved experiments yet</div>
+          <div style={{ fontSize: 13, color: C.muted, fontFamily: FONT, lineHeight: 1.6, maxWidth: 380 }}>Save a named configuration — replications, seed, run length, and parameter overrides — to replay or compare later.</div>
+          {userId && <Btn variant="primary" onClick={() => { setExpEditId(null); setExpFormName(""); setExpFormDesc(""); setExpFormOverrides([]); setExpFormPickerOpen(false); if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model)); setExpFormOpen(true); }}>+ New Experiment</Btn>}
+        </div>
+      )}
+
+      {/* Experiment cards — B-Events style */}
+      {(() => {
+        const lcFilter = expFilterText.toLowerCase();
+        const filtered = lcFilter ? experiments.filter(e => e.name.toLowerCase().includes(lcFilter)) : experiments;
+        return filtered.map((exp, idx) => {
+          const isExpanded = expandedExpIds.has(exp.id);
               const isEditing = expEditId === exp.id;
               const cfg = exp.config;
               const summaryLine = `${cfg.replications} repl · seed ${cfg.seed} · warm-up ${cfg.warmupPeriod} · ${cfg.terminationMode === "time" ? `duration ${cfg.maxSimTime}` : "condition stop"}${cfg.overrides?.length > 0 ? ` · ${cfg.overrides.length} override${cfg.overrides.length > 1 ? "s" : ""}` : ""}`;
@@ -1748,15 +1747,18 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               const runCfg = () => { loadCfg(); setRunLabel(exp.name); setExecuteSection("run"); };
 
               return (
-                <div key={exp.id} style={{ borderBottom: idx < filtered.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                <div key={exp.id} style={{ background: C.bg, border: `1px solid ${C.accent}33`, borderLeft: `3px solid ${C.accent}`, borderRadius: 6, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                   {/* Collapsed header — always visible */}
-                  <div onClick={toggleExpand} style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none" }}>
-                    <span style={{ fontSize: 12, color: isExpanded ? C.accent : C.muted, flexShrink: 0 }}>{isExpanded ? "▼" : "▶"}</span>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button
+                      onClick={toggleExpand}
+                      style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 3px", color: isExpanded ? C.accent : C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1, flexShrink: 0 }}
+                      aria-label={isExpanded ? "Collapse" : "Expand"}
+                    >{isExpanded ? "▾" : "▸"}</button>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{exp.name}</div>
                       {!isExpanded && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>{summaryLine}</div>}
                     </div>
-                    {/* Quick-action buttons visible in collapsed state */}
                     {!isExpanded && (
                       <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                         <Btn small variant="primary" onClick={loadCfg}>Load</Btn>
@@ -1767,7 +1769,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
                   {/* Expanded body */}
                   {isExpanded && (
-                    <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 12, borderTop: `1px solid ${C.border}` }}>
+                    <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
                       {isEditing ? (
                         <>
                           {/* Edit mode */}
@@ -1866,10 +1868,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   )}
                 </div>
               );
-            });
-          })()}
-        </div>
-      </div>
+        });
+      })()}
       </div>
       )}
 

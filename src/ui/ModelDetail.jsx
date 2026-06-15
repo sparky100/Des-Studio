@@ -1630,12 +1630,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                           {u.initials&&<div style={{fontSize:11,color:C.muted,fontFamily:SANS}}>{u.initials}</div>}
                         </div>
                         <select value={model.access?.[u.id]||"viewer"}
-                          onChange={e=>{const a={...(model.access||{}),[u.id]:e.target.value};if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(onRefresh);}}
+                          onChange={e=>{const a={...(model.access||{}),[u.id]:e.target.value};setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}
                           style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
                           <option value="viewer">Viewer</option>
                           <option value="editor">Editor</option>
                         </select>
-                        <Btn small variant="ghost" onClick={()=>{const a={...(model.access||{}),[u.id]:"none"};if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(onRefresh);}}>Remove</Btn>
+                        <Btn small variant="ghost" onClick={()=>{const a={...(model.access||{}),[u.id]:"none"};setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}>Remove</Btn>
                       </div>
                     ))}
                   </div>
@@ -1676,7 +1676,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         <Btn small variant="primary" onClick={()=>{
                           const role=pendingRoles[u.id]||"viewer";
                           const a={...(model.access||{}),[u.id]:role};
-                          if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(()=>{setCollabQuery("");onRefresh();});
+                          setModel(m=>({...m,access:a}));
+                          setCollabQuery("");
+                          overrides.onSetAccess?.(modelId,a);
                         }}>Add</Btn>
                       </div>
                     ))}
