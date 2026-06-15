@@ -425,11 +425,13 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", padding: 14, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <div>
           <SH label="Model Proposal" />
-          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
-            {isNewModel ? "Review the model before saving it to your library." : "Review what will change before applying it to the model."}
-          </div>
+          {!readOnly && (
+            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
+              {isNewModel ? "Review the model before saving it to your library." : "Review what will change before applying it to the model."}
+            </div>
+          )}
         </div>
-        <Btn small variant="ghost" onClick={onDiscard}>Discard</Btn>
+        {!readOnly && <Btn small variant="ghost" onClick={onDiscard}>Discard</Btn>}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 14, overflowY: "auto", flex: 1, minHeight: 0 }}>
