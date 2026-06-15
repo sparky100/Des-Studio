@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { validateModel } from "../../engine/validation.js";
 import { Btn, Empty, SH, Tag } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { METRIC_LABELS } from "../execute/executeHelpers.js";
 
 const SECTION_META = [
   { key: "entityTypes", label: "Entity Classes" },
@@ -348,9 +349,17 @@ function SimulationSummaryCard({ proposedModel }) {
         <div>
           <div style={sectionLabel}>Goals</div>
           {goals.map((goal, i) => {
-            const text = typeof goal === "string" ? goal
-              : goal.metric && goal.target ? `${goal.metric}: ${goal.target}`
-              : goal.metric || JSON.stringify(goal);
+            if (typeof goal === "string") return <div key={i} style={rowStyle}>{goal}</div>;
+            const metricLabel = METRIC_LABELS[goal.metric] || goal.metric || "";
+            const resourceMetricLabel = goal.metric?.startsWith("resource.")
+              ? "Utilisation"
+              : metricLabel;
+            const displayLabel = goal.label
+              || (goal.scope?.name ? `${goal.scope.name} — ${resourceMetricLabel}` : resourceMetricLabel);
+            const opPart = goal.operator?.startsWith("p")
+              ? `${goal.operator.toUpperCase()} <`
+              : (goal.operator || "<");
+            const text = goal.target != null ? `${displayLabel} ${opPart} ${goal.target}` : displayLabel;
             return <div key={i} style={rowStyle}>{text}</div>;
           })}
         </div>
