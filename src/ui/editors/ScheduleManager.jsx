@@ -791,6 +791,8 @@ function InlineRowsBanner({ modelId, userId, bEvents, onExtracted }) {
   );
 }
 
+const SANS = "Inter,'Segoe UI',Arial,sans-serif";
+
 // ── ScheduleManager (exported) ────────────────────────────────────────────────
 
 export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], dataSources = [], epoch, timeUnit = "minutes", onBEventsExtracted, onUpdateBEvents, focusScheduleId, onFocusHandled, onGoToBEvent }) {
@@ -920,11 +922,17 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], dataSo
 
       {/* Header */}
       <div style={{ padding: "12px 16px 0" }}>
-        <SH label="Schedules" color={C.accent}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: SANS }}>Schedules</div>
+            <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, marginTop: 2 }}>
+              {schedules.length === 0 ? "No schedules yet" : `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""}`}
+            </div>
+          </div>
           {canEdit && !showNewForm && (
-            <Btn small variant="ghost" onClick={() => setShowNewForm(true)}>+ New Schedule</Btn>
+            <Btn variant="primary" onClick={() => setShowNewForm(true)}>+ New Schedule</Btn>
           )}
-        </SH>
+        </div>
       </div>
 
       {/* New schedule form */}
@@ -941,7 +949,16 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], dataSo
 
       {/* Schedule cards */}
       {schedules.length === 0 ? (
-        <Empty icon="📅" msg={`No schedules yet.${canEdit ? " Create one to store timetable data separately from the DES logic." : ""}`} />
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "40px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, margin: "12px 16px 16px" }}>
+          <div style={{ fontSize: 32, lineHeight: 1 }}>📅</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: SANS }}>No schedules yet</div>
+          <div style={{ fontSize: 13, color: C.muted, fontFamily: SANS, lineHeight: 1.6, maxWidth: 380 }}>
+            Create a named timetable to store arrival data separately from the DES logic — switch schedules at run time.
+          </div>
+          {canEdit && !showNewForm && (
+            <Btn variant="primary" onClick={() => setShowNewForm(true)}>Create first schedule</Btn>
+          )}
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 16px 16px" }}>
           {schedules.map(sched => (

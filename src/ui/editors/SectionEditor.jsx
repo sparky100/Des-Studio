@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Btn, CommitInput, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
+const SANS = "Inter,'Segoe UI',Arial,sans-serif";
+
 const PRESET_COLORS = [
   "#4A90D9", "#27AE60", "#E74C3C", "#9B59B6",
   "#F39C12", "#1ABC9C", "#E67E22", "#3498DB",
@@ -80,14 +82,29 @@ const SectionEditor = ({ sections = [], queues = [], entityTypes = [], bEvents =
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <SH label="Sections" color={C.accent}>
-        <Btn small variant="ghost" onClick={add}>+ Add Section</Btn>
-      </SH>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: SANS }}>Sections</div>
+          <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, marginTop: 2 }}>
+            {sections.length === 0 ? "No sections yet" : `${sections.length} section${sections.length !== 1 ? "s" : ""}`}
+          </div>
+        </div>
+        <Btn variant="primary" onClick={add}>+ Add Section</Btn>
+      </div>
       <InfoBox color={C.accent}>
         Group related queues, events, and entity types into named sections. Sections appear as coloured swimlanes in the visual
         designer and as filter tabs in each editor.
       </InfoBox>
-      {sections.length === 0 && <Empty icon="Sections" msg="No sections yet. Add a section to organise large models." />}
+      {sections.length === 0 && (
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "40px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 32, lineHeight: 1 }}>📋</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: SANS }}>No sections yet</div>
+          <div style={{ fontSize: 13, color: C.muted, fontFamily: SANS, lineHeight: 1.6, maxWidth: 380 }}>
+            Group queues, events, and entity types into named sections — they appear as swimlanes in the canvas and filter tabs in each editor.
+          </div>
+          <Btn variant="primary" onClick={add}>Add first section</Btn>
+        </div>
+      )}
       {sections.map((s, i) => {
         const isExpanded = expandedIds.has(s.id);
         const memberCount = s.memberIds.length;

@@ -46,6 +46,7 @@ import { normalizeModelConditions }         from "../model/conditionFormat.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "goals", "graph", "experimentDefaults"];
+const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
 const AuthoringWorkflowShell = ({ mode, children }) => (
   <section aria-label={`${mode.label} authoring shell`} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -278,13 +279,27 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
 
   return (
     <div style={{display:'flex', flexDirection:'column', gap:8}}>
-      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:2}}>
-        <label style={{fontSize:11, fontWeight:600, color:C.muted, letterSpacing:'1.5px', textTransform:'uppercase', fontFamily:FONT}}>Data Sources</label>
-        {canEdit && <Btn small variant="ghost" onClick={add}>+ Add source</Btn>}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 2 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: SANS }}>Data Sources</div>
+          <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, marginTop: 2 }}>
+            {sources.length === 0 ? "No external data connected" : `${sources.length} source${sources.length !== 1 ? "s" : ""} connected`}
+          </div>
+        </div>
+        {canEdit && <Btn variant="primary" onClick={add}>+ Add source</Btn>}
       </div>
 
       {sources.length === 0 && (
-        <span style={{fontSize:12, color:C.muted, fontFamily:FONT}}>No external data is connected yet.</span>
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "40px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 32, lineHeight: 1 }}>🔗</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: SANS }}>No data sources connected</div>
+          <div style={{ fontSize: 13, color: C.muted, fontFamily: SANS, lineHeight: 1.6, maxWidth: 380 }}>
+            Connect a live data feed to drive arrivals or entity attributes from an external REST API or schedule file.
+          </div>
+          {canEdit && (
+            <Btn variant="primary" onClick={add}>Connect first source</Btn>
+          )}
+        </div>
       )}
 
       {sources.map((src, idx) => (
