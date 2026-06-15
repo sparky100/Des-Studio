@@ -217,14 +217,9 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
                   {opPart} {def?.unit || ""}
                 </div>
               </div>
-              <span
-                onClick={e => { e.stopPropagation(); rem(i, g.id); }}
-                role="button"
-                aria-label={`Remove goal ${i + 1}`}
-                style={{ fontSize: 11, color: C.muted, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}
-              >
-                ✕
-              </span>
+              <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
+                <Btn small variant="danger" ariaLabel={`Remove goal ${i + 1}`} onClick={() => rem(i, g.id)}>✕</Btn>
+              </div>
             </div>
 
             {/* Expanded editing area */}
