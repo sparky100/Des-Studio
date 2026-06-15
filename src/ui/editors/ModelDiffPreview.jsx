@@ -504,22 +504,20 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
                       />
                     )}
                     <div style={{ color: C.text, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>{section.label}</div>
-                    {hasChanges && <Tag label="Changed" color={C.accent} />}
-                    {hasChanges && (
-                      <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
-                        {[added.length ? `${added.length} added` : "", modified.length ? `${modified.length} modified` : "", removed.length ? `${removed.length} removed` : ""].filter(Boolean).join("  ·  ")}
-                      </div>
+                    {hasChanges ? (
+                      <>
+                        <Tag label="Changed" color={C.accent} />
+                        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
+                          {[added.length ? `${added.length} added` : "", modified.length ? `${modified.length} modified` : "", removed.length ? `${removed.length} removed` : ""].filter(Boolean).join("  ·  ")}
+                        </div>
+                      </>
+                    ) : (
+                      <Tag label="Unchanged" color={C.green} />
                     )}
                   </div>
                   <ChangeList title="Added" items={added} color={C.green} renderItem={renderItemSummary} />
                   <ChangeList title="Removed" items={removed} color={C.red} renderItem={renderItemSummary} />
                   <ChangeList title="Modified" items={modified} color={C.amber} renderItem={(item) => <ModifiedSummaryItem item={item} />} />
-                  {!hasChanges && unchanged.length > 0 && (
-                    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", color: C.muted, fontFamily: FONT, fontSize: 10 }}>
-                      <span style={{ fontWeight: 600 }}>{unchanged.length} unchanged: </span>
-                      {unchanged.map(item => item.name || item.id || "?").join(", ")}
-                    </div>
-                  )}
                 </section>
               );
             })}
