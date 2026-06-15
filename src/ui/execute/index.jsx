@@ -1756,6 +1756,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                         <Btn small variant="primary" onClick={loadCfg}>Load</Btn>
                         <Btn small variant="ghost" onClick={runCfg}>Run</Btn>
+                        <Btn small variant="danger" ariaLabel={`Delete experiment ${exp.name}`} onClick={async () => {
+                          if (!confirm(`Delete "${exp.name}"?`)) return;
+                          try { await deleteExperiment(exp.id); setExperiments(prev => prev.filter(e => e.id !== exp.id)); setExpandedExpIds(prev => { const n = new Set(prev); n.delete(exp.id); return n; }); }
+                          catch (err) { setExperimentsError(err?.message || "Delete failed"); }
+                        }}>✕</Btn>
                       </div>
                     )}
                   </div>
@@ -1849,11 +1854,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                               try { const cloned = await cloneExperiment(exp.id, userId); setExperiments(prev => [cloned, ...prev]); }
                               catch (err) { setExperimentsError(err?.message || "Clone failed"); }
                             }}>Clone</Btn>
-                            <Btn small variant="ghost" onClick={async () => {
-                              if (!confirm(`Delete "${exp.name}"?`)) return;
-                              try { await deleteExperiment(exp.id); setExperiments(prev => prev.filter(e => e.id !== exp.id)); setExpandedExpIds(prev => { const n = new Set(prev); n.delete(exp.id); return n; }); }
-                              catch (err) { setExperimentsError(err?.message || "Delete failed"); }
-                            }}>Delete</Btn>
                           </div>
                         </>
                       )}
