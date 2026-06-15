@@ -942,7 +942,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const selectableTabs = TABS.filter(t => !t.disabled);
   const NAV_MODES=[
     {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
-    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","containers","bevents","cevents","sections","schedules","state","validate"]},
+    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","containers","bevents","cevents","sections","schedules","goals","state","validate"]},
     {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
     {id:"results",label:"Results",primaryTab:"results",tabs:["results"]},
     ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
@@ -953,7 +953,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const DISPLAY_MODES = isMobileLayout
       ? [
         {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
-        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","containers","bevents","cevents","sections","schedules","state","validate"]},
+        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","containers","bevents","cevents","sections","schedules","goals","state","validate"]},
         {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
         {id:"results",label:"Results",primaryTab:"results",tabs:["results"]},
         ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
