@@ -574,7 +574,7 @@ function buildExecutiveSummary(model, results, recommendations, aggStats = {}, m
   }</div>` : '';
 
   // Goal status summary
-  const goalGaps = buildGoalGaps(model, aggStats);
+  const goalGaps = buildGoalGaps(model, aggStats, { ...summary, waitDist: results?.waitDist });
   let goalStatusHtml = '';
   if (Array.isArray(goalGaps) && goalGaps.length) {
     const met   = goalGaps.filter(g => g.met).length;
@@ -615,7 +615,6 @@ function buildMethodology(model, results, experimentConfig, aggStats = {}, type 
   const multiRep     = Object.values(aggStats).some(s => s?.n >= 2);
   const queueNames   = Object.keys(results.waitDist || {});
   const resourceTypes = Object.keys(summary.perResource || {});
-  const goals        = model.goals || [];
 
   const parts = [];
   const MAX_LISTED = 3;
@@ -657,15 +656,6 @@ function buildMethodology(model, results, experimentConfig, aggStats = {}, type 
   // Replications
   if (multiRep && replications >= 2) {
     parts.push(`<p class="method-item"><strong>Replications:</strong> The model was run ${replications} times with different random seeds. Headline figures are averages across all replications${type === 'technical' ? '; 95% confidence intervals are shown in the results' : ''}.</p>`);
-  }
-
-  // Performance targets
-  if (goals.length) {
-    const goalItems = goals.map(g => {
-      const lbl = g.label || g.metric;
-      return `<li><strong>${esc(lbl)}:</strong> ${esc(g.operator)} ${esc(String(g.target))}</li>`;
-    }).join('');
-    parts.push(`<ul style="margin:8px 0 8px 18px;font-size:12px;color:#374151;line-height:1.8">${goalItems}</ul>`);
   }
 
   if (!parts.length) return '';
@@ -715,7 +705,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     const qPart = queueNames.length ? `${queueNames.length} queue${queueNames.length !== 1 ? 's' : ''}` : '';
     const rPart = resourceTypes.length ? `${resourceTypes.length} resource type${resourceTypes.length !== 1 ? 's' : ''}` : '';
     const coverageDesc = [qPart, rPart].filter(Boolean).join(' and ');
-    const goalGapsPeek = buildGoalGaps(model, results.aggregateStats || {});
+    const goalGapsPeek = buildGoalGaps(model, results.aggregateStats || {}, { ...summary, waitDist });
     const goalNote = Array.isArray(goalGapsPeek) && goalGapsPeek.length
       ? ` Performance against ${goalGapsPeek.length} defined goal${goalGapsPeek.length !== 1 ? 's' : ''} is assessed below.`
       : '';
@@ -798,10 +788,14 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     const utilRows = resourceTypes.map(t => {
       const r = perResource[t];
       const pct = Number.isFinite(r.utilisation) ? `${Math.round(r.utilisation * 100)}%` : '—';
-      return [t, String(r.total ?? '—'), pct];
+      const et = (model.entityTypes || []).find(e => e.name === t);
+      const countCell = et?.shiftSchedule?.length
+        ? `shift (${et.shiftSchedule.length} period${et.shiftSchedule.length !== 1 ? 's' : ''})`
+        : String(r.total ?? '—');
+      return [t, countCell, pct];
     });
     utilTableHtml = `<p class="note">Percentage of time each resource was busy (averaged across the run, excluding warm-up). Green &lt;75%, amber 75–90%, red &gt;90%.</p>
-    ${htmlTable(['Resource type', 'Count', 'Utilisation'], utilRows)}`;
+    ${htmlTable(['Resource type', 'Capacity', 'Utilisation'], utilRows)}`;
   }
 
   const outcomeHasTimings = outcomes.some(r => r.avgWait != null || r.avgSojourn != null);
@@ -831,7 +825,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
   }
 
   // Goal assessment
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...summary, waitDist });
   let goalHtml = '';
   if (Array.isArray(goalGaps) && goalGaps.length) {
     const goalRows = goalGaps.map(g => [
@@ -1020,7 +1014,6 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
   const multiRep     = Object.values(aggregateStats).some(s => s?.n >= 2);
   const arrivalMode  = detectArrivalMode(model, summary);
   const warmup       = Number(experimentConfig.warmupPeriod ?? experimentConfig.warmup ?? 0);
-  const goals        = model.goals || [];
 
   const lines = [];
 
@@ -1089,11 +1082,6 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
   if (multiRep && Number(experimentConfig.replications ?? 1) >= 2) {
     lines.push(`**Replications:** ${experimentConfig.replications} runs averaged${isTechnical ? '; 95% confidence intervals shown in results' : ''}.`);
   }
-  if (goals.length) {
-    lines.push('');
-    lines.push('**Performance targets:**');
-    goals.forEach(g => lines.push(`- ${g.label || g.metric}: **${g.operator} ${g.target}**`));
-  }
   lines.push('');
   lines.push('---');
   lines.push('');
@@ -1116,7 +1104,7 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     kpiRows.push([`Total cost${multiRep ? ' (avg per run)' : ''}`, formatCurrency(costVal) ?? '—']);
   }
   // Inline goal status
-  const goalGapsForMd = buildGoalGaps(model, results.aggregateStats || {});
+  const goalGapsForMd = buildGoalGaps(model, results.aggregateStats || {}, { ...summary, waitDist: results.waitDist });
   if (Array.isArray(goalGapsForMd) && goalGapsForMd.length) {
     const met   = goalGapsForMd.filter(g => g.met).length;
     const total = goalGapsForMd.length;
@@ -1170,9 +1158,13 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     const utilRows = resourceTypes.map(t => {
       const r = summary.perResource[t];
       const pct = Number.isFinite(r.utilisation) ? `${Math.round(r.utilisation * 100)}%` : '—';
-      return [t, String(r.total ?? '—'), pct];
+      const et = (model.entityTypes || []).find(e => e.name === t);
+      const countCell = et?.shiftSchedule?.length
+        ? `shift (${et.shiftSchedule.length} period${et.shiftSchedule.length !== 1 ? 's' : ''})`
+        : String(r.total ?? '—');
+      return [t, countCell, pct];
     });
-    lines.push(mdTable(['Resource', 'Count', '% Busy'], utilRows));
+    lines.push(mdTable(['Resource', 'Capacity', '% Busy'], utilRows));
     lines.push('');
   }
 
