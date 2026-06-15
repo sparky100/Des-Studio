@@ -3,6 +3,8 @@ import { alpha } from "../shared/tokens.js";
 import { Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
+const SANS = "Inter,'Segoe UI',Arial,sans-serif";
+
 const METRICS = [
   { value: "summary.avgWait",        label: "Average wait time",           unit: "time units", type: "time",      scope: "queue" },
   { value: "summary.avgSvc",         label: "Average service time",        unit: "time units", type: "time",      scope: null },
@@ -167,9 +169,13 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <SH label="Performance Goals" color={C.purple}>
-        <Btn small variant="ghost" onClick={add}>+ Add Goal</Btn>
-      </SH>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: SANS }}>Performance Goals</div>
+          <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, marginTop: 2 }}>Target KPIs for AI analysis and result judgement</div>
+        </div>
+        <Btn variant="primary" onClick={add}>+ Add Goal</Btn>
+      </div>
       <InfoBox color={C.purple}>
         Set target KPIs for your model. The AI analysis panel will compare simulation results against
         these targets when generating insights. Time metrics support percentile operators (e.g. p90 {"<"} 10 means
@@ -190,8 +196,12 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
       )}
 
       {goals.length === 0 && (
-        <Empty icon="🎯" msg="No targets set yet. Add a target if you want the tool to judge whether results are good enough."
-          action={{ label: "+ Add Goal", onClick: add }} />
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "40px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 32, lineHeight: 1 }}>🎯</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: SANS }}>No targets set yet</div>
+          <div style={{ fontSize: 13, color: C.muted, fontFamily: SANS, lineHeight: 1.6, maxWidth: 380 }}>Add a target if you want the AI analysis tool to judge whether simulation results are good enough.</div>
+          <Btn variant="primary" onClick={add}>+ Add Goal</Btn>
+        </div>
       )}
 
       {visible.map((g) => {
