@@ -926,7 +926,7 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], dataSo
           <div>
             <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: SANS }}>Schedules</div>
             <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, marginTop: 2 }}>
-              {schedules.length === 0 ? "No schedules yet" : `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""}`}
+              {schedules.length > 0 ? `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""}` : "Named timetables for arrival data — switch at run time"}
             </div>
           </div>
           {canEdit && !showNewForm && (
