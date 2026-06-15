@@ -1123,16 +1123,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </div>
               </div>
             )}
-            {(model.parentModelId || (overrides.childScenarios||[]).length > 0) && (
-              <ScenariosSection
-                model={model}
-                parentModel={overrides.parentModel||null}
-                childScenarios={overrides.childScenarios||[]}
-                onOpenScenario={overrides.onOpenScenario}
-                onOpenParent={overrides.onOpenParent}
-              />
-            )}
-
             {/* Name + description as a document-style header */}
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {canEdit
@@ -1178,6 +1168,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </div>
                 <Btn small variant="ghost" onClick={()=>{setBaselineName(`Scenario from ${model.name||"this model"}`);setShowBaselineModal(true);}}>Create variant</Btn>
               </div>
+            )}
+
+            {(model.parentModelId || (overrides.childScenarios||[]).length > 0) && (
+              <ScenariosSection
+                model={model}
+                parentModel={overrides.parentModel||null}
+                childScenarios={overrides.childScenarios||[]}
+                onOpenScenario={overrides.onOpenScenario}
+                onOpenParent={overrides.onOpenParent}
+              />
             )}
 
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18}}>
