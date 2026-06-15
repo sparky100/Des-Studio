@@ -38,7 +38,7 @@ const SUB_ICONS = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DEFINE_TAB_IDS = ["entities", "queues", "bevents", "cevents", "sections", "schedules", "state"];
+const DEFINE_TAB_IDS = ["entities", "queues", "bevents", "cevents", "sections", "schedules", "goals", "state"];
 
 export function ModelTabBar({
   tab, setTab,
