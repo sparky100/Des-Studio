@@ -750,7 +750,8 @@ export function buildGoalGaps(model = {}, aggregateStats = {}, summary = {}) {
     const gap = current != null ? +(current - target).toFixed(1) : null;
     return {
       metric: g.metric,
-      label: g.label || `${g.metric} ${op} ${target}`,
+      label: g.label || (g.scope?.name ? `${g.scope.name} — ${g.metric} ${op} ${target}` : `${g.metric} ${op} ${target}`),
+      scope: g.scope || null,
       operator: op,
       target,
       current,
@@ -778,7 +779,7 @@ export function evaluateSweepPointGoals(goals = [], aggregateStats = {}) {
       else if (op === ">=") met = current >= target;
       else if (op === "==") met = Math.abs(current - target) < 0.001;
     }
-    return { metric: g.metric, label: g.label || `${g.metric} ${op} ${target}`, operator: op, target, current, met };
+    return { metric: g.metric, label: g.label || (g.scope?.name ? `${g.scope.name} — ${g.metric} ${op} ${target}` : `${g.metric} ${op} ${target}`), operator: op, target, current, met };
   });
   const feasible = gaps.every(g => g.met === true);
   return { feasible, gaps };
@@ -1510,7 +1511,7 @@ export function buildModelDescriptionPrompt(model = {}, results = {}) {
       ...(et.role === 'server' ? { count: et.count } : {}),
     })),
     queues: (model.queues || []).map(q => ({ name: q.name, discipline: q.discipline || 'FIFO' })),
-    goals: (model.goals || []).filter(g => g.label || g.metric).map(g => ({ label: g.label || g.metric, target: g.target })),
+    goals: (model.goals || []).filter(g => g.label || g.metric).map(g => ({ label: g.label || (g.scope?.name ? `${g.scope.name} — ${g.metric}` : g.metric), target: g.target })),
     features: { hasCost, hasShifts, hasContainers, hasFailures, hasPriority, isPlanBased },
   };
 

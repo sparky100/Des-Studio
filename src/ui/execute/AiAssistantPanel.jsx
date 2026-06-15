@@ -95,8 +95,8 @@ function BeforeAfterTable({ goals, baselineStats, afterStats, beforeWaitDist, af
         : null;
       const metColor = met === true ? C.green : met === false ? C.red : C.muted;
       rows.push(
-        <tr key={`goal-${g.metric}`} style={{ borderTop: `1px solid ${C.border}` }}>
-          <td style={{ color: C.text, padding: "2px 4px" }}>{g.label || g.metric}</td>
+        <tr key={`goal-${g.metric}-${g.scope?.id || "global"}`} style={{ borderTop: `1px solid ${C.border}` }}>
+          <td style={{ color: C.text, padding: "2px 4px" }}>{g.label || (g.scope?.name ? `${g.scope.name} — ${g.metric}` : g.metric)}</td>
           <td style={{ color: C.muted, padding: "2px 4px" }}>{fmt(beforeVal)}</td>
           <td style={{ color: met === true ? C.green : met === false ? C.red : C.text, padding: "2px 4px" }}>{fmt(afterVal)}</td>
           <td style={{ color: metColor, padding: "2px 4px", fontWeight: 700 }}>{met === true ? "MET" : met === false ? "MISSED" : "—"}</td>
