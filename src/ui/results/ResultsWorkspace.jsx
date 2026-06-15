@@ -286,7 +286,7 @@ function CiBadge({ ci, C, FONT }) {
   );
 }
 
-export function SummaryCardGrid({ results, replicationResults = [], model = {} }) {
+export function SummaryCardGrid({ results, replicationResults = [], model = {}, healthFlags = [] }) {
   const { C, FONT } = useTheme();
   const summary = results?.summary || {};
   // Derive replication count from prop array; fall back to stored replications field
@@ -487,6 +487,26 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           </>
         );
       })()}
+      {healthFlags.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+            HEALTH ALERTS
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {healthFlags.map((flag, i) => {
+              const isCritical = flag.severity === "critical";
+              const bg     = isCritical ? `${C.red}18`   : `${C.amber}12`;
+              const border = isCritical ? `${C.red}55`   : `${C.amber}44`;
+              const color  = isCritical ? C.red           : C.text;
+              return (
+                <div key={`${flag.code}-${i}`} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 6, padding: "8px 12px", fontFamily: FONT, fontSize: 12, color, lineHeight: 1.5 }}>
+                  {flag.message}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
       {outcomeEntries.length > 0 && (
         <>
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
@@ -1544,7 +1564,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
           <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
-            <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} />
+            <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} healthFlags={healthFlags} />
           </div>
         </div>
         {queuePeaks.length > 0 && (
@@ -1629,23 +1649,6 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
           <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} />
         </div>
       </div>
-
-      {/* ── Health flags — deterministic signals before AI analysis ────────── */}
-      {healthFlags.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 }}>
-          {healthFlags.map((flag, i) => {
-            const isCritical = flag.severity === "critical";
-            const bg    = isCritical ? `${C.red}18`   : `${C.amber}12`;
-            const border = isCritical ? `${C.red}55`   : `${C.amber}44`;
-            const color  = isCritical ? C.red           : C.text;
-            return (
-              <div key={`${flag.code}-${i}`} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 6, padding: "8px 12px", fontFamily: FONT, fontSize: 12, color, lineHeight: 1.5 }}>
-                {flag.message}
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {/* ── 2. Bottleneck section — header + nested collapsible charts ─────── */}
       {(chartModel.hasTimeSeries || hasWaitDistributions || queuePeaks.length > 0) && (
