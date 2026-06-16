@@ -514,6 +514,7 @@ export function FlowDiagramReactFlow({
       }}
     >
       <ReactFlow
+        id="flow-diagram-canvas"
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
