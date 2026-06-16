@@ -450,6 +450,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [historyError,setHistoryError]=useState("");
   const [historyShowArchived,setHistoryShowArchived]=useState(false);
   const [shareLinksMap,setShareLinksMap]=useState({});
+  const [executeRunning, setExecuteRunning] = useState(false);
   const [showCsvImport,setShowCsvImport]=useState(false);
   const [showSimPyExport,setShowSimPyExport]=useState(false);
   const [latestResults,setLatestResults]=useState(null);
@@ -1065,6 +1066,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const runCountValue = model.statsLoading || model.statsError ? "—" : model.stats?.runs ?? 0;
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100dvh",minHeight:"100vh",background:C.bg}}>
+      {!executeRunning && (
+      <>
       <ModelDetailHeader
         model={model} canEdit={canEdit} dirty={dirty} saving={saving}
         past={past} future={future} currentVersion={currentVersion}
@@ -1099,6 +1102,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           win.document.write(html); win.document.close(); win.focus();
         }}
       />
+      </>
+      )}
       <div style={{flex:1,display:"flex",flexDirection:"row",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
         <SaveBanner canEdit={canEdit} dirty={dirty} visualPending={visualPending} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
@@ -1447,6 +1452,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 toast.success(`Applied: ${suggestion.change?.target} → ${suggestion.change?.to}`);
               } : null}
               onExposeRunApi={fn => { runWithPatchRef.current = fn; }}
+              onRunStateChange={setExecuteRunning}
               schedulesVersion={schedulesVersion}
               modelAssistantOpen={aiSidebarOpen}
               onOpenModelAssistant={() => {

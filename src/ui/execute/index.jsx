@@ -159,7 +159,7 @@ async function doCloudSave(saveFn, {
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true }) => {
   const { C, FONT } = useTheme();
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
@@ -1026,6 +1026,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }, [autoRunning, effectiveAutoSpeed, doStep]);
 
   useEffect(() => {
+    onRunStateChange?.(autoRunning || mode === "running");
+  }, [autoRunning, mode, onRunStateChange]);
+
+  useEffect(() => {
     return () => runnerRef.current?.cancel();
   }, []);
 
@@ -1527,6 +1531,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {!autoRunning && mode !== "running" && (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[
           { id: "run", label: "Run" },
@@ -1554,6 +1559,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           </Btn>
         ))}
       </div>
+      )}
 
       {executeSection === "run" && showRunSetup && !autoRunning && mode !== "running" && (
         <div style={{ maxWidth: 1120, margin: "0 auto" }}>
@@ -1567,7 +1573,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             terminationCondition={terminationCondition} setTerminationCondition={setTerminationCondition}
             showRunSetup={showRunSetup} setShowRunSetup={setShowRunSetup}
             runSetupSummary={runSetupSummary}
+            warmupDetection={warmupDetection} setWarmupDetection={setWarmupDetection}
+            replicationResults={replicationResults}
             model={model}
+            onDetectWarmup={handleDetectWarmup}
             persistExperimentDefaults={persistExperimentDefaults}
             animationEnabled={animationEnabled} setAnimationEnabled={setAnimationEnabled}
             collectTimeSeries={collectTimeSeries} setCollectTimeSeries={setCollectTimeSeries}
@@ -2543,11 +2552,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
       {executeSection === "run" && (autoRunning || mode === "running") && (
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        {autoRunning ? (
-          <Btn variant="danger" onClick={toggleAuto}>⏹ Stop Auto</Btn>
-        ) : (
-          <Btn variant="success" onClick={doStep} disabled={mode === "done" || runBusy}> Step</Btn>
-        )}
+        <Btn variant="success" onClick={doStep} disabled={mode === "done" || runBusy}> Step</Btn>
+        <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || runBusy}>{autoRunning ? "⏹ Stop Auto" : "Auto Run"}</Btn>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
             {speedMultiplier.toFixed(1)}×
