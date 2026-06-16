@@ -427,36 +427,45 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   );
 };
 
-// SectionFilterTabs — section-aware filter strip shared by all table editors.
-// sections: model.sections array. activeId: current section filter ("all"|"unassigned"|sectionId).
-// onChange(id): called when user switches tab.
-const SectionFilterTabs = ({ sections = [], activeId, onChange }) => {
+// SectionFilterTabs — section-aware filter strip shared by all table editors and results.
+// sections: model.sections array. activeIds: array of selected section IDs (empty = show all).
+// onToggle(id): called when user toggles a section tab.
+const SectionFilterTabs = ({ sections = [], activeIds = [], onToggle }) => {
   const { C, FONT } = useTheme();
   if (!sections.length) return null;
+  const allSelected = activeIds.length === 0;
   const tabs = [
     { id: "all", label: "All", color: C.muted },
     ...sections.map(s => ({ id: s.id, label: s.name || "Section", color: s.color })),
     { id: "unassigned", label: "Unassigned", color: C.muted },
   ];
+  const handleClick = (id) => {
+    if (id === "all") { onToggle([]); return; }
+    if (id === "unassigned") { onToggle(["unassigned"]); return; }
+    const set = new Set(activeIds);
+    if (set.has(id)) { set.delete(id); } else { set.add(id); }
+    onToggle([...set]);
+  };
   return (
-    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
       {tabs.map(t => {
-        const active = activeId === t.id;
+        const active = t.id === "all" ? allSelected : t.id === "unassigned" ? activeIds.includes("unassigned") : activeIds.includes(t.id);
         return (
           <button
             key={t.id}
             type="button"
-            onClick={() => onChange(t.id)}
+            onClick={() => handleClick(t.id)}
             style={{
-              fontSize: 10, fontWeight: active ? 700 : 400, fontFamily: FONT,
-              padding: "3px 10px", borderRadius: 12, cursor: "pointer",
+              fontSize: 11, fontWeight: active ? 700 : 400, fontFamily: FONT,
+              padding: "5px 12px", borderRadius: 14, cursor: "pointer",
               border: `1px solid ${active ? t.color : `${t.color}55`}`,
               background: active ? `${t.color}22` : "transparent",
               color: active ? t.color : C.muted,
+              transition: "border-color 120ms ease, background 120ms ease",
             }}
           >
             {active && t.id !== "all" && t.id !== "unassigned" && (
-              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: t.color, marginRight: 4, verticalAlign: "middle" }} />
+              <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: t.color, marginRight: 5, verticalAlign: "middle" }} />
             )}
             {t.label}
           </button>
@@ -466,16 +475,20 @@ const SectionFilterTabs = ({ sections = [], activeId, onChange }) => {
   );
 };
 
-// filterBySection — returns items whose id appears in the given section, or all/unassigned.
-export function filterBySection(items, sections, activeSectionId) {
-  if (!activeSectionId || activeSectionId === "all") return items;
-  if (activeSectionId === "unassigned") {
+// filterBySection — returns items whose id appears in any of the selected sections, or all/unassigned.
+export function filterBySection(items, sections, activeSectionIds = []) {
+  if (!Array.isArray(activeSectionIds) || activeSectionIds.length === 0) return items;
+  if (activeSectionIds.includes("unassigned")) {
     const allMemberIds = new Set(sections.flatMap(s => s.memberIds));
     return items.filter(item => !allMemberIds.has(item.id));
   }
-  const section = sections.find(s => s.id === activeSectionId);
-  if (!section) return items;
-  return items.filter(item => section.memberIds.includes(item.id));
+  const memberSet = new Set();
+  for (const sid of activeSectionIds) {
+    const section = sections.find(s => s.id === sid);
+    if (section?.memberIds) section.memberIds.forEach(id => memberSet.add(id));
+  }
+  if (memberSet.size === 0) return items;
+  return items.filter(item => memberSet.has(item.id));
 }
 
 export { displayEventName, queueDisplayName, conditionOptions, assignOptions, bEffectOptions, DropField, EffectPicker, toTitleCase, normTypeName, SectionFilterTabs };

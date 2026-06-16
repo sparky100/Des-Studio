@@ -12,7 +12,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
-  const [activeSectionId,setActiveSectionId]=useState("all");
+  const [activeSectionIds,setActiveSectionIds]=useState([]);
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(events.map(e=>e.id)));
@@ -71,7 +71,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
   };
 
   const lcFilter=filterText.toLowerCase();
-  const sectionFiltered=filterBySection(events, sections, activeSectionId);
+  const sectionFiltered=filterBySection(events, sections, activeSectionIds);
   const filteredEventIds=errorFilter?.filteredEventIds;
   const filtered=sectionFiltered.filter(ev=>{
     const matchesText=!lcFilter||(ev.name||"").toLowerCase().includes(lcFilter);
@@ -89,7 +89,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         </div>
         <Btn variant="primary" onClick={add}>+ Add C-Event</Btn>
       </div>
-      <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
+      <SectionFilterTabs sections={sections} activeIds={activeSectionIds} onToggle={setActiveSectionIds}/>
       {events.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"

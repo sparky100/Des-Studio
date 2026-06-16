@@ -20,7 +20,7 @@ const QueueEditor = ({queues=[], entityTypes=[], sections=[], errorFilter=null, 
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
-  const [activeSectionId,setActiveSectionId]=useState("all");
+  const [activeSectionIds,setActiveSectionIds]=useState([]);
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(queues.map(q=>q.id)));
@@ -59,7 +59,7 @@ const QueueEditor = ({queues=[], entityTypes=[], sections=[], errorFilter=null, 
   });
 
   const lcFilter=filterText.toLowerCase();
-  const sectionFiltered=filterBySection(queues, sections, activeSectionId);
+  const sectionFiltered=filterBySection(queues, sections, activeSectionIds);
   const filteredQueueIds=errorFilter?.filteredQueueIds;
   const filtered=sectionFiltered.filter(q=>{
     const matchesText=!lcFilter||(q.name||"").toLowerCase().includes(lcFilter);
@@ -77,7 +77,7 @@ const QueueEditor = ({queues=[], entityTypes=[], sections=[], errorFilter=null, 
         </div>
         <Btn variant="primary" onClick={add}>+ Add Queue</Btn>
       </div>
-      <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
+      <SectionFilterTabs sections={sections} activeIds={activeSectionIds} onToggle={setActiveSectionIds}/>
       {queues.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"

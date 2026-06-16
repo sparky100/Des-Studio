@@ -11,7 +11,7 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
-  const [activeSectionId,setActiveSectionId]=useState("all");
+  const [activeSectionIds,setActiveSectionIds]=useState([]);
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(types.map(e=>e.id)));
@@ -60,7 +60,7 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
   };
 
   const lcFilter=filterText.toLowerCase();
-  const sectionFiltered=filterBySection(types, sections, activeSectionId);
+  const sectionFiltered=filterBySection(types, sections, activeSectionIds);
   const filteredEntityTypeIds=errorFilter?.filteredEntityTypeIds;
   const filtered=sectionFiltered.filter(et=>{
     const matchesText=!lcFilter||(et.name||"").toLowerCase().includes(lcFilter);
@@ -78,7 +78,7 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
         </div>
         <Btn variant="primary" onClick={add}>+ Add Type</Btn>
       </div>
-      <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
+      <SectionFilterTabs sections={sections} activeIds={activeSectionIds} onToggle={setActiveSectionIds}/>
       {types.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"

@@ -1495,7 +1495,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     } catch {}
     return { ...SECTION_DEFAULTS };
   });
-  const [activeSectionId, setActiveSectionId] = useState("all");
+  const [activeSectionIds, setActiveSectionIds] = useState([]);
 
   const toggleSection = id => setSectionsOpen(prev => {
     const next = { ...prev, [id]: !prev[id] };
@@ -1503,7 +1503,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     return next;
   });
 
-  const chartModel = useMemo(() => buildResultsViewModel(results, model, { activeSectionId }), [results, model, activeSectionId]);
+  const chartModel = useMemo(() => buildResultsViewModel(results, model, { activeSectionIds }), [results, model, activeSectionIds]);
   const healthFlags = useMemo(() => evaluateResultsHealth(results, model), [results, model]);
 
   const handleExportLLMBundle = useCallback(() => {
@@ -1656,7 +1656,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         {/* ── Section filter ──────────────────────────────────────────────── */}
         {model?.sections?.length > 0 && (
           <div style={{ padding: "4px 0 8px 0" }}>
-            <SectionFilterTabs sections={model.sections} activeId={activeSectionId} onChange={setActiveSectionId} />
+            <SectionFilterTabs sections={model.sections} activeIds={activeSectionIds} onToggle={setActiveSectionIds} />
           </div>
         )}
 

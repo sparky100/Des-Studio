@@ -9,7 +9,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
-  const [activeSectionId,setActiveSectionId]=useState("all");
+  const [activeSectionIds,setActiveSectionIds]=useState([]);
   const cardRefs=useRef({});
 
   useEffect(()=>{
@@ -52,7 +52,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
   const remS=(i,j)=>{const n=[...events];n[i]={...n[i],schedules:n[i].schedules.filter((_,idx)=>idx!==j)};onChange(n);};
 
   const lcFilter=filterText.toLowerCase();
-  const sectionFiltered=filterBySection(events, sections, activeSectionId);
+  const sectionFiltered=filterBySection(events, sections, activeSectionIds);
   const filteredEventIds=errorFilter?.filteredEventIds;
   const filtered=sectionFiltered.filter(ev=>{
     const matchesText=!lcFilter||(ev.name||"").toLowerCase().includes(lcFilter);
@@ -70,7 +70,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         </div>
         <Btn variant="primary" onClick={add}>+ Add B-Event</Btn>
       </div>
-      <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
+      <SectionFilterTabs sections={sections} activeIds={activeSectionIds} onToggle={setActiveSectionIds}/>
       {events.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"

@@ -195,31 +195,34 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
   ];
 }
 
-export function resolveSectionFilter(model, sectionId) {
-  if (!sectionId || sectionId === "all") return null;
+export function resolveSectionFilter(model, sectionIds) {
+  if (!Array.isArray(sectionIds) || sectionIds.length === 0) return null;
   const sections = Array.isArray(model?.sections) ? model.sections : [];
   const queues = Array.isArray(model?.queues) ? model.queues : [];
   const entityTypes = Array.isArray(model?.entityTypes) ? model.entityTypes : [];
   const allQueueIds = new Set(queues.map(q => q.id));
   const allTypeIds = new Set(entityTypes.map(et => et.id));
 
-  if (sectionId === "unassigned") {
+  if (sectionIds.includes("unassigned")) {
     const assignedIds = new Set(sections.flatMap(s => s.memberIds || []));
     return {
       shouldInclude: (id) => (allQueueIds.has(id) || allTypeIds.has(id)) && !assignedIds.has(id),
     };
   }
-  const section = sections.find(s => s.id === sectionId);
-  if (!section) return null;
-  const memberSet = new Set(section.memberIds || []);
+  const memberSet = new Set();
+  for (const sid of sectionIds) {
+    const section = sections.find(s => s.id === sid);
+    if (section?.memberIds) section.memberIds.forEach(id => memberSet.add(id));
+  }
+  if (memberSet.size === 0) return null;
   return {
     shouldInclude: (id) => memberSet.has(id),
   };
 }
 
 export function buildResultsViewModel(results = {}, model = {}, options = {}) {
-  const { activeSectionId } = options;
-  const sectionFilter = resolveSectionFilter(model, activeSectionId);
+  const { activeSectionIds } = options;
+  const sectionFilter = resolveSectionFilter(model, activeSectionIds);
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
   const chartSections = buildChartSections(results, model, sectionFilter);
   const runtimeMetrics = buildRuntimeMetricsModel(results);
