@@ -320,7 +320,7 @@ function CanvasControls({ canEdit, onResetLayout, onCaptureImage, connecting, fi
         {onCaptureImage && (
           <button
             type="button"
-            style={panelBtnStyle}
+            style={{ ...panelBtnStyle, fontSize: 14, padding: "3px 7px" }}
             title="Capture a snapshot of the current canvas as a model preview image"
             onClick={() => onCaptureImage(() => fitView({ padding: 0.15, duration: 0 }))}
           >
