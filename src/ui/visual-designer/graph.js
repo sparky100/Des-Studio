@@ -434,27 +434,15 @@ export async function exportCanvasToPng(fitViewFn) {
       console.log('[capture] waiting 500ms for render');
       await new Promise(r => setTimeout(r, 500));
     }
-    const wrapper = document.getElementById('flow-diagram-canvas');
-    console.log('[capture] wrapper by id:', !!wrapper);
-    const el = wrapper?.querySelector('.react-flow') || document.querySelector('.react-flow');
-    console.log('[capture] react-flow found:', !!el);
-    if (!el) {
-      console.warn('[capture] all react-flow elements on page:', document.querySelectorAll('.react-flow').length);
-      return null;
-    }
+    // Capture the viewport directly — nodes live here with transform applied inline
+    const viewport = document.querySelector('.react-flow__viewport');
+    console.log('[capture] viewport found:', !!viewport);
+    if (!viewport) return null;
+
     const { toCanvas } = await import('html-to-image');
-    console.log('[capture] calling toCanvas on element:', el.tagName, el.className);
-    const canvas = await toCanvas(el, {
+    const canvas = await toCanvas(viewport, {
       pixelRatio: 2,
       backgroundColor: '#ffffff',
-      filter: node => {
-        const cls = node.classList;
-        return !cls?.contains('react-flow__controls') &&
-               !cls?.contains('react-flow__minimap') &&
-               !cls?.contains('react-flow__background') &&
-               !cls?.contains('react-flow__panel') &&
-               !node.getAttribute?.('data-id')?.startsWith('section-');
-      },
     });
     return canvas.toDataURL('image/png');
   } catch (err) {
