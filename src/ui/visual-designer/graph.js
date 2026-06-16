@@ -432,7 +432,8 @@ export async function exportCanvasToPng(fitViewFn) {
       fitViewFn();
       await new Promise(r => setTimeout(r, 400));
     }
-    const el = document.getElementById('flow-diagram-canvas') || document.querySelector('.react-flow');
+    const el = document.getElementById('flow-diagram-canvas')?.querySelector('.react-flow')
+            || document.querySelector('.react-flow');
     if (!el) return null;
     const { toSvg } = await import('html-to-image');
     const svgStr = await toSvg(el, {

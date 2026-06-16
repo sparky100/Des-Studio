@@ -512,9 +512,9 @@ export function FlowDiagramReactFlow({
         overflow: "hidden",
         boxShadow: dragOver ? `inset 0 0 0 2px ${C.accent}` : "none",
       }}
+      id="flow-diagram-canvas"
     >
       <ReactFlow
-        id="flow-diagram-canvas"
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
