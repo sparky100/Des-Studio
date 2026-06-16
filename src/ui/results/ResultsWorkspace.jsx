@@ -1356,11 +1356,16 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
             return dist ? { name, dist } : null;
           })
           .filter(Boolean);
-        const sinkCount = Object.entries(journeys || {}).reduce((sum, [key, n]) => {
+        const terminalCount = Object.entries(journeys || {}).reduce((sum, [key, n]) => {
           const parts = key.split("→");
           const lastPart = parts[parts.length - 1];
           const isSink = !sectionById[lastPart];
-          return (isSink && parts[parts.length - 2] === sec.id) ? sum + n : sum;
+          return (isSink && lastPart !== "Incomplete" && parts[parts.length - 2] === sec.id) ? sum + n : sum;
+        }, 0);
+        const incompleteCount = Object.entries(journeys || {}).reduce((sum, [key, n]) => {
+          const parts = key.split("→");
+          const lastPart = parts[parts.length - 1];
+          return (lastPart === "Incomplete" && parts[parts.length - 2] === sec.id) ? sum + n : sum;
         }, 0);
         const isQueueOpen = !!queueOpen[sec.id];
         return (
@@ -1388,10 +1393,16 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
                 <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>AVG TIME IN SECTION</span>
                 <span style={{ fontFamily: FONT, fontSize: 12, color: C.text, fontWeight: 700 }}>{fmtT(stats.avgSojourn)}</span>
               </div>
-              {sinkCount > 0 && (
+              {terminalCount > 0 && (
                 <div style={{ background: `${C.accent}18`, border: `1px solid ${C.accent}44`, borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
                   <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>DONE</span>
-                  <span style={{ fontFamily: FONT, fontSize: 12, color: C.accent, fontWeight: 700 }}>{fmtCount(sinkCount)}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 12, color: C.accent, fontWeight: 700 }}>{fmtCount(terminalCount)}</span>
+                </div>
+              )}
+              {incompleteCount > 0 && (
+                <div style={{ background: `${C.amber}18`, border: `1px solid ${C.amber}44`, borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>IN SYST.</span>
+                  <span style={{ fontFamily: FONT, fontSize: 12, color: C.amber, fontWeight: 700 }}>{fmtCount(incompleteCount)}</span>
                 </div>
               )}
             </div>
