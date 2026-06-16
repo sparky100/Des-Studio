@@ -58,11 +58,14 @@ export function buildRuntimeMetricsModel(results = {}) {
   };
 }
 
-export function buildQueueDepthSeries(results = {}, model = {}) {
+export function buildQueueDepthSeries(results = {}, model = {}, sectionFilter = null) {
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
   const queues = Array.isArray(model?.queues) ? model.queues : [];
+  const filteredQueues = sectionFilter
+    ? queues.filter(q => sectionFilter.shouldInclude(q.id))
+    : queues;
 
-  return queues.map(queue => {
+  return filteredQueues.map(queue => {
     const queueName = queue.name || queue.id || "Queue";
     const fallbackType = customerTypeForQueue(queue, model);
     return {
@@ -85,11 +88,14 @@ export function buildQueueDepthSeries(results = {}, model = {}) {
   });
 }
 
-export function buildServerUtilizationSeries(results = {}, model = {}) {
+export function buildServerUtilizationSeries(results = {}, model = {}, sectionFilter = null) {
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
   const serverTypes = (model?.entityTypes || []).filter(et => et.role === "server");
+  const filteredServers = sectionFilter
+    ? serverTypes.filter(s => sectionFilter.shouldInclude(s.id))
+    : serverTypes;
 
-  return serverTypes.map(server => {
+  return filteredServers.map(server => {
     const hasShiftSchedule = Array.isArray(server.shiftSchedule) && server.shiftSchedule.length > 0;
     return {
       id: server.id || server.name,
@@ -113,19 +119,26 @@ export function buildServerUtilizationSeries(results = {}, model = {}) {
   });
 }
 
-export function buildWaitDistributions(results = {}) {
+export function buildWaitDistributions(results = {}, model = {}, sectionFilter = null) {
   const waitDist = results?.waitDist && typeof results.waitDist === "object" ? results.waitDist : {};
+  const queues = Array.isArray(model?.queues) ? model.queues : [];
+  const nameToId = Object.fromEntries(queues.map(q => [q.name, q.id]));
   const breakdown = results?.summary?.waitSamplesBreakdown;
   const sourceSuffix = breakdown
     ? ` (${breakdown.served} served, ${breakdown.reneged} reneged${breakdown.inProgress > 0 ? `, ${breakdown.inProgress} in-progress` : ""})`
     : " from completed customers";
-  // Chartable when raw values survive (live/full runs) OR when only pre-computed
-  // histogram bins remain (compacted saved runs — see compactifyWaitDist).
   return Object.entries(waitDist)
-    .filter(([, dist]) => dist && (
-      (Array.isArray(dist.values) && dist.values.length >= 2) ||
-      (Array.isArray(dist.histogram?.bins) && dist.histogram.bins.length >= 2)
-    ))
+    .filter(([label, dist]) => {
+      if (!dist) return false;
+      if (sectionFilter) {
+        const qid = nameToId[label];
+        if (!qid || !sectionFilter.shouldInclude(qid)) return false;
+      }
+      return (
+        (Array.isArray(dist.values) && dist.values.length >= 2) ||
+        (Array.isArray(dist.histogram?.bins) && dist.histogram.bins.length >= 2)
+      );
+    })
     .map(([label, dist]) => {
       const values = Array.isArray(dist.values)
         ? [...dist.values].map(v => finiteNumber(v)).sort((a, b) => a - b)
@@ -146,10 +159,10 @@ export function buildWaitDistributions(results = {}) {
     });
 }
 
-export function buildChartSections(results = {}, model = {}) {
-  const queueDepthSeries = buildQueueDepthSeries(results, model);
-  const serverUtilizationSeries = buildServerUtilizationSeries(results, model);
-  const waitDistributions = buildWaitDistributions(results);
+export function buildChartSections(results = {}, model = {}, sectionFilter = null) {
+  const queueDepthSeries = buildQueueDepthSeries(results, model, sectionFilter);
+  const serverUtilizationSeries = buildServerUtilizationSeries(results, model, sectionFilter);
+  const waitDistributions = buildWaitDistributions(results, model, sectionFilter);
 
   return [
     {
@@ -182,9 +195,33 @@ export function buildChartSections(results = {}, model = {}) {
   ];
 }
 
-export function buildResultsViewModel(results = {}, model = {}) {
+export function resolveSectionFilter(model, sectionId) {
+  if (!sectionId || sectionId === "all") return null;
+  const sections = Array.isArray(model?.sections) ? model.sections : [];
+  const queues = Array.isArray(model?.queues) ? model.queues : [];
+  const entityTypes = Array.isArray(model?.entityTypes) ? model.entityTypes : [];
+  const allQueueIds = new Set(queues.map(q => q.id));
+  const allTypeIds = new Set(entityTypes.map(et => et.id));
+
+  if (sectionId === "unassigned") {
+    const assignedIds = new Set(sections.flatMap(s => s.memberIds || []));
+    return {
+      shouldInclude: (id) => (allQueueIds.has(id) || allTypeIds.has(id)) && !assignedIds.has(id),
+    };
+  }
+  const section = sections.find(s => s.id === sectionId);
+  if (!section) return null;
+  const memberSet = new Set(section.memberIds || []);
+  return {
+    shouldInclude: (id) => memberSet.has(id),
+  };
+}
+
+export function buildResultsViewModel(results = {}, model = {}, options = {}) {
+  const { activeSectionId } = options;
+  const sectionFilter = resolveSectionFilter(model, activeSectionId);
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
-  const chartSections = buildChartSections(results, model);
+  const chartSections = buildChartSections(results, model, sectionFilter);
   const runtimeMetrics = buildRuntimeMetricsModel(results);
   return {
     hasTimeSeries: timeSeries.length > 0,

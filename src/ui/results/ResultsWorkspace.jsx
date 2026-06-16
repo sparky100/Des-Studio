@@ -3,6 +3,7 @@ import { alpha } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { csvEscape, downloadTextFile, slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { batchMeansCI, buildHistogramFD, computePercentiles, computeSummaryStats, detectOutliers } from "../../engine/statistics.js";
+import { SectionFilterTabs } from "../editors/helpers.jsx";
 import { buildResultsViewModel } from "./resultsViewModel.js";
 import { evaluateResultsHealth } from "./healthFlags.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -1494,13 +1495,15 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     } catch {}
     return { ...SECTION_DEFAULTS };
   });
+  const [activeSectionId, setActiveSectionId] = useState("all");
+
   const toggleSection = id => setSectionsOpen(prev => {
     const next = { ...prev, [id]: !prev[id] };
     try { localStorage.setItem("des.results.sections", JSON.stringify(next)); } catch {}
     return next;
   });
 
-  const chartModel = useMemo(() => buildResultsViewModel(results, model), [results, model]);
+  const chartModel = useMemo(() => buildResultsViewModel(results, model, { activeSectionId }), [results, model, activeSectionId]);
   const healthFlags = useMemo(() => evaluateResultsHealth(results, model), [results, model]);
 
   const handleExportLLMBundle = useCallback(() => {
@@ -1647,10 +1650,17 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
         <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
           <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} healthFlags={healthFlags} />
+          </div>
         </div>
-      </div>
 
-      {/* ── 2. Bottleneck section — header + nested collapsible charts ─────── */}
+        {/* ── Section filter ──────────────────────────────────────────────── */}
+        {model?.sections?.length > 0 && (
+          <div style={{ padding: "4px 0 8px 0" }}>
+            <SectionFilterTabs sections={model.sections} activeId={activeSectionId} onChange={setActiveSectionId} />
+          </div>
+        )}
+
+        {/* ── 2. Bottleneck section — header + nested collapsible charts ─────── */}
       {(chartModel.hasTimeSeries || hasWaitDistributions || queuePeaks.length > 0) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <SectionHeader id="bottlenecks" label="Where Are the Bottlenecks?" isOpen={sectionsOpen.bottlenecks} onToggle={toggleSection} />
