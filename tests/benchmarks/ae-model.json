@@ -1,0 +1,1447 @@
+{
+  "name": "A&E",
+  "model_json": {
+    "schemaVersion": 1,
+    "entityTypes": [
+      {
+        "id": "et_patient",
+        "name": "Patient",
+        "role": "customer",
+        "count": 0,
+        "attrDefs": [
+          {
+            "dist": "Fixed",
+            "name": "acuity",
+            "mutable": true,
+            "valueType": "number",
+            "distParams": {
+              "value": "3"
+            },
+            "defaultValue": 3
+          },
+          {
+            "name": "arrivalTime",
+            "mutable": true,
+            "valueType": "number",
+            "defaultValue": 0
+          }
+        ]
+      },
+      {
+        "id": "et_triage_nurse",
+        "name": "TriageNurse",
+        "role": "server",
+        "count": 4,
+        "shiftSchedule": [
+          {
+            "time": 0,
+            "capacity": 4
+          },
+          {
+            "time": 480,
+            "capacity": "4"
+          },
+          {
+            "time": 1320,
+            "capacity": 2
+          }
+        ]
+      },
+      {
+        "id": "et_resus_bay",
+        "name": "ResusBay",
+        "role": "server",
+        "count": 5,
+        "shiftSchedule": [
+          {
+            "time": 0,
+            "capacity": 5
+          },
+          {
+            "time": 1320,
+            "capacity": 4
+          }
+        ]
+      },
+      {
+        "id": "et_majors_cubicle",
+        "name": "MajorsCubicle",
+        "role": "server",
+        "count": 18,
+        "shiftSchedule": [
+          {
+            "time": 0,
+            "capacity": 18
+          },
+          {
+            "time": 480,
+            "capacity": 18
+          },
+          {
+            "time": 1320,
+            "capacity": 13
+          }
+        ]
+      },
+      {
+        "id": "et_minors_cubicle",
+        "name": "MinorsCubicle",
+        "role": "server",
+        "count": 8,
+        "shiftSchedule": [
+          {
+            "time": 0,
+            "capacity": 8
+          },
+          {
+            "time": 480,
+            "capacity": 8
+          },
+          {
+            "time": 1320,
+            "capacity": 4
+          }
+        ]
+      },
+      {
+        "id": "et_xray",
+        "name": "XrayMachine",
+        "role": "server",
+        "count": 3,
+        "shiftSchedule": [
+          {
+            "time": 0,
+            "capacity": 3
+          },
+          {
+            "time": 480,
+            "capacity": 3
+          },
+          {
+            "time": 1320,
+            "capacity": 2
+          }
+        ]
+      },
+      {
+        "id": "et_lab",
+        "name": "BloodsLab",
+        "role": "server",
+        "count": 3,
+        "shiftSchedule": [
+          {
+            "time": 0,
+            "capacity": 3
+          },
+          {
+            "time": 480,
+            "capacity": 3
+          },
+          {
+            "time": 1320,
+            "capacity": 2
+          }
+        ]
+      },
+      {
+        "id": "et_doctor",
+        "name": "Doctor",
+        "role": "server",
+        "count": 10,
+        "shiftSchedule": [
+          {
+            "time": 0,
+            "capacity": 10
+          },
+          {
+            "time": 480,
+            "capacity": 12
+          },
+          {
+            "time": 1320,
+            "capacity": 7
+          }
+        ]
+      },
+      {
+        "id": "et_inpatient_bed",
+        "name": "InpatientBed",
+        "role": "server",
+        "count": 14,
+        "attrDefs": []
+      }
+    ],
+    "stateVariables": [],
+    "bEvents": [
+      {
+        "id": "b_arrive_acuity1",
+        "name": "Arrival - Acuity 1 (Resuscitation)",
+        "effect": [
+          "ARRIVE(Patient, Resus Queue)",
+          "SET_ATTR(acuity, 1)",
+          "SET_ATTR(arrivalTime, clock)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_acuity1",
+            "distParams": {
+              "mean": "240"
+            },
+            "useEntityCtx": false
+          }
+        ],
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_arrive_acuity2_day",
+        "name": "Arrival - Acuity 2 Daytime (Emergency)",
+        "effect": [
+          "ARRIVE(Patient, Triage Queue)",
+          "SET_ATTR(acuity, 2)",
+          "SET_ATTR(arrivalTime, clock)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_acuity2_day",
+            "distParams": {
+              "mean": "20"
+            },
+            "useEntityCtx": false
+          }
+        ],
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_arrive_acuity2_night",
+        "name": "Arrival - Acuity 2 Night (Emergency)",
+        "effect": [
+          "ARRIVE(Patient, Triage Queue)",
+          "SET_ATTR(acuity, 2)",
+          "SET_ATTR(arrivalTime, clock)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_acuity2_night",
+            "distParams": {
+              "mean": "33"
+            },
+            "useEntityCtx": false
+          }
+        ],
+        "scheduledTime": "480"
+      },
+      {
+        "id": "b_arrive_acuity3_day",
+        "name": "Arrival - Acuity 3 Daytime (Urgent)",
+        "effect": [
+          "ARRIVE(Patient, Triage Queue)",
+          "SET_ATTR(acuity, 3)",
+          "SET_ATTR(arrivalTime, clock)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_acuity3_day",
+            "distParams": {
+              "mean": "9"
+            },
+            "useEntityCtx": false
+          }
+        ],
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_arrive_acuity3_night",
+        "name": "Arrival - Acuity 3 Night (Urgent)",
+        "effect": [
+          "ARRIVE(Patient, Triage Queue)",
+          "SET_ATTR(acuity, 3)",
+          "SET_ATTR(arrivalTime, clock)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_acuity3_night",
+            "distParams": {
+              "mean": "15"
+            },
+            "useEntityCtx": false
+          }
+        ],
+        "scheduledTime": "480"
+      },
+      {
+        "id": "b_arrive_acuity4_day",
+        "name": "Arrival - Acuity 4 Daytime (Standard)",
+        "effect": [
+          "ARRIVE(Patient, Triage Queue)",
+          "SET_ATTR(acuity, 4)",
+          "SET_ATTR(arrivalTime, clock)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_acuity4_day",
+            "distParams": {
+              "mean": "7"
+            },
+            "useEntityCtx": false
+          }
+        ],
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_arrive_acuity4_night",
+        "name": "Arrival - Acuity 4 Night (Standard)",
+        "effect": [
+          "ARRIVE(Patient, Triage Queue)",
+          "SET_ATTR(acuity, 4)",
+          "SET_ATTR(arrivalTime, clock)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_acuity4_night",
+            "distParams": {
+              "mean": "16"
+            },
+            "useEntityCtx": false
+          }
+        ],
+        "scheduledTime": "480"
+      },
+      {
+        "id": "b_arrive_acuity5_day",
+        "name": "Arrival - Acuity 5 Daytime (Non-urgent)",
+        "effect": [
+          "ARRIVE(Patient, Triage Queue)",
+          "SET_ATTR(acuity, 5)",
+          "SET_ATTR(arrivalTime, clock)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_acuity5_day",
+            "distParams": {
+              "mean": "18"
+            },
+            "useEntityCtx": false
+          }
+        ],
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_arrive_acuity5_night",
+        "name": "Arrival - Acuity 5 Night (Non-urgent)",
+        "effect": [
+          "ARRIVE(Patient, Triage Queue)",
+          "SET_ATTR(acuity, 5)",
+          "SET_ATTR(arrivalTime, clock)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_acuity5_night",
+            "distParams": {
+              "mean": "40"
+            },
+            "useEntityCtx": false
+          }
+        ],
+        "scheduledTime": "480"
+      },
+      {
+        "id": "b_triage_complete",
+        "name": "Triage Complete",
+        "effect": [
+          "RELEASE(TriageNurse)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Resus Queue",
+            "probability": 0.06
+          },
+          {
+            "queueName": "Majors Queue",
+            "probability": 0.38
+          },
+          {
+            "queueName": "Minors Queue",
+            "probability": 0.56
+          }
+        ]
+      },
+      {
+        "id": "b_resus_treat_complete",
+        "name": "Resus Treatment Complete",
+        "effect": [
+          "RELEASE(ResusBay, Doctor Review Resus Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_majors_treat_complete",
+        "name": "Majors Treatment Complete",
+        "effect": [
+          "RELEASE(MajorsCubicle)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Xray Queue",
+            "probability": 0.55
+          },
+          {
+            "queueName": "Doctor Review Majors Queue",
+            "probability": 0.45
+          }
+        ]
+      },
+      {
+        "id": "b_minors_treat_complete",
+        "name": "Minors Treatment Complete",
+        "effect": [
+          "RELEASE(MinorsCubicle)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Xray Queue",
+            "probability": 0.3
+          },
+          {
+            "queueName": "Doctor Review Minors Queue",
+            "probability": 0.7
+          }
+        ]
+      },
+      {
+        "id": "b_xray_complete",
+        "name": "X-ray Complete",
+        "effect": [
+          "RELEASE(XrayMachine)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Lab Queue",
+            "probability": 0.4
+          },
+          {
+            "queueName": "Doctor Review Resus Queue",
+            "probability": 0.2
+          },
+          {
+            "queueName": "Doctor Review Majors Queue",
+            "probability": 0.2
+          },
+          {
+            "queueName": "Doctor Review Minors Queue",
+            "probability": 0.2
+          }
+        ]
+      },
+      {
+        "id": "b_lab_complete",
+        "name": "Bloods/Lab Complete",
+        "effect": [
+          "RELEASE(BloodsLab)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Doctor Review Resus Queue",
+            "probability": 0.34
+          },
+          {
+            "queueName": "Doctor Review Majors Queue",
+            "probability": 0.33
+          },
+          {
+            "queueName": "Doctor Review Minors Queue",
+            "probability": 0.33
+          }
+        ]
+      },
+      {
+        "id": "b_doctor_resus_complete",
+        "name": "Doctor Decision - Resus",
+        "effect": [
+          "RELEASE(Doctor)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Boarding Queue",
+            "probability": 0.85
+          },
+          {
+            "queueName": null,
+            "probability": 0.15
+          }
+        ]
+      },
+      {
+        "id": "b_doctor_majors_complete",
+        "name": "Doctor Decision - Majors",
+        "effect": [
+          "RELEASE(Doctor)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Boarding Queue",
+            "probability": 0.35
+          },
+          {
+            "queueName": null,
+            "probability": 0.65
+          }
+        ]
+      },
+      {
+        "id": "b_doctor_minors_complete",
+        "name": "Doctor Decision - Minors",
+        "effect": [
+          "RELEASE(Doctor)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Boarding Queue",
+            "probability": 0.05
+          },
+          {
+            "queueName": null,
+            "probability": 0.95
+          }
+        ]
+      },
+      {
+        "id": "b_admitted_complete",
+        "name": "Admitted - Transferred to Ward",
+        "effect": [
+          "COMPLETE()"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      }
+    ],
+    "cEvents": [
+      {
+        "id": "c_triage",
+        "name": "Start Triage",
+        "effect": [
+          "ASSIGN(Triage Queue, TriageNurse)"
+        ],
+        "priority": 5,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Triage Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(TriageNurse).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_triage_complete",
+            "distParams": {
+              "max": "12",
+              "min": "3",
+              "mode": "6"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_resus_treat",
+        "name": "Start Resus Treatment",
+        "effect": [
+          "ASSIGN(Resus Queue, ResusBay)"
+        ],
+        "priority": 0,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Resus Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(ResusBay).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Erlang",
+            "eventId": "b_resus_treat_complete",
+            "distParams": {
+              "k": "3",
+              "mean": "60"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_majors_treat",
+        "name": "Start Majors Treatment",
+        "effect": [
+          "ASSIGN(Majors Queue, MajorsCubicle)"
+        ],
+        "priority": 1,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Majors Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(MajorsCubicle).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Erlang",
+            "eventId": "b_majors_treat_complete",
+            "distParams": {
+              "k": "2",
+              "mean": "30"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_minors_treat",
+        "name": "Start Minors Treatment",
+        "effect": [
+          "ASSIGN(Minors Queue, MinorsCubicle)"
+        ],
+        "priority": 2,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Minors Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(MinorsCubicle).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_minors_treat_complete",
+            "distParams": {
+              "max": "30",
+              "min": "8",
+              "mode": "15"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_xray",
+        "name": "Start X-ray",
+        "effect": [
+          "ASSIGN(Xray Queue, XrayMachine)"
+        ],
+        "priority": 1,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Xray Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(XrayMachine).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_xray_complete",
+            "distParams": {
+              "max": "20",
+              "min": "5",
+              "mode": "10"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_lab",
+        "name": "Start Bloods/Lab",
+        "effect": [
+          "ASSIGN(Lab Queue, BloodsLab)"
+        ],
+        "priority": 1,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Lab Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(BloodsLab).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_lab_complete",
+            "distParams": {
+              "max": "75",
+              "min": "20",
+              "mode": "45"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_doctor_resus",
+        "name": "Start Doctor Review - Resus",
+        "effect": [
+          "ASSIGN(Doctor Review Resus Queue, Doctor)"
+        ],
+        "priority": 0,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Doctor Review Resus Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Doctor).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_doctor_resus_complete",
+            "distParams": {
+              "max": "35",
+              "min": "10",
+              "mode": "20"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_doctor_majors",
+        "name": "Start Doctor Review - Majors",
+        "effect": [
+          "ASSIGN(Doctor Review Majors Queue, Doctor)"
+        ],
+        "priority": 1,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Doctor Review Majors Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Doctor).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_doctor_majors_complete",
+            "distParams": {
+              "max": "25",
+              "min": "8",
+              "mode": "15"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_doctor_minors",
+        "name": "Start Doctor Review - Minors",
+        "effect": [
+          "ASSIGN(Doctor Review Minors Queue, Doctor)"
+        ],
+        "priority": 2,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Doctor Review Minors Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Doctor).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_doctor_minors_complete",
+            "distParams": {
+              "max": "18",
+              "min": "5",
+              "mode": "10"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_boarding",
+        "name": "Transfer to Inpatient Bed (Boarding)",
+        "effect": [
+          "ASSIGN(Boarding Queue, InpatientBed)"
+        ],
+        "priority": 0,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Boarding Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(InpatientBed).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Fixed",
+            "eventId": "b_admitted_complete",
+            "distParams": {
+              "value": "1"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      }
+    ],
+    "queues": [
+      {
+        "id": "q_triage",
+        "name": "Triage Queue",
+        "discipline": "FIFO",
+        "customerType": "Patient"
+      },
+      {
+        "id": "q_resus",
+        "name": "Resus Queue",
+        "discipline": "FIFO",
+        "customerType": "Patient"
+      },
+      {
+        "id": "q_majors",
+        "name": "Majors Queue",
+        "discipline": "PRIORITY(acuity)",
+        "customerType": "Patient"
+      },
+      {
+        "id": "q_minors",
+        "name": "Minors Queue",
+        "discipline": "PRIORITY(acuity)",
+        "customerType": "Patient"
+      },
+      {
+        "id": "q_xray",
+        "name": "Xray Queue",
+        "discipline": "FIFO",
+        "customerType": "Patient"
+      },
+      {
+        "id": "q_lab",
+        "name": "Lab Queue",
+        "discipline": "FIFO",
+        "customerType": "Patient"
+      },
+      {
+        "id": "q_doctor_resus",
+        "name": "Doctor Review Resus Queue",
+        "discipline": "PRIORITY(acuity)",
+        "customerType": "Patient"
+      },
+      {
+        "id": "q_doctor_majors",
+        "name": "Doctor Review Majors Queue",
+        "discipline": "PRIORITY(acuity)",
+        "customerType": "Patient"
+      },
+      {
+        "id": "q_doctor_minors",
+        "name": "Doctor Review Minors Queue",
+        "discipline": "PRIORITY(acuity)",
+        "customerType": "Patient"
+      },
+      {
+        "id": "q_boarding",
+        "name": "Boarding Queue",
+        "discipline": "FIFO",
+        "customerType": "Patient"
+      }
+    ],
+    "containerTypes": [],
+    "goals": [
+      {
+        "label": "95% of patients: total wait under 4 hours (4hr target)",
+        "metric": "summary.avgWait",
+        "target": 240,
+        "operator": "p95"
+      },
+      {
+        "label": "Average total time in system under 4 hours",
+        "metric": "summary.avgTimeInSystem",
+        "target": 240,
+        "operator": "<"
+      },
+      {
+        "label": "Triage queue wait under 15 minutes",
+        "scope": {
+          "id": "q_triage",
+          "name": "Triage Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWait",
+        "target": 15,
+        "operator": "<"
+      },
+      {
+        "label": "Majors queue wait under 30 minutes",
+        "scope": {
+          "id": "q_majors",
+          "name": "Majors Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWait",
+        "target": 30,
+        "operator": "<"
+      },
+      {
+        "label": "Minors queue wait under 60 minutes",
+        "scope": {
+          "id": "q_minors",
+          "name": "Minors Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWait",
+        "target": 60,
+        "operator": "<"
+      },
+      {
+        "label": "Boarding queue wait under 3 hours (exit block)",
+        "scope": {
+          "id": "q_boarding",
+          "name": "Boarding Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWait",
+        "target": 180,
+        "operator": "<"
+      },
+      {
+        "label": "Majors cubicle utilisation under 85%",
+        "scope": {
+          "id": "et_majors_cubicle",
+          "name": "MajorsCubicle",
+          "type": "resource"
+        },
+        "metric": "resource.utilisation",
+        "target": 0.85,
+        "operator": "<"
+      },
+      {
+        "label": "Doctor utilisation under 85%",
+        "scope": {
+          "id": "et_doctor",
+          "name": "Doctor",
+          "type": "resource"
+        },
+        "metric": "resource.utilisation",
+        "target": 0.85,
+        "operator": "<"
+      },
+      {
+        "label": "Inpatient bed (boarding) utilisation under 90%",
+        "scope": {
+          "id": "et_inpatient_bed",
+          "name": "InpatientBed",
+          "type": "resource"
+        },
+        "metric": "resource.utilisation",
+        "target": 0.9,
+        "operator": "<"
+      },
+      {
+        "label": "Over 98% of patients fully processed",
+        "metric": "summary.servedRatio",
+        "target": 0.98,
+        "operator": ">"
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "x": 232,
+          "y": 454,
+          "id": "queue:q_triage",
+          "type": "queue",
+          "refId": "q_triage"
+        },
+        {
+          "x": 1392,
+          "y": 196,
+          "id": "queue:q_resus",
+          "type": "queue",
+          "refId": "q_resus"
+        },
+        {
+          "x": 616,
+          "y": 433,
+          "id": "queue:q_majors",
+          "type": "queue",
+          "refId": "q_majors"
+        },
+        {
+          "x": 616,
+          "y": 629,
+          "id": "queue:q_minors",
+          "type": "queue",
+          "refId": "q_minors"
+        },
+        {
+          "x": 1008,
+          "y": 391,
+          "id": "queue:q_xray",
+          "type": "queue",
+          "refId": "q_xray"
+        },
+        {
+          "x": 1384,
+          "y": 335,
+          "id": "queue:q_lab",
+          "type": "queue",
+          "refId": "q_lab"
+        },
+        {
+          "x": 1768,
+          "y": 319,
+          "id": "queue:q_doctor_resus",
+          "type": "queue",
+          "refId": "q_doctor_resus"
+        },
+        {
+          "x": 1768,
+          "y": 433,
+          "id": "queue:q_doctor_majors",
+          "type": "queue",
+          "refId": "q_doctor_majors"
+        },
+        {
+          "x": 1768,
+          "y": 547,
+          "id": "queue:q_doctor_minors",
+          "type": "queue",
+          "refId": "q_doctor_minors"
+        },
+        {
+          "x": 2152,
+          "y": 381,
+          "id": "queue:q_boarding",
+          "type": "queue",
+          "refId": "q_boarding"
+        },
+        {
+          "x": 1192,
+          "y": 107,
+          "id": "source:b_arrive_acuity1-0",
+          "type": "source",
+          "refId": "b_arrive_acuity1"
+        },
+        {
+          "x": 40,
+          "y": 80,
+          "id": "source:b_arrive_acuity2_day-0",
+          "type": "source",
+          "refId": "b_arrive_acuity2_day"
+        },
+        {
+          "x": 40,
+          "y": 184,
+          "id": "source:b_arrive_acuity2_night-0",
+          "type": "source",
+          "refId": "b_arrive_acuity2_night"
+        },
+        {
+          "x": 40,
+          "y": 288,
+          "id": "source:b_arrive_acuity3_day-0",
+          "type": "source",
+          "refId": "b_arrive_acuity3_day"
+        },
+        {
+          "x": 40,
+          "y": 392,
+          "id": "source:b_arrive_acuity3_night-0",
+          "type": "source",
+          "refId": "b_arrive_acuity3_night"
+        },
+        {
+          "x": 40,
+          "y": 496,
+          "id": "source:b_arrive_acuity4_day-0",
+          "type": "source",
+          "refId": "b_arrive_acuity4_day"
+        },
+        {
+          "x": 40,
+          "y": 600,
+          "id": "source:b_arrive_acuity4_night-0",
+          "type": "source",
+          "refId": "b_arrive_acuity4_night"
+        },
+        {
+          "x": 40,
+          "y": 704,
+          "id": "source:b_arrive_acuity5_day-0",
+          "type": "source",
+          "refId": "b_arrive_acuity5_day"
+        },
+        {
+          "x": 40,
+          "y": 808,
+          "id": "source:b_arrive_acuity5_night-0",
+          "type": "source",
+          "refId": "b_arrive_acuity5_night"
+        },
+        {
+          "x": 2536,
+          "y": 381,
+          "id": "sink:b_admitted_complete",
+          "type": "sink",
+          "refId": "b_admitted_complete"
+        },
+        {
+          "x": 424,
+          "y": 454,
+          "id": "activity:c_triage",
+          "type": "activity",
+          "refId": "c_triage"
+        },
+        {
+          "x": 1584,
+          "y": 192,
+          "id": "activity:c_resus_treat",
+          "type": "activity",
+          "refId": "c_resus_treat"
+        },
+        {
+          "x": 808,
+          "y": 426,
+          "id": "activity:c_majors_treat",
+          "type": "activity",
+          "refId": "c_majors_treat"
+        },
+        {
+          "x": 808,
+          "y": 629,
+          "id": "activity:c_minors_treat",
+          "type": "activity",
+          "refId": "c_minors_treat"
+        },
+        {
+          "x": 1200,
+          "y": 391,
+          "id": "activity:c_xray",
+          "type": "activity",
+          "refId": "c_xray"
+        },
+        {
+          "x": 1576,
+          "y": 351,
+          "id": "activity:c_lab",
+          "type": "activity",
+          "refId": "c_lab"
+        },
+        {
+          "x": 1960,
+          "y": 319,
+          "id": "activity:c_doctor_resus",
+          "type": "activity",
+          "refId": "c_doctor_resus"
+        },
+        {
+          "x": 2152,
+          "y": 277,
+          "id": "sink:exit-b_doctor_resus_complete",
+          "type": "sink",
+          "refId": "route-exit:b_doctor_resus_complete"
+        },
+        {
+          "x": 1960,
+          "y": 433,
+          "id": "activity:c_doctor_majors",
+          "type": "activity",
+          "refId": "c_doctor_majors"
+        },
+        {
+          "x": 2152,
+          "y": 495,
+          "id": "sink:exit-b_doctor_majors_complete",
+          "type": "sink",
+          "refId": "route-exit:b_doctor_majors_complete"
+        },
+        {
+          "x": 1960,
+          "y": 547,
+          "id": "activity:c_doctor_minors",
+          "type": "activity",
+          "refId": "c_doctor_minors"
+        },
+        {
+          "x": 2152,
+          "y": 599,
+          "id": "sink:exit-b_doctor_minors_complete",
+          "type": "sink",
+          "refId": "route-exit:b_doctor_minors_complete"
+        },
+        {
+          "x": 2344,
+          "y": 381,
+          "id": "activity:c_boarding",
+          "type": "activity",
+          "refId": "c_boarding"
+        }
+      ],
+      "version": 1,
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "zoom": 1
+      }
+    },
+    "experimentDefaults": {
+      "seed": 610073487,
+      "maxSimTime": 1440,
+      "liveDataMode": null,
+      "replications": 10,
+      "warmupPeriod": 120,
+      "terminationMode": "time",
+      "resultDetailLevel": "compact",
+      "terminationCondition": null
+    },
+    "timeUnit": "minutes",
+    "epoch": "2026-06-12T00:00:00",
+    "sections": [
+      {
+        "id": "sec_front_door",
+        "name": "Front Door / Triage",
+        "color": "#4A90D9",
+        "memberIds": [
+          "q_triage",
+          "et_triage_nurse",
+          "b_triage_complete",
+          "c_triage"
+        ],
+        "exitQueues": [
+          "Resus Queue",
+          "Majors Queue",
+          "Minors Queue"
+        ],
+        "entryQueues": [
+          "Triage Queue"
+        ]
+      },
+      {
+        "id": "sec_resus",
+        "name": "Resuscitation",
+        "color": "#27AE60",
+        "memberIds": [
+          "q_resus",
+          "et_resus_bay",
+          "c_resus_treat",
+          "b_resus_treat_complete"
+        ],
+        "exitQueues": [
+          "Doctor Review Resus Queue"
+        ],
+        "entryQueues": [
+          "Resus Queue"
+        ]
+      },
+      {
+        "id": "sec_majors",
+        "name": "Majors",
+        "color": "#E67E22",
+        "memberIds": [
+          "q_majors",
+          "et_majors_cubicle",
+          "c_majors_treat",
+          "b_majors_treat_complete"
+        ],
+        "exitQueues": [
+          "Xray Queue",
+          "Doctor Review Majors Queue"
+        ],
+        "entryQueues": [
+          "Majors Queue"
+        ]
+      },
+      {
+        "id": "sec_minors",
+        "name": "Minors",
+        "color": "#8E44AD",
+        "memberIds": [
+          "q_minors",
+          "et_minors_cubicle",
+          "c_minors_treat",
+          "b_minors_treat_complete"
+        ],
+        "exitQueues": [
+          "Xray Queue",
+          "Doctor Review Minors Queue"
+        ],
+        "entryQueues": [
+          "Minors Queue"
+        ]
+      },
+      {
+        "id": "sec_diagnostics",
+        "name": "Diagnostics (X-ray & Bloods)",
+        "color": "#E74C3C",
+        "memberIds": [
+          "q_xray",
+          "q_lab",
+          "et_xray",
+          "et_lab",
+          "c_xray",
+          "c_lab",
+          "b_xray_complete",
+          "b_lab_complete"
+        ],
+        "exitQueues": [
+          "Lab Queue",
+          "Doctor Review Resus Queue",
+          "Doctor Review Majors Queue",
+          "Doctor Review Minors Queue"
+        ],
+        "entryQueues": [
+          "Xray Queue",
+          "Lab Queue"
+        ]
+      },
+      {
+        "id": "sec_decision",
+        "name": "Doctor Decision",
+        "color": "#91a216",
+        "memberIds": [
+          "q_doctor_resus",
+          "q_doctor_majors",
+          "q_doctor_minors",
+          "et_doctor",
+          "c_doctor_resus",
+          "c_doctor_majors",
+          "c_doctor_minors",
+          "b_doctor_resus_complete",
+          "b_doctor_majors_complete",
+          "b_doctor_minors_complete"
+        ],
+        "exitQueues": [
+          "Boarding Queue"
+        ],
+        "entryQueues": [
+          "Doctor Review Resus Queue",
+          "Doctor Review Majors Queue",
+          "Doctor Review Minors Queue"
+        ]
+      },
+      {
+        "id": "sec_disposition",
+        "name": "Disposition (Admit / Discharge)",
+        "color": "#F39C12",
+        "memberIds": [
+          "q_boarding",
+          "et_inpatient_bed",
+          "c_boarding",
+          "b_admitted_complete"
+        ],
+        "exitQueues": [],
+        "entryQueues": [
+          "Boarding Queue"
+        ]
+      }
+    ]
+  },
+  "exportedAt": "2026-06-16T19:37:18.313Z",
+  "appVersion": "0.9.0 - Beta",
+  "description": "Detailed model of a large Glasgow A&E department over a 24-hour period: time-varying arrivals stratified by Manchester Triage System acuity (1-5), nurse triage, streaming to Resus/Majors/Minors, optional X-ray/bloods diagnostics, doctor decision, and admit (with inpatient bed boarding delay) vs discharge. Tracks 4-hour target compliance and per-stream waits."
+}

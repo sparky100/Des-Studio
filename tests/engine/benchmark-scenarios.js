@@ -1,4 +1,9 @@
 import { TEMPLATES } from "../../src/engine/templates.js";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function clone(value) {
   return structuredClone(value);
@@ -443,6 +448,16 @@ export function createBenchmarkScenarios({ includeStress = false } = {}) {
       replications: 1,
       category: "queue-growth",
     },
+    {
+      key: "ae-department",
+      label: "Accident and Emergency (9 types, 10 queues, 20 B/10 C, shifts, PRIORITY, sections)",
+      model: makeAEModel(),
+      seed: 687215104,
+      maxSimTime: 1440,
+      maxCycles: 120000,
+      replications: 1,
+      category: "real-world",
+    },
     ...(includeStress ? [{
       key: "large-queues-stress",
       label: "Stress case with large queues",
@@ -455,3 +470,17 @@ export function createBenchmarkScenarios({ includeStress = false } = {}) {
     }] : []),
   ];
 }
+
+function makeAEModel() {
+  const cwd = typeof process !== "undefined" ? process.cwd() : __dirname;
+  const candidatePaths = [
+    resolve(__dirname, "../benchmarks/ae-model.json"),
+    resolve(cwd, "tests/benchmarks/ae-model.json"),
+  ];
+  for (const p of candidatePaths) {
+    try { return JSON.parse(readFileSync(p, "utf-8")).model_json; } catch {}
+  }
+  throw new Error("Cannot find tests/benchmarks/ae-model.json — run from project root");
+}
+
+export { makeAEModel };

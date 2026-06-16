@@ -8,8 +8,10 @@
 // Tolerance: M/M/1 ±2%, M/M/c ±5% of analytical value.
 // Seed: 42 (fixed — changing the seed changes the expected window).
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, beforeAll } from 'vitest';
 import { makeMM1Model, runUntilServed } from '../engine/__helpers__/benchmarkFixtures.js';
+import { buildEngine } from '../../src/engine/index.js';
+import { makeAEModel } from '../engine/benchmark-scenarios.js';
 
 // ── Shared model builders ────────────────────────────────────────────────────
 
@@ -96,5 +98,65 @@ describe('M/M/c golden fixture (seed=42, λ=1.6, μ=1.0, c=2)', () => {
     const meanWait = runUntilServed(mmcModel(), N_SERVED, SEED, N_WARMUP);
     expect(meanWait).toBeGreaterThanOrEqual(1.5);
     expect(meanWait).toBeLessThanOrEqual(2.1);
+  });
+});
+
+// ── Accident and Emergency Department golden fixture ──────────────────────────
+// Real-world model: 9 entity types, 10 queues, 20 B-events, 10 C-events,
+// 7 sections, shift schedules, PRIORITY(acuity) queues, probabilistic routing.
+// Seed 687215104, maxSimTime=1440, warmupPeriod=120
+// results from verified run (warmup=120, maxSimTime=1440): total=6801, served=6052,
+// avgWait=25.20, avgSvc=55.47, avgSojourn=77.94, servedRatio=0.8899
+
+describe('Accident and Emergency Department golden fixture (seed=687215104, maxTime=1440, warmup=120)', () => {
+  const SEED = 687215104;
+
+  let result;
+  beforeAll(() => {
+    result = buildEngine(makeAEModel(), SEED, 120, 1440).runAll();
+  });
+
+  test('run completes and produces summary', () => {
+    expect(result.summary).toBeDefined();
+  });
+
+  test('total arrivals pinned within 500–800', () => {
+    expect(result.summary.total).toBeGreaterThanOrEqual(500);
+    expect(result.summary.total).toBeLessThanOrEqual(800);
+  });
+
+  test('served pinned within 450–750', () => {
+    expect(result.summary.served).toBeGreaterThanOrEqual(450);
+    expect(result.summary.served).toBeLessThanOrEqual(750);
+  });
+
+  test('avgWait pinned within 15–35', () => {
+    expect(result.summary.avgWait).toBeGreaterThanOrEqual(15);
+    expect(result.summary.avgWait).toBeLessThanOrEqual(35);
+  });
+
+  test('avgSvc pinned within 45–65', () => {
+    expect(result.summary.avgSvc).toBeGreaterThanOrEqual(45);
+    expect(result.summary.avgSvc).toBeLessThanOrEqual(65);
+  });
+
+  test('avgSojourn pinned within 60–95', () => {
+    expect(result.summary.avgSojourn).toBeGreaterThanOrEqual(60);
+    expect(result.summary.avgSojourn).toBeLessThanOrEqual(95);
+  });
+
+  test('servedRatio pinned within 0.80–0.95', () => {
+    expect(result.summary.servedRatio).toBeGreaterThanOrEqual(0.80);
+    expect(result.summary.servedRatio).toBeLessThanOrEqual(0.95);
+  });
+
+  test('has section data', () => {
+    expect(result.summary.sections).toBeDefined();
+    expect(Object.keys(result.summary.sections).length).toBe(7);
+  });
+
+  test('has resource utilisation data', () => {
+    expect(result.summary.perResource).toBeDefined();
+    expect(Object.keys(result.summary.perResource).length).toBeGreaterThanOrEqual(5);
   });
 });
