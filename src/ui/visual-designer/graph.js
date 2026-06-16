@@ -428,27 +428,19 @@ export function graphLayoutFromDerivedGraph(derivedGraph = {}) {
 
 export async function exportCanvasToPng(fitViewFn) {
   try {
-    // Save current viewport state so we can restore it after capture
-    const viewport = document.querySelector('.react-flow__viewport');
-    if (!viewport) return null;
-    const savedTransform = viewport.style.transform || '';
-
     if (typeof fitViewFn === 'function') {
       fitViewFn();
       await new Promise(r => setTimeout(r, 500));
     }
+    const viewport = document.querySelector('.react-flow__viewport');
+    if (!viewport) return null;
 
     const { toCanvas } = await import('html-to-image');
     const canvas = await toCanvas(viewport, {
       pixelRatio: 2,
       backgroundColor: '#ffffff',
-      filter: node => {
-        return !node.getAttribute?.('data-id')?.startsWith('section-');
-      },
+      filter: node => !node.getAttribute?.('data-id')?.startsWith('section-'),
     });
-
-    // Restore the user's original viewport position
-    viewport.style.transform = savedTransform;
     return canvas.toDataURL('image/png');
   } catch (err) {
     console.warn('[simmodlr] Canvas export failed:', err);
