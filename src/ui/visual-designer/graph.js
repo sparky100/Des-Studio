@@ -429,28 +429,25 @@ export function graphLayoutFromDerivedGraph(derivedGraph = {}) {
 export async function exportCanvasToPng(fitViewFn) {
   try {
     if (typeof fitViewFn === 'function') {
-      console.log('[capture] fitView called');
       fitViewFn();
-      console.log('[capture] waiting 500ms');
       await new Promise(r => setTimeout(r, 500));
     }
-    const el = document.querySelector('.react-flow');
-    console.log('[capture] react-flow found:', !!el, '| size:', el?.offsetWidth, 'x', el?.offsetHeight);
-    if (!el) return null;
+    const viewport = document.querySelector('.react-flow__viewport');
+    if (!viewport) return null;
 
-    const { toPng } = await import('html-to-image');
-    return await toPng(el, {
+    // Force overflow hidden so toCanvas doesn't try to render overflow content
+    const prevOverflow = viewport.style.overflow;
+    viewport.style.overflow = 'hidden';
+
+    const { toCanvas } = await import('html-to-image');
+    const canvas = await toCanvas(viewport, {
       pixelRatio: 2,
       backgroundColor: '#ffffff',
-      filter: node => {
-        const cls = node.classList;
-        return !cls?.contains('react-flow__controls') &&
-               !cls?.contains('react-flow__minimap') &&
-               !cls?.contains('react-flow__background') &&
-               !cls?.contains('react-flow__panel') &&
-               !node.getAttribute?.('data-id')?.startsWith('section-');
-      },
+      filter: node => !node.getAttribute?.('data-id')?.startsWith('section-'),
     });
+
+    viewport.style.overflow = prevOverflow;
+    return canvas.toDataURL('image/png');
   } catch (err) {
     console.warn('[simmodlr] Canvas export failed:', err);
     return null;
