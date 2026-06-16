@@ -1625,14 +1625,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="access"&&isOwner&&(
           <div style={{maxWidth:700,margin:"0 auto",display:"flex",flexDirection:"column",gap:18}}>
             <section aria-label="Sharing settings" style={{display:"flex",flexDirection:"column",gap:10}}>
-              <SH label="Sharing"/>
+              <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS,borderBottom:`1px solid ${C.border}`,paddingBottom:4}}>Sharing</div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"private").then(onRefresh);}} small>🔒 Private</Btn>
                 <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"public").then(onRefresh);}} small>🌐 Public</Btn>
               </div>
             </section>
             <section aria-label="Export model" style={{display:"flex",flexDirection:"column",gap:10}}>
-              <SH label="Export"/>
+              <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS,borderBottom:`1px solid ${C.border}`,paddingBottom:4}}>Export</div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12}}>
                 <div>
                   <div style={{fontSize:12,color:C.text,fontFamily:FONT,fontWeight:700,marginBottom:4}}>Model JSON</div>
