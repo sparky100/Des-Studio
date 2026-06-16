@@ -430,26 +430,19 @@ export async function exportCanvasToPng(fitViewFn) {
   try {
     if (typeof fitViewFn === 'function') {
       fitViewFn();
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     }
     const el = document.querySelector('.react-flow');
     if (!el) return null;
-    const rect = el.getBoundingClientRect();
-
     const { toPng } = await import('html-to-image');
     return await toPng(el, {
       pixelRatio: 2,
-      canvasWidth: Math.round(rect.width * 2),
-      canvasHeight: Math.round(rect.height * 2),
       backgroundColor: '#ffffff',
-      filter: node => {
-        const cls = node.classList;
-        return !cls?.contains('react-flow__controls') &&
-               !cls?.contains('react-flow__minimap') &&
-               !cls?.contains('react-flow__background') &&
-               !cls?.contains('react-flow__panel') &&
-               !node.getAttribute?.('data-id')?.startsWith('section-');
-      },
+      filter: node =>
+        !node.classList?.contains('react-flow__controls') &&
+        !node.classList?.contains('react-flow__minimap') &&
+        !node.classList?.contains('react-flow__background') &&
+        !node.getAttribute?.('data-id')?.startsWith('section-'),
     });
   } catch (err) {
     console.warn('[simmodlr] Canvas export failed:', err);

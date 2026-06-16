@@ -476,7 +476,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const runWithPatchRef = useRef(null);
   const fitAllRef = useRef(null);
-  const pendingImageRef = useRef(null);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
     try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
   });
@@ -713,10 +712,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     if(tab!=="visual"&&visualPending){
       setDirty(true);
       setVisualPending(false);
-    }
-    if(tab!=="visual"&&pendingImageRef.current){
-      setWholeModel({ ...model, imageDataUrl: pendingImageRef.current });
-      pendingImageRef.current = null;
     }
   },[tab]);
 
@@ -1123,7 +1118,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="visual"&&(
           renderAuthoringShell(
             <Suspense fallback={<SkeletonPanel rows={5} />}>
-              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onImageCaptured={(dataUrl) => { pendingImageRef.current = dataUrl; }} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
+              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
             </Suspense>
           )
         )}
@@ -1185,20 +1180,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 : <div style={{fontSize:14,color:C.muted,fontFamily:SANS,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{model.description}</div>
               }
             </div>
-
-            {/* Model image preview — captured from the Visual Designer */}
-            {model.imageDataUrl && (
-              <div style={{ marginTop: 12, borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}`, background: "#ffffff", maxWidth: "100%" }}>
-                <img src={model.imageDataUrl} alt="Model visual diagram" style={{ width: "100%", maxHeight: 600, objectFit: "contain", display: "block" }} />
-                {canEdit && (
-                  <div style={{ padding: "6px 10px", background: C.surface, borderTop: `1px solid ${C.border}` }}>
-                    <Btn small variant="ghost" onClick={() => { const { imageDataUrl: _, ...rest } = model; setWholeModel(rest); }}>
-                      Remove image
-                    </Btn>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Key metrics from last run */}
             {overviewHistory.length > 0 && (() => {
