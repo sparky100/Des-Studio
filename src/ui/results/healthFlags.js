@@ -1,5 +1,5 @@
 // Deterministic health flags evaluated from simulation results — no LLM required.
-// Returns a sorted array of { code, severity, resource?, message } objects.
+// Returns a sorted array of { code, severity, resource?, message, suggestion } objects.
 // severity: "critical" | "warning"
 
 export function evaluateResultsHealth(results = {}, model = {}) {
@@ -13,10 +13,12 @@ export function evaluateResultsHealth(results = {}, model = {}) {
     if (!Number.isFinite(util)) continue;
     if (util >= 0.9) {
       flags.push({ code: "H1", severity: "critical", resource: typeName,
-        message: `${typeName} at ${Math.round(util * 100)}% utilisation — saturated, queue will grow without more capacity.` });
+        message: `${typeName} at ${Math.round(util * 100)}% utilisation — saturated, queue will grow without more capacity.`,
+        suggestion: "Add more servers or reduce arrival rate to prevent unbounded queue growth." });
     } else if (util >= 0.8) {
       flags.push({ code: "H1", severity: "warning", resource: typeName,
-        message: `${typeName} at ${Math.round(util * 100)}% utilisation — approaching saturation, expect queue build-up.` });
+        message: `${typeName} at ${Math.round(util * 100)}% utilisation — approaching saturation, expect queue build-up.`,
+        suggestion: "Monitor utilisation — may need additional capacity for longer runs or higher loads." });
     }
   }
 
@@ -33,7 +35,8 @@ export function evaluateResultsHealth(results = {}, model = {}) {
       const lateMean  = avg(timeSeries.slice(-splitAt));
       if (lateMean > earlyMean * 1.5 && lateMean > 2) {
         flags.push({ code: "H2", severity: "warning", resource: q,
-          message: `${q} queue trending up (avg ${earlyMean.toFixed(1)} → ${lateMean.toFixed(1)} waiting) — the system may not reach steady state.` });
+          message: `${q} queue trending up (avg ${earlyMean.toFixed(1)} → ${lateMean.toFixed(1)} waiting) — the system may not reach steady state.`,
+          suggestion: "Check upstream constraints — the queue is growing faster than it's being drained, suggesting a capacity shortfall or an arrival surge." });
       }
     }
   }
@@ -50,10 +53,12 @@ export function evaluateResultsHealth(results = {}, model = {}) {
       : "";
     if (wipPct >= 20) {
       flags.push({ code: "H3", severity: "critical",
-        message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run — large unfinished backlog, results may be unreliable.` });
+        message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run — large unfinished backlog, results may be unreliable.`,
+        suggestion: "Identify and relieve capacity constraints — arriving entities are backing up faster than the system can serve them." });
     } else if (wipPct >= 10) {
       flags.push({ code: "H3", severity: "warning",
-        message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run.` });
+        message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run.`,
+        suggestion: "Check for capacity constraints — a portion of arrivals could not complete before the run ended." });
     }
   }
 
@@ -66,11 +71,13 @@ export function evaluateResultsHealth(results = {}, model = {}) {
     if (Number.isFinite(capacity) && capacity > 0) {
       if (peak >= capacity * 2) {
         flags.push({ code: "H4", severity: "warning", resource: queue.name,
-          message: `${queue.name} peaked at ${peak} waiting (${Math.round(peak / capacity)}× its capacity of ${capacity}).` });
+          message: `${queue.name} peaked at ${peak} waiting (${Math.round(peak / capacity)}× its capacity of ${capacity}).`,
+          suggestion: `Increase ${queue.name} capacity or add an overflow route to handle peak demand.` });
       }
     } else if (peak > 50) {
       flags.push({ code: "H4", severity: "warning", resource: queue.name,
-        message: `${queue.name} peaked at ${peak} waiting.` });
+        message: `${queue.name} peaked at ${peak} waiting.`,
+        suggestion: `Consider adding a capacity limit or overflow route to ${queue.name}.` });
     }
   }
 

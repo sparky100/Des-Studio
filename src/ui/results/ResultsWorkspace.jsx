@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
-import { alpha } from "../shared/tokens.js";
+import { alpha, RADIUS } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { csvEscape, downloadTextFile, slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { batchMeansCI, buildHistogramFD, computePercentiles, computeSummaryStats, detectOutliers } from "../../engine/statistics.js";
@@ -287,7 +287,53 @@ function CiBadge({ ci, C, FONT }) {
   );
 }
 
-export function SummaryCardGrid({ results, replicationResults = [], model = {}, healthFlags = [] }) {
+function KeyFindingsBanner({ healthFlags, C, FONT }) {
+  if (!healthFlags?.length) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+      <div style={{ fontSize: 10, color: C.red, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+        KEY FINDINGS ({healthFlags.length})
+      </div>
+      {healthFlags.map((flag, i) => {
+        const isCritical = flag.severity === "critical";
+        const accentColor = isCritical ? C.red : C.amber;
+        return (
+          <div key={`${flag.code}-${i}`} style={{
+            background: isCritical ? `${C.errorBg}44` : `${C.warnBg}18`,
+            borderLeft: `3px solid ${accentColor}`,
+            borderRadius: RADIUS.md,
+            padding: "10px 14px",
+            display: "flex", flexDirection: "column", gap: 4,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 14, lineHeight: 1 }}>{isCritical ? "\u26A1" : "\u26A0"}</span>
+              <span style={{
+                background: accentColor + "22", color: accentColor,
+                borderRadius: 3, padding: "1px 6px",
+                fontSize: 9, fontWeight: 700, letterSpacing: 1, fontFamily: FONT,
+              }}>
+                {isCritical ? "CRITICAL" : "WARNING"}
+              </span>
+              {flag.resource && (
+                <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{flag.resource}</span>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
+              {flag.message}
+            </div>
+            {flag.suggestion && (
+              <div style={{ fontSize: 11, color: C.accent, fontFamily: FONT, fontWeight: 600, marginTop: 2 }}>
+                {"\u2192"} {flag.suggestion}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function SummaryCardGrid({ results, replicationResults = [], model = {} }) {
   const { C, FONT } = useTheme();
   const summary = results?.summary || {};
   // Derive replication count from prop array; fall back to stored replications field
@@ -488,26 +534,6 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {}, 
           </>
         );
       })()}
-      {healthFlags.length > 0 && (
-        <>
-          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
-            HEALTH ALERTS
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {healthFlags.map((flag, i) => {
-              const isCritical = flag.severity === "critical";
-              const bg     = isCritical ? `${C.red}18`   : `${C.amber}12`;
-              const border = isCritical ? `${C.red}55`   : `${C.amber}44`;
-              const color  = isCritical ? C.red           : C.text;
-              return (
-                <div key={`${flag.code}-${i}`} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 6, padding: "8px 12px", fontFamily: FONT, fontSize: 12, color, lineHeight: 1.5 }}>
-                  {flag.message}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
       {outcomeEntries.length > 0 && (
         <>
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
@@ -1575,10 +1601,11 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   if (!chartModel.hasTimeSeries && !hasWaitDistributions && !hasAnalysisInputs) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+        <KeyFindingsBanner healthFlags={healthFlags} C={C} FONT={FONT} />
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
           <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
-            <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} healthFlags={healthFlags} />
+            <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} />
           </div>
         </div>
         {queuePeaks.length > 0 && (
@@ -1656,11 +1683,12 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+      <KeyFindingsBanner healthFlags={healthFlags} C={C} FONT={FONT} />
       {/* ── 1. Headline KPIs ───────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
         <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
         <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
-          <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} healthFlags={healthFlags} />
+          <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} />
           </div>
         </div>
 
