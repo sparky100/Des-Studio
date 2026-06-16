@@ -442,9 +442,9 @@ export async function exportCanvasToPng(fitViewFn) {
       console.warn('[capture] all react-flow elements on page:', document.querySelectorAll('.react-flow').length);
       return null;
     }
-    const { toSvg } = await import('html-to-image');
-    console.log('[capture] calling toSvg on element:', el.tagName, el.className);
-    const svgStr = await toSvg(el, {
+    const { toCanvas } = await import('html-to-image');
+    console.log('[capture] calling toCanvas on element:', el.tagName, el.className);
+    const canvas = await toCanvas(el, {
       pixelRatio: 2,
       backgroundColor: '#ffffff',
       filter: node => {
@@ -456,22 +456,7 @@ export async function exportCanvasToPng(fitViewFn) {
                !node.getAttribute?.('data-id')?.startsWith('section-');
       },
     });
-    const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(svgBlob);
-    const img = new Image();
-    const dataUrl = await new Promise((resolve, reject) => {
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        canvas.getContext('2d').drawImage(img, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
-      };
-      img.onerror = reject;
-      img.src = url;
-    });
-    URL.revokeObjectURL(url);
-    return dataUrl;
+    return canvas.toDataURL('image/png');
   } catch (err) {
     console.warn('[simmodlr] Canvas export failed:', err);
     return null;
