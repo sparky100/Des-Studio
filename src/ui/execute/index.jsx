@@ -1555,7 +1555,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         ))}
       </div>
 
-      {executeSection === "run" && showRunSetup && (
+      {executeSection === "run" && showRunSetup && !autoRunning && mode !== "running" && (
         <div style={{ maxWidth: 1120, margin: "0 auto" }}>
           <ExperimentControls
             warmupPeriod={warmupPeriod} setWarmupPeriod={setWarmupPeriod}
@@ -1567,10 +1567,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             terminationCondition={terminationCondition} setTerminationCondition={setTerminationCondition}
             showRunSetup={showRunSetup} setShowRunSetup={setShowRunSetup}
             runSetupSummary={runSetupSummary}
-            warmupDetection={warmupDetection} setWarmupDetection={setWarmupDetection}
-            replicationResults={replicationResults}
             model={model}
-            onDetectWarmup={handleDetectWarmup}
             persistExperimentDefaults={persistExperimentDefaults}
             animationEnabled={animationEnabled} setAnimationEnabled={setAnimationEnabled}
             collectTimeSeries={collectTimeSeries} setCollectTimeSeries={setCollectTimeSeries}
@@ -2312,7 +2309,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       )}
 
       {/* ADR-016: Schedule selector — shown when model has more than one schedule */}
-      {modelSchedules.length > 1 && (
+      {modelSchedules.length > 1 && !autoRunning && mode !== "running" && (
         <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>Timetable:</span>
           <select
@@ -2331,7 +2328,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       )}
 
 
-      {executeSection === "run" && (
+      {executeSection === "run" && !autoRunning && mode !== "running" && (
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {/* Validation status indicator — informational only, positioned first */}
         {hasAdmissionErrors ? (
@@ -2544,9 +2541,37 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       </div>
       )}
 
+      {executeSection === "run" && (autoRunning || mode === "running") && (
+      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        {autoRunning ? (
+          <Btn variant="danger" onClick={toggleAuto}>⏹ Stop Auto</Btn>
+        ) : (
+          <Btn variant="success" onClick={doStep} disabled={mode === "done" || runBusy}> Step</Btn>
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
+            {speedMultiplier.toFixed(1)}×
+          </span>
+          <input
+            aria-label="Animation speed multiplier"
+            type="range"
+            min={0.5} max={10} step={0.5}
+            value={speedMultiplier}
+            onChange={e => setSpeedMultiplier(parseFloat(e.target.value))}
+            style={{ width: 72, accentColor: C.accent, cursor: "pointer" }}
+          />
+        </div>
+        {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
+        {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
+        <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap", marginLeft: "auto" }}>
+          {replications} rep{replications !== 1 ? "s" : ""} · {terminationMode === "time" ? `${maxSimTime} time units` : "condition stop"} · seed {seed}{warmupPeriod > 0 ? ` · warm-up ${warmupPeriod}` : ""}
+        </span>
+      </div>
+      )}
+
       {executeSection === "run" && (
         <>
-      {!hideRunReadiness && (
+      {!hideRunReadiness && !autoRunning && mode !== "running" && (
         <div
           role={hasAdmissionErrors ? "alert" : "status"}
           style={{
