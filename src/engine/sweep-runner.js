@@ -7,8 +7,9 @@ import { summarizeReplicationResults } from "./statistics.js";
 import { applySweepValues, applySweepValue, generateSweepValues, generate2DSweepValues } from "./sweep-params.js";
 
 const SWEEP_METRICS = [
-  "summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.avgTimeInSystem",
-  "summary.served", "summary.servedRatio", "summary.reneged",
+  "summary.total", "summary.avgWait", "summary.avgSvc", "summary.avgSojourn",
+  "summary.avgTimeInSystem", "summary.served", "summary.servedRatio", "summary.reneged",
+  "summary.totalCost", "summary.costPerServed",
 ];
 
 function wrapReplications(options) {

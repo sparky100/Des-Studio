@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { alpha, lerpColor } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
-import { fmt, METRIC_LABELS } from "./executeHelpers.js";
+import { fmt, fmtMetric, METRIC_LABELS } from "./executeHelpers.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 // Check whether a sweep point's aggregateStats satisfies all goals.
@@ -454,7 +454,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
                   )}
                   {/* Main value */}
                   <div style={{ fontSize: 20, fontWeight: 800, color: C.bg, lineHeight: 1, fontFamily: FONT }}>
-                    {Number.isFinite(mean) ? fmt(mean) : "—"}
+                    {Number.isFinite(mean) ? fmtMetric(metric, mean) : "—"}
                   </div>
                   {/* CI half-width */}
                   {halfWidth != null && halfWidth > 0 && (
