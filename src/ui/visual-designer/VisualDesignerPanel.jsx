@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
-import { deriveGraphFromModel, VISUAL_NODE_TYPES, exportCanvasToPng } from "./graph.js";
+import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
 import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
@@ -230,7 +230,7 @@ function ValidationChecklist({ visualIssues, modelErrors, modelWarnings, graph, 
   );
 }
 
-export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit, onImageCaptured, flowKey = 0, fitAllRef }) {
+export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit, flowKey = 0, fitAllRef }) {
   const { C, FONT } = useTheme();
   const PALETTE_ITEMS = [
     { type: VISUAL_NODE_TYPES.SOURCE,   label: "Add Source",   icon: "S", color: C.green },
@@ -314,20 +314,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   const applyModel = nextModel => {
     setMessage(null);
     onModelChange?.(nextModel);
-  };
-  const handleCaptureImage = async (fitViewFn) => {
-    setMessage({ state: "info", text: "Capturing canvas image..." });
-    try {
-      const dataUrl = await exportCanvasToPng(fitViewFn);
-      if (dataUrl) {
-        onImageCaptured?.(dataUrl);
-        setMessage({ state: "success", text: "Model image captured. Switch tabs to save it to the overview." });
-      } else {
-        setMessage({ state: "error", text: "Capture failed — no canvas found. Try opening the Design tab first." });
-      }
-    } catch {
-      setMessage({ state: "error", text: "Image capture failed. Check the console for details." });
-    }
   };
   const selectedNodes = useMemo(() => {
     const ids = new Set(selectedNodeIds);
@@ -1009,7 +995,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               onConnectNodes={connectNodes}
               onDropNode={addNode}
               onResetLayout={canEdit ? resetLayout : null}
-              onCaptureImage={canEdit ? handleCaptureImage : null}
             />
             {isStarterBlank && canEdit && (
               <div style={{
