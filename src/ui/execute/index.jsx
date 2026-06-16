@@ -167,6 +167,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [log, setLog] = useState([]);
   const [autoSpeed, setAutoSpeed] = useState(400);
   const [autoRunning, setAutoRunning] = useState(false);
+  const isRunning = autoRunning || mode === "running" || mode === "stepping";
   const [saveStatus, setSaveStatus] = useState(null);
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
   const [results, setResults] = useState(null);
@@ -1026,7 +1027,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }, [autoRunning, effectiveAutoSpeed, doStep]);
 
   useEffect(() => {
-    onRunStateChange?.(autoRunning || mode === "running");
+    onRunStateChange?.(isRunning);
   }, [autoRunning, mode, onRunStateChange]);
 
   useEffect(() => {
@@ -1531,7 +1532,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {!autoRunning && mode !== "running" && (
+      {!isRunning && (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[
           { id: "run", label: "Run" },
@@ -1561,7 +1562,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       </div>
       )}
 
-      {executeSection === "run" && showRunSetup && !autoRunning && mode !== "running" && (
+      {executeSection === "run" && showRunSetup && !isRunning && (
         <div style={{ maxWidth: 1120, margin: "0 auto" }}>
           <ExperimentControls
             warmupPeriod={warmupPeriod} setWarmupPeriod={setWarmupPeriod}
@@ -2318,7 +2319,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       )}
 
       {/* ADR-016: Schedule selector — shown when model has more than one schedule */}
-      {modelSchedules.length > 1 && !autoRunning && mode !== "running" && (
+      {modelSchedules.length > 1 && !isRunning && (
         <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>Timetable:</span>
           <select
@@ -2337,7 +2338,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       )}
 
 
-      {executeSection === "run" && !autoRunning && mode !== "running" && (
+      {executeSection === "run" && !isRunning && (
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {/* Validation status indicator — informational only, positioned first */}
         {hasAdmissionErrors ? (
@@ -2550,7 +2551,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       </div>
       )}
 
-      {executeSection === "run" && (autoRunning || mode === "running") && (
+      {executeSection === "run" && isRunning && (
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || runBusy}> Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || runBusy}>{autoRunning ? "⏹ Stop Auto" : "Auto Run"}</Btn>
@@ -2567,6 +2568,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             style={{ width: 72, accentColor: C.accent, cursor: "pointer" }}
           />
         </div>
+        <Btn variant="danger" onClick={() => {
+          stopAuto();
+          if (batchActive) cancelBatch();
+          if (singleRunActive) cancelSingleRun();
+          setMode("idle");
+        }}>✕ Cancel</Btn>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
         <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap", marginLeft: "auto" }}>
@@ -2577,7 +2584,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
       {executeSection === "run" && (
         <>
-      {!hideRunReadiness && !autoRunning && mode !== "running" && (
+      {!hideRunReadiness && !isRunning && (
         <div
           role={hasAdmissionErrors ? "alert" : "status"}
           style={{
