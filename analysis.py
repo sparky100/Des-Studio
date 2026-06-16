@@ -70,16 +70,20 @@ def analyze(path):
     print(f"MetricsOnly:{data.get('metricsOnly', False)}")
 
     # ── experiment config ────────────────────────────────────────────────────
-    exp = data.get("experiment", {})
+    exp = data.get("experiment", data.get("_experiment_config", {}))
+    summary = data.get("results", {}).get("summary", data.get("summary", {}))
+    runLabel = data.get("runLabel") or exp.get("runLabel", "N/A")
+    seed = data.get("_base_seed") or exp.get("seed", "N/A")
+    reps_config = exp.get("replications", len(data.get("replications", [])))
     print(f"\n{'=' * 70}")
     print("  EXPERIMENT CONFIG")
     print(f"{'=' * 70}")
-    print(f"  Label:           {exp.get('runLabel', 'N/A')}")
-    print(f"  Seed:            {exp.get('seed', 'N/A')}")
-    print(f"  Replications:    {exp.get('replications', 'N/A')}")
+    print(f"  Run Label:       {runLabel}")
+    print(f"  Seed:            {seed}")
+    print(f"  Replications:    {reps_config}")
     print(f"  Warm-up:         {exp.get('warmupPeriod', 0)}")
-    print(f"  Max sim time:    {exp.get('maxSimTime', 'N/A')}")
-    print(f"  Term. mode:      {exp.get('terminationMode', 'N/A')}")
+    print(f"  Max sim time:    {exp.get('maxSimTime', summary.get('finalTime') or exp.get('max_simulation_time') or 'N/A')}")
+    print(f"  Term. mode:      {exp.get('terminationMode', 'time')}")
 
     # ── aggregate stats ──────────────────────────────────────────────────────
     agg = data.get("aggregateStats", {})
@@ -139,7 +143,6 @@ def analyze(path):
                     print(f"    {name:12s} computed={fmt(ci['mean'])}  stored={fmt(stored_mean)}  {match}")
 
     # ── summary section ──────────────────────────────────────────────────────
-    summary = data.get("results", {}).get("summary", {})
     if summary:
         print(f"\n── Results Summary ──")
         for k in ["total", "arrived", "served", "reneged", "servedRatio",
@@ -235,7 +238,6 @@ def analyze(path):
 
     # ── validation summary ───────────────────────────────────────────────────
     print(f"\n── Quick Cross-Checks ──")
-    summary = data.get("results", {}).get("summary", {}) or {}
     arrived = fin(summary.get("total", summary.get("arrived", 0))) or 0
     served = fin(summary.get("served", 0)) or 0
     reneged = fin(summary.get("reneged", 0)) or 0
