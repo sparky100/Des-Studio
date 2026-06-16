@@ -179,7 +179,7 @@ def analyze(path):
                 print(f"    {sec_id}: count={fmt(sdata.get('count',0),0)}  avgSojourn={fmt(sdata.get('avgSojourn'))}")
 
     # ── time series statistics ───────────────────────────────────────────────
-    ts = data.get("results", {}).get("timeSeries", [])
+    ts = data.get("results", {}).get("timeSeries", data.get("timeSeries", []))
     if ts:
         print(f"\n── Time Series ({len(ts)} snapshots) ──")
         # collect all queue names and server types
@@ -217,7 +217,7 @@ def analyze(path):
                 print(f"    {sv}: avg={avg_u:.1f}%  peak={peak_u:.1f}%")
 
     # ── wait distributions ───────────────────────────────────────────────────
-    waitDist = data.get("results", {}).get("waitDist", {})
+    waitDist = data.get("results", {}).get("waitDist", data.get("waitDist", {}))
     if waitDist:
         print(f"\n── Wait Distributions ──")
         for qname, dist in waitDist.items():
@@ -230,7 +230,7 @@ def analyze(path):
             print(f"  {qname}: n={n}  mean={fmt(mean)}  p50={fmt(p50)}  p95={fmt(p95)}  p99={fmt(p99)}  samples={len(values)}")
 
     # ── runtime metrics ──────────────────────────────────────────────────────
-    rt = data.get("results", {}).get("runtimeMetrics", {})
+    rt = data.get("results", {}).get("runtimeMetrics", data.get("runtimeMetrics", {}))
     if rt:
         print(f"\n── Runtime Metrics ──")
         for k, v in rt.items():
