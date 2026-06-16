@@ -429,10 +429,13 @@ export function graphLayoutFromDerivedGraph(derivedGraph = {}) {
 export async function exportCanvasToPng(fitViewFn) {
   try {
     if (typeof fitViewFn === 'function') {
+      console.log('[capture] fitView called');
       fitViewFn();
+      console.log('[capture] waiting 500ms');
       await new Promise(r => setTimeout(r, 500));
     }
     const viewport = document.querySelector('.react-flow__viewport');
+    console.log('[capture] viewport found:', !!viewport, '| size:', viewport?.offsetWidth, 'x', viewport?.offsetHeight, '| overflow:', getComputedStyle(viewport)?.overflow);
     if (!viewport) return null;
 
     const { toCanvas } = await import('html-to-image');
@@ -441,6 +444,7 @@ export async function exportCanvasToPng(fitViewFn) {
       backgroundColor: '#ffffff',
       filter: node => !node.getAttribute?.('data-id')?.startsWith('section-'),
     });
+    console.log('[capture] canvas size:', canvas.width, 'x', canvas.height);
     return canvas.toDataURL('image/png');
   } catch (err) {
     console.warn('[simmodlr] Canvas export failed:', err);
