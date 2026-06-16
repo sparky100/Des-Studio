@@ -315,6 +315,20 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     setMessage(null);
     onModelChange?.(nextModel);
   };
+  const handleCaptureImage = async (fitViewFn) => {
+    setMessage({ state: "info", text: "Capturing canvas image..." });
+    try {
+      const dataUrl = await exportCanvasToPng(fitViewFn);
+      if (dataUrl) {
+        applyModel({ ...model, imageDataUrl: dataUrl });
+        setMessage({ state: "success", text: "Model image captured and saved to overview." });
+      } else {
+        setMessage({ state: "error", text: "Capture failed — no canvas found. Try opening the Design tab first." });
+      }
+    } catch {
+      setMessage({ state: "error", text: "Image capture failed. Check the console for details." });
+    }
+  };
   const selectedNodes = useMemo(() => {
     const ids = new Set(selectedNodeIds);
     return (graph.nodes || []).filter(node => ids.has(node.id));
@@ -995,6 +1009,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               onConnectNodes={connectNodes}
               onDropNode={addNode}
               onResetLayout={canEdit ? resetLayout : null}
+              onCaptureImage={canEdit ? handleCaptureImage : null}
             />
             {isStarterBlank && canEdit && (
               <div style={{

@@ -1181,6 +1181,20 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               }
             </div>
 
+            {/* Model image preview — captured from the Visual Designer */}
+            {model.imageDataUrl && (
+              <div style={{ marginTop: 12, borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}`, background: "#ffffff", maxWidth: "100%" }}>
+                <img src={model.imageDataUrl} alt="Model visual diagram" style={{ width: "100%", display: "block" }} />
+                {canEdit && (
+                  <div style={{ padding: "6px 10px", background: C.surface, borderTop: `1px solid ${C.border}` }}>
+                    <Btn small variant="ghost" onClick={() => { const { imageDataUrl: _, ...rest } = model; setWholeModel(rest); }}>
+                      Remove image
+                    </Btn>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Key metrics from last run */}
             {overviewHistory.length > 0 && (() => {
               const lastRow = overviewHistory[0];

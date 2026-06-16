@@ -251,7 +251,7 @@ function toFlowEdge(edge, C, FONT) {
   };
 }
 
-function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef }) {
+function CanvasControls({ canEdit, onResetLayout, onCaptureImage, connecting, fitNodeRef, fitAllRef }) {
   const { C, FONT } = useTheme();
   const [showShortcuts, setShowShortcuts] = useState(false);
   const panelBtnStyle = {
@@ -317,6 +317,16 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
         >
           ? Keys
         </button>
+        {onCaptureImage && (
+          <button
+            type="button"
+            style={panelBtnStyle}
+            title="Capture a snapshot of the current canvas as a model preview image"
+            onClick={() => onCaptureImage(() => fitView({ padding: 0.15, duration: 0 }))}
+          >
+            📷
+          </button>
+        )}
       </Panel>
       {showShortcuts && (
         <Panel position="bottom-center">
@@ -376,6 +386,7 @@ export function FlowDiagramReactFlow({
   onConnectNodes,
   onDropNode,
   onResetLayout,
+  onCaptureImage,
 }) {
   const { C, FONT } = useTheme();
   const [dragOver, setDragOver] = useState(false);
@@ -579,6 +590,7 @@ export function FlowDiagramReactFlow({
         <CanvasControls
           canEdit={canEdit}
           onResetLayout={onResetLayout}
+          onCaptureImage={onCaptureImage}
           connecting={connecting}
           fitNodeRef={fitNodeRef}
           fitAllRef={fitAllRef}
