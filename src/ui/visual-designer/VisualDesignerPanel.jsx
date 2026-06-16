@@ -230,7 +230,7 @@ function ValidationChecklist({ visualIssues, modelErrors, modelWarnings, graph, 
   );
 }
 
-export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit, flowKey = 0, fitAllRef }) {
+export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit, onImageCaptured, flowKey = 0, fitAllRef }) {
   const { C, FONT } = useTheme();
   const PALETTE_ITEMS = [
     { type: VISUAL_NODE_TYPES.SOURCE,   label: "Add Source",   icon: "S", color: C.green },
@@ -320,8 +320,8 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     try {
       const dataUrl = await exportCanvasToPng(fitViewFn);
       if (dataUrl) {
-        applyModel({ ...model, imageDataUrl: dataUrl });
-        setMessage({ state: "success", text: "Model image captured and saved to overview." });
+        onImageCaptured?.(dataUrl);
+        setMessage({ state: "success", text: "Model image captured. Switch tabs to save it to the overview." });
       } else {
         setMessage({ state: "error", text: "Capture failed — no canvas found. Try opening the Design tab first." });
       }

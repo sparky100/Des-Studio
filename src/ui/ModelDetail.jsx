@@ -476,6 +476,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const runWithPatchRef = useRef(null);
   const fitAllRef = useRef(null);
+  const pendingImageRef = useRef(null);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
     try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
   });
@@ -712,6 +713,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     if(tab!=="visual"&&visualPending){
       setDirty(true);
       setVisualPending(false);
+    }
+    if(tab!=="visual"&&pendingImageRef.current){
+      setWholeModel({ ...model, imageDataUrl: pendingImageRef.current });
+      pendingImageRef.current = null;
     }
   },[tab]);
 
@@ -1118,7 +1123,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="visual"&&(
           renderAuthoringShell(
             <Suspense fallback={<SkeletonPanel rows={5} />}>
-              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
+              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onImageCaptured={(dataUrl) => { pendingImageRef.current = dataUrl; }} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
             </Suspense>
           )
         )}
