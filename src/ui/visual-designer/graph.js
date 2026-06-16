@@ -429,13 +429,21 @@ export function graphLayoutFromDerivedGraph(derivedGraph = {}) {
 export async function exportCanvasToPng(fitViewFn) {
   try {
     if (typeof fitViewFn === 'function') {
+      console.log('[capture] calling fitViewFn');
       fitViewFn();
-      await new Promise(r => setTimeout(r, 400));
+      console.log('[capture] waiting 500ms for render');
+      await new Promise(r => setTimeout(r, 500));
     }
-    const el = document.getElementById('flow-diagram-canvas')?.querySelector('.react-flow')
-            || document.querySelector('.react-flow');
-    if (!el) return null;
+    const wrapper = document.getElementById('flow-diagram-canvas');
+    console.log('[capture] wrapper by id:', !!wrapper);
+    const el = wrapper?.querySelector('.react-flow') || document.querySelector('.react-flow');
+    console.log('[capture] react-flow found:', !!el);
+    if (!el) {
+      console.warn('[capture] all react-flow elements on page:', document.querySelectorAll('.react-flow').length);
+      return null;
+    }
     const { toSvg } = await import('html-to-image');
+    console.log('[capture] calling toSvg on element:', el.tagName, el.className);
     const svgStr = await toSvg(el, {
       pixelRatio: 2,
       backgroundColor: '#ffffff',
