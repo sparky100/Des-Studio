@@ -430,20 +430,54 @@ export async function exportCanvasToPng(fitViewFn) {
   try {
     if (typeof fitViewFn === 'function') {
       fitViewFn();
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await new Promise(r => setTimeout(r, 400));
     }
     const el = document.querySelector('.react-flow');
     if (!el) return null;
+
+    // Reset viewport transform so html-to-image sees nodes at their natural positions
+    const viewport = el.querySelector('.react-flow__viewport');
+    const savedTransform = viewport?.style?.transform || '';
+    if (viewport) {
+      // Force-fit: compute bounds of all rendered node elements and set transform accordingly
+      const nodeEls = viewport.querySelectorAll('[data-id]:not([data-id^="section-"])');
+      if (nodeEls.length > 0) {
+        const rects = Array.from(nodeEls).map(n => n.getBoundingClientRect());
+        const parentRect = el.getBoundingClientRect();
+        const minX = Math.min(...rects.map(r => r.left - parentRect.left));
+        const minY = Math.min(...rects.map(r => r.top - parentRect.top));
+        const maxX = Math.max(...rects.map(r => r.right - parentRect.left));
+        const maxY = Math.max(...rects.map(r => r.bottom - parentRect.top));
+        const contentW = Math.max(maxX - minX, 100);
+        const contentH = Math.max(maxY - minY, 100);
+        const scale = Math.min(
+          (parentRect.width * 0.85) / contentW,
+          (parentRect.height * 0.85) / contentH,
+          1.5
+        );
+        const tx = (parentRect.width - contentW * scale) / 2 - minX * scale;
+        const ty = (parentRect.height - contentH * scale) / 2 - minY * scale;
+        viewport.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+      }
+    }
+
     const { toPng } = await import('html-to-image');
-    return await toPng(el, {
+    const dataUrl = await toPng(el, {
       pixelRatio: 2,
-      backgroundColor: '#ffffff',
-      filter: node =>
-        !node.classList?.contains('react-flow__controls') &&
-        !node.classList?.contains('react-flow__minimap') &&
-        !node.classList?.contains('react-flow__background') &&
-        !node.getAttribute?.('data-id')?.startsWith('section-'),
+      backgroundColor: '#0b1014',
+      filter: node => {
+        const cls = node.classList;
+        return !cls?.contains('react-flow__controls') &&
+               !cls?.contains('react-flow__minimap') &&
+               !cls?.contains('react-flow__background') &&
+               !cls?.contains('react-flow__panel') &&
+               !node.getAttribute?.('data-id')?.startsWith('section-');
+      },
     });
+
+    // Restore viewport transform
+    if (viewport) viewport.style.transform = savedTransform;
+    return dataUrl;
   } catch (err) {
     console.warn('[simmodlr] Canvas export failed:', err);
     return null;
