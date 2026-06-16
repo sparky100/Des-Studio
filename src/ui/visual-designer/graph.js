@@ -434,18 +434,23 @@ export async function exportCanvasToPng(fitViewFn) {
       console.log('[capture] waiting 500ms');
       await new Promise(r => setTimeout(r, 500));
     }
-    const viewport = document.querySelector('.react-flow__viewport');
-    console.log('[capture] viewport found:', !!viewport, '| size:', viewport?.offsetWidth, 'x', viewport?.offsetHeight, '| overflow:', getComputedStyle(viewport)?.overflow);
-    if (!viewport) return null;
+    const el = document.querySelector('.react-flow');
+    console.log('[capture] react-flow found:', !!el, '| size:', el?.offsetWidth, 'x', el?.offsetHeight);
+    if (!el) return null;
 
-    const { toCanvas } = await import('html-to-image');
-    const canvas = await toCanvas(viewport, {
+    const { toPng } = await import('html-to-image');
+    return await toPng(el, {
       pixelRatio: 2,
       backgroundColor: '#ffffff',
-      filter: node => !node.getAttribute?.('data-id')?.startsWith('section-'),
+      filter: node => {
+        const cls = node.classList;
+        return !cls?.contains('react-flow__controls') &&
+               !cls?.contains('react-flow__minimap') &&
+               !cls?.contains('react-flow__background') &&
+               !cls?.contains('react-flow__panel') &&
+               !node.getAttribute?.('data-id')?.startsWith('section-');
+      },
     });
-    console.log('[capture] canvas size:', canvas.width, 'x', canvas.height);
-    return canvas.toDataURL('image/png');
   } catch (err) {
     console.warn('[simmodlr] Canvas export failed:', err);
     return null;
