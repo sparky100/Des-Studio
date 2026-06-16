@@ -566,7 +566,6 @@ function buildExecutiveSummary(model, results, recommendations, aggStats = {}, m
     { lbl: `Avg total time (${unit})`,      val: formatN(resolveValue('avgSojourn',   summary, aggStats)) },
     { lbl: `Avg time in system (${unit})`,  val: formatN(resolveValue('avgTimeInSystem', summary, aggStats)) },
     { lbl: 'Service completion rate',       val: formatPct(resolveValue('servedRatio', summary, aggStats)) },
-    { lbl: 'Avg WIP',                       val: formatN(resolveValue('avgWIP',       summary, aggStats)) },
   ].filter(k => k.val !== null);
 
   const kpiHtml = kpis.length ? `<div class="kpi-grid">${
@@ -723,8 +722,6 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     [`Average total time in system (${unit})`,                            formatN(resolveValue('avgSojourn',   summary, aggStats))],
     [`Average time in system incl. in-progress (${unit})`,            formatN(resolveValue('avgTimeInSystem', summary, aggStats))],
     [`Service completion rate`,                                      formatPct(resolveValue('servedRatio', summary, aggStats))],
-    [`Longest time in system (${unit})`,                             formatN(resolveValue('maxSojourn',   summary, aggStats))],
-    [`Average number in system (WIP)`,                               formatN(resolveValue('avgWIP',       summary, aggStats))],
     [`Total cost`,                                                   formatCurrency(resolveValue('totalCost',     summary, aggStats))],
     [`Cost per ${entityName.toLowerCase()} served`,                  formatCurrency(resolveValue('costPerServed', summary, aggStats))],
   ].filter(r => r[1] !== null);
@@ -1095,7 +1092,6 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     ['Avg total time in system',                   `${formatN(resolveValue('avgSojourn', summary, aggregateStats)) ?? '—'} ${unit}`],
     ['Avg time in system (incl. in-progress)',     `${formatN(resolveValue('avgTimeInSystem', summary, aggregateStats)) ?? '—'} ${unit}`],
     ['Service completion rate',                    formatPct(resolveValue('servedRatio', summary, aggregateStats)) ?? '—'],
-    [`Avg ${entityName.toLowerCase()}s in system (WIP)`, `${formatN(resolveValue('avgWIP', summary, aggregateStats)) ?? '—'}`],
     [`${entityName}s served${multiRep ? ' (avg per run)' : ''}`,  `${formatInt(resolveValue('served',  summary, aggregateStats)) ?? '—'}`],
     [`${entityName}s reneged${multiRep ? ' (avg per run)' : ''}`, `${formatInt(resolveValue('reneged', summary, aggregateStats)) ?? '—'}`],
   ].filter(r => r[1] && !r[1].startsWith('—'));
