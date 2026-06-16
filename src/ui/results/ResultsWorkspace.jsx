@@ -290,10 +290,11 @@ function CiBadge({ ci, C, FONT }) {
 function KeyFindingsBanner({ healthFlags, C, FONT }) {
   if (!healthFlags?.length) return null;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-      <div style={{ fontSize: 10, color: C.red, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 10, color: C.red, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
         KEY FINDINGS ({healthFlags.length})
       </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))", gap: 8 }}>
       {healthFlags.map((flag, i) => {
         const isCritical = flag.severity === "critical";
         const accentColor = isCritical ? C.red : C.amber;
@@ -329,6 +330,7 @@ function KeyFindingsBanner({ healthFlags, C, FONT }) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -571,8 +573,8 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                     </div>
                   )}
                 </div>
-              );
-            })}
+        );
+      })}
           </div>
         </>
       )}
