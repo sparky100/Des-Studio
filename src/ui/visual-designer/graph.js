@@ -432,22 +432,25 @@ export async function exportCanvasToPng(fitViewFn) {
       fitViewFn();
       await new Promise(r => setTimeout(r, 500));
     }
-    const viewport = document.querySelector('.react-flow__viewport');
-    if (!viewport) return null;
+    const el = document.querySelector('.react-flow');
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
 
-    // Force overflow hidden so toCanvas doesn't try to render overflow content
-    const prevOverflow = viewport.style.overflow;
-    viewport.style.overflow = 'hidden';
-
-    const { toCanvas } = await import('html-to-image');
-    const canvas = await toCanvas(viewport, {
+    const { toPng } = await import('html-to-image');
+    return await toPng(el, {
       pixelRatio: 2,
+      canvasWidth: Math.round(rect.width * 2),
+      canvasHeight: Math.round(rect.height * 2),
       backgroundColor: '#ffffff',
-      filter: node => !node.getAttribute?.('data-id')?.startsWith('section-'),
+      filter: node => {
+        const cls = node.classList;
+        return !cls?.contains('react-flow__controls') &&
+               !cls?.contains('react-flow__minimap') &&
+               !cls?.contains('react-flow__background') &&
+               !cls?.contains('react-flow__panel') &&
+               !node.getAttribute?.('data-id')?.startsWith('section-');
+      },
     });
-
-    viewport.style.overflow = prevOverflow;
-    return canvas.toDataURL('image/png');
   } catch (err) {
     console.warn('[simmodlr] Canvas export failed:', err);
     return null;
