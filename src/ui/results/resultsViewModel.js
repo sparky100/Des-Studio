@@ -68,20 +68,18 @@ export function buildQueueDepthSeries(results = {}, model = {}, sectionFilter = 
   return filteredQueues.map(queue => {
     const queueName = queue.name || queue.id || "Queue";
     const fallbackType = customerTypeForQueue(queue, model);
+    const hasQueueData = timeSeries.some(entry => entry?.byQueue?.[queueName]);
     return {
       id: queue.id || queueName,
       label: queueName,
       points: timeSeries.map(entry => ({
         t: finiteNumber(entry?.t),
-        value: finiteNumber(
-          entry?.byQueue?.[queueName]?.waiting,
-          finiteNumber(entry?.byType?.[fallbackType]?.waiting)
-        ),
+        value: hasQueueData
+          ? finiteNumber(entry?.byQueue?.[queueName]?.waiting)
+          : finiteNumber(entry?.byQueue?.[queueName]?.waiting ?? entry?.byType?.[fallbackType]?.waiting),
       })),
-      source: timeSeries.some(entry => entry?.byQueue?.[queueName])
-        ? "queue"
-        : "type-fallback",
-      sourceLabel: timeSeries.some(entry => entry?.byQueue?.[queueName])
+      source: hasQueueData ? "queue" : "type-fallback",
+      sourceLabel: hasQueueData
         ? "Queue measurements taken during the run"
         : `Fallback from ${fallbackType} waiting counts`,
     };
