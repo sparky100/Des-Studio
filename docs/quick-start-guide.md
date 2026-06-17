@@ -64,7 +64,7 @@ This is where simulation earns its value: not one answer, but a map of how the s
 
 ---
 
-## Step 4 — Read Results and Use the Model Assistant
+## Step 4 — Read Results and Use the Simulation Assistant
 
 Key outputs per resource and queue:
 
@@ -73,6 +73,6 @@ Key outputs per resource and queue:
 - **Throughput** — entities served per time unit
 - **Renege / abandonment count** — entities that left before being served
 
-The **Model Assistant** lets you ask plain-language questions about your results: *"Which queue is the main bottleneck?"*, *"What happens to utilisation if I add a second server?"* Answers are grounded in the actual run data.
+The **Simulation Assistant** lets you ask plain-language questions about your results: *"Which queue is the main bottleneck?"*, *"What happens to utilisation if I add a second server?"* Answers are grounded in the actual run data.
 
 Use the **Report** button to generate a formatted summary (Senior Management or Technical depth, HTML or Markdown).

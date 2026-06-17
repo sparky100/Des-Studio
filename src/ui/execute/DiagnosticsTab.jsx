@@ -327,7 +327,7 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 48, gap: 12 }}>
         <div style={{ fontSize: 14, color: C.muted, fontFamily: FONT, textAlign: "center" }}>
-          Run the model to enable Model Assistant diagnostics.
+          Run the model to enable Simulation Assistant diagnostics.
         </div>
       </div>
     );

@@ -464,7 +464,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [schedulesVersion,setSchedulesVersion]=useState(0);
   const [resultsView,setResultsView]=useState("summary");
   const [overviewHistory,setOverviewHistory]=useState([]);
-  const [showExplorePanel,setShowExplorePanel]=useState(false);
+  const [showOptimisePanel,setShowOptimisePanel]=useState(false);
   const [aiAction,setAiAction]=useState(null);
   const [collabQuery,setCollabQuery]=useState("");
   const [pendingRoles,setPendingRoles]=useState({});
@@ -972,9 +972,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     return ["overview"];
   }, [activeMode?.id]);
   const hasModelIssues = validation.errors.length > 0 || validation.warnings.length > 0;
-  const exploreVisible = useMemo(()=>
-    ["overview","design","execute","results"].includes(activeMode?.id) && validation.errors.length===0,
-  [activeMode?.id, validation.errors.length]);
   const resolvedTier = useMemo(()=>
     resolveRunAdmissionTier(overrides.plan,{isAdmin:overrides.isAdmin}),
   [overrides.plan,overrides.isAdmin]);
@@ -1093,8 +1090,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             else { setAiAction("explain"); }
           }
         }}
-        onExplore={()=>setShowExplorePanel(true)}
-        exploreVisible={exploreVisible}
         onPrintDefinition={() => {
           const html = buildModelDefinitionHtml(model);
           const win = window.open("", "_blank");
@@ -1815,6 +1810,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             setAiSidebarOpen(false);
             setAiAction(null);
           } : null}
+          onOpenOptimise={() => setShowOptimisePanel(true)}
           onClose={()=>{setAiSidebarOpen(false);setAiAction(null);}}
         />
       )}
@@ -1830,7 +1826,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           </div>
         </div>
       )}
-      {showExplorePanel&&(
+      {showOptimisePanel&&(
         <AdaptiveBatchPanel
           model={model}
           tier={resolvedTier}
@@ -1841,7 +1837,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             : async()=>null}
           onSaveInsights={saveAiInsights}
           onGoToResults={(payload)=>{
-            setShowExplorePanel(false);
+            setShowOptimisePanel(false);
             // Replace any stale results from a previous run with the Explore
             // aggregate, otherwise the Results tab keeps showing the old run.
             if(payload?.results){
@@ -1853,8 +1849,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             }
             setTab("results");setResultsView("summary");
           }}
-          onApplyModel={(nextModel)=>{setWholeModel(nextModel);setShowExplorePanel(false);}}
-          onClose={()=>setShowExplorePanel(false)}
+          onApplyModel={(nextModel)=>{setWholeModel(nextModel);setShowOptimisePanel(false);}}
+          onClose={()=>setShowOptimisePanel(false)}
         />
       )}
       </div>

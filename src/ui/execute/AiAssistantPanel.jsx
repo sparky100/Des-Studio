@@ -389,6 +389,7 @@ export const AiAssistantPanel = ({
   triggerAction = null, // { action: "explain"|"compare"|"refine", seq: number }
   onDiagnosticsNodeSelect = null,
   onRefineInDescribe = null,
+  onOpenOptimise = null,
 }) => {
   const { C, FONT } = useTheme();
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -964,7 +965,7 @@ export const AiAssistantPanel = ({
   };
 
   const focusedAction = isResultsContext ? activeMode : null;
-  const panelTitle = "Model Assistant";
+  const panelTitle = "Simulation Assistant";
   const panelSubtitle = isRunContext
     ? "Debug and diagnose simulation runs."
     : isResultsContext
@@ -981,7 +982,7 @@ export const AiAssistantPanel = ({
     : { display: "contents" };
 
   return (
-    <aside aria-label="Model Assistant" style={overlayStyle}>
+    <aside aria-label="Simulation Assistant" style={overlayStyle}>
       {sidebar && (
         <div
           onMouseDown={startDrag}
@@ -1019,7 +1020,7 @@ export const AiAssistantPanel = ({
         {(overlay || sidebar || mobileFullscreen || (!embedded && onClose)) && onClose && (
           <button
             type="button"
-            aria-label="Close Model Assistant"
+            aria-label="Close Simulation Assistant"
             onClick={onClose}
             style={{ background: "none", border: "none", color: C.muted, fontSize: 16, cursor: "pointer", padding: "0 4px" }}
           >✕</button>
@@ -1085,6 +1086,11 @@ export const AiAssistantPanel = ({
       {/* Model Q&A — shown in all non-results modes (hidden in run when not design toggle) */}
       {!isResultsContext && (!isRunContext || runModeToggle === "design") && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {onOpenOptimise && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+              <Btn small variant="ghost" onClick={onOpenOptimise}>{"\u26A1"} Optimise</Btn>
+            </div>
+          )}
           <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
             ASK ABOUT THIS MODEL
           </label>
@@ -1143,6 +1149,7 @@ export const AiAssistantPanel = ({
       {/* Mode tabs — shown when in results context, not in run */}
       {!isRunContext && isResultsContext && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {onOpenOptimise && <Btn small variant="ghost" onClick={onOpenOptimise}>{"\u26A1"} Optimise</Btn>}
           {[
             { id: "explain", label: "Analyse" },
             { id: "compare", label: "Compare" },
@@ -1169,6 +1176,12 @@ export const AiAssistantPanel = ({
                 {mode.charAt(0).toUpperCase() + mode.slice(1)}
               </button>
             ))}
+            {onOpenOptimise && <button type="button" onClick={onOpenOptimise}
+              style={{
+                background: "transparent", border: `1px solid ${C.border}`,
+                borderRadius: 5, color: C.accent, fontFamily: FONT, fontSize: 11, fontWeight: 700,
+                padding: "5px 12px", cursor: "pointer", letterSpacing: 0.5,
+              }}>{"\u26A1"} Optimise</button>}
           </div>
           {runModeToggle !== "design" && (
             <DiagnosticsTab mode={runModeToggle} model={model} results={results} onGoToNode={onDiagnosticsNodeSelect || (() => {})} />

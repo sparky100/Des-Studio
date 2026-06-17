@@ -2394,7 +2394,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             View Results →
           </Btn>
         )}
-        <Btn variant={modelAssistantOpen ? "primary" : "ghost"} onClick={() => onOpenModelAssistant?.()}>Model Assistant</Btn>
+        <Btn variant={modelAssistantOpen ? "primary" : "ghost"} onClick={() => onOpenModelAssistant?.()}>Simulation Assistant</Btn>
         <div style={{ position: "relative", display: "flex", gap: 6 }}>
           {/* Export Data popover */}
           {showExportPopover && (

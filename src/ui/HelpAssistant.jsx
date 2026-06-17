@@ -322,7 +322,7 @@ export function HelpAssistant({
           setIsLoading(false);
         },
         onError: err => {
-          setError(err?.message || 'Failed to get response from Model Assistant');
+          setError(err?.message || 'Failed to get response from Simulation Assistant');
           setIsLoading(false);
         },
       }
@@ -399,7 +399,7 @@ export function HelpAssistant({
       }}>
         <div>
           <div id="model-assistant-title" style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
-            Model Assistant
+            Simulation Assistant
           </div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
             Ask about this model, simmodlr, or modelling concepts
@@ -407,7 +407,7 @@ export function HelpAssistant({
         </div>
         <button
           type="button"
-          aria-label="Close Model Assistant"
+          aria-label="Close Simulation Assistant"
           onClick={onClose}
           style={{
             background: 'none',

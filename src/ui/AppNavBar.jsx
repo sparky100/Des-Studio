@@ -120,11 +120,11 @@ export function AppNavBar({
           <InfoIcon />
         </button>
 
-        {/* Model Assistant (?) button */}
+        {/* Simulation Assistant (?) button */}
         <button
           type="button"
-          aria-label="Model Assistant"
-          title="Model Assistant"
+          aria-label="Simulation Assistant"
+          title="Simulation Assistant"
           onClick={onHelpOpen}
           style={navBtnStyle}
         >

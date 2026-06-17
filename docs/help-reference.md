@@ -582,13 +582,13 @@ If a B-event still has rows embedded directly in the model JSON (legacy format),
 
 ---
 
-## ✦ Explore — Adaptive Batch Analysis
+## ⚡ Optimise — Adaptive Batch Analysis
 
-**Explore** is an AI agent triggered from any model view. It runs the model through progressively larger replication batches until statistical confidence is achieved, then streams an LLM-generated opportunity report.
+**Optimise** is reached via the Simulation Assistant sidebar. It runs the model through progressively larger replication batches until statistical confidence is achieved, then streams an LLM-generated opportunity report.
 
-### Accessing Explore
+### Accessing Optimise
 
-Click the **✦ Explore** button in the model header bar. The button is visible when you are in the Overview, Design, or Run mode and the model has no validation errors. If the model has errors, fix them in the **Model Health** tab first.
+Click the **⚡ Optimise** button inside the Simulation Assistant sidebar. The button is visible when you are in the Results mode and the model has no validation errors. If the model has errors, fix them in the **Model Health** tab first.
 
 ### Pre-flight confirmation
 
@@ -649,9 +649,9 @@ If the model is complex or high-variance, the Free tier may not achieve the ±5%
 
 ---
 
-## Model Assistant
+## Simulation Assistant
 
-The Model Assistant is the AI panel available from any model editing, run, or results view. Click the **✦ AI** button in the mode bar to open it. It adapts to your current context:
+The Simulation Assistant is the AI panel available from any model editing, run, or results view. Click the **✦ AI** button in the mode bar to open it. It adapts to your current context:
 
 | Context | What it shows |
 |---------|--------------|
@@ -659,9 +659,9 @@ The Model Assistant is the AI panel available from any model editing, run, or re
 | **Run tab** (Execute) | A **Diagnostics** panel showing entity inspection and event log overlays on the Execute canvas. The same **ASK ABOUT THIS MODEL** input is available so you can ask questions about the model while watching it run. After a run completes, a second **ASK A QUESTION** input appears for results-specific queries. |
 | **Results tab** | Three focused tabs: **Analyse** (plain-language narrative of results), **Compare** (side-by-side comparison with a saved run), and **Refine Plan** (schedule adjustment suggestions — only when the model has a timetable). A **FOLLOW-UP QUESTION** input lets you ask specific questions about the results. No action fires automatically — click the button to trigger analysis. |
 
-### Opening the Model Assistant
+### Opening the Simulation Assistant
 
-Click the **✦ AI** button in the mode bar to toggle the Model Assistant. On desktop it opens as a resizable sidebar. On compact layouts (720–1024px) the panel floats as an overlay. On mobile (<720px), it opens full-screen.
+Click the **✦ AI** button in the mode bar to toggle the Simulation Assistant. On desktop it opens as a resizable sidebar. On compact layouts (720–1024px) the panel floats as an overlay. On mobile (<720px), it opens full-screen.
 
 ### Design and Run tabs — Model Q&A
 
@@ -671,7 +671,7 @@ Quick-start chips suggest context-specific questions based on the tab you're vie
 
 ### Run tab — Diagnostics
 
-When you open the Model Assistant on the Run tab, it shows the **Diagnostics** panel: entity inspector overlays on the Execute canvas, event log filtering by phase, and node status indicators. This replaces the full analysis interface — results-focused actions (Analyse, Compare, Refine Plan) only appear in the Results tab.
+When you open the Simulation Assistant on the Run tab, it shows the **Diagnostics** panel: entity inspector overlays on the Execute canvas, event log filtering by phase, and node status indicators. This replaces the full analysis interface — results-focused actions (Analyse, Compare, Refine Plan) only appear in the Results tab.
 
 ### Results tab — Focused actions
 

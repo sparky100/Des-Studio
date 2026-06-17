@@ -261,11 +261,11 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    | **Starvation** | Per-resource time and percentage spent starved — server idle because its queue was empty, not because it was recently freed. High starvation means the server is capacity-constrained on the supply side; consider whether upstream stages need balancing. |
    | **Run Effort** | Replications completed, total sim time, wall-clock duration. |
 
-5. Open the **✦ AI** sidebar (Model Assistant) to explore the results:
+5. Open the **✦ AI** sidebar (Simulation Assistant) to explore the results:
 
 **How wait time is calculated.** The average wait time includes all entities that spent time in a queue: served entities, reneged entities (those that left the queue before service), and in-progress entities still waiting when the simulation ends. In-progress partial waits are half-weighted (standard DES practice). A separate Little's Law estimate (`L_q / arrival rate`) is computed from the time-averaged queue length and checked against the per-entity average; when the two estimates disagree by more than 5%, the run may be too short for reliable wait-time estimates.
 
-6. Open the **✦ AI** sidebar (Model Assistant) to explore the results:
+6. Open the **✦ AI** sidebar (Simulation Assistant) to explore the results:
    - Click **Analyse** for a plain-English narrative of the results with structured improvement suggestions.
    - Click **Compare** to compare against a saved historical run.
    - Use the text input to ask specific questions about the results (e.g. "Which queue had the longest wait?").
@@ -303,7 +303,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
 ### 4.7 Additional features
 
-**Voice input.** The AI chat dialogs — Help Assistant, Model Assistant, and AI Diagnostics — each include a microphone button. Clicking it activates the browser's Speech Recognition API so you can dictate questions or describe changes verbally instead of typing.
+**Voice input.** The AI chat dialogs — Help Assistant, Simulation Assistant, and AI Diagnostics — each include a microphone button. Clicking it activates the browser's Speech Recognition API so you can dictate questions or describe changes verbally instead of typing.
 
 **Live warnings during runs.** While a simulation is running in Step or Auto Run mode, a compact **⚠** badge appears in the run bar. This badge monitors real-time conditions — resource utilisation exceeding safe thresholds, server starvation, and queue capacity warnings — and updates as the run progresses. Click the badge to expand a panel showing each active warning with the affected resource or queue and the current value. Warnings are only active during execution and disappear once the run completes. They are designed to help you spot problems early without waiting for the full results analysis.
 
@@ -320,7 +320,7 @@ Each flag includes an actionable suggestion: adding capacity, rebalancing upstre
 
 **Bottom Panel.** The collapsible bottom panel in the Execute view is collapsed by default. Click any tab name (**Log**, **Entities**, **Charts**, **Stage KPIs**) to expand the panel at that tab. The panel has a touch-friendly resize handle along its top edge — drag up or down to adjust the height. The **Step Log** tab shows only the last 50 event entries for readability; during a run this scrolls automatically as new events arrive. Click on an entity in the Entity Table or on the Execute canvas to open the **Entity Inspector** for that entity's full state and history.
 
-**Explore panel.** After a batch run completes, a ✦ Explore button appears in the model header. Clicking it opens an AI panel that analyses the results for bottlenecks, quick wins, and investment opportunities. Each suggestion has an **Apply ↗** button that proposes the change to the model with a before/after diff so you can review it before committing.
+**Optimise.** Inside the Simulation Assistant sidebar, click **⚡ Optimise** to run an adaptive batch analysis. The AI analyses results for bottlenecks, quick wins, and investment opportunities. Each suggestion has an **Apply ↗** button that proposes the change to the model with a before/after diff so you can review it before committing.
 
 **Schedule Manager.** The **Schedules** sub-tab under the Design section lets you create named timetables for time-varying arrival patterns. You can import arrival rows from CSV or Excel files (including multi-event imports) and link timetables to B-Events.
 

@@ -106,7 +106,7 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 | `replication-runner.js` | Persistent worker pool (`createReplicationPool`), INIT_RUN protocol, compact per-rep payload |
 | `worker.js` | Web Worker entry point — receives INIT_RUN once, then RUN_REPLICATION per rep |
 | `run-admission.js` | Tier-based run limits (Free/Standard/Pro) enforced before any run |
-| `adaptive-batch.js` | Adaptive replication logic for Explore panel |
+| `adaptive-batch.js` | Adaptive replication logic for Simulation Assistant Optimise panel |
 | `sweep-runner.js` | Parametric sweep execution |
 | `sweep-params.js` | Sweep parameter space |
 | `complexity-estimator.js` | Pre-run complexity estimate |
@@ -595,13 +595,13 @@ All LLM calls go through `src/llm/prompts.js`. Prompts are built as structured o
 | `buildExplainResultsPrompt(model, experimentConfig, results, ciResults)` | Generates narrative for Results → Explain tab |
 | `buildComparisonPrompt(modelName, runA, runB, modelA, modelB)` | Structured comparison of two run results (actual name; not `buildCompareRunsPrompt`) |
 | `buildPlanRefinementPrompt(model, experimentConfig, results)` | Patches `model_json` based on user feedback |
-| `buildResultsQueryPrompt(question, model, results, conversationHistory)` | Context-aware results Q&A for Model Assistant sidebar |
+| `buildResultsQueryPrompt(question, model, results, conversationHistory)` | Context-aware results Q&A for Simulation Assistant sidebar |
 | `buildModelDescriptionPrompt(model, results)` | Plain-English description for Senior Management report |
 | `buildCiResults(aggregateStats)` | Formats CI data for report narrative |
 | `buildSuggestionPrompt(model, experimentConfig, results)` | Generates improvement suggestions |
 | `buildSensitivityPrompt(modelName, experimentConfig, ciResults)` | Sensitivity analysis narrative |
 | `buildModelQueryPrompt(question, model, history, context)` | Design- and run-mode model Q&A. Receives structured model digest (entity attributes, queue configs, C-event summaries, sections, goals) plus current tab context. |
-| `buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, ciSummary, tier)` | Explore/Adaptive Batch analysis narrative |
+| `buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, ciSummary, tier)` | Simulation Assistant Optimise/Adaptive Batch analysis narrative |
 | `buildReportRecommendationsPrompt(model, results)` | Report recommendations section |
 
 ### 3.6 Report generation (src/reports/)
@@ -785,9 +785,9 @@ Models consistently triggering this guard should be reviewed: the most common ca
 
 Tier-based run limits enforced before any run starts. `getRunAdmission(model, options)` returns an admission decision based on the user's plan tier (Free/Standard/Pro), model complexity, and estimated event count. Prevents oversized runs from reaching the engine.
 
-#### Explore / Adaptive Batch (`src/engine/adaptive-batch.js`)
+#### Simulation Assistant Optimise / Adaptive Batch (`src/engine/adaptive-batch.js`)
 
-AI-driven adaptive replication orchestration used by the Explore panel. `runAdaptiveBatch(options)` runs successive batches of replications, stopping when the confidence interval half-width meets the target precision threshold or a maximum replication count is reached.
+AI-driven adaptive replication orchestration used by the Simulation Assistant Optimise panel. `runAdaptiveBatch(options)` runs successive batches of replications, stopping when the confidence interval half-width meets the target precision threshold or a maximum replication count is reached.
 
 #### Confidence Interval method
 

@@ -49,7 +49,6 @@ export function ModelTabBar({
   isCompactLayout,
   showMoreTabs, setShowMoreTabs,
   aiSidebarOpen = false, onToggleAiSidebar = null,
-  onExplore = null, exploreVisible = false,
   onPrintDefinition = null,
 }) {
   const { C, FONT } = useTheme();
@@ -307,7 +306,7 @@ export function ModelTabBar({
               type="button"
               aria-pressed={aiSidebarOpen}
               onClick={onToggleAiSidebar}
-              title="Model Assistant — ask for help building or improving this model"
+              title="Simulation Assistant — ask for help building or improving this model"
               style={{
                 background: aiSidebarOpen ? C.panel : C.surface,
                 border: `1px solid ${aiSidebarOpen ? C.accent : C.border}`,
@@ -318,27 +317,9 @@ export function ModelTabBar({
               }}
             >
               <span aria-hidden="true">✨</span>
-              Model Assistant
+              Simulation Assistant
             </button>
           </>
-        )}
-        {exploreVisible && onExplore && (
-          <button
-            type="button"
-            onClick={onExplore}
-            title="Run adaptive batch and get AI-powered improvement opportunities"
-            style={{
-              marginLeft: 6,
-              background: C.surface,
-              border: `1px solid ${C.accent}`,
-              borderRadius: 6, color: C.accent,
-              cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
-              flexShrink: 0, fontFamily: FONT, fontSize: 11, fontWeight: 700,
-              padding: "7px 10px", whiteSpace: "nowrap",
-            }}
-          >
-            ✦ Explore
-          </button>
         )}
       </div>
 

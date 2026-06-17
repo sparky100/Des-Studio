@@ -97,9 +97,9 @@ Servers can be configured with **failure distributions** (MTBF, MTTR) to simulat
 
 ---
 
-## Model Assistant & Reporting
+## Simulation Assistant & Reporting
 
-The **Model Assistant** answers plain-language questions about your model and results — *"Where is the bottleneck?"*, *"What would happen with one more server?"* — with answers grounded directly in the simulation output.
+The **Simulation Assistant** answers plain-language questions about your model and results — *"Where is the bottleneck?"*, *"What would happen with one more server?"* — with answers grounded directly in the simulation output.
 
 The **Report generator** produces four variants: Senior Management or Technical depth × HTML or Markdown format, covering KPIs, bottleneck identification, queue analysis, and scenario recommendations.
 
