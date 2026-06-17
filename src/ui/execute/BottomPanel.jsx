@@ -442,7 +442,6 @@ function StageKpisTable({ snap, model }) {
 function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeSelect, model }) {
   const { C, FONT } = useTheme();
   const [expandedSeq, setExpandedSeq] = useState(null);
-  const [searchText, setSearchText]   = useState("");
   const [phaseFilter, setPhaseFilter] = useState("all");
   const wallTimeFor = (simTime) => (
     model?.epoch && simTime != null
@@ -454,12 +453,8 @@ function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeS
       ? log.filter(e => e.message?.includes(selectedNodeLabel))
       : log;
     if (phaseFilter !== "all") result = result.filter(e => e.phase === phaseFilter);
-    if (searchText.trim()) {
-      const q = searchText.toLowerCase();
-      result = result.filter(e => e.message?.toLowerCase().includes(q));
-    }
     return result;
-  }, [log, selectedNodeLabel, phaseFilter, searchText]);
+  }, [log, selectedNodeLabel, phaseFilter]);
 
   const nodeNames = useMemo(() => {
     const names = new Set();
@@ -506,13 +501,6 @@ function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeS
   return (
     <div>
       <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
-        <input
-          placeholder="Search messages…"
-          value={searchText}
-          onChange={ev => setSearchText(ev.target.value)}
-          style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4,
-            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 8px", outline: "none" }}
-        />
         <select
           value={phaseFilter}
           onChange={ev => setPhaseFilter(ev.target.value)}
