@@ -1333,7 +1333,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
           onClick={() => setCollapsed(c => { const next = !c; try { localStorage.setItem("des.bottomPanel.collapsed", next ? "1" : "0"); } catch {} return next; })}
           style={chevronStyle}
         >
-          {collapsed ? "▲" : "▼"}
+          {collapsed ? "▼" : "▲"}
         </button>
       </div>
 

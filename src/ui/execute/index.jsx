@@ -454,7 +454,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     const initLog = [{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }];
     logRef.current = initLog;
     setLog(initLog);
-    setMode("stepping");
+    setMode("idle");
     setAutoRunning(false);
     setSaveStatus(null);
     setPhaseCTruncated(false);
@@ -537,6 +537,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (!engineRef.current) return;
     setHideRunReadiness(true);
     setExecuteSection("run");
+    setMode("stepping");
     const r = engineRef.current.step();
     const cycleLog = r.cycleLog || [];
     const nextLog = [...logRef.current, ...cycleLog];

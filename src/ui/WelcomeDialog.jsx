@@ -4,10 +4,22 @@ import { Z } from "./shared/tokens.js";
 import { Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
+const ic = (w, h, children) => (
+  <svg width={w} height={h} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {children}
+  </svg>
+);
+
+const IconCreate  = () => ic(22, 22, <><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></>);
+const IconLibrary = () => ic(22, 22, <><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></>);
+const IconAI      = () => ic(22, 22, <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>);
+const IconHelp   = () => ic(22, 22, <><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></>);
+
 const OPTIONS = [
   {
     id: "create",
-    icon: "✏",
+    icon: <IconCreate />,
     heading: "Create a Model",
     friendly: "Choose how to build a model — describe, draw or define",
     guidance:
@@ -16,7 +28,7 @@ const OPTIONS = [
   },
   {
     id: "library",
-    icon: "📚",
+    icon: <IconLibrary />,
     heading: "Access the Model Library",
     friendly: "Browse and fork models from the public library",
     guidance:
@@ -25,7 +37,7 @@ const OPTIONS = [
   },
   {
     id: "ai",
-    icon: "✦",
+    icon: <IconAI />,
     heading: "Build with AI Tools",
     friendly: "Let an external AI design your model — then import it in one click",
     guidance:
@@ -34,7 +46,7 @@ const OPTIONS = [
   },
   {
     id: "help",
-    icon: "?",
+    icon: <IconHelp />,
     heading: "Get Help",
     friendly: "Learn how simmodlr works",
     guidance:
@@ -129,7 +141,7 @@ export function WelcomeDialog({ onCreateModel, onOpenLibrary, onHelp, onExportSc
                 e.currentTarget.style.borderColor = opt.accent ? C.accent : C.border;
               }}
             >
-              <span style={{ fontSize: 22, lineHeight: 1, marginBottom: 4 }}>{opt.icon}</span>
+              <span style={{ color: opt.accent ? C.accent : C.text, lineHeight: 1, marginBottom: 4 }}>{opt.icon}</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{opt.heading}</span>
               <span style={{ fontSize: 11, color: C.accent, fontWeight: 600, marginBottom: 2 }}>
                 {opt.friendly}

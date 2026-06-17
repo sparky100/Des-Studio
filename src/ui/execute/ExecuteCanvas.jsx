@@ -735,31 +735,6 @@ export function ExecuteCanvas({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {summary?.warmupPeriod > 0 && (
-        <div style={{
-          background: `${C.warmup}22`, border: `1px solid ${C.amber}44`, borderRadius: 8,
-          padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center",
-        }}>
-          <div style={{ display: "flex", gap: 16 }}>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>WARM-UP DURATION</span>
-              <span style={{ fontSize: 14, color: C.amber, fontWeight: 700 }}>{summary.warmupPeriod}</span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>OBS. EXCLUDED</span>
-              <span style={{ fontSize: 14, color: C.reneged, fontWeight: 700 }}>{summary.excludedCount || 0}</span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>OBS. INCLUDED</span>
-              <span style={{ fontSize: 14, color: C.served, fontWeight: 700 }}>{summary.total || 0}</span>
-            </div>
-          </div>
-          <div style={{ fontSize: 10, color: C.amber, fontWeight: 700, fontFamily: FONT, letterSpacing: 1 }}>
-            WARM-UP AUDIT TRAIL
-          </div>
-        </div>
-      )}
-
       {snap && (
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 10, alignItems: "stretch" }}>
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderTop: `3px solid ${C.purple}`, borderRadius: 8, padding: "10px 14px", textAlign: "center", minWidth: 80, display: "flex", flexDirection: "column", justifyContent: "center" }}>
