@@ -1,11 +1,12 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 1.9.0
-**Date:** 2026-06-14
-**Sprint baseline:** Sprint 85
+**Version:** 2.1.0
+**Date:** 2026-06-17
+**Sprint baseline:** Sprint 88
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
+| v2.1.0 | 2026-06-17 | Sprint 88 | Added MANDATORY GENERATION PROTOCOL (5-step checklist); §5 rows[] warning box; TOP LLM MISTAKE #16; closing Core Principle |
 | v1.0.0 | 2026-05-23 | Sprint 70 | Initial versioned snapshot — schema as delivered at Sprint 70 |
 | v1.1.0 | 2026-05-23 | Sprint 70 | Added SPT, EDD, PRIORITY(attrName) queue disciplines to §3; added V11 (Normal warning) and V16 (no termination condition warning) to §10 validation table |
 | v1.2.0 | 2026-05-23 | Sprint 70 | Fixed app URL to `https://des.simmodlr.app`; updated LLM delivery instructions to save JSON file and produce magic link |
@@ -24,6 +25,37 @@
 
 **Purpose:** This file is the authoritative specification for generating valid simmodlr model JSON.
 Paste it (or reference it) as context when prompting any LLM to create or modify a model.
+
+---
+
+## MANDATORY GENERATION PROTOCOL
+
+Before writing a single line of model JSON, you MUST complete these steps in order.
+Skipping any step will produce an invalid model.
+
+### Step 1 — Read the full schema
+Read every section of this document (§1–§15) before generating anything.
+Do not rely on memory or prior examples. The schema evolves; always read it fresh.
+
+### Step 2 — Use the reference model as your template
+§12.3 contains a complete valid model. Match its field names, structure, and nesting exactly.
+If a field is not present in the reference model or explicitly defined in the schema, do not invent it.
+
+### Step 3 — Read TOP LLM MISTAKES
+Read every row in the TOP LLM MISTAKES table. For each one, confirm your model does not contain that pattern.
+
+### Step 4 — Validate before output
+Before returning any JSON, check every blocking rule in §10 programmatically or by inspection.
+A model with any blocking error (V1–V45, CHK-001 to CHK-013) must not be returned to the user.
+Fix all errors first.
+
+### Step 5 — Planned arrivals: check row count
+If the model uses rows[], count them.
+- ≤ 50 rows: embed inline in `schedules[{ eventId, rows: [...] }]`
+- > 50 rows: set `rows: []` in the JSON and deliver a companion CSV
+rows[] belongs inside `schedules[]`, never directly on the B-event.
+
+A model is either valid or it is not finished. The user should never have to ask for a valid model.
 
 ---
 
@@ -50,6 +82,7 @@ Read this before writing any model JSON.
 | 13 | Missing `sections[]` on large models | Any model with ≥8 queues or ≥3 named stages MUST include a populated `sections[]`. Use `memberIds` (not `elementIds`). See §12.1. |
 | 14 | Server `count` as a string instead of integer | `count` must be a JSON integer: `"count": 3`, never `"count": "3"`. When a `shiftSchedule` is present, always set `count` equal to `shiftSchedule[0].capacity`. Blocked by V19. |
 | 15 | Disconnected queue/activity fragment | Every declared queue must be reachable from an arrival source. A queue that is never named as a destination in any `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination` field is a fragment — it will never receive entities. Remove it, or add routing that targets it. Blocked by V45. |
+| 16 | rows[] placed directly on the B-event instead of inside `schedules[]` | Move rows into `"schedules": [{"eventId": "b_arrive", "rows": [...]}]`. A top-level `rows[]` with empty `schedules[]` is silently ignored — V8 fires because the engine finds no arrival source. |
 
 ---
 
@@ -339,6 +372,11 @@ Instead of `dist`/`distParams`, a schedule entry can supply an explicit list of 
 - `rows[].attrs` key names must match `attrDefs[].name` on the arriving entity type.
 - When all scheduled arrivals are exhausted the arrival B-event does not reschedule.
 - `times[]` and `rows[]` are mutually exclusive with `dist`/`distParams` in the same schedule entry.
+
+> ⚠ **Common mistake:** `rows[]` must be placed inside `schedules[]` as
+> `{"eventId": "b_arrive", "rows": [...]}` — never directly on the B-event object.
+> A B-event with `rows[]` at the top level and an empty `schedules[]` will produce
+> no arrivals and trigger V8.
 
 > **Developer note:** The conversion from `HH:MM` / ISO timestamps to simulation time is handled by `parsePlanCsv(text, { epoch, timeUnit })` in `src/ui/shared/planCsvParser.js`. Pass the model's `epoch` string and `timeUnit` to this function when building integrations that ingest CSV data.
 
@@ -2157,3 +2195,13 @@ Bind a specific distribution parameter to a field from a live source:
 > **Security note:** `authSecret` fields must always contain `{{env.VAR}}` placeholders, never literal tokens or passwords. The actual credential is entered by the user in the browser at session time and is never stored in the database or included in model exports.
 
 For full integration guidance see `docs/simmodlr_RealTime_Integration_Guide.md`.
+
+---
+
+## Core Principle
+
+An LLM generating a simmodlr model is **not done** when it has written JSON —
+it is done when that JSON passes every blocking rule in §10. A model with any
+blocking error is incomplete work. Return only valid models. If you cannot
+produce a valid model, explain what is preventing you rather than returning a
+broken one.

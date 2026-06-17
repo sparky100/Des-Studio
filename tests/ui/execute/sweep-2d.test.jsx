@@ -96,8 +96,6 @@ const validModel = {
 
 function openSweepSection() {
   fireEvent.click(screen.getByRole('button', { name: /^studies$/i }));
-  const header = screen.getByText('STUDIES');
-  fireEvent.click(header.closest('div') || header);
 }
 
 function setup2DPanel() {
@@ -170,7 +168,7 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     // The error appears in both the live counter and the validation banner
     const errors = screen.getAllByText(/2d sweep grid exceeds 50 points/i);
     expect(errors.length).toBeGreaterThanOrEqual(1);
-    expect(mockRun2DSweep).not.toHaveBeenCalled();
+    expect(mockRunSweepOffthread).not.toHaveBeenCalled();
   });
 
   it('2D results table renders with correct row and column labels', async () => {
@@ -195,7 +193,7 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
-    await waitFor(() => expect(mockRun2DSweep).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockRunSweepOffthread).toHaveBeenCalledTimes(1));
 
     // Grid table headers: row labels (valueA) and column labels (valueB)
     // fmt() now formats to 0 decimal places (integer)
@@ -229,7 +227,7 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
-    await waitFor(() => expect(mockRun2DSweep).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockRunSweepOffthread).toHaveBeenCalledTimes(1));
 
     // Before click, no cell stats sidebar
     expect(screen.queryByText(/cell stats/i)).not.toBeInTheDocument();
@@ -273,7 +271,7 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
       { valueA: 1, valueB: 10 },
       { valueA: 2, valueB: 20 },
     ]);
-    mockRun2DSweep.mockImplementation(({ onProgress, onComplete }) => {
+    mockRunSweepOffthread.mockImplementation(({ onProgress, onComplete }) => {
       onProgress({ totalPoints: 4, currentPoint: 1, gridSize: { rows: 2, cols: 2 } });
       return { cancel: vi.fn() };
     });

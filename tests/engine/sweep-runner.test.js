@@ -27,15 +27,20 @@ function makeMockReplications(count, overrides = {}) {
 }
 
 function wrapReplications(options) {
-  const { replications, baseSeed, onReplicationComplete, onComplete } = options;
+  const { replications, baseSeed, onReplicationComplete, onComplete, onCancelled } = options;
   const results = makeMockReplications(replications, { baseSeed });
-  setTimeout(() => {
+  let timerId = setTimeout(() => {
     results.forEach((r, i) => {
       onReplicationComplete?.(r, { completed: i + 1, total: replications });
     });
     onComplete?.(results);
   }, 0);
-  return { cancel: vi.fn() };
+  return {
+    cancel() {
+      clearTimeout(timerId);
+      onCancelled?.();
+    },
+  };
 }
 
 beforeEach(() => {
