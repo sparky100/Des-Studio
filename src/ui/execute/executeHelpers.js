@@ -73,6 +73,22 @@ export function makeTimeSeriesAccumulator(maxPoints = 500) {
   let typeSums = null;
   let count = 0;
 
+  // Queues/types that haven't received any entities yet are simply absent
+  // from a sample's byQueue/byType map (sparse representation), so a key
+  // can legitimately first appear well after t=0 or in a later replication.
+  // Keys are therefore created lazily, on first sight, rather than only
+  // being seeded from the first sample of the first replication — otherwise
+  // any queue/type that was empty at t=0 would be silently dropped from
+  // every subsequent average forever.
+  function ensureQueueKey(k) {
+    if (!queueSums[k]) queueSums[k] = { waiting: new Float64Array(grid.length), total: new Float64Array(grid.length) };
+    return queueSums[k];
+  }
+  function ensureTypeKey(k) {
+    if (!typeSums[k]) typeSums[k] = { waiting: new Float64Array(grid.length), busy: new Float64Array(grid.length), idle: new Float64Array(grid.length), total: new Float64Array(grid.length) };
+    return typeSums[k];
+  }
+
   function addSeries(ts) {
     if (!Array.isArray(ts) || ts.length === 0) return;
     if (!grid) {
@@ -82,11 +98,6 @@ export function makeTimeSeriesAccumulator(maxPoints = 500) {
         : times.slice();
       queueSums = {};
       typeSums = {};
-      const first = ts[0];
-      for (const k of Object.keys(first.byQueue || {}))
-        queueSums[k] = { waiting: new Float64Array(grid.length), total: new Float64Array(grid.length) };
-      for (const k of Object.keys(first.byType || {}))
-        typeSums[k] = { waiting: new Float64Array(grid.length), busy: new Float64Array(grid.length), idle: new Float64Array(grid.length), total: new Float64Array(grid.length) };
     }
     let j = 0;
     for (let gi = 0; gi < grid.length; gi++) {
@@ -95,10 +106,16 @@ export function makeTimeSeriesAccumulator(maxPoints = 500) {
       const pt = ts[j]?.t <= t ? ts[j] : null;
       if (!pt) continue;
       for (const [k, q] of Object.entries(pt.byQueue || {})) {
-        if (queueSums[k]) { queueSums[k].waiting[gi] += q.waiting ?? 0; queueSums[k].total[gi] += q.total ?? 0; }
+        const s = ensureQueueKey(k);
+        s.waiting[gi] += q.waiting ?? 0;
+        s.total[gi] += q.total ?? 0;
       }
       for (const [k, ty] of Object.entries(pt.byType || {})) {
-        if (typeSums[k]) { typeSums[k].waiting[gi] += ty.waiting ?? 0; typeSums[k].busy[gi] += ty.busy ?? 0; typeSums[k].idle[gi] += ty.idle ?? 0; typeSums[k].total[gi] += ty.total ?? 0; }
+        const s = ensureTypeKey(k);
+        s.waiting[gi] += ty.waiting ?? 0;
+        s.busy[gi] += ty.busy ?? 0;
+        s.idle[gi] += ty.idle ?? 0;
+        s.total[gi] += ty.total ?? 0;
       }
     }
     count++;
