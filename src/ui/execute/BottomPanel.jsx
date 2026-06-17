@@ -1246,9 +1246,11 @@ export function BottomPanel({ log, snap, model, autoRunning = false, hasResults 
         gap: 2,
         padding: "6px 10px",
         borderBottom: collapsed ? "none" : `1px solid ${C.border}`,
+        flexWrap: "wrap",
+        rowGap: 4,
       }}>
         <div role="tablist" aria-label="Bottom panel tabs"
-          style={{ display: "flex", background: C.bg, borderRadius: 5, padding: 2, gap: 1 }}>
+          style={{ display: "flex", background: C.bg, borderRadius: 5, padding: 2, gap: 1, flexWrap: "wrap" }}>
           {TABS.map(tab => (
             <button
               key={tab.id}
@@ -1302,7 +1304,7 @@ export function BottomPanel({ log, snap, model, autoRunning = false, hasResults 
             })}
           </div>
         )}
-        {hasResults && (
+        {hasResults && !collapsed && (
           <button
             type="button"
             onClick={onOpenResults}
