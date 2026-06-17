@@ -1489,23 +1489,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               {latestResults?._model_snapshot && (
                 <Btn small variant="ghost" onClick={() => setShowResultsSnapshot(true)}>View Model</Btn>
               )}
-              {latestResults && (
-                <div style={{ position: "relative" }}>
-                  <Btn small variant="ghost" onClick={() => setExportMenuOpen(v => !v)}>Export ▾</Btn>
-                  {exportMenuOpen && (
-                    <div
-                      style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 200, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 1000 }}
-                      onMouseLeave={() => setExportMenuOpen(false)}
-                    >
-                      <button onClick={() => { handleResultsExportJson(); setExportMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export Results (JSON)</button>
-                      <button onClick={() => { handleResultsExportLLMBundle(); setExportMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export for AI tools (.md)</button>
-                      <button onClick={() => { handleResultsReport('seniorMgmt'); setExportMenuOpen(false); }} disabled={resultsReportGenerating} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: resultsReportGenerating ? C.muted : C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: resultsReportGenerating ? "default" : "pointer", borderRadius: 4 }}>
-                        {resultsReportGenerating ? "Generating…" : "Create Report"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
 
             {resultsView==="summary"&&(
@@ -1528,6 +1511,24 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         return <option key={row.id} value={row.id}>{label}</option>;
                       })}
                     </select>
+                    <div style={{ flex: 1 }} />
+                    {latestResults && (
+                      <div style={{ position: "relative" }}>
+                        <Btn small variant="ghost" onClick={() => setExportMenuOpen(v => !v)}>Export ▾</Btn>
+                        {exportMenuOpen && (
+                          <div
+                            style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 200, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 1000 }}
+                            onMouseLeave={() => setExportMenuOpen(false)}
+                          >
+                            <button onClick={() => { handleResultsExportJson(); setExportMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export Results (JSON)</button>
+                            <button onClick={() => { handleResultsExportLLMBundle(); setExportMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export for AI tools (.md)</button>
+                            <button onClick={() => { handleResultsReport('seniorMgmt'); setExportMenuOpen(false); }} disabled={resultsReportGenerating} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: resultsReportGenerating ? C.muted : C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: resultsReportGenerating ? "default" : "pointer", borderRadius: 4 }}>
+                              {resultsReportGenerating ? "Generating…" : "Create Report"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
                 {latestResults ? (
