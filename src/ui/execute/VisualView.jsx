@@ -89,7 +89,7 @@ export const VisualView = ({ snap, model, summary }) => {
             </div>
           )}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8 }}>
           {[
             { label: "Arrived", value: totalArrived, color: C.kpiArr },
             { label: "Served", value: totalServed, color: C.kpiSvc },

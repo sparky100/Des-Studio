@@ -1173,27 +1173,33 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
   useEffect(() => {
     const handlePointerMove = (event) => {
       if (!dragStateRef.current) return;
-      const nextHeight = dragStateRef.current.startHeight + (dragStateRef.current.startY - event.clientY);
-      setBodyHeight(Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, nextHeight)));
+      event.preventDefault();
+      const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+      const delta = dragStateRef.current.startY - clientY;
+      const newH = Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, dragStateRef.current.startHeight + delta));
+      setBodyHeight(newH);
+      try { localStorage.setItem("des.bottomPanel.height", String(newH)); } catch {}
     };
     const handlePointerUp = () => {
-      if (dragStateRef.current) {
-        try { localStorage.setItem("des.bottomPanel.height", String(bodyHeightRef.current)); } catch {}
-      }
       dragStateRef.current = null;
     };
     window.addEventListener("mousemove", handlePointerMove);
     window.addEventListener("mouseup", handlePointerUp);
+    window.addEventListener("touchmove", handlePointerMove, { passive: false });
+    window.addEventListener("touchend", handlePointerUp);
     return () => {
       window.removeEventListener("mousemove", handlePointerMove);
       window.removeEventListener("mouseup", handlePointerUp);
+      window.removeEventListener("touchmove", handlePointerMove);
+      window.removeEventListener("touchend", handlePointerUp);
     };
   }, []);
 
   const startResize = (event) => {
     event.preventDefault();
     setMaximized(false);
-    dragStateRef.current = { startY: event.clientY, startHeight: bodyHeight };
+    const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+    dragStateRef.current = { startY: clientY, startHeight: bodyHeight };
   };
 
   const tabBtnStyle = (id) => ({
@@ -1320,9 +1326,11 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
           aria-orientation="horizontal"
           aria-label="Resize bottom panel"
           onMouseDown={startResize}
+          onTouchStart={startResize}
           style={{
-            height: 10,
+            height: 16,
             cursor: "ns-resize",
+            touchAction: "none",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

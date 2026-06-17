@@ -175,6 +175,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [liveWaitDist, setLiveWaitDist] = useState(null);
   const [liveSummary, setLiveSummary] = useState(null);
   const [liveFlags, setLiveFlags] = useState([]);
+  const [liveFlagsOpen, setLiveFlagsOpen] = useState(false);
   const [singleRunStatus, setSingleRunStatus] = useState("idle");
   const [singleRunProgress, setSingleRunProgress] = useState(null);
   const [batchStatus, setBatchStatus] = useState("idle");
@@ -2575,15 +2576,43 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             style={{ width: 72, accentColor: C.accent, cursor: "pointer" }}
           />
         </div>
-        {liveFlags.length > 0 && (
-          <span title={liveFlags.map(f => f.message).join("\n")} style={{
-            background: liveFlags.some(f => f.severity === "critical") ? C.red + "22" : C.amber + "22",
-            border: `1px solid ${liveFlags.some(f => f.severity === "critical") ? C.red + "44" : C.amber + "44"}`,
-            borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 700,
-            color: liveFlags.some(f => f.severity === "critical") ? C.red : C.amber,
-            fontFamily: FONT, cursor: "default", whiteSpace: "nowrap",
-          }}>{"\u26A0"} {liveFlags.length}</span>
-        )}
+        {liveFlags.length > 0 ? (
+          <div style={{ position: "relative" }}>
+            <button type="button" onClick={() => setLiveFlagsOpen(v => !v)} style={{
+              background: liveFlags.some(f => f.severity === "critical") ? C.red + "22" : C.amber + "22",
+              border: `1px solid ${liveFlags.some(f => f.severity === "critical") ? C.red + "44" : C.amber + "44"}`,
+              borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 700,
+              color: liveFlags.some(f => f.severity === "critical") ? C.red : C.amber,
+              fontFamily: FONT, cursor: "pointer", whiteSpace: "nowrap", lineHeight: 1.5,
+            }}>{"\u26A0"} {liveFlags.length}</button>
+            {liveFlagsOpen && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 199 }} onClick={() => setLiveFlagsOpen(false)} />
+                <div style={{
+                position: "absolute", top: "100%", right: 0, marginTop: 4,
+                background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8,
+                padding: 8, minWidth: 260, maxWidth: "90vw",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 200,
+                display: "flex", flexDirection: "column", gap: 6,
+              }}>
+                {liveFlags.map((f, i) => {
+                  const isCritical = f.severity === "critical";
+                  return (
+                    <div key={i} style={{
+                      borderLeft: `2px solid ${isCritical ? C.red : C.amber}`,
+                      paddingLeft: 8, fontSize: 10, fontFamily: FONT,
+                      color: isCritical ? C.red : C.amber, lineHeight: 1.4,
+                    }}>
+                      {f.resource && <span style={{ color: C.muted }}>{f.resource}: </span>}
+                      {f.message}
+                    </div>
+                );
+              })}
+              </div>
+              </>
+            )}
+          </div>
+        ) : null}
         <Btn variant="danger" onClick={() => {
           stopAuto();
           if (batchActive) cancelBatch();
