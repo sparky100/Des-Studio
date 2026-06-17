@@ -1162,7 +1162,7 @@ export function BottomPanel({ log, snap, model, autoRunning = false, hasResults 
     try { const t = localStorage.getItem("des.bottomPanel.tab"); return TABS.some(tab => tab.id === t) ? t : "log"; } catch { return "log"; }
   });
   const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem("des.bottomPanel.collapsed") === "1"; } catch { return false; }
+    try { return localStorage.getItem("des.bottomPanel.collapsed") !== "0"; } catch { return true; }
   });
   const [bodyHeight, setBodyHeight] = useState(() => {
     try { const s = parseInt(localStorage.getItem("des.bottomPanel.height"), 10); return Number.isFinite(s) ? Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, s)) : BOTTOM_PANEL_BODY_HEIGHT; } catch { return BOTTOM_PANEL_BODY_HEIGHT; }
@@ -1265,6 +1265,11 @@ export function BottomPanel({ log, snap, model, autoRunning = false, hasResults 
             </button>
           ))}
         </div>
+        {autoRunning && (
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, fontStyle: "italic", marginLeft: 6, marginRight: 8, whiteSpace: "nowrap" }}>
+            Data paused
+          </span>
+        )}
         <div style={{ flex: 1 }} />
         {!collapsed && (
           <div style={{ display: "flex", gap: 3, alignItems: "center", marginRight: 4 }}>
@@ -1338,12 +1343,6 @@ export function BottomPanel({ log, snap, model, autoRunning = false, hasResults 
             overflowX: "hidden",
           }}
         >
-          {autoRunning ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: C.muted, fontFamily: FONT, fontSize: 12, fontStyle: "italic" }}>
-              Data paused during AutoRun — stop or switch to Step mode to inspect
-            </div>
-          ) : (
-          <>
           {activeTab === "log"       && <LogTab log={log.slice(-50)} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
           {activeTab === "resources" && <ResourcesTab snap={snap} model={model} />}
@@ -1378,8 +1377,6 @@ export function BottomPanel({ log, snap, model, autoRunning = false, hasResults 
               <EventCountsTable snap={snap} model={model} />
               <StageKpisTable snap={snap} model={model} />
             </div>
-          )}
-          </>
           )}
         </div>
       )}
