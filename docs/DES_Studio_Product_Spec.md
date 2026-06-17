@@ -1,8 +1,8 @@
 # simmodlr — Product Specification
 
-**Version:** 7.4.0  
-**Date:** 2026-06-11  
-**Sprint baseline:** Sprint 85  
+**Version:** 7.5.0  
+**Date:** 2026-06-17  
+**Sprint baseline:** Sprint 88  
 **Status:** Living document — reviewed and updated at end of each sprint  
 **Note:** package.json version is 0.9.0-Beta; version alignment with spec version number pending.
 
@@ -77,11 +77,12 @@ These are non-negotiable. Removing any one of them makes simmodlr no longer a si
 | M5 | **Predicate Builder** | Type-safe, point-and-click condition editor for C-Events. No free-text logic. Operator set constrained by attribute type. |
 | M6 | **Distribution library** | 11 distribution types: Exponential, Uniform, Normal, Triangular, Fixed, Erlang, Empirical, Piecewise, Attribute-based (ServerAttr, EntityAttr), Schedule. Seeded PRNG (mulberry32). No `Math.random()` in engine. |
 | M7 | **Validation gates** | 38 validation rules (V1–V38). Blocking errors prevent run; warnings proceed with banner. Model Health panel shows live status. |
-| M8 | **Multi-replication runner** | Parallel Web Worker pool. Configurable seed, warm-up period, termination condition, max sim time. |
-| M9 | **Confidence intervals** | 95% CI via batch means. Displayed on all KPI cards for multi-replication runs. |
-| M10 | **Define editors** | Structured UI editors for all model element types, accessed via the **Define** button in the Design toolbar. Sub-sections: Entity Types, Queues, B-Events, C-Events, Schedules, Model Data. No free-text logic fields. |
-| M11 | **Run history** | Every run saved (summary + model snapshot). Reproducible via stored seed and schedule reference. |
-| M12 | **Supabase persistence** | Models, runs, schedules, and user accounts stored in PostgreSQL with Row-Level Security. |
+| M8 | **Health flag system** | Deterministic post-run health evaluation across 11 codes (H1-H11) covering utilisation (80/90/95% thresholds), queue growth, starvation, completion rate, peak overflow, and Little's Law validation. Flags carry severity (critical/warning), suggested actions, and resource attribution. Displayed as a "Key Findings" banner above all result summaries. |
+| M9 | **Multi-replication runner** | Parallel Web Worker pool. Configurable seed, warm-up period, termination condition, max sim time. |
+| M10 | **Confidence intervals** | 95% CI via batch means. Displayed on all KPI cards for multi-replication runs. |
+| M11 | **Define editors** | Structured UI editors for all model element types, accessed via the **Define** button in the Design toolbar. Sub-sections: Entity Types, Queues, B-Events, C-Events, Schedules, Model Data. No free-text logic fields. |
+| M12 | **Run history** | Every run saved (summary + model snapshot). Reproducible via stored seed and schedule reference. |
+| M13 | **Supabase persistence** | Models, runs, schedules, and user accounts stored in PostgreSQL with Row-Level Security. |
 
 ### Should-have
 
@@ -95,21 +96,23 @@ High-value features that are complete but whose absence would degrade the platfo
 | S4 | **Parametric sweep** | 1D and 2D sweeps with Goal Feasibility line. Two-scenario comparison uses paired-t confidence intervals with Bonferroni correction. Note: tukeyHSD() and oneWayANOVA() are implemented in the engine but not yet wired to the UI. |
 | S5 | **Warm-up diagnostics** | Welch graphical warm-up test. Transient detection. Replication-level variance chart. |
 | S6 | **Report generation** | Senior Management and Technical reports in HTML and Markdown. AI-written narrative sections grounded in run results. |
-| S7 | **Share / public dashboard** | Public link, QR code, embeddable widget. Read-only. No login required for viewers. |
-| S8 | **Model versioning** | Explicit milestones with notes. Version history panel. Structural change detection. Run records reference version snapshot. |
-| S9 | **Model Assistant (AI)** | Persistent sidebar. Design mode: tab-aware suggested questions and model Q&A with full structure context (entity attributes, queue configs, C-event logic). Run mode: canvas diagnostics (entity inspector, event log overlays) with model Q&A above. Results mode: Analyse, Compare, and Refine Plan tabs — all manual, no auto-fire. |
-| S10 | **Template library** | 22 pre-built templates covering healthcare, logistics, transport, manufacturing, and service industries. Browsable by domain chip filter and text search. |
-| S11 | **Schedule Manager** | Named timetables (e.g. Weekday, Weekend) stored separately from `model_json` (ADR-016). CSV and Excel/XLSX import, multi-event import, and inline-row migration to named schedules. Schedule selector in Execute panel. |
-| S12 | **Resource failures and shift-change behavior** | FAIL/REPAIR macros with MTBF/MTTR distributions. V37 validation enforces paired configuration. Shift-change behavior configurable per server: **Delay** (finish current service before applying shift change), **Preempt** (interrupt immediately; entity re-queues with remaining service time), or **Suspend** (pause service at shift boundary; resume on next shift start). |
-| S13 | **Voice input** | Microphone button in AI chat dialogs. Uses the Web Speech API to transcribe spoken input into the prompt field. |
-| S14 | **Explore / AdaptiveBatchPanel** | AI-driven bottleneck analysis panel. Runs adaptive replication stepping (increasing batch size until 95% CI is within ±5% of the mean), surfaces bottleneck resources and queues, and provides an Apply-to-model action. |
-| S15 | **Run admission tier system** | Per-user run tier controls replication depth: Free (10 reps), Standard (30 reps), Pro (100 reps). Enforced before each run. |
-| S16 | **Per-outcome metrics** | avgWait and avgSojourn reported per journey outcome in run results, enabling comparison across routing branches. |
-| S17 | **SimPy Python export and browser execution** | One-click export of any model as a runnable SimPy `.py` script. Category 1 (fully runnable) for models using standard macros; Category 2 (annotated TODO stubs) for models containing RENEGE, BATCH, MATCH, FAIL, REPAIR, PREEMPT, or RENEGE_OLDEST. Available from the header bar (⬇ SimPy button) and from the Access tab → Export section. Category 1 models can **Run in Browser** via Pyodide WebAssembly (~25 MB, cached after first use) — no Python installation needed; results load directly into the Results workspace with a `[SimPy]` source label and are saved to run history (label: `SimPy  DD/MM/YYYY HH:mm`). The Results workspace shows enriched KPI cards: arrivals, served, completion rate, avg wait, wait percentiles (P50/P90/P99), avg service time, avg sojourn, and per-resource utilisation. The generated script supports `RUN_MODE = "text"` (human-readable terminal output) or `"json"` (JSONL per-replication records for pipeline use); the browser runner sets `"json"` automatically. Piecewise, Schedule, and Empirical distributions are fully Category 1; all 22 built-in templates export runnable scripts. No round-trip import. |
-| S18 | **Starvation tracking** | Per-resource starvation metric: cumulative time a server was idle despite entities waiting upstream (`starvationTime`) and the fraction of post-warmup time starved (`starvationPct`). Distinguishes upstream supply bottlenecks from capacity shortfalls — a high-utilisation server with non-zero starvation indicates a feed problem, not an under-capacity problem. |
-| S19 | **Purge period** | Scheduled queue sweep that removes entities exceeding a maximum dwell time. Configured as a B-event with a fixed or periodic interval. Complements entity-driven reneging with a global timer-based clearance — useful for batch/job queues operating under SLA deadlines. |
-| S20 | **Sign-in Welcome dialog** | Modal dialog shown to all users on every sign-in (not on page refresh). Four option cards in a 2×2 grid: **Create a Model** (opens NewModelModal with describe/draw/define framing), **Access the Model Library** (switches to My Models tab), **Build with AI Tools** (downloads AI Prompt Pack), **Get Help** (opens AI Help Assistant). Triggered via `signedInThisSession` boolean state in App.jsx; guarded by a `didShowWelcome` ref so it fires once per session. Race condition (dialog firing for existing users immediately on login) fixed by calling `setLoading(true)` in the SIGNED_IN auth handler before `setSession()`. |
-| S21 | **AI Prompt Pack export** | `buildLLMSchemaPromptPack()` in `src/llm/bundleExport.js` bundles `docs/model-schema-for-llm.md` verbatim with a how-to preamble and starter prompt. Downloaded as `simmodlr-ai-prompt-pack.md` from: (a) the Welcome dialog → Build with AI Tools card, and (b) the **↓ AI Prompt Pack** ghost button in the Model Library header next to **+ New Model**. |
+| S7 | **Live health warnings** | 8 live warning codes (L1-L6) evaluated per-step during Step and AutoRun execution. Covers utilisation thresholds, starvation percentage, continuous starvation duration, sustained high utilisation, zombie asset detection, and queue capacity overflow. Displayed as a clickable ⚠ badge in the compact run bar. Zero overhead when timeSeries is disabled (batch/sweep/experiment runs). |
+| S8 | **Run mode UX** | During Step and AutoRun, the sidebar, header, and section tabs collapse into a compact bar showing only run controls (Step, Auto Run, speed, Cancel). The BottomPanel defaults to collapsed with touch-friendly resize. |
+| S9 | **Share / public dashboard** | Public link, QR code, embeddable widget. Read-only. No login required for viewers. |
+| S10 | **Model versioning** | Explicit milestones with notes. Version history panel. Structural change detection. Run records reference version snapshot. |
+| S11 | **Model Assistant (AI)** | Persistent sidebar. Design mode: tab-aware suggested questions and model Q&A with full structure context (entity attributes, queue configs, C-event logic). Run mode: canvas diagnostics (entity inspector, event log overlays) with model Q&A above. Results mode: Analyse, Compare, and Refine Plan tabs — all manual, no auto-fire. |
+| S12 | **Template library** | 22 pre-built templates covering healthcare, logistics, transport, manufacturing, and service industries. Browsable by domain chip filter and text search. |
+| S13 | **Schedule Manager** | Named timetables (e.g. Weekday, Weekend) stored separately from `model_json` (ADR-016). CSV and Excel/XLSX import, multi-event import, and inline-row migration to named schedules. Schedule selector in Execute panel. |
+| S14 | **Resource failures and shift-change behavior** | FAIL/REPAIR macros with MTBF/MTTR distributions. V37 validation enforces paired configuration. Shift-change behavior configurable per server: **Delay** (finish current service before applying shift change), **Preempt** (interrupt immediately; entity re-queues with remaining service time), or **Suspend** (pause service at shift boundary; resume on next shift start). |
+| S15 | **Voice input** | Microphone button in AI chat dialogs. Uses the Web Speech API to transcribe spoken input into the prompt field. |
+| S16 | **Explore / AdaptiveBatchPanel** | AI-driven bottleneck analysis panel. Runs adaptive replication stepping (increasing batch size until 95% CI is within ±5% of the mean), surfaces bottleneck resources and queues, and provides an Apply-to-model action. |
+| S17 | **Run admission tier system** | Per-user run tier controls replication depth: Free (10 reps), Standard (30 reps), Pro (100 reps). Enforced before each run. |
+| S18 | **Per-outcome metrics** | avgWait and avgSojourn reported per journey outcome in run results, enabling comparison across routing branches. |
+| S19 | **SimPy Python export and browser execution** | One-click export of any model as a runnable SimPy `.py` script. Category 1 (fully runnable) for models using standard macros; Category 2 (annotated TODO stubs) for models containing RENEGE, BATCH, MATCH, FAIL, REPAIR, PREEMPT, or RENEGE_OLDEST. Available from the header bar (⬇ SimPy button) and from the Access tab → Export section. Category 1 models can **Run in Browser** via Pyodide WebAssembly (~25 MB, cached after first use) — no Python installation needed; results load directly into the Results workspace with a `[SimPy]` source label and are saved to run history (label: `SimPy  DD/MM/YYYY HH:mm`). The Results workspace shows enriched KPI cards: arrivals, served, completion rate, avg wait, wait percentiles (P50/P90/P99), avg service time, avg sojourn, and per-resource utilisation. The generated script supports `RUN_MODE = "text"` (human-readable terminal output) or `"json"` (JSONL per-replication records for pipeline use); the browser runner sets `"json"` automatically. Piecewise, Schedule, and Empirical distributions are fully Category 1; all 22 built-in templates export runnable scripts. No round-trip import. |
+| S20 | **Starvation tracking** | Per-resource starvation metric: cumulative time a server was idle despite entities waiting upstream (`starvationTime`) and the fraction of post-warmup time starved (`starvationPct`). Distinguishes upstream supply bottlenecks from capacity shortfalls — a high-utilisation server with non-zero starvation indicates a feed problem, not an under-capacity problem. |
+| S21 | **Purge period** | Scheduled queue sweep that removes entities exceeding a maximum dwell time. Configured as a B-event with a fixed or periodic interval. Complements entity-driven reneging with a global timer-based clearance — useful for batch/job queues operating under SLA deadlines. |
+| S22 | **Sign-in Welcome dialog** | Modal dialog shown to all users on every sign-in (not on page refresh). Four option cards in a 2×2 grid: **Create a Model** (opens NewModelModal with describe/draw/define framing), **Access the Model Library** (switches to My Models tab), **Build with AI Tools** (downloads AI Prompt Pack), **Get Help** (opens AI Help Assistant). Triggered via `signedInThisSession` boolean state in App.jsx; guarded by a `didShowWelcome` ref so it fires once per session. Race condition (dialog firing for existing users immediately on login) fixed by calling `setLoading(true)` in the SIGNED_IN auth handler before `setSession()`. |
+| S23 | **AI Prompt Pack export** | `buildLLMSchemaPromptPack()` in `src/llm/bundleExport.js` bundles `docs/model-schema-for-llm.md` verbatim with a how-to preamble and starter prompt. Downloaded as `simmodlr-ai-prompt-pack.md` from: (a) the Welcome dialog → Build with AI Tools card, and (b) the **↓ AI Prompt Pack** ghost button in the Model Library header next to **+ New Model**. |
 
 ### Could-have
 
@@ -243,6 +246,7 @@ simmodlr is built for advanced modellers but must not alienate users who encount
 | "MTBF/MTTR not configured" | "You've set the server to fail but haven't said how long failures last" |
 | "C-scan restart limit exceeded" | "The simulation detected a possible loop in your service conditions (C-Event restart limit reached)" |
 | "95% CI: [8.2, 11.4]" | "Average wait: 9.8 minutes (High confidence)" |
+| Health Alerts | Key Findings |
 
 This standard applies to all new UI text and to the AI-generated narrative in reports. Technical precision is preserved in the underlying data; the surface layer speaks plain English first.
 

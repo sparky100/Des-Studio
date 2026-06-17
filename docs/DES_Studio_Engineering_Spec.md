@@ -1,9 +1,9 @@
 # simmodlr — Engineering Specification
 
-**Version:** 7.4.0  
-**Date:** 2026-06-11  
+**Version:** 7.5.0  
+**Date:** 2026-06-17  
 **Note:** package.json version is 0.9.0-Beta; this document uses an internal engineering version number.  
-**Sprint baseline:** Sprint 85  
+**Sprint baseline:** Sprint 88  
 **Status:** Living document — updated at end of each sprint  
 **Audience:** Engineering team, technical contributors, platform integrators
 
@@ -121,6 +121,7 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 | `adapters/mockAdapter.js` | Mock adapter for testing |
 | `simpy-export.js` | Pure-function SimPy Python export (Sprint 80). No React, no DOM, no Supabase. Generates `RUN_MODE`-aware scripts with enriched `Stats` class (Sprint 85). See §3.7 for API and design. |
 | `simpy-runner-worker.js` | Pyodide Web Worker entry point (Sprint 85). Loads CPython-in-WASM from CDN, installs SimPy via `micropip`, captures JSONL stdout, streams `{type:"rep"}` / `{type:"summary"}` messages back via `postMessage`. Module worker (`type:"module"`). |
+| `ui/results/healthFlags.js` | `evaluateResultsHealth()` — deterministic post-run flag evaluation across 11 codes (H1–H11); `evaluateLiveHealth()` — lightweight per-step live flag evaluation for 8 codes (L1–L6) |
 
 ### 1.4 Three-Phase execution loop
 
@@ -288,6 +289,21 @@ interface CEvent {
 | `Schedule` | `scheduleRef` | Planned absolute times from `model_schedules` |
 
 All distributions sample via `state.rng` (mulberry32 seeded PRNG). No distribution calls `Math.random()`.
+
+#### perResource summary (health flags)
+
+The `summary.perResource[name]` object, returned by `getSummary()`, includes these fields consumed by the health flag evaluators in `src/ui/results/healthFlags.js`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `utilisation` | `number` | Fraction of elapsed time the resource was busy (0–1) |
+| `starvationTime` | `number` | Average idle-while-queued time per server of this type |
+| `starvationPct` | `number` | Fraction of elapsed time the resource was idle with work queued (0–1) |
+| `maxStarvationDuration` | `number \| null` | Longest continuous idle period for any server of this type (Sprint 88) |
+| `maxSustainedHighUtil` | `number \| null` | Longest continuous period where utilisation ≥ 90% (Sprint 88) |
+| `maxSustainedZeroUtil` | `number \| null` | Longest continuous period where utilisation was 0% while system was active (Sprint 88) |
+
+These fields are used by H1 (utilisation thresholds), H5 (starvation), and H9 (continuous starvation exceeding 2× mean service time) health flag codes, as well as L1/L2/L5 live flags.
 
 ### 2.2 Supabase schema
 
@@ -468,6 +484,39 @@ The summary also includes:
 - `waitSamplesBreakdown`: `{ served, reneged, inProgress }` counts for UI transparency
 
 The `RENEGE` macro now calls `buildStageRecord(entity, null, clock)` before clearing the entity's waiting state, so reneged entities contribute wait samples to both `avgWait` and `waitDist`.
+
+#### 3.1.2 Starvation tracking (Sprint 88)
+
+Server starvation (idle time while work is queued) is tracked via `_starvationStart` and `_starvationTime` fields per server entity:
+
+- **`_starvationStart`** — clock value when the server last became idle. Set at creation time (`entities.js:296`, `index.js:524`). Reset to `clock` by `releaseServerClaim()` (`entities.js:226`).
+- **`_starvationTime`** — accumulated idle time. Flushed by `claimServerForEntity()` (`entities.js:200–204`) when the server transitions idle→busy, and in `getSummary()` (`index.js:1375–1385`) for final aggregation.
+
+**Gaps closed in Sprint 88:**
+- `repairServers()` (`entities.js:249`): after repair, sets `_starvationStart = clock`
+- COSEIZE auxiliary servers (`macros.js:990`): flushes `_starvationStart` before setting status to `"busy"`
+- Suspended server reactivation (`phases.js:72`): sets `_starvationStart = clock`
+
+The `getSummary()` loop aggregates per-type: `starvationTimeSum`, `maxContStarvDur`, `starvationTime` (average per server), `starvationPct` (fraction of total server-time).
+
+#### 3.1.3 Utilisation streak tracking (Sprint 88)
+
+A lightweight `_utilStreaks` object tracks per-resource utilisation patterns across timeSeries snapshots (zero overhead when `collectTimeSeries` is disabled):
+
+```javascript
+// Per-resource streak state — maintained inside buildEngine() closure
+const _utilStreaks = {};
+for (const srv of entities) {
+  if (srv.role === "server" && !_utilStreaks[srv.type]) {
+    _utilStreaks[srv.type] = {
+      highStart: null, highEnd: null, maxHigh: 0,   // ≥90% utilisation streak
+      zeroStart: null, zeroEnd: null, maxZero: 0,   // 0% utilisation streak
+    };
+  }
+}
+```
+
+Updated at each timeSeries snapshot (`index.js:1039–1059`). Streaks are flushed in `getSummary()` and exposed as `perResource[name].maxSustainedHighUtil` and `perResource[name].maxSustainedZeroUtil` (`index.js:1400–1412`).
 
 ### 3.2 Visual Designer interaction contract
 
@@ -710,6 +759,8 @@ DES Studio `DRAIN` fails immediately if container level < amount (guard). SimPy 
 
 Worker pool size defaults to `navigator.hardwareConcurrency - 1` (minimum 1, no upper cap). Workers are **persistent** — spawned once per batch run via `createReplicationPool()` and reused across all rounds (adaptive batch, sweep points). The model and run configuration are sent to each worker exactly once via an `INIT_RUN` message; subsequent `RUN_REPLICATION` messages carry only `{ replicationIndex, seed, entityDetail }`, avoiding a `structuredClone` of the full model per job.
 
+Utilisation streak tracking (§3.1.3) has zero overhead when `collectTimeSeries` is disabled (batch runs, sweeps, experiments). When enabled, overhead is O(resourceTypes) per timeSeries sample — negligible compared to the entity-level operations in the main loop.
+
 ### 4.3 Results persistence limits
 
 `src/db/results-persistence.js` enforces payload size limits before saving to Supabase:
@@ -933,6 +984,7 @@ Full records in `docs/decisions/`. Key decisions affecting day-to-day developmen
 | ADR-011 | Conditional routing schema — routing table with predicate nodes | Routing logic expressed as data, not code. Safe evaluator handles routing decisions. |
 | ADR-015 | Explicit version milestones — user-initiated snapshots, not auto-versioning | `model_versions` table. Structural change detection flags when a version is stale. |
 | ADR-016 | Schedule data separation — timetable rows extracted to `model_schedules` | `model_json` holds `scheduleRef` UUIDs. `resolveInlineSchedules()` merges before engine call. |
+| ADR-017 | Health flag architecture and live warning system | Deterministic post-run evaluation (11 codes: H1–H11) + lightweight per-step live evaluation (8 codes: L1–L6). Both use engine summary data already available — no new engine state required for post-run. Live evaluation piggybacks on existing timeSeries snapshots with zero overhead when disabled. Accepted Sprint 88. |
 
 ---
 

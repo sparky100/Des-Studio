@@ -1,8 +1,8 @@
 # simmodlr — User Guide
 
-**Version:** 7.4.0  
-**Date:** 2026-06-11  
-**Sprint baseline:** Sprint 85  
+**Version:** 7.5.0  
+**Date:** 2026-06-17  
+**Sprint baseline:** Sprint 88  
 **Audience:** Simulation practitioners, operations analysts, engineering students
 
 ---
@@ -242,18 +242,19 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    | Setting | Guidance |
    |---------|---------|
    | **Replications** | Use 10–30 for initial exploration, 100+ for published results. More replications = narrower confidence intervals. |
-   | **Warm-up period** | Set to approximately the time the system takes to reach steady state (check the Results → Analysis → Welch plot after a first run). 0 is fine for terminating simulations. |
    | **Max sim time** | Set to the time horizon of interest (e.g. one working day = 480 minutes). |
    | **Termination condition** | Leave blank for time-based termination, or enter a condition (e.g. `total_served >= 1000`). |
    | **Seed** | Leave blank for a random seed, or enter a number for reproducible results. |
    | **Schedule** | If the model has multiple timetables (e.g. Weekday, Weekend), select which one to use. |
    | **Purge period** | Optional run-down time after the simulation clock reaches Max sim time. New arrivals stop but the system continues until all queues drain. Useful for end-of-day or shift-end scenarios — set to the longest expected remaining service time. |
 
-3. Click **Run**. The Execute canvas animates entity flow in real time. The event log in the Bottom Panel records every event.
+3. Click **Run**. The Execute canvas animates entity flow in real time. During execution, the sidebar and header collapse to give maximum canvas space, and a compact run bar appears with **Step**, **Auto Run**, speed, and **Cancel** controls. A **⚠** badge in the run bar shows real-time warnings when utilisation, starvation, or queue capacity thresholds are exceeded — click it to see details.
+
 4. When the run completes, the Results tab shows:
 
    | Section | What it tells you |
    |---------|------------------|
+   | **Key Findings** | Critical issues (saturation, starvation, growing queues) flagged at the top above all other results with actionable improvement suggestions. |
    | **Summary** | Entities arriving, served, and reneged. Average wait, service time, and utilisation. Goal pass/fail. |
    | **Bottlenecks** | Which queues have the longest average waits. Peak queue depth. |
    | **Analysis** | Confidence intervals, Welch warm-up diagnostic, replication-level variance. |
@@ -268,6 +269,8 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    - Click **Analyse** for a plain-English narrative of the results with structured improvement suggestions.
    - Click **Compare** to compare against a saved historical run.
    - Use the text input to ask specific questions about the results (e.g. "Which queue had the longest wait?").
+
+   The **Export** button sits next to the **Saved Run** dropdown in the toolbar (not in the sub-tab bar), providing quick access to LLM Bundle, reports, and JSON export.
 
 ### 4.5 Compare scenarios with a parametric sweep
 
@@ -301,6 +304,21 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 ### 4.7 Additional features
 
 **Voice input.** The AI chat dialogs — Help Assistant, Model Assistant, and AI Diagnostics — each include a microphone button. Clicking it activates the browser's Speech Recognition API so you can dictate questions or describe changes verbally instead of typing.
+
+**Live warnings during runs.** While a simulation is running in Step or Auto Run mode, a compact **⚠** badge appears in the run bar. This badge monitors real-time conditions — resource utilisation exceeding safe thresholds, server starvation, and queue capacity warnings — and updates as the run progresses. Click the badge to expand a panel showing each active warning with the affected resource or queue and the current value. Warnings are only active during execution and disappear once the run completes. They are designed to help you spot problems early without waiting for the full results analysis.
+
+**Key Findings.** After a run completes, the Results workspace surfaces critical health flags in a **Key Findings** section above all other results. These flags automatically detect:
+
+| Finding | What it flags |
+|---------|--------------|
+| **Saturation** | A resource is utilised above 90% — demand exceeds near-term capacity. The queue feeding this resource is your primary bottleneck. |
+| **Starvation** | A resource has significant idle time because its input queue is empty — indicates an upstream bottleneck or over-capacity. |
+| **Growing queues** | Queue depth is increasing at the end of the simulation — the system has not reached steady state and waits are still rising. |
+| **Reliability** | Resource downtime (from failure/repair cycles) is materially affecting throughput. |
+
+Each flag includes an actionable suggestion: adding capacity, rebalancing upstream stages, extending simulation time, or addressing reliability. Key Findings replaces the need to scan individual charts for problems — the critical issues are surfaced first.
+
+**Bottom Panel.** The collapsible bottom panel in the Execute view is collapsed by default. Click any tab name (**Log**, **Entities**, **Charts**, **Stage KPIs**) to expand the panel at that tab. The panel has a touch-friendly resize handle along its top edge — drag up or down to adjust the height. The **Step Log** tab shows only the last 50 event entries for readability; during a run this scrolls automatically as new events arrive. Click on an entity in the Entity Table or on the Execute canvas to open the **Entity Inspector** for that entity's full state and history.
 
 **Explore panel.** After a batch run completes, a ✦ Explore button appears in the model header. Clicking it opens an AI panel that analyses the results for bottlenecks, quick wins, and investment opportunities. Each suggestion has an **Apply ↗** button that proposes the change to the model with a before/after diff so you can review it before committing.
 
