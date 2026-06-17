@@ -48,6 +48,30 @@ export function evaluateResultsHealth(results = {}, model = {}) {
     }
   }
 
+  // H10 — Sustained high utilisation (≥90% for 15+ consecutive time units)
+  for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
+    const highDur = Number(stats?.maxSustainedHighUtil);
+    if (!Number.isFinite(highDur) || highDur < 15) continue;
+    flags.push({ code: "H10", severity: "warning", resource: typeName,
+      message: `${typeName} sustained ≥90% utilisation for ${highDur.toFixed(0)} consecutive time units — the system is running at a level where delays compound rapidly.`,
+      suggestion: `Add capacity to ${typeName} or throttle arrivals — sustained high utilisation means the queue will not recover naturally.` });
+  }
+
+  // H11 — Zombie asset (zero utilisation for extended period while system is active)
+  for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
+    const zeroDur = Number(stats?.maxSustainedZeroUtil);
+    if (!Number.isFinite(zeroDur) || zeroDur <= 0) continue;
+    const totalArrived = Number(summary.total ?? summary.arrived ?? summary.totalArrived ?? 0);
+    const avgInterArrival = totalArrived > 0 && summary.avgSojourn != null
+      ? (summary.maxSimTime ?? (summary.terminatingState?.finalTime ?? 100)) / totalArrived
+      : null;
+    if (avgInterArrival != null && zeroDur > avgInterArrival * 5) {
+      flags.push({ code: "H11", severity: "warning", resource: typeName,
+        message: `${typeName} idle for ${zeroDur.toFixed(0)} consecutive time units while arrivals were active — work may have lost its routing path to this resource.`,
+        suggestion: `Check entity routing and B-event destinations — ${typeName} may be unreachable or blocked by an upstream queue.` });
+    }
+  }
+
   // H2 — Growing queue (last 20% of run mean > 1.5× first 20%) — requires timeSeries
   if (timeSeries.length >= 10) {
     const splitAt = Math.max(1, Math.floor(timeSeries.length * 0.2));
@@ -189,6 +213,25 @@ export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
     if (maxStarv > avgSvc * 2) {
       flags.push({ code: "L4", severity: "warning", resource: typeName,
         message: `${typeName} idle ${maxStarv.toFixed(0)} units — exceeds 2× avg service time.` });
+    }
+  }
+
+  // L5 — Sustained high utilisation (≥90% for 15+ consecutive time units)
+  for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
+    const highDur = Number(stats?.maxSustainedHighUtil);
+    if (!Number.isFinite(highDur) || highDur < 15) continue;
+    flags.push({ code: "L5", severity: "warning", resource: typeName,
+      message: `${typeName} ≥90% utilised for ${highDur.toFixed(0)} consecutive time units.` });
+  }
+
+  // L6 — Zombie asset (zero utilisation while arrivals are active)
+  for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
+    const zeroDur = Number(stats?.maxSustainedZeroUtil);
+    if (!Number.isFinite(zeroDur) || zeroDur <= 0) continue;
+    const util = Number(stats?.utilisation);
+    if (Number.isFinite(util) && util === 0) {
+      flags.push({ code: "L6", severity: "warning", resource: typeName,
+        message: `${typeName} at 0% utilisation — work may be blocked from reaching this resource.` });
     }
   }
 

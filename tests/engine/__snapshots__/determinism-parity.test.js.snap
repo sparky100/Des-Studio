@@ -1,5 +1,23 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`determinism parity — fixed-seed benchmark scenarios > ae-department (seed=687215104) 1`] = `
+{
+  "avgSojourn": 82.4331,
+  "avgSvc": 57.1515,
+  "avgWIP": 41.8244,
+  "avgWait": 27.1667,
+  "c_event_scans": 28989,
+  "c_events_fired": 2464,
+  "entities_created": 800,
+  "events_processed": 5666,
+  "finalTime": 1440,
+  "max_future_event_list_size": 67,
+  "reneged": 0,
+  "served": 650,
+  "total": 733,
+}
+`;
+
 exports[`determinism parity — fixed-seed benchmark scenarios > glasgow-train-plan (seed=44) 1`] = `
 {
   "avgSojourn": 3.3305,

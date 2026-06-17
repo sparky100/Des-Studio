@@ -500,6 +500,14 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   for (const e of entities) e.id = nextId();
   _runtimeMetrics.entitiesCreated += entities.length;
 
+  // Lightweight per-resource utilisation streak tracking
+  const _utilStreaks = {};
+  for (const srv of entities) {
+    if (srv.role === "server" && !_utilStreaks[srv.type]) {
+      _utilStreaks[srv.type] = { highStart: null, highEnd: null, maxHigh: 0, zeroStart: null, zeroEnd: null, maxZero: 0 };
+    }
+  }
+
   const helpers = () => makeHelpers(entities, runtimeModel);
   const createServerEntity = (serverTypeName, arrivalTime = clock) => {
     const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
@@ -1017,12 +1025,42 @@ const cycleLog = [];
 
     // Collect time-series snapshot after Phase C stabilises (F10.4a)
     const stepSnap = captureSnap ? snap(clock) : null;
+    let liteSnap = null;
     if (_timeSeries !== null) {
       if (stepSnap) {
         _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: stepSnap.byQueue });
       } else {
-        const lite = snapLite();
-        _timeSeries.push({ t: clock, byType: lite.byType, byQueue: lite.byQueue });
+        liteSnap = snapLite();
+        _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: liteSnap.byQueue });
+      }
+      // Update utilisation streaks from this snapshot
+      const byType = stepSnap?.byType ?? liteSnap?.byType;
+      if (byType) {
+        for (const [typeName, streak] of Object.entries(_utilStreaks)) {
+          const bt = byType[typeName];
+          if (!bt || !bt.total) continue;
+          const util = bt.busy / bt.total;
+
+          // High utilisation streak (≥ 90%)
+          if (util >= 0.90) {
+            if (streak.highStart == null) streak.highStart = clock;
+            streak.highEnd = clock;
+          } else if (streak.highStart != null) {
+            const dur = streak.highEnd - streak.highStart;
+            if (dur > streak.maxHigh) streak.maxHigh = dur;
+            streak.highStart = null; streak.highEnd = null;
+          }
+
+          // Zero utilisation streak
+          if (util === 0) {
+            if (streak.zeroStart == null) streak.zeroStart = clock;
+            streak.zeroEnd = clock;
+          } else if (streak.zeroStart != null) {
+            const dur = streak.zeroEnd - streak.zeroStart;
+            if (dur > streak.maxZero) streak.maxZero = dur;
+            streak.zeroStart = null; streak.zeroEnd = null;
+          }
+        }
       }
     }
 
@@ -1356,6 +1394,21 @@ const cycleLog = [];
       delete r.busyTimeSum;
       delete r.starvationTimeSum;
       delete r.maxContStarvDur;
+    }
+
+    // Flush and add utilisation streak data
+    for (const [type, streak] of Object.entries(_utilStreaks)) {
+      if (!perResource[type]) continue;
+      if (streak.highStart != null) {
+        const dur = streak.highEnd - streak.highStart;
+        if (dur > streak.maxHigh) streak.maxHigh = dur;
+      }
+      if (streak.zeroStart != null) {
+        const dur = streak.zeroEnd - streak.zeroStart;
+        if (dur > streak.maxZero) streak.maxZero = dur;
+      }
+      perResource[type].maxSustainedHighUtil = streak.maxHigh > 0 ? +streak.maxHigh.toFixed(4) : null;
+      perResource[type].maxSustainedZeroUtil = streak.maxZero > 0 ? +streak.maxZero.toFixed(4) : null;
     }
 
     const totalCost   = state.__totalCost || 0;
