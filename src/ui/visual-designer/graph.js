@@ -119,7 +119,7 @@ function withLayout(nodes, edges, graph = {}) {
 
 function conditionLabel(c, depth = 0) {
   if (!c) return "condition";
-  if (typeof c === "string") return c.length > 20 ? c.slice(0, 17) + "…" : c;
+  if (typeof c === "string") return c;
   if (typeof c !== "object") return "condition";
   if ((c.operator === "AND" || c.operator === "OR") && Array.isArray(c.clauses) && depth === 0) {
     const parts = c.clauses.map(cl => conditionLabel(cl, 1)).filter(p => p !== "condition");
@@ -130,10 +130,9 @@ function conditionLabel(c, depth = 0) {
   const variable = rawVar.replace(/^entity\./i, "");
   const op       = clean(c.operator || c.op || "");
   const value    = c.value !== undefined ? c.value : c.right;
-  const label    = variable && op && value !== undefined ? `${variable} ${op} ${value}`
-                 : variable && value !== undefined       ? `${variable} = ${value}`
-                 : "condition";
-  return label.length > 20 ? label.slice(0, 17) + "…" : label;
+  return variable && op && value !== undefined ? `${variable} ${op} ${value}`
+       : variable && value !== undefined       ? `${variable} = ${value}`
+       : "condition";
 }
 
 export function deriveGraphFromModel(model = {}) {

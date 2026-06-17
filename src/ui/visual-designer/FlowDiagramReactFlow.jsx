@@ -188,10 +188,14 @@ function DesEdge({
               fontFamily: labelStyle?.fontFamily,
               fontSize: labelStyle?.fontSize,
               fontWeight: labelStyle?.fontWeight,
-              lineHeight: 1,
+              lineHeight: 1.3,
               padding: labelBgPadding ? `${labelBgPadding[1]}px ${labelBgPadding[0]}px` : "3px 6px",
               pointerEvents: "none",
               userSelect: "none",
+              maxWidth: 160,
+              whiteSpace: "normal",
+              wordBreak: "break-word",
+              textAlign: "center",
             }}
           >
             {label}
