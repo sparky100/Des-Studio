@@ -670,7 +670,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       let _scheduleRowAttrs = undefined;
       for (const sched of ev.schedules || []) {
         // eventId may be absent when scheduleRef was set without eventId (treat as self-referencing)
-        if (sched.eventId != null && sched.eventId !== ev.id) continue;
+        // When scheduleRef is set, the schedule was resolved upstream — skip eventId matching
+        if (sched.eventId != null && sched.eventId !== ev.id && !sched.scheduleRef) continue;
         const dp = sched.distParams || {};
         const rows = sched.rows ? sched.rows : (Array.isArray(dp.rows) ? dp.rows : null);
         const rawTimes = rows

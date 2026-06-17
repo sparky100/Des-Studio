@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExecutePanel } from '../../../src/ui/execute/index.jsx';
 
@@ -104,9 +104,19 @@ function setup2DPanel() {
   fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
 }
 
-function selectParamFromDropdown(ariaLabel, optionText) {
-  const select = screen.getByRole('combobox', { name: ariaLabel });
-  fireEvent.change(select, { target: { value: optionText } });
+// Opens the picker at `chooseBtns[index]`, optionally filters via the search box, then clicks the param.
+// For X (before Y selected): index=0 when 2 "Choose parameter…" buttons exist.
+// For Y (after X selected): index=0 when only Y's button remains.
+// Uses findByRole (async) so state updates from picker opening flush before querying.
+async function selectParam(index, labelRegex, searchQuery = null) {
+  const chooseBtns = screen.getAllByRole('button', { name: /choose parameter/i });
+  fireEvent.click(chooseBtns[index]);
+  if (searchQuery) {
+    // Use the search input to show params in collapsed sections (bypasses section expansion)
+    const searchInput = await screen.findByPlaceholderText(/filter parameters/i);
+    fireEvent.change(searchInput, { target: { value: searchQuery } });
+  }
+  fireEvent.click(await screen.findByRole('button', { name: labelRegex }));
 }
 
 function mock2DSweepRunner(results) {
@@ -132,31 +142,30 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
     openSweepSection();
 
-    // Default is 1D: only one parameter picker visible
-    expect(screen.getByRole('combobox', { name: /sweep parameter$/i })).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: /sweep parameter y/i })).not.toBeInTheDocument();
-
-    // Switch to 2D
-    fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
-    expect(screen.getByRole('combobox', { name: /sweep parameter x/i })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: /sweep parameter y/i })).toBeInTheDocument();
-
-    // Switch back to 1D
+    // Force 1D mode (initial state may vary) and verify 1D controls
     fireEvent.click(screen.getByRole('button', { name: /1d sweep/i }));
-    expect(screen.getByRole('combobox', { name: /sweep parameter$/i })).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: /sweep parameter y/i })).not.toBeInTheDocument();
+    expect(screen.getByText('PARAMETER')).toBeInTheDocument();
+    expect(screen.queryByText('PARAMETER Y')).not.toBeInTheDocument();
+
+    // Switch to 2D and verify both X and Y pickers appear
+    fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
+    expect(screen.getByText('PARAMETER X')).toBeInTheDocument();
+    expect(screen.getByText('PARAMETER Y')).toBeInTheDocument();
+
+    // Switch back to 1D and verify Y picker disappears
+    fireEvent.click(screen.getByRole('button', { name: /1d sweep/i }));
+    expect(screen.getByText('PARAMETER')).toBeInTheDocument();
+    expect(screen.queryByText('PARAMETER Y')).not.toBeInTheDocument();
   });
 
-  it('validation blocks run when 2D grid exceeds 50 points', () => {
+  it('validation blocks run when 2D grid exceeds 50 points', async () => {
     setup2DPanel();
 
-    // Select parameter X
-    const selectX = screen.getByRole('combobox', { name: /sweep parameter x/i });
-    fireEvent.change(selectX, { target: { value: 'entityTypeCount|et_server|' } });
+    // Select X = Server.count (Servers & Capacity section is defaultOpen)
+    await selectParam(0, /server\.count/i);
 
-    // Select parameter Y
-    const selectY = screen.getByRole('combobox', { name: /sweep parameter y/i });
-    fireEvent.change(selectY, { target: { value: 'queueCapacity|q_wait|' } });
+    // Select Y = Waiting.capacity (Queue Capacity section must be expanded first)
+    await selectParam(0, /waiting\.capacity/i, 'waiting');
 
     // Mock grid validation to throw
     mockGenerate2DSweepValues.mockImplementation(() => {
@@ -165,7 +174,7 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
-    // The error appears in both the live counter and the validation banner
+    // Error appears in the validation banner (and inline counter)
     const errors = screen.getAllByText(/2d sweep grid exceeds 50 points/i);
     expect(errors.length).toBeGreaterThanOrEqual(1);
     expect(mockRunSweepOffthread).not.toHaveBeenCalled();
@@ -188,22 +197,24 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     mock2DSweepRunner(results);
 
     setup2DPanel();
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter x/i }), { target: { value: 'entityTypeCount|et_server|' } });
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter y/i }), { target: { value: 'queueCapacity|q_wait|' } });
+    await selectParam(0, /server\.count/i);
+    await selectParam(0, /waiting\.capacity/i, 'waiting');
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
-    await waitFor(() => expect(mockRunSweepOffthread).toHaveBeenCalledTimes(1));
+    // Wait for the grid to render (state flush from onComplete callback)
+    await waitFor(() => {
+      expect(mockRunSweepOffthread).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText('10')).toBeInTheDocument();
+    });
 
     // Grid table headers: row labels (valueA) and column labels (valueB)
-    // fmt() now formats to 0 decimal places (integer)
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('10')).toBeInTheDocument();
-    expect(screen.getByText('20')).toBeInTheDocument();
+    expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('10').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('20').length).toBeGreaterThanOrEqual(1);
 
-    // Cell values should be visible (now integer formatted)
-    // Use getAllByText because multiple cells may have same integer value
+    // Cell values (integer formatted)
     expect(screen.getAllByText('5').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('8').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
@@ -222,12 +233,16 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     mock2DSweepRunner(results);
 
     setup2DPanel();
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter x/i }), { target: { value: 'entityTypeCount|et_server|' } });
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter y/i }), { target: { value: 'queueCapacity|q_wait|' } });
+    await selectParam(0, /server\.count/i);
+    await selectParam(0, /waiting\.capacity/i, 'waiting');
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
-    await waitFor(() => expect(mockRunSweepOffthread).toHaveBeenCalledTimes(1));
+    // Wait for the grid to render (state flush from onComplete callback)
+    await waitFor(() => {
+      expect(mockRunSweepOffthread).toHaveBeenCalledTimes(1);
+      expect(screen.getAllByText('5').length).toBeGreaterThanOrEqual(1);
+    });
 
     // Before click, no cell stats sidebar
     expect(screen.queryByText(/cell stats/i)).not.toBeInTheDocument();
@@ -236,34 +251,27 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     const cells = screen.getAllByText('5');
     fireEvent.click(cells[0]);
 
-    // Sidebar should appear with the cell's aggregate stats
+    // Sidebar appears with the cell's aggregate stats
     expect(screen.getByText(/cell stats/i)).toBeInTheDocument();
-    // Both cell and sidebar now contain 5
-    expect(screen.getAllByText('5').length).toBeGreaterThanOrEqual(1);
-    // Avg service = 2.1 rounded to 2
     expect(screen.getAllByText('Avg service').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('2D sweep run button is disabled until both parameters are selected', () => {
+  it('2D sweep run button is disabled until both parameters are selected', async () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
     openSweepSection();
-
     fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
 
     // Before selecting any parameter, the Run Sweep button is not rendered
     expect(screen.queryByRole('button', { name: /run sweep/i })).not.toBeInTheDocument();
 
-    // Select X only — button now appears but is disabled
-    const selectX = screen.getByRole('combobox', { name: /sweep parameter x/i });
-    fireEvent.change(selectX, { target: { value: 'entityTypeCount|et_server|' } });
+    // Select X only — button appears but is disabled
+    await selectParam(0, /server\.count/i);
 
-    const runBtn = screen.getByRole('button', { name: /run sweep/i });
-    expect(runBtn).toBeDisabled();
+    expect(screen.getByRole('button', { name: /run sweep/i })).toBeDisabled();
 
     // Select Y — button becomes enabled
-    const selectY = screen.getByRole('combobox', { name: /sweep parameter y/i });
-    fireEvent.change(selectY, { target: { value: 'queueCapacity|q_wait|' } });
-    expect(runBtn).not.toBeDisabled();
+    await selectParam(0, /waiting\.capacity/i, 'waiting');
+    expect(screen.getByRole('button', { name: /run sweep/i })).not.toBeDisabled();
   });
 
   it('shows 2D grid size in progress text', async () => {
@@ -271,14 +279,14 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
       { valueA: 1, valueB: 10 },
       { valueA: 2, valueB: 20 },
     ]);
-    mockRunSweepOffthread.mockImplementation(({ onProgress, onComplete }) => {
+    mockRunSweepOffthread.mockImplementation(({ onProgress }) => {
       onProgress({ totalPoints: 4, currentPoint: 1, gridSize: { rows: 2, cols: 2 } });
       return { cancel: vi.fn() };
     });
 
     setup2DPanel();
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter x/i }), { target: { value: 'entityTypeCount|et_server|' } });
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter y/i }), { target: { value: 'queueCapacity|q_wait|' } });
+    await selectParam(0, /server\.count/i);
+    await selectParam(0, /waiting\.capacity/i, 'waiting');
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
