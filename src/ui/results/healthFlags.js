@@ -7,7 +7,7 @@ export function evaluateResultsHealth(results = {}, model = {}) {
   const summary = results?.summary || {};
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
 
-  // H1 — Resource utilisation ≥ 80% / ≥ 90% / ≥ 95%
+  // H1 — Resource utilisation ≥ 85% / ≥ 90% / ≥ 95%
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
     const util = Number(stats?.utilisation);
     if (!Number.isFinite(util)) continue;
@@ -19,7 +19,7 @@ export function evaluateResultsHealth(results = {}, model = {}) {
       flags.push({ code: "H1", severity: "critical", resource: typeName,
         message: `${typeName} at ${Math.round(util * 100)}% utilisation — saturated, queue will grow without more capacity.`,
         suggestion: "Add more servers or reduce arrival rate to prevent unbounded queue growth." });
-    } else if (util >= 0.8) {
+    } else if (util >= 0.85) {
       flags.push({ code: "H1", severity: "warning", resource: typeName,
         message: `${typeName} at ${Math.round(util * 100)}% utilisation — approaching saturation, expect queue build-up.`,
         suggestion: "Monitor utilisation — may need additional capacity for longer runs or higher loads." });
@@ -29,7 +29,7 @@ export function evaluateResultsHealth(results = {}, model = {}) {
   // H5 — Resource starvation (idle with work queued)
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
     const starvPct = Number(stats?.starvationPct);
-    if (!Number.isFinite(starvPct) || starvPct <= 0.1) continue;
+    if (!Number.isFinite(starvPct) || starvPct <= 0.2) continue;
     flags.push({ code: "H5", severity: "warning", resource: typeName,
       message: `${typeName} starved ${Math.round(starvPct * 100)}% of the time — idle servers while work was queued.`,
       suggestion: "Check routing rules or entity-to-server assignment — servers are idle when work is available." });
@@ -105,7 +105,7 @@ export function evaluateResultsHealth(results = {}, model = {}) {
       flags.push({ code: "H3", severity: "critical",
         message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run — large unfinished backlog, results may be unreliable.`,
         suggestion: "Identify and relieve capacity constraints — arriving entities are backing up faster than the system can serve them." });
-    } else if (wipPct >= 10) {
+    } else if (wipPct >= 15) {
       flags.push({ code: "H3", severity: "warning",
         message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run.`,
         suggestion: "Check for capacity constraints — a portion of arrivals could not complete before the run ended." });
@@ -180,7 +180,7 @@ export function evaluateResultsHealth(results = {}, model = {}) {
 export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
   const flags = [];
 
-  // L1 — Resource utilisation ≥ 80% / ≥ 90% / ≥ 95%
+  // L1 — Resource utilisation ≥ 85% / ≥ 90% / ≥ 95%
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
     const util = Number(stats?.utilisation);
     if (!Number.isFinite(util)) continue;
@@ -190,7 +190,7 @@ export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
     } else if (util >= 0.9) {
       flags.push({ code: "L1", severity: "critical", resource: typeName,
         message: `${typeName} at ${Math.round(util * 100)}% utilisation — saturated.` });
-    } else if (util >= 0.8) {
+    } else if (util >= 0.85) {
       flags.push({ code: "L1", severity: "warning", resource: typeName,
         message: `${typeName} at ${Math.round(util * 100)}% utilisation — approaching saturation.` });
     }
@@ -199,7 +199,7 @@ export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
   // L2 — Resource starvation (idle with work queued)
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
     const starvPct = Number(stats?.starvationPct);
-    if (!Number.isFinite(starvPct) || starvPct <= 0.1) continue;
+    if (!Number.isFinite(starvPct) || starvPct <= 0.2) continue;
     flags.push({ code: "L2", severity: "warning", resource: typeName,
       message: `${typeName} starved ${Math.round(starvPct * 100)}% — idle with work queued.` });
   }

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExecutePanel } from '../../../src/ui/execute/index.jsx';
 
@@ -214,10 +214,10 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     expect(screen.getAllByText('10').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('20').length).toBeGreaterThanOrEqual(1);
 
-    // Cell values (integer formatted)
-    expect(screen.getAllByText('5').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('8').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
+    // Cell values (fmtMetric uses .toFixed(1) for avgWait)
+    expect(screen.getAllByText('5.2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('7.8').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('3.1').length).toBeGreaterThanOrEqual(1);
   });
 
   it('clicking a cell shows aggregate stats sidebar', async () => {
@@ -241,14 +241,14 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     // Wait for the grid to render (state flush from onComplete callback)
     await waitFor(() => {
       expect(mockRunSweepOffthread).toHaveBeenCalledTimes(1);
-      expect(screen.getAllByText('5').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('5.2').length).toBeGreaterThanOrEqual(1);
     });
 
     // Before click, no cell stats sidebar
     expect(screen.queryByText(/cell stats/i)).not.toBeInTheDocument();
 
-    // Click the first data cell (contains 5)
-    const cells = screen.getAllByText('5');
+    // Click the first data cell (contains 5.2, from mean=5.2 with .toFixed(1))
+    const cells = screen.getAllByText('5.2');
     fireEvent.click(cells[0]);
 
     // Sidebar appears with the cell's aggregate stats
