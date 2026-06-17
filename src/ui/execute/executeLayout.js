@@ -26,12 +26,19 @@ function execHeight(type) {
 }
 
 /**
- * Runs a fresh Dagre left-to-right layout with execute-canvas dimensions.
- * Returns a new array of nodes with updated x/y — does not mutate input.
- * Intentionally ignores any stored visual-designer positions.
+ * Produces execute-canvas node positions.
+ * Saved x/y from the visual designer are preserved whenever present.
+ * For nodes without saved positions, a Dagre left-to-right layout is used.
  */
 export function computeExecuteLayout(nodes, edges) {
   if (!nodes?.length) return nodes ?? [];
+
+  const withSaved = nodes.map(node => {
+    if (Number.isFinite(node.x) && Number.isFinite(node.y)) return node;
+    return null;
+  });
+  const savedCount = withSaved.filter(Boolean).length;
+  if (savedCount === nodes.length) return withSaved;
 
   const g = new dagre.graphlib.Graph();
   g.setGraph({
@@ -57,6 +64,7 @@ export function computeExecuteLayout(nodes, edges) {
   dagre.layout(g);
 
   return nodes.map(node => {
+    if (Number.isFinite(node.x) && Number.isFinite(node.y)) return node;
     const pos = g.node(node.id);
     const h   = execHeight(node.type);
     return {
