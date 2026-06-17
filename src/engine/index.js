@@ -1034,6 +1034,15 @@ const cycleLog = [];
         liteSnap = snapLite();
         _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: liteSnap.byQueue });
       }
+      // Track max queue depth from this snapshot (same source as charts)
+      const byQueue = stepSnap?.byQueue ?? liteSnap?.byQueue;
+      if (byQueue) {
+        for (const [qName, qData] of Object.entries(byQueue)) {
+          const depth = qData?.waiting ?? 0;
+          const currentMax = _runtimeMetrics.maxQueueLengthByQueue[qName] || 0;
+          if (depth > currentMax) _runtimeMetrics.maxQueueLengthByQueue[qName] = depth;
+        }
+      }
       // Update utilisation streaks from this snapshot
       const byType = stepSnap?.byType ?? liteSnap?.byType;
       if (byType) {
