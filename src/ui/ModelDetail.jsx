@@ -1474,8 +1474,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
               {[
                 {id:"summary",label:"Summary",disabled:false},
-                {id:"log",label:"Log",disabled:!latestLog?.length},
-                {id:"entities",label:"Entities",disabled:!latestResults?.entitySummary?.length&&!latestResults?.entitySummaryCompact?.length},
                 {id:"history",label:"History",disabled:false},
               ].map(sub=>(
                 <Btn

@@ -154,12 +154,14 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     resultsJson._result_risk_level = config.riskLevel;
   }
 
+  // Always strip the full trace log — never persist it to the database.
+  if (Array.isArray(resultsJson.log) && resultsJson.log.length > 0) {
+    resultsJson.logSummary = buildLogSummary(resultsJson.log);
+    delete resultsJson.log;
+    trimmedFields.push("log");
+  }
+
   if (detailLevel === "minimal") {
-    if (Array.isArray(resultsJson.log) && resultsJson.log.length > 0) {
-      resultsJson.logSummary = buildLogSummary(resultsJson.log);
-      delete resultsJson.log;
-      trimmedFields.push("log");
-    }
     if (Array.isArray(resultsJson.trace) && resultsJson.trace.length > 0) {
       delete resultsJson.trace;
       trimmedFields.push("trace");
@@ -196,11 +198,6 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       }));
     }
   } else if (detailLevel === "compact") {
-    if (Array.isArray(resultsJson.log) && resultsJson.log.length > 0) {
-      resultsJson.logSummary = buildLogSummary(resultsJson.log);
-      delete resultsJson.log;
-      trimmedFields.push("log");
-    }
     if (Array.isArray(resultsJson.trace) && resultsJson.trace.length > 0) {
       delete resultsJson.trace;
       trimmedFields.push("trace");
@@ -237,10 +234,6 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
   // the same stripping that "minimal" applies so the INSERT does not time out.
   const PAYLOAD_SAFE_BYTES = 800_000;
   if (detailLevel !== "minimal" && JSON.stringify(resultsJson).length > PAYLOAD_SAFE_BYTES) {
-    if (Array.isArray(resultsJson.log) && resultsJson.log.length > 0) {
-      resultsJson.logSummary = buildLogSummary(resultsJson.log);
-      delete resultsJson.log;
-    }
     delete resultsJson.trace;
     if (Array.isArray(resultsJson.entitySummary) && resultsJson.entitySummary.length > 0) {
       resultsJson.entitySummaryCompact = summarizeEntitySummary(resultsJson.entitySummary);
