@@ -775,7 +775,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                       {et.role === "server" && !hasShifts && (
                         <input type="number" min="1" value={et.count || "1"} onChange={e => {
                           const next = [...(model.entityTypes || [])];
-                          next[i] = { ...next[i], count: e.target.value };
+                          next[i] = { ...next[i], count: parseInt(e.target.value, 10) || "1" };
                           applyModel({ ...model, entityTypes: next });
                         }}
                           style={{ width: "100%", boxSizing: "border-box", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 3px", outline: "none", textAlign: "center" }}

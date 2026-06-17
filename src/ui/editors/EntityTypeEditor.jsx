@@ -150,7 +150,7 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
                     <input
                       aria-label={`Server pool size for ${et.name||"server"}`}
                       type="number" min="1" step="1"
-                      value={et.count||""} onChange={e=>upd(i,"count",e.target.value)} placeholder="1"
+                      value={et.count||""} onChange={e=>upd(i,"count",parseInt(e.target.value,10)||"")} placeholder="1"
                       style={{width:60,background:"transparent",border:`1px solid ${C.server}55`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
                     {parseInt(et.count||"1",10)>1&&(
                       <span style={{fontSize:10,color:C.server,fontFamily:FONT}}>
