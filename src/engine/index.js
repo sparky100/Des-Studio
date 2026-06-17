@@ -1325,7 +1325,7 @@ const cycleLog = [];
 
     const perResource = {};
     for (const srv of servers) {
-      if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyTimeSum: 0, starvationTimeSum: 0 };
+      if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyTimeSum: 0, starvationTimeSum: 0, maxContStarvDur: 0 };
       perResource[srv.type].total++;
       const busyTime = (srv._busyTime || 0) + (
         srv.status === "busy" && srv._busyStart != null
@@ -1337,10 +1337,13 @@ const cycleLog = [];
       if (srv._starvationStart != null && srv.status === "idle") {
         const starvTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
         perResource[srv.type].starvationTimeSum += starvTime;
+        const contDur = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
+        if (contDur > perResource[srv.type].maxContStarvDur) perResource[srv.type].maxContStarvDur = contDur;
         srv._starvationTime = starvTime;
         delete srv._starvationStart;
       } else if (srv._starvationTime) {
         perResource[srv.type].starvationTimeSum += srv._starvationTime;
+        if (srv._starvationTime > perResource[srv.type].maxContStarvDur) perResource[srv.type].maxContStarvDur = srv._starvationTime;
       }
     }
     for (const type of Object.keys(perResource)) {
@@ -1349,8 +1352,10 @@ const cycleLog = [];
       r.utilisation = denominator > 0 ? +(r.busyTimeSum / denominator).toFixed(4) : 0;
       r.starvationTime = denominator > 0 ? +(r.starvationTimeSum / r.total).toFixed(4) : 0;
       r.starvationPct = denominator > 0 ? +(r.starvationTimeSum / denominator).toFixed(4) : 0;
+      r.maxStarvationDuration = r.maxContStarvDur > 0 ? +r.maxContStarvDur.toFixed(4) : null;
       delete r.busyTimeSum;
       delete r.starvationTimeSum;
+      delete r.maxContStarvDur;
     }
 
     const totalCost   = state.__totalCost || 0;

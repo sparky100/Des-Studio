@@ -35,6 +35,19 @@ export function evaluateResultsHealth(results = {}, model = {}) {
       suggestion: "Check routing rules or entity-to-server assignment — servers are idle when work is available." });
   }
 
+  // H9 — Continuous starvation exceeding 2× mean service time
+  for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
+    const maxStarv = Number(stats?.maxStarvationDuration);
+    if (!Number.isFinite(maxStarv) || maxStarv <= 0) continue;
+    const avgSvc = Number(summary?.avgSvc);
+    if (!Number.isFinite(avgSvc) || avgSvc <= 0) continue;
+    if (maxStarv > avgSvc * 2) {
+      flags.push({ code: "H9", severity: "warning", resource: typeName,
+        message: `${typeName} idle for ${maxStarv.toFixed(1)} time units continuously — exceeds 2× mean service time of ${avgSvc.toFixed(1)}.`,
+        suggestion: `Check upstream delivery to ${typeName} — work is not reaching this resource, suggesting a routing or blocking issue.` });
+    }
+  }
+
   // H2 — Growing queue (last 20% of run mean > 1.5× first 20%) — requires timeSeries
   if (timeSeries.length >= 10) {
     const splitAt = Math.max(1, Math.floor(timeSeries.length * 0.2));
@@ -165,6 +178,18 @@ export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
     if (!Number.isFinite(starvPct) || starvPct <= 0.1) continue;
     flags.push({ code: "L2", severity: "warning", resource: typeName,
       message: `${typeName} starved ${Math.round(starvPct * 100)}% — idle with work queued.` });
+  }
+
+  // L4 — Continuous starvation exceeding 2× mean service time
+  for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
+    const maxStarv = Number(stats?.maxStarvationDuration);
+    if (!Number.isFinite(maxStarv) || maxStarv <= 0) continue;
+    const avgSvc = Number(summary?.avgSvc);
+    if (!Number.isFinite(avgSvc) || avgSvc <= 0) continue;
+    if (maxStarv > avgSvc * 2) {
+      flags.push({ code: "L4", severity: "warning", resource: typeName,
+        message: `${typeName} idle ${maxStarv.toFixed(0)} units — exceeds 2× avg service time.` });
+    }
   }
 
   // L3 — Queue depth exceeds capacity
