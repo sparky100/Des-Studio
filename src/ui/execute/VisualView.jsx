@@ -78,9 +78,9 @@ export const VisualView = ({ snap, model, summary }) => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 16, alignItems: "start" }}>
-        <div style={{ background: C.bg, border: `2px solid ${C.purple}44`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 140 }}>
+        <div style={{ background: C.bg, border: `2px solid ${C.purple}44`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 160 }}>
           <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 2, marginBottom: 6 }}>SIM CLOCK</div>
-          <div style={{ fontSize: 42, fontWeight: 300, color: C.text, fontFamily: FONT, lineHeight: 1 }}>
+          <div style={{ fontSize: 42, fontWeight: 300, color: C.text, fontFamily: FONT, lineHeight: 1, fontFeatureSettings: '"tnum"' }}>
             {parseFloat(snap.clock).toFixed(0)}
           </div>
           {wallClock && (

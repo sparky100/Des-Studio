@@ -737,9 +737,9 @@ export function ExecuteCanvas({
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {snap && (
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 10, alignItems: "stretch" }}>
-          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderTop: `3px solid ${C.purple}`, borderRadius: 8, padding: "10px 14px", textAlign: "center", minWidth: 80, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderTop: `3px solid ${C.purple}`, borderRadius: 8, padding: "10px 14px", textAlign: "center", minWidth: 110, display: "flex", flexDirection: "column", justifyContent: "center" }}>
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: "0.8px", fontWeight: 600, marginBottom: 6 }}>SIM CLOCK</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: C.purple, fontFamily: FONT, lineHeight: 1 }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: C.purple, fontFamily: FONT, lineHeight: 1, fontFeatureSettings: '"tnum"' }}>
               {parseFloat(snap.clock).toFixed(0)}
             </div>
             {wallClock && (
