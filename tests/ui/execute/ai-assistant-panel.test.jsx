@@ -19,7 +19,7 @@ describe("AiAssistantPanel", () => {
       />
     );
 
-    expect(screen.getByRole("complementary", { name: "Model Assistant" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Simulation Assistant" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Analyse results" })).toBeTruthy();
   });
 });

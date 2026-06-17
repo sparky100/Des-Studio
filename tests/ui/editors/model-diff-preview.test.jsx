@@ -35,7 +35,7 @@ describe("ModelDiffPreview", () => {
     render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={onApply} onDiscard={vi.fn()} allowDraftApply />);
 
     // Expand technical changes to access section checkboxes
-    fireEvent.click(screen.getByText(/show technical changes/i));
+    fireEvent.click(screen.getByText(/Show changes from current model/i));
     fireEvent.click(screen.getByRole("button", { name: /^apply selected$/i }));
     fireEvent.click(screen.getByLabelText(/apply entity classes/i));
     fireEvent.click(screen.getByLabelText(/apply b-events/i));
@@ -74,7 +74,7 @@ describe("ModelDiffPreview", () => {
     render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={vi.fn()} onDiscard={vi.fn()} />);
 
     // Expand technical changes to see diff content
-    fireEvent.click(screen.getByText(/show technical changes/i));
+    fireEvent.click(screen.getByText(/Show changes from current model/i));
 
     expect(screen.getByText("Old Queue")).toBeInTheDocument();
     expect(screen.getByText("discipline")).toBeInTheDocument();
@@ -263,7 +263,7 @@ describe("ModelDiffPreview", () => {
     expect(screen.queryByText(/sections changed/i)).not.toBeInTheDocument();
 
     // Click toggle
-    fireEvent.click(screen.getByText(/show technical changes/i));
+    fireEvent.click(screen.getByText(/Show changes from current model/i));
 
     // Now diff stats visible
     expect(screen.getByText(/sections changed/i)).toBeInTheDocument();

@@ -33,12 +33,14 @@ const mockLog = [
 describe('BottomPanel — LogTab', () => {
   test('renders log entries with phase tags', () => {
     render(<BottomPanel log={mockLog} snap={mockSnap} model={mockModel} />);
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     expect(screen.getByText(/Engine initialised/i)).toBeInTheDocument();
     expect(screen.getByText(/Clock/i)).toBeInTheDocument();
   });
 
   test('expand button shows debug detail for entries with cEval', () => {
     render(<BottomPanel log={mockLog} snap={mockSnap} model={mockModel} />);
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     const expandButtons = screen.getAllByText('▶');
     expect(expandButtons.length).toBeGreaterThan(0);
     fireEvent.click(expandButtons[0]);
@@ -49,6 +51,7 @@ describe('BottomPanel — LogTab', () => {
   test('entity ID links in log detail call onEntitySelect', () => {
     const onEntitySelect = vi.fn();
     render(<BottomPanel log={mockLog} snap={mockSnap} model={mockModel} onEntitySelect={onEntitySelect} />);
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     const expandButtons = screen.getAllByText('▶');
     fireEvent.click(expandButtons[0]);
     const entityLink = screen.getByText('#1');
@@ -59,6 +62,7 @@ describe('BottomPanel — LogTab', () => {
   test('node name in log message is clickable and calls onNodeSelect', () => {
     const onNodeSelect = vi.fn();
     render(<BottomPanel log={mockLog} snap={mockSnap} model={mockModel} onNodeSelect={onNodeSelect} />);
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     const nodeLink = screen.getByText('Arrival');
     fireEvent.click(nodeLink);
     expect(onNodeSelect).toHaveBeenCalledWith('Arrival');
@@ -66,6 +70,7 @@ describe('BottomPanel — LogTab', () => {
 
   test('node filter banner shows when selectedNodeLabel is set', () => {
     render(<BottomPanel log={mockLog} snap={mockSnap} model={mockModel} selectedNodeLabel="Queue" />);
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     expect(screen.getByText(/Filter: Queue/i)).toBeInTheDocument();
     expect(screen.getByText('Show all')).toBeInTheDocument();
   });
@@ -73,6 +78,7 @@ describe('BottomPanel — LogTab', () => {
   test('Show all button clears node filter', () => {
     const onClearFilter = vi.fn();
     render(<BottomPanel log={mockLog} snap={mockSnap} model={mockModel} selectedNodeLabel="Queue" onClearFilter={onClearFilter} />);
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     fireEvent.click(screen.getByText('Show all'));
     expect(onClearFilter).toHaveBeenCalled();
   });

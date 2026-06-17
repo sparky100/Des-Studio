@@ -13,7 +13,7 @@ describe("help assistant prompt", () => {
 
   it("prompt contains role and scope definition", () => {
     const prompt = buildHelpAssistantSystemPrompt();
-    expect(prompt).toMatch(/simmodlr Model Assistant/i);
+    expect(prompt).toMatch(/simmodlr Simulation Assistant/i);
     expect(prompt).toMatch(/your role/i);
     expect(prompt).toMatch(/knowledge base/i);
   });

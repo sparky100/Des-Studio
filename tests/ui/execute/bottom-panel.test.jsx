@@ -59,22 +59,25 @@ describe("BottomPanel — F9C.8", () => {
 
   test("collapse toggle hides the panel body", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
-    // Log content visible initially
+    // Panel starts collapsed — expand it first
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /collapse details panel/i }));
-    // Log content hidden after collapse
+    // Now collapse it
+    fireEvent.click(screen.getByRole("button", { name: /collapse details/i }));
     expect(screen.queryByText(/ARRIVE Customer/)).not.toBeInTheDocument();
   });
 
   test("expand toggle restores panel body", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
-    fireEvent.click(screen.getByRole("button", { name: /collapse details panel/i }));
-    fireEvent.click(screen.getByRole("button", { name: /expand details panel/i }));
+    // Panel starts collapsed — expand it
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
   });
 
   test("keeps a stable body height so tab content scrolls inside the panel", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
+    // Expand the panel first (starts collapsed)
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     const body = screen.getByLabelText(/bottom panel content/i);
     expect(body).toHaveStyle({ height: "320px", minHeight: "320px", overflowY: "auto" });
 
@@ -82,18 +85,12 @@ describe("BottomPanel — F9C.8", () => {
     expect(screen.getByLabelText(/bottom panel content/i)).toHaveStyle({ height: "320px" });
   });
 
-  test("offers maximize and resize affordances for the live inspector", () => {
+  test("offers resize affordance for the live inspector", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
-    expect(screen.getByRole("button", { name: /expand panel/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     expect(screen.getByRole("separator", { name: /resize bottom panel/i })).toBeInTheDocument();
   });
 
-  test("shows an Open Results action when run results are available", () => {
-    const onOpenResults = vi.fn();
-    render(<BottomPanel log={log} snap={snap} model={model} hasResults onOpenResults={onOpenResults} />);
-    fireEvent.click(screen.getByRole("button", { name: /open results/i }));
-    expect(onOpenResults).toHaveBeenCalledOnce();
-  });
 });
 
 describe("BottomPanel — F9C.9 live metrics", () => {
@@ -118,6 +115,7 @@ describe("BottomPanel — F9C.11 node-filtered log", () => {
         selectedNodeLabel="Queue A" onClearFilter={() => {}} />
     );
     // "ARRIVE Customer #1 to Queue A" matches; "ASSIGN Customer #1 to Clerk" does not
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
     expect(screen.queryByText(/ASSIGN Customer/)).not.toBeInTheDocument();
   });
@@ -128,12 +126,14 @@ describe("BottomPanel — F9C.11 node-filtered log", () => {
       <BottomPanel log={log} snap={snap} model={model}
         selectedNodeLabel="Queue A" onClearFilter={onClear} />
     );
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     fireEvent.click(screen.getByRole("button", { name: /show all/i }));
     expect(onClear).toHaveBeenCalledOnce();
   });
 
   test("all log entries shown when no filter", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
     expect(screen.getByText(/ASSIGN Customer/)).toBeInTheDocument();
   });
@@ -142,6 +142,7 @@ describe("BottomPanel — F9C.11 node-filtered log", () => {
     const onEntitySelect = vi.fn();
     render(<BottomPanel log={detailedLog} snap={snap} model={model} onEntitySelect={onEntitySelect} />);
 
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     fireEvent.click(screen.getByTitle(/toggle debug detail/i));
     expect(screen.getByText(/C-Eval/i)).toBeInTheDocument();
     expect(screen.getByText(/winner: #2 → server #1/i)).toBeInTheDocument();

@@ -42,18 +42,18 @@ describe("HelpAssistant", () => {
 
   it("renders when isOpen = true", () => {
     render(<HelpAssistant {...defaultProps} />);
-    expect(screen.getByText("Model Assistant")).toBeInTheDocument();
+    expect(screen.getByText("Simulation Assistant")).toBeInTheDocument();
   });
 
   it("does not render when isOpen = false", () => {
     render(<HelpAssistant {...defaultProps} isOpen={false} />);
-    expect(screen.queryByText("Model Assistant")).not.toBeInTheDocument();
+    expect(screen.queryByText("Simulation Assistant")).not.toBeInTheDocument();
   });
 
   it("close button calls onClose callback", async () => {
     const onClose = vi.fn();
     render(<HelpAssistant {...defaultProps} onClose={onClose} />);
-    const closeButton = screen.getByLabelText("Close Model Assistant");
+    const closeButton = screen.getByLabelText("Close Simulation Assistant");
     await userEvent.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
