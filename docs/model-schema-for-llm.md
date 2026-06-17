@@ -912,6 +912,11 @@ When `scope` is omitted, the metric applies system-wide.
 
 ## 10. Validation Rules Summary
 
+**VALIDATION CHECKLIST — Before outputting a proposedModel, the LLM MUST verify
+every blocking rule below. The FATAL ERRORS in the system prompt cover common
+cases; this table is exhaustive. Any model that fails a blocking rule is invalid
+and will be rejected at import.**
+
 simmodlr runs two validation layers before every simulation. Both block the run on errors.
 All generated model JSON MUST pass every blocking rule below.
 

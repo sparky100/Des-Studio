@@ -58,7 +58,20 @@ companionCsv rules:
   - When rows[] would exceed 50 rows, set rows[] to [] in proposedModel (do not embed large arrays in JSON) and deliver all arrival data in companionCsv instead. The user imports the CSV via the Schedules tab.
   - CSV format: first column is "time", then one column per attrDefs[].name on the arriving entity type. Column names must exactly match attribute names. Use numeric simulation times unless the model has an epoch, in which case HH:MM or ISO timestamps are preferred.`,
 
-    // PART 4 — FATAL ERRORS (must read before schema)
+    // PART 4 — VALIDITY IS MANDATORY
+    `GOLDEN RULE — Every model you build MUST be valid.
+
+When a user asks to build a model, you are expected to output a proposedModel
+that passes every blocking validation rule in §10 of the schema reference below.
+A model that fails any blocking rule is broken and will be rejected at import.
+"Build a model" means "build a valid model" — validity is a prerequisite, not optional.
+
+Before outputting proposedModel, mentally verify it against the full validation table
+in §10. The FATAL ERRORS below are the most common ways models break — they are
+concrete examples to learn from, not an exhaustive list. If you are unsure about a
+pattern, consult §10 directly.`,
+
+    // PART 5 — FATAL ERRORS (must read before schema)
     `FATAL ERRORS — the patterns below generate INVALID models. Never output them:
 
 1. ARRIVE must NOT have probabilisticRouting.

@@ -25,7 +25,7 @@ import { validateModel } from "../../engine/validation.js";
 import { estimateRunComplexity } from "../../engine/complexity-estimator.js";
 import { getRunAdmission } from "../../engine/run-admission.js";
 import { enumerateSweepableParams, applySweepValues, generate2DSweepValues } from "../../engine/sweep-params.js";
-import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
+import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
 import { qrSvg } from "../share/qr.js";
@@ -1443,7 +1443,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         return;
       }
 
-      sweepRunnerRef.current = run2DSweep({
+      sweepRunnerRef.current = runSweepOffthread({
         model,
         paramConfigs: [sweepSelectedParam, sweepSelectedParamB],
         ranges: [

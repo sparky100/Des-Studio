@@ -4,6 +4,7 @@ import { ExecutePanel } from '../../../src/ui/execute/index.jsx';
 
 const mockRunSweep = vi.hoisted(() => vi.fn());
 const mockRun2DSweep = vi.hoisted(() => vi.fn());
+const mockRunSweepOffthread = vi.hoisted(() => vi.fn());
 const mockGenerate2DSweepValues = vi.hoisted(() => vi.fn());
 const mockSaveSimulationRun = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockFetchRunHistory = vi.hoisted(() => vi.fn().mockResolvedValue([]));
@@ -11,6 +12,7 @@ const mockFetchRunHistory = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 vi.mock('../../../src/engine/sweep-runner.js', () => ({
   runSweep: mockRunSweep,
   run2DSweep: mockRun2DSweep,
+  runSweepOffthread: mockRunSweepOffthread,
 }));
 
 vi.mock('../../../src/engine/sweep-params.js', () => ({
@@ -110,7 +112,7 @@ function selectParamFromDropdown(ariaLabel, optionText) {
 }
 
 function mock2DSweepRunner(results) {
-  mockRun2DSweep.mockImplementation(({ onComplete }) => {
+  mockRunSweepOffthread.mockImplementation(({ onComplete }) => {
     onComplete?.(results);
     return { cancel: vi.fn() };
   });
@@ -120,6 +122,7 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
   beforeEach(() => {
     mockRunSweep.mockReset();
     mockRun2DSweep.mockReset();
+    mockRunSweepOffthread.mockReset();
     mockGenerate2DSweepValues.mockReset();
     mockSaveSimulationRun.mockReset();
     mockFetchRunHistory.mockReset();
