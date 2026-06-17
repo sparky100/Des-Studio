@@ -1511,7 +1511,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         return <option key={row.id} value={row.id}>{label}</option>;
                       })}
                     </select>
-                    <div style={{ flex: 1 }} />
                     {latestResults && (
                       <div style={{ position: "relative" }}>
                         <Btn small variant="ghost" onClick={() => setExportMenuOpen(v => !v)}>Export ▾</Btn>

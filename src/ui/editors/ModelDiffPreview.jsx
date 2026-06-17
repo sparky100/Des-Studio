@@ -467,7 +467,7 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
             style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontFamily: FONT, fontSize: 11, padding: 0, display: "flex", alignItems: "center", gap: 5 }}
           >
             <span style={{ fontSize: 9 }}>{showTechnical ? "▼" : "▶"}</span>
-            Show technical changes
+            Show changes from current model
           </button>
         </div>
 
