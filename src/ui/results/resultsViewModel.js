@@ -69,6 +69,7 @@ export function buildQueueDepthSeries(results = {}, model = {}, sectionFilter = 
     const queueName = queue.name || queue.id || "Queue";
     const fallbackType = customerTypeForQueue(queue, model);
     const hasQueueData = timeSeries.some(entry => entry?.byQueue?.[queueName]);
+    const hasAnyQueueData = timeSeries.some(entry => Object.keys(entry?.byQueue || {}).length > 0);
     return {
       id: queue.id || queueName,
       label: queueName,
@@ -76,12 +77,16 @@ export function buildQueueDepthSeries(results = {}, model = {}, sectionFilter = 
         t: finiteNumber(entry?.t),
         value: hasQueueData
           ? finiteNumber(entry?.byQueue?.[queueName]?.waiting)
-          : finiteNumber(entry?.byQueue?.[queueName]?.waiting ?? entry?.byType?.[fallbackType]?.waiting),
+          : hasAnyQueueData
+            ? 0
+            : finiteNumber(entry?.byQueue?.[queueName]?.waiting ?? entry?.byType?.[fallbackType]?.waiting),
       })),
-      source: hasQueueData ? "queue" : "type-fallback",
+      source: hasQueueData ? "queue" : hasAnyQueueData ? "queue-empty" : "type-fallback",
       sourceLabel: hasQueueData
         ? "Queue measurements taken during the run"
-        : `Fallback from ${fallbackType} waiting counts`,
+        : hasAnyQueueData
+          ? `No ${queueName} data — queue was always empty`
+          : `Fallback from ${fallbackType} waiting counts`,
     };
   });
 }
