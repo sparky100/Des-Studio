@@ -987,6 +987,10 @@ export const MACROS = [
 
       for (let i = 1; i < serverEntries.length; i++) {
         const [sType, srv] = serverEntries[i];
+        if (srv._starvationStart != null) {
+          srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
+          delete srv._starvationStart;
+        }
         srv.status = "busy";
         srv._busyStart = clock;
         srv.currentCustId = cust.id;

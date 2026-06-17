@@ -246,6 +246,7 @@ export function repairServers(failedServers, clock) {
   for (const srv of failedServers) {
     const failedAt   = srv._failedAt;
     srv.status       = "idle";
+    srv._starvationStart = clock;
     srv._failedAt    = undefined;
     srv._downtime    = failedAt != null ? +(clock - failedAt).toFixed(4) : 0;
     count++;
