@@ -262,7 +262,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const runStartPerfRef = useRef(null);
   const [animationEnabled, setAnimationEnabled] = useState(true);
   const [collectTimeSeries, setCollectTimeSeries] = useState(true);
-  const [saveDetailLevel, setSaveDetailLevel] = useState("compact");
+  const [saveDetailLevel, setSaveDetailLevel] = useState(() => experimentDefaults.resultDetailLevel || "compact");
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
@@ -309,7 +309,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     logRef.current = log;
   }, [log]);
   useEffect(() => {
-    setSaveDetailLevel("compact");
+    const stored = model?.experimentDefaults?.resultDetailLevel;
+    if (stored === "full" || stored === "minimal" || stored === "compact") {
+      setSaveDetailLevel(stored);
+    }
   }, [model?.experimentDefaults?.resultDetailLevel]);
 
   // Fetch model_schedules when modelId changes (ADR-016)
