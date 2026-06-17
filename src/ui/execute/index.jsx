@@ -18,6 +18,7 @@ import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
+import { evaluateLiveHealth } from "../results/healthFlags.js";
 import { CustomerToken, VisualView } from "./VisualView.jsx";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
@@ -173,6 +174,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [results, setResults] = useState(null);
   const [liveWaitDist, setLiveWaitDist] = useState(null);
   const [liveSummary, setLiveSummary] = useState(null);
+  const [liveFlags, setLiveFlags] = useState([]);
   const [singleRunStatus, setSingleRunStatus] = useState("idle");
   const [singleRunProgress, setSingleRunProgress] = useState(null);
   const [batchStatus, setBatchStatus] = useState("idle");
@@ -462,6 +464,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setLatestRunId(null);
     setLiveWaitDist(null);
     setLiveSummary(null);
+    setLiveFlags([]);
     liveHistThrottleRef.current = 0;
     onResultsReady?.(null);
     onRunComplete?.({ results: null, replicationResults: [], warmupDetection: null, log: [] });
@@ -551,13 +554,16 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       if (now - liveHistThrottleRef.current > 400) {
         liveHistThrottleRef.current = now;
         setLiveWaitDist(engineRef.current.getWaitDist?.() || null);
-        setLiveSummary(engineRef.current.getSummary?.() || null);
+        const ls = engineRef.current.getSummary?.();
+        setLiveSummary(ls || null);
+        if (ls) setLiveFlags(evaluateLiveHealth(r.snap, ls, model));
       }
     }
 
     if (r.done) {
       setMode("done");
       setLiveWaitDist(null);
+      setLiveFlags([]);
       stopAuto();
       const prepareStartedAt = nowPerf();
       setSaveStatus({ state: 'saving', message: 'Preparing results...' });
@@ -2569,11 +2575,21 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             style={{ width: 72, accentColor: C.accent, cursor: "pointer" }}
           />
         </div>
+        {liveFlags.length > 0 && (
+          <span title={liveFlags.map(f => f.message).join("\n")} style={{
+            background: liveFlags.some(f => f.severity === "critical") ? C.red + "22" : C.amber + "22",
+            border: `1px solid ${liveFlags.some(f => f.severity === "critical") ? C.red + "44" : C.amber + "44"}`,
+            borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 700,
+            color: liveFlags.some(f => f.severity === "critical") ? C.red : C.amber,
+            fontFamily: FONT, cursor: "default", whiteSpace: "nowrap",
+          }}>{"\u26A0"} {liveFlags.length}</span>
+        )}
         <Btn variant="danger" onClick={() => {
           stopAuto();
           if (batchActive) cancelBatch();
           if (singleRunActive) cancelSingleRun();
           setMode("idle");
+          setLiveFlags([]);
         }}>✕ Cancel</Btn>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
