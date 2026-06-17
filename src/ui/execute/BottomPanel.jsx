@@ -1161,9 +1161,7 @@ export function BottomPanel({ log, snap, model, autoRunning = false, hasResults 
   const [activeTab, setActiveTab] = useState(() => {
     try { const t = localStorage.getItem("des.bottomPanel.tab"); return TABS.some(tab => tab.id === t) ? t : "log"; } catch { return "log"; }
   });
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem("des.bottomPanel.collapsed") !== "0"; } catch { return true; }
-  });
+  const [collapsed, setCollapsed] = useState(true);
   const [bodyHeight, setBodyHeight] = useState(() => {
     try { const s = parseInt(localStorage.getItem("des.bottomPanel.height"), 10); return Number.isFinite(s) ? Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, s)) : BOTTOM_PANEL_BODY_HEIGHT; } catch { return BOTTOM_PANEL_BODY_HEIGHT; }
   });
