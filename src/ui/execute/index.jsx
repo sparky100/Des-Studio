@@ -3191,6 +3191,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 log={log}
                 snap={currentSnap}
                 model={model}
+                autoRunning={autoRunning}
                 hasResults={canOpenResultsView}
                 onOpenResults={() => onGoToResults?.()}
                 selectedNodeLabel={selectedNodeLabel}

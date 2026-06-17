@@ -1168,7 +1168,7 @@ function FelTab({ snap, model }) {
 
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
-export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries, waitDist }) {
+export function BottomPanel({ log, snap, model, autoRunning = false, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries, waitDist }) {
   const { C, FONT } = useTheme();
   const [activeTab, setActiveTab] = useState(() => {
     try { const t = localStorage.getItem("des.bottomPanel.tab"); return TABS.some(tab => tab.id === t) ? t : "log"; } catch { return "log"; }
@@ -1350,7 +1350,13 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
             overflowX: "hidden",
           }}
         >
-          {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
+          {autoRunning ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: C.muted, fontFamily: FONT, fontSize: 12, fontStyle: "italic" }}>
+              Data paused during AutoRun — stop or switch to Step mode to inspect
+            </div>
+          ) : (
+          <>
+          {activeTab === "log"       && <LogTab log={log.slice(-50)} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
           {activeTab === "resources" && <ResourcesTab snap={snap} model={model} />}
           {activeTab === "fel"       && <FelTab snap={snap} model={model} />}
@@ -1384,6 +1390,8 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
               <EventCountsTable snap={snap} model={model} />
               <StageKpisTable snap={snap} model={model} />
             </div>
+          )}
+          </>
           )}
         </div>
       )}
