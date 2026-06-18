@@ -9,6 +9,16 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 // Check whether a sweep point's aggregateStats satisfies all goals.
 // goals: array of {metric, operator, target} from model.goals
 // Returns true if all goals met, false if any missed, null if no goals or no data.
+function chipStyle(color, FONT) {
+  return {
+    display: "inline-block",
+    background: alpha(color, 0.12), border: `1px solid ${alpha(color, 0.3)}`,
+    borderRadius: 20, padding: "3px 10px",
+    fontSize: 11, fontWeight: 700, color, whiteSpace: "nowrap",
+    fontFamily: FONT,
+  };
+}
+
 function pointIsFeasible(goals, aggregateStats) {
   if (!goals?.length) return null;
   const STAT_KEY = {
@@ -107,19 +117,23 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
   return (
     <div style={{ background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 12, overflow: "hidden" }}>
       {hasGoals && (
-        <div style={{ fontSize: 10, fontFamily: FONT, marginBottom: 6, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ color: feasibleCount > 0 ? C.green : C.red }}>
-            {feasibleCount}/{valid.length} points satisfy all goals
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+          <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+            {feasibility.map((f, i) => (
+              <div key={i} style={{
+                width: 10, height: 10, borderRadius: 3,
+                background: f === true ? C.green : f === false ? C.red : C.border,
+              }} />
+            ))}
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: feasibleCount > 0 ? C.green : C.red, fontFamily: FONT }}>
+            {feasibleCount} / {valid.length} meet all goals
           </span>
           {matchingGoals.map((g, i) => (
-            <span key={i} style={{ color: C.amber }}>
-              — goal: {g.metric} {g.operator} {g.target}
-            </span>
+            <div key={i} style={chipStyle(C.amber, FONT)}>
+              {METRIC_LABELS[STAT_KEY[g.metric]] || g.metric} {g.operator} {fmtMetric(metric, parseFloat(g.target))}
+            </div>
           ))}
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: C.muted }}>
-            <svg width={10} height={10}><circle cx={5} cy={5} r={4} fill={C.green} /></svg> feasible
-            <svg width={10} height={10} style={{ marginLeft: 4 }}><circle cx={5} cy={5} r={4} fill={C.muted} opacity={0.5} /></svg> infeasible
-          </span>
         </div>
       )}
       <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}
@@ -128,7 +142,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
           <g key={i}>
             <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.chartGrid} strokeWidth={1} />
             <text x={PAD.left - 6} y={yScale(tick) + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace">
-              {tick.toFixed(1)}
+              {fmtMetric(metric, tick)}
             </text>
           </g>
         ))}
@@ -141,7 +155,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
               <line x1={PAD.left} y1={ty} x2={W - PAD.right} y2={ty}
                 stroke={C.amber} strokeWidth={1.5} strokeDasharray="6,3" />
               <text x={W - PAD.right + 2} y={ty + 3} fill={C.amber} fontSize={9} fontFamily="monospace">
-                {g.operator}{g.target}
+                {g.operator}{fmtMetric(metric, parseFloat(g.target))}
               </text>
             </g>
           );
@@ -159,13 +173,16 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
           const cx = xScale(v), cy = yScale(vMeans[i]);
           return (
             <g key={i}
-              onMouseEnter={() => setTip({ x: cx, y: cy, label: `${paramLabel || "x"} = ${v}`, value: `${(METRIC_LABELS[metric] || metric).slice(0,14)}: ${vMeans[i]?.toFixed(1)}` })}
+              onMouseEnter={() => setTip({ x: cx, y: cy, label: `${paramLabel || "x"} = ${v}`, value: `${(METRIC_LABELS[metric] || metric).slice(0,14)}: ${fmtMetric(metric, vMeans[i])}` })}
               style={{ cursor: "crosshair" }}>
               <circle cx={cx} cy={cy} r={isBest ? 5 : 3}
                 fill={col} stroke={C.bg} strokeWidth={1.5} opacity={f === false ? 0.5 : 1} />
               {isBest && (
-                <text x={cx} y={cy - 9} textAnchor="middle"
-                  fill={C.green} fontSize={9} fontFamily="monospace" fontWeight="bold">best</text>
+                <g>
+                  <rect x={cx - 16} y={cy - 21} width={32} height={12} rx={3} fill={C.green} />
+                  <text x={cx} y={cy - 12} textAnchor="middle"
+                    fill="#fff" fontSize={8} fontFamily={FONT} fontWeight={900} letterSpacing="0.5">BEST</text>
+                </g>
               )}
             </g>
           );
@@ -191,7 +208,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
       {bestIdx != null && (
         <div style={{ fontSize: 10, fontFamily: FONT, color: C.green, marginTop: 4 }}>
           Best feasible: {paramLabel || "param"} = <strong>{vValues[bestIdx]}</strong>,
-          {" "}{METRIC_LABELS[metric] || metric} = <strong>{vMeans[bestIdx]?.toFixed(1)}</strong>
+          {" "}{METRIC_LABELS[metric] || metric} = <strong>{fmtMetric(metric, vMeans[bestIdx])}</strong>
         </div>
       )}
     </div>
@@ -346,14 +363,6 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
 
   const orderedCells = valueAs.flatMap(va => valueBs.map(vb => getCell(va, vb)));
 
-  const chipStyle = (color) => ({
-    display: "inline-block",
-    background: alpha(color, 0.12), border: `1px solid ${alpha(color, 0.3)}`,
-    borderRadius: 20, padding: "3px 10px",
-    fontSize: 11, fontWeight: 700, color, whiteSpace: "nowrap",
-    fontFamily: FONT,
-  });
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
@@ -395,7 +404,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
           {/* Column headers */}
           {valueBs.map(vb => (
             <div key={`ch-${vb}`} style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", padding: "4px 2px" }}>
-              <div style={chipStyle(C.accent)}>{fmt(vb)}</div>
+              <div style={chipStyle(C.accent, FONT)}>{fmt(vb)}</div>
             </div>
           ))}
 
@@ -403,7 +412,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
           {valueAs.flatMap(va => [
             /* Row header */
             <div key={`rh-${va}`} style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "2px 8px 2px 0" }}>
-              <div style={chipStyle(C.amber)}>{fmt(va)}</div>
+              <div style={chipStyle(C.amber, FONT)}>{fmt(va)}</div>
             </div>,
             /* Cells */
             ...valueBs.map(vb => {
