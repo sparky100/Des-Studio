@@ -691,6 +691,40 @@ describe("Sprint 46 — AI apply & verify", () => {
       expect(gaps[0].met).toBe(false);
       expect(gaps[0].current).toBeCloseTo(0.88);
     });
+
+    it("resolves a queue-scoped maxWIP goal from runtimeMetrics.max_queue_length_by_queue", () => {
+      const model = {
+        goals: [{
+          metric: "summary.maxWIP",
+          operator: "<=",
+          target: 15,
+          scope: { type: "queue", id: "q1", name: "Voucher queue" },
+        }],
+      };
+      const summary = {
+        runtimeMetrics: { max_queue_length_by_queue: { "Voucher queue": 12 } },
+      };
+      const gaps = buildGoalGaps(model, {}, summary);
+      expect(gaps[0].current).toBe(12);
+      expect(gaps[0].met).toBe(true);
+    });
+
+    it("matches queue-scoped maxWIP goal case/whitespace-insensitively by name", () => {
+      const model = {
+        goals: [{
+          metric: "summary.maxWIP",
+          operator: "<=",
+          target: 15,
+          scope: { type: "queue", id: "q1", name: " voucher queue " },
+        }],
+      };
+      const summary = {
+        runtimeMetrics: { max_queue_length_by_queue: { "Voucher Queue": 20 } },
+      };
+      const gaps = buildGoalGaps(model, {}, summary);
+      expect(gaps[0].current).toBe(20);
+      expect(gaps[0].met).toBe(false);
+    });
   });
 
   describe("parseSuggestionResponse", () => {

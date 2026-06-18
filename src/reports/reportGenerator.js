@@ -573,7 +573,7 @@ function buildExecutiveSummary(model, results, recommendations, aggStats = {}, m
   }</div>` : '';
 
   // Goal status summary
-  const goalGaps = buildGoalGaps(model, aggStats, { ...summary, waitDist: results?.waitDist });
+  const goalGaps = buildGoalGaps(model, aggStats, { ...summary, waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
   let goalStatusHtml = '';
   if (Array.isArray(goalGaps) && goalGaps.length) {
     const met   = goalGaps.filter(g => g.met).length;
@@ -704,7 +704,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     const qPart = queueNames.length ? `${queueNames.length} queue${queueNames.length !== 1 ? 's' : ''}` : '';
     const rPart = resourceTypes.length ? `${resourceTypes.length} resource type${resourceTypes.length !== 1 ? 's' : ''}` : '';
     const coverageDesc = [qPart, rPart].filter(Boolean).join(' and ');
-    const goalGapsPeek = buildGoalGaps(model, results.aggregateStats || {}, { ...summary, waitDist });
+    const goalGapsPeek = buildGoalGaps(model, results.aggregateStats || {}, { ...summary, waitDist, runtimeMetrics: results?.runtimeMetrics });
     const goalNote = Array.isArray(goalGapsPeek) && goalGapsPeek.length
       ? ` Performance against ${goalGapsPeek.length} defined goal${goalGapsPeek.length !== 1 ? 's' : ''} is assessed below.`
       : '';
@@ -822,7 +822,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
   }
 
   // Goal assessment
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...summary, waitDist });
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...summary, waitDist, runtimeMetrics: results?.runtimeMetrics });
   let goalHtml = '';
   if (Array.isArray(goalGaps) && goalGaps.length) {
     const goalRows = goalGaps.map(g => [
@@ -1100,7 +1100,7 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     kpiRows.push([`Total cost${multiRep ? ' (avg per run)' : ''}`, formatCurrency(costVal) ?? '—']);
   }
   // Inline goal status
-  const goalGapsForMd = buildGoalGaps(model, results.aggregateStats || {}, { ...summary, waitDist: results.waitDist });
+  const goalGapsForMd = buildGoalGaps(model, results.aggregateStats || {}, { ...summary, waitDist: results.waitDist, runtimeMetrics: results?.runtimeMetrics });
   if (Array.isArray(goalGapsForMd) && goalGapsForMd.length) {
     const met   = goalGapsForMd.filter(g => g.met).length;
     const total = goalGapsForMd.length;
