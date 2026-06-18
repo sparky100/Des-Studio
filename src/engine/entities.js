@@ -5,6 +5,9 @@
 //   2. Add creation logic in createServerEntities if pre-created at t=0
 //   3. Update statusHelpers if the new role has unique status semantics
 
+import { evaluatePredicate } from "./conditions.js";
+import { sample } from "./distributions.js";
+
 export const ENTITY_ROLES = {
   customer: {
     label:       "customer",
@@ -230,14 +233,16 @@ export function releaseServerClaim(customer, server, clock) {
   return true;
 }
 
-export function preemptCustomer(cust, srv, clock, noteQueueDepth) {
+// A preempted customer resumes an interrupted wait — it's not making a fresh decision
+// to join a queue, so balking is skipped, but capacity/overflow (F11.1/F11.3) still
+// applies (it could overflow/exit if its original queue is now full).
+export function preemptCustomer(cust, srv, clock, ctx) {
   const scheduledDuration = srv._scheduledDuration || 0;
   const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
   cust._remainingService  = remainingService;
   releaseServerClaim(cust, srv, clock);
   clearWaitingState(cust);
-  markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
-  noteQueueDepth?.(cust.queue);
+  attemptQueueJoin(cust, cust.lastQueue || cust.queue, clock, ctx, { skipBalk: true });
   return remainingService;
 }
 
@@ -257,6 +262,109 @@ export function repairServers(failedServers, clock) {
 export function findQueueConfig(model, token) {
   const key = norm(token);
   return (model?.queues || []).find(queue => norm(queue.name) === key || norm(queue.customerType) === key) || null;
+}
+
+/**
+ * Centralized queue-join check (F11.1/F11.2/F11.3): balking, capacity/overflow, and
+ * (on success) queue-level auto-reneging — enforced identically no matter which macro
+ * delivers an entity into a queue (ARRIVE, RELEASE, routing, BATCH/UNBATCH/SPLIT, etc.).
+ *
+ * `entity` may or may not already be in `ctx.entities` — ARRIVE constructs the entity
+ * before it has ever joined anything, while every other call site passes an entity
+ * already present in the array. Both are handled uniformly.
+ *
+ * opts:
+ *   skipBalk        — preempted entities resume an interrupted wait, not a fresh join
+ *   skipCapacity     — kept for symmetry; unused today
+ *   legacyBalkCondition / legacyBalkProbability — ARRIVE's backward-compat fallback to
+ *                      B-event-level balk fields, for models authored before balking moved
+ *                      to the Queue
+ *   visitedQueues    — internal: cycle guard threaded through recursive overflow reroutes
+ *
+ * Returns true if the entity ended up waiting somewhere; false if it was discarded
+ * (balked/blocked with no overflow destination, or an overflow cycle was detected).
+ */
+export function attemptQueueJoin(entity, queueName, clock, ctx, opts = {}) {
+  const { model, entities } = ctx;
+  const qDef = findQueueConfig(model, queueName);
+  const visited = opts.visitedQueues || new Set();
+  const qKey = norm(qDef?.name || queueName);
+
+  if (visited.has(qKey)) {
+    discardFailedJoin(entity, ctx, `#${entity.id} (${entity.type}) overflow cycle detected at "${queueName}" — exited system`);
+    return false;
+  }
+  visited.add(qKey);
+
+  if (!opts.skipBalk) {
+    const balkCondition = qDef?.balkCondition ?? opts.legacyBalkCondition ?? null;
+    if (balkCondition) {
+      const qLen = entities.filter(e => e.status === "waiting" && norm(e.queue) === norm(queueName)).length;
+      const balkState = { ...ctx.state, queues: { [queueName]: { length: qLen } } };
+      if (evaluatePredicate(balkCondition, balkState)) {
+        return rerouteOrExit("balkCount", "balked", entity, qDef, queueName, clock, ctx, visited);
+      }
+    }
+    const balkProbability = qDef?.balkProbability ?? opts.legacyBalkProbability ?? null;
+    if (balkProbability != null && ctx.rng() < balkProbability) {
+      return rerouteOrExit("balkCount", "balked (p)", entity, qDef, queueName, clock, ctx, visited);
+    }
+  }
+
+  if (!opts.skipCapacity) {
+    const cap = qDef?.capacity != null ? parseInt(qDef.capacity, 10) : null;
+    if (cap !== null && Number.isFinite(cap) && cap > 0) {
+      const currentDepth = entities.filter(e => e.status === "waiting" && norm(e.queue) === norm(queueName)).length;
+      if (currentDepth >= cap) {
+        return rerouteOrExit("blockingCount", `blocked (capacity ${cap})`, entity, qDef, queueName, clock, ctx, visited);
+      }
+    }
+  }
+
+  markEntityWaiting(entity, clock, queueName);
+  if (!entities.includes(entity)) {
+    entities.push(entity);
+    ctx.noteEntityCreated?.(entity);
+  } else {
+    ctx.noteQueueDepth?.(queueName);
+  }
+  ctx.setLastCustId?.(entity.id);
+  if (qDef?.renegeDist) scheduleAutoRenege(entity, qDef, clock, ctx);
+  return true;
+}
+
+function rerouteOrExit(metricKey, reasonLabel, entity, qDef, queueName, clock, ctx, visited) {
+  ctx.incQueueMetric?.(queueName, metricKey);
+  const dest = qDef?.overflowDestination ?? null;
+  if (dest) {
+    ctx.msgs?.push(`#${entity.id} (${entity.type}) ${reasonLabel} at "${queueName}" → rerouted to "${dest}"`);
+    return attemptQueueJoin(entity, dest, clock, ctx, { visitedQueues: visited });
+  }
+  discardFailedJoin(entity, ctx, `#${entity.id} (${entity.type}) ${reasonLabel} at "${queueName}" — exited system`);
+  return false;
+}
+
+function discardFailedJoin(entity, ctx, msg) {
+  const { entities } = ctx;
+  const idx = entities.indexOf(entity);
+  if (idx !== -1) entities.splice(idx, 1);
+  ctx.msgs?.push(msg);
+}
+
+function scheduleAutoRenege(entity, qDef, clock, ctx) {
+  if (typeof ctx.scheduleEvent !== "function") return;
+  const qKey = qDef.id || norm(qDef.name);
+  const schedCtx = { clock, streamName: `auto-renege:${qKey}`, streamRegistry: ctx.streamRegistry };
+  const delay = Math.max(0, sample(qDef.renegeDist, qDef.renegeDistParams || {}, ctx.rng, null, schedCtx));
+  ctx.scheduleEvent({
+    id:            `auto_renege_${qKey}`,
+    name:          `Auto-Renege (${qDef.name})`,
+    effect:        "RENEGE(ctx)",
+    schedules:     [],
+    scheduledTime: clock + delay,
+    _isRenege:        true,
+    _contextCustId:   entity.id,
+  });
 }
 
 /**

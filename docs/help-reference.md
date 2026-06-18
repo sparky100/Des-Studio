@@ -42,7 +42,10 @@ Buffers where customer entities wait for service. Defined in `queues[]` array.
 | discipline | Selection rule for next entity to serve |
 | capacity | Maximum waiting entities (null = unlimited) |
 | customerType | Entity type name expected in this queue |
-| overflowDestination | Queue for blocked/balked entities |
+| overflowDestination | Queue for blocked/balked entities; recursively re-checked at the destination, so overflow chains (A→B→C) are followed at runtime |
+| balkProbability | Probability (0-1) an entity declines to join, checked on every join attempt — ARRIVE, RELEASE, routing, batch/split, preemption (V21) |
+| balkCondition | Predicate object `{variable, operator, value}` checked on every join attempt, same scope as balkProbability |
+| renegeDist / renegeDistParams | Distribution sampled to auto-schedule a patience timer the moment an entity joins — no RENEGE(ctx) B-event needs to be authored |
 
 ### B-Events (Bound Events)
 
@@ -376,8 +379,9 @@ All 6 queue disciplines.
 
 **Causes:**
 - Using RENEGE(TypeName) instead of RENEGE(ctx) [V25]
-- Reneging schedule missing isRenege: true flag
+- Manual schedules-based reneging missing isRenege: true flag
 - Entity already served before reneging timeout
+- Simpler fix: set `renegeDist`/`renegeDistParams` directly on the queue instead of hand-wiring a RENEGE(ctx) B-event — the engine auto-schedules the patience timer on every join, with no eventId wiring required
 
 **Fix:** Use RENEGE(ctx); set isRenege: true on schedule entry.
 

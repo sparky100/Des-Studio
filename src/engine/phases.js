@@ -11,7 +11,7 @@
 import { MACROS, applyScalar }              from "./macros.js";
 import { evalCondition, evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
-import { clearWaitingState, markEntityWaiting, preemptCustomer, releaseServerClaim } from "./entities.js";
+import { clearWaitingState, attemptQueueJoin, preemptCustomer, releaseServerClaim } from "./entities.js";
 
 function completeEntity(cust, ev, clock, state) {
   const previousQueue = cust.queue ?? cust.lastQueue ?? null;
@@ -91,7 +91,7 @@ function applyShiftChange(ev, ctx) {
             ? Math.max(0, srv._scheduledDuration - (ctx.clock - (cust.serviceStart ?? ctx.clock)))
             : 0;
           cust._remainingService = rem;
-          preemptCustomer(cust, srv, ctx.clock, ctx.noteQueueDepth);
+          preemptCustomer(cust, srv, ctx.clock, ctx);
         }
         const idx = ctx.entities.indexOf(srv);
         if (idx >= 0) ctx.entities.splice(idx, 1);
@@ -158,6 +158,7 @@ export function applyEffect(effect, ctx) {
     incQueueMetric: ctx.incQueueMetric ?? null,
     noteEntityCreated: ctx.noteEntityCreated ?? null,
     noteQueueDepth: ctx.noteQueueDepth ?? null,
+    streamRegistry: ctx.streamRegistry ?? null,
     _arbitration: ctx._arbitration ?? null,
     getLastCustId: () => lastCustId,
     getLastSrvId:  () => lastSrvId,
@@ -239,6 +240,11 @@ export function fireBEvent(ev, ctx) {
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
   const { msgs, felEntries } = applyEffect(effectStr, effectCtx);
 
+  // Shared context for queue-join checks (F11.1/F11.2/F11.3) performed outside of
+  // applyEffect — conditional/probabilistic routing and the loop-guard exit both
+  // deliver an already-existing entity into a (possibly new) queue, same as RELEASE.
+  const joinCtx = { ...ctx, msgs, scheduleEvent: (entry) => felEntries.push(entry) };
+
   // ── Route helper: apply a resolved queueName to the customer.
   // null / "" means "exit system" — complete the customer immediately.
   const applyRoute = (cust, queueName, note) => {
@@ -253,9 +259,7 @@ export function fireBEvent(ev, ctx) {
       };
       ctx.incEventCount?.(`route-exit:${ev.id || ev.name || "unknown"}`);
       msgs.push(`Routing: #${cust.id} → exit system (${note})`);
-    } else {
-      markEntityWaiting(cust, clock, queueName);
-      ctx.noteQueueDepth?.(queueName);
+    } else if (attemptQueueJoin(cust, queueName, clock, joinCtx)) {
       msgs.push(`Routing: #${cust.id} → "${queueName}" (${note})`);
     }
   };
@@ -312,9 +316,9 @@ export function fireBEvent(ev, ctx) {
       if (Number.isFinite(maxCount) && cust.loopCount >= maxCount) {
         const exitQ = ev.loopConfig.exitQueueName;
         if (exitQ) {
-          markEntityWaiting(cust, clock, exitQ);
-          ctx.noteQueueDepth?.(exitQ);
-          msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → "${exitQ}"`);
+          if (attemptQueueJoin(cust, exitQ, clock, joinCtx)) {
+            msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → "${exitQ}"`);
+          }
         } else {
           const evTail = completeEntity(cust, ev, clock, ctx.state);
           cust.outcome = {

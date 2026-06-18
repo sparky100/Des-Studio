@@ -1256,4 +1256,61 @@ describe("V5 — EntityAttr skips dist validation", () => {
       expect(errors.filter(e => e.code === "V45")).toHaveLength(0);
     });
   });
+
+  describe("V46 — overflowDestination cycle detection", () => {
+    it("fires V46 when two queues name each other as overflow destinations", () => {
+      const model = {
+        entityTypes: [],
+        stateVariables: [],
+        queues: [
+          { id: "q_a", name: "Queue A", discipline: "FIFO", capacity: 1, overflowDestination: "Queue B" },
+          { id: "q_b", name: "Queue B", discipline: "FIFO", capacity: 1, overflowDestination: "Queue A" },
+        ],
+        bEvents: [
+          { id: "b_arr", name: "Arrival", effect: ["ARRIVE(Customer, Queue A)"], schedules: [] },
+        ],
+        cEvents: [],
+      };
+      const { errors } = validateModel(model);
+      const v46 = errors.filter(e => e.code === "V46");
+      expect(v46.length).toBeGreaterThan(0);
+      expect(v46.some(e => e.affectedIds?.queueIds?.includes("q_a"))).toBe(true);
+      expect(v46.some(e => e.affectedIds?.queueIds?.includes("q_b"))).toBe(true);
+    });
+
+    it("fires V46 for a longer cycle (A -> B -> C -> A)", () => {
+      const model = {
+        entityTypes: [],
+        stateVariables: [],
+        queues: [
+          { id: "q_a", name: "Queue A", discipline: "FIFO", capacity: 1, overflowDestination: "Queue B" },
+          { id: "q_b", name: "Queue B", discipline: "FIFO", capacity: 1, overflowDestination: "Queue C" },
+          { id: "q_c", name: "Queue C", discipline: "FIFO", capacity: 1, overflowDestination: "Queue A" },
+        ],
+        bEvents: [
+          { id: "b_arr", name: "Arrival", effect: ["ARRIVE(Customer, Queue A)"], schedules: [] },
+        ],
+        cEvents: [],
+      };
+      const { errors } = validateModel(model);
+      expect(errors.filter(e => e.code === "V46").length).toBeGreaterThan(0);
+    });
+
+    it("does not fire V46 for a terminating overflow chain (A -> B -> exit)", () => {
+      const model = {
+        entityTypes: [],
+        stateVariables: [],
+        queues: [
+          { id: "q_a", name: "Queue A", discipline: "FIFO", capacity: 1, overflowDestination: "Queue B" },
+          { id: "q_b", name: "Queue B", discipline: "FIFO", capacity: 1 },
+        ],
+        bEvents: [
+          { id: "b_arr", name: "Arrival", effect: ["ARRIVE(Customer, Queue A)"], schedules: [] },
+        ],
+        cEvents: [],
+      };
+      const { errors } = validateModel(model);
+      expect(errors.filter(e => e.code === "V46")).toHaveLength(0);
+    });
+  });
 });

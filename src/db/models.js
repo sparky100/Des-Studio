@@ -5,6 +5,7 @@
 
 import { supabase } from "./supabase.js";
 import { normalizeModelConditions } from "../model/conditionFormat.js";
+import { migrateBalkingToQueues } from "../model/balkMigration.js";
 import { buildPersistedResultsJson } from "./results-persistence.js";
 
 // Every column that this module reads or writes. Used by validateDbSchema().
@@ -97,7 +98,7 @@ async function runDesModelsSelect(buildQuery) {
 // ── Row normalisation ─────────────────────────────────────────────────────────
 export function norm(r) {
   const modelJson = r.model_json || {};
-  return normalizeModelConditions({
+  return migrateBalkingToQueues(normalizeModelConditions({
     id:             r.id,
     name:           r.name,
     description:    r.description || "",
@@ -123,7 +124,7 @@ export function norm(r) {
     updatedAt:      r.updated_at,
     latestVersion:  r.latest_version || 0,
     parentModelId:  r.parent_model_id || null,
-  });
+  }));
 }
 
 function modelJsonFromModel(model = {}) {

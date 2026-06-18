@@ -111,9 +111,18 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const showTimeInput=!isStart&&!isTmpl;
         const effects=Array.isArray(ev.effect)?ev.effect:(ev.effect?[ev.effect]:[]);
         const updEffects=(newEffects)=>{const n=[...events];n[i]={...n[i],effect:newEffects};onChange(n);};
-        const updBalk=(f,v)=>{const n=[...events];n[i]={...n[i],[f]:v===''||v===null?undefined:v};onChange(n);};
         const hasRelease=effects.some(eff=>typeof eff==='string'&&/^RELEASE\s*\(/i.test(eff));
         const hasArriveEffect=effects.some(eff=>typeof eff==='string'&&/^ARRIVE\s*\(/i.test(eff));
+        const joinTargetQueueName=(()=>{
+          for(const eff of effects){
+            if(typeof eff!=='string')continue;
+            const am=eff.match(/^ARRIVE\(([^,)]+)(?:\s*,\s*([^,)]+))?\)/i);
+            if(am)return am[2]?.trim()||(am[1].trim()+'Queue');
+            const rm=eff.match(/^RELEASE\(([^,)]+)(?:\s*,\s*([^,)]+))?\)/i);
+            if(rm&&rm[2])return rm[2].trim();
+          }
+          return null;
+        })();
         const hasRouting=Array.isArray(ev.routing) && ev.routing.some(row=>String(row?.condition?.variable||row?.condition?.token||row?.condition?.left||"").trim()!=="");
         const hasProb=Array.isArray(ev.probabilisticRouting) && ev.probabilisticRouting.length>0;
         const routingMode=hasRouting?"conditional":hasProb?"probabilistic":"none";
@@ -143,21 +152,8 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         };
         const updLoop=(f,v)=>{const n=[...events];n[i]={...n[i],loopConfig:{...n[i].loopConfig,[f]:v}};onChange(n);};
 
-        const hasBalkProb=ev.balkProbability!=null&&ev.balkProbability!==""&&!isNaN(ev.balkProbability);
-        const hasBalkCond=!!(ev.balkCondition);
-        const balkMode=hasBalkCond?"condition":hasBalkProb?"probability":"none";
-        const setBalkMode=(mode)=>{
-          const n=[...events];
-          const{balkProbability:_p,balkCondition:_c,...rest}=n[i];
-          if(mode==="probability") n[i]={...rest,balkProbability:0.1};
-          else if(mode==="condition") n[i]={...rest,balkCondition:{variable:'',operator:'>',value:0}};
-          else n[i]={...rest};
-          onChange(n);
-        };
-
         const schedStatus=String((ev.schedules||[]).length||"0");
         const routingStatus=routingMode==="none"?"off":routingMode;
-        const balkStatus=balkMode==="none"?"off":balkMode==="probability"?`prob ${Math.round((ev.balkProbability||0)*100)}%`:"condition";
         const loopStatus=loopEnabled?`max ${ev.loopConfig?.maxLoopCount||"?"}x`:"off";
 
         const effectSummary=effects.length===0?"no effects":effects.length===1?(effects[0].match(/^\w+/)?.[0]||"effect"):`${effects.length} effects`;
@@ -289,59 +285,13 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 </SectionPanel>
               )}
 
-              {/* Balking — collapsible, shown only for arrival events */}
-              {hasArriveEffect&&(
-                <SectionPanel label="Balking" status={balkStatus} color={C.amber}>
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Mode:</span>
-                    <select value={balkMode} onChange={e=>setBalkMode(e.target.value)}
-                      style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
-                      <option value="none">No balking</option>
-                      <option value="probability">Probability-based</option>
-                      <option value="condition">Condition-based</option>
-                    </select>
-                  </div>
-                  {balkMode==="probability"&&(<>
-                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                      <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>Balk probability (0–1):</span>
-                      <input aria-label="Balk probability" type="number" min="0" max="1" step="0.01"
-                        value={ev.balkProbability??''} onChange={e=>updBalk('balkProbability',e.target.value===''?null:parseFloat(e.target.value))}
-                        placeholder="e.g. 0.2"
-                        style={{width:100,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
-                    </div>
-                    {ev.balkProbability>0&&(
-                      <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
-                        {Math.round(ev.balkProbability*100)}% of arrivals decline to join the queue.
-                      </div>
-                    )}
-                  </>)}
-                  {balkMode==="condition"&&(()=>{
-                    const bc=typeof ev.balkCondition==='object'&&ev.balkCondition!==null?ev.balkCondition:{variable:'',operator:'>',value:0};
-                    const updBc=(patch)=>updBalk('balkCondition',{...bc,...patch});
-                    const balkVars=[
-                      ...queues.map(q=>({label:`Queue.${q.name}.length`,value:`Queue.${q.name}.length`})),
-                      ...stateVariables.filter(sv=>sv.name).map(sv=>({label:sv.name,value:sv.name})),
-                    ];
-                    const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 6px',outline:'none'};
-                    return(<>
-                    <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>IF</span>
-                      <select value={bc.variable||''} onChange={e=>updBc({variable:e.target.value})} style={{...selSt,flex:1,minWidth:140}}>
-                        <option value=''>— variable —</option>
-                        {balkVars.map(v=><option key={v.value} value={v.value}>{v.label}</option>)}
-                      </select>
-                      <select value={bc.operator||'>'} onChange={e=>updBc({operator:e.target.value})} style={{...selSt,width:52}}>
-                        {['==','!=','<','>','<=','>='].map(op=><option key={op} value={op}>{op}</option>)}
-                      </select>
-                      <input type="number" value={bc.value??''} onChange={e=>updBc({value:e.target.value===''?0:Number(e.target.value)})}
-                        style={{width:70,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 6px',outline:'none'}}/>
-                    </div>
-                    <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
-                      Entity skips the queue on arrival when this condition is true.
-                    </div>
-                    </>);
-                  })()}
-                </SectionPanel>
+              {/* Balking/capacity/reneging now live on the queue itself — apply uniformly
+                  regardless of how an entity reaches it (ARRIVE, RELEASE, routing, batch/split) */}
+              {(hasArriveEffect||hasRelease)&&joinTargetQueueName&&(
+                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.6,padding:"6px 8px",border:`1px solid ${C.border}`,borderRadius:4}}>
+                  Balking, capacity, and reneging are configured on the queue itself — edit{" "}
+                  <strong style={{color:C.text}}>{joinTargetQueueName}</strong> in the Queues tab.
+                </div>
               )}
 
               {/* Loop Guard — collapsible */}

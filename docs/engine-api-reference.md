@@ -276,7 +276,12 @@ rng(); // → number in [0, 1)
   queues: [
     { id: string, name: string, customerType: string,
       discipline: 'FIFO'|'LIFO'|'PRIORITY'|'SPT'|'EDD',
-      capacity: string | null }
+      capacity: string | null,
+      overflowDestination?: string,     // queue name for blocked/balked entities; recursed and re-checked at the destination
+      balkProbability?: number,         // ∈ [0,1] (V21); checked on every join — ARRIVE, RELEASE, routing, batch/split, preemption
+      balkCondition?: object,           // predicate { variable, operator, value }, same scope as balkProbability
+      renegeDist?: string,              // auto-schedules a patience timer on join; no RENEGE(ctx) B-event needed
+      renegeDistParams?: Object }
   ],
   bEvents: [
     {

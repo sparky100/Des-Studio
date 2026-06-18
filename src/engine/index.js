@@ -870,7 +870,7 @@ const cycleLog = [];
         for (const srv of servers) {
           if (srv.status === "busy" || srv.status === "serving") {
             const cust = entities.find(e => e.id === srv.currentCustId);
-            if (cust) preemptCustomer(cust, srv, clock, null);
+            if (cust) preemptCustomer(cust, srv, clock, makeCtx());
           }
           srv.status = "failed";
           srv._failedAt = clock;

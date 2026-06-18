@@ -1,11 +1,12 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 2.1.0
-**Date:** 2026-06-17
+**Version:** 2.2.0
+**Date:** 2026-06-18
 **Sprint baseline:** Sprint 88
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
+| v2.2.0 | 2026-06-18 | Queue-scoped balking/reneging | Balking (`balkProbability`/`balkCondition`) moved from the ARRIVE B-event to the Queue (§3) — checked on every join (ARRIVE, RELEASE, routing, batch/split, preemption), not just arrival. Added queue-level `renegeDist`/`renegeDistParams` for zero-wiring automatic patience timeouts (§3, §4 reneging pattern). Added V46 (overflow-destination cycle detection) to §10; relocated V21 to Queue scope; CHK-011 now also checks queues. Removed the B-event "Optional: Balking" worked example, replaced with a pointer to §3. Legacy B-event-level balking is migrated onto the matching queue automatically at load time (non-destructive, idempotent). |
 | v2.1.0 | 2026-06-17 | Sprint 88 | Added MANDATORY GENERATION PROTOCOL (5-step checklist); §5 rows[] warning box; TOP LLM MISTAKE #16; closing Core Principle |
 | v1.0.0 | 2026-05-23 | Sprint 70 | Initial versioned snapshot — schema as delivered at Sprint 70 |
 | v1.1.0 | 2026-05-23 | Sprint 70 | Added SPT, EDD, PRIORITY(attrName) queue disciplines to §3; added V11 (Normal warning) and V16 (no termination condition warning) to §10 validation table |
@@ -70,7 +71,7 @@ Read this before writing any model JSON.
 | 2 | `"effect": ["RELEASE(Server)", "COMPLETE()"]` | `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped. Use `"effect": ["COMPLETE()"]` alone — COMPLETE releases the server automatically. Warning V38. |
 | 2b | `"effect": ["COMPLETE()", "RELEASE(Server)"]` | `COMPLETE` marks entity `"done"` and releases the server. The `RELEASE` that follows re-queues the completed entity, causing an **infinite loop**. Use `"effect": ["COMPLETE()"]` alone. Warning V38b. |
 | 3 | Missing `useEntityCtx: true` on cSchedules | Without this, the target B-event can't identify the entity. Always add `"useEntityCtx": true` to every `cSchedules[]` entry. |
-| 4 | `balkCondition` as a string | Must be a predicate object: `{ "variable": "Queue.Name.length", "operator": ">", "value": 5 }`. Never a string expression. Blocked by CHK-011. |
+| 4 | `balkCondition` as a string, or placed on the B-event | Must be a predicate object on the Queue itself: `{ "variable": "Queue.Name.length", "operator": ">", "value": 5 }`. Never a string expression, and never nested under a B-event. Blocked by CHK-011. |
 | 5 | `routing[].condition` as a string | Same as #4 — must be a predicate object, never a string. Blocked by CHK-012. |
 | 6 | `"effect"` as a bare string | Must be an array: `"effect": ["ARRIVE(Customer)"]` — never `"effect": "ARRIVE(Customer)"`. |
 | 7 | `scheduledTime` as a number | Must be a string: `"scheduledTime": "0"` — never `"scheduledTime": 0`. Blocked by V26. |
@@ -284,7 +285,12 @@ Queues are waiting areas for customers.
   - `PRIORITY(attrName)` — uses the named attribute instead of `priority`, e.g. `"PRIORITY(severity)"`. The named attribute **must** exist on the customer entity type and be of type `number`. A missing or wrong-typed attribute silently falls back to FIFO. **JSON-import only — the UI discipline picker does not expose the `PRIORITY(attrName)` form.**
   - `SPT` (Shortest Processing Time) — selects the entity with the smallest `serviceTime` or `processingTime` attribute value. The customer entity type **must** define an attribute named `serviceTime` or `processingTime` of type `number`; without it, discipline order is undefined. FIFO tiebreaker. **JSON-import only — not in the UI discipline picker.**
   - `EDD` (Earliest Due Date) — selects the entity with the smallest `dueDate` attribute value. The customer entity type **must** define an attribute named `dueDate` of type `number`; without it, discipline order is undefined. FIFO tiebreaker. **JSON-import only — not in the UI discipline picker.**
-- `overflowDestination` (optional): name of another queue to receive overflow entities when this queue is full. UI-editable (appears when capacity is set).
+- `overflowDestination` (optional): name of another queue to receive overflow entities when this queue is full. UI-editable (appears when capacity is set). When the overflow destination is itself full, the engine recursively checks the next hop (and the one after that), exiting the system only if a cycle or dead end is reached — overflow chains (A→B→C) are checked at every hop, not just the first.
+- `balkProbability` (optional, number 0–1): the probability an entity declines to join this queue, checked **every time** an entity attempts to join it — via `ARRIVE`, `RELEASE`, conditional/probabilistic routing, batch/split, or preemption re-queue — not just on arrival. V21 validates the range.
+- `balkCondition` (optional): a **predicate object** `{ "variable", "operator", "value" }`, evaluated on every join attempt (same scope as `balkProbability` above). Use `"variable": "Queue.<queueName>.length"` to test queue occupancy. **Never a string** (CHK-011). Mutually combinable with `balkProbability` (both are checked if both are set).
+- `renegeDist` / `renegeDistParams` (optional): when set, the engine automatically schedules a patience timer the moment an entity successfully joins this queue, sampled from the named distribution — no `RENEGE(ctx)` B-event needs to be authored. If the entity is still waiting when the timer fires, it abandons the queue exactly as a manually-wired renege would; if it has already been served, the timer is a no-op. This can be combined with the manual `schedules[{isRenege:true}]` B-event mechanism on the same model without conflict.
+
+**Note:** Balking, capacity, and reneging are all properties of the Queue object — they apply uniformly no matter how an entity reaches the queue. Older models may have `balkProbability`/`balkCondition` on the ARRIVE B-event instead; these are migrated onto the matching queue automatically at load time (non-destructively — the legacy fields are left in place), so hand-written JSON should always place these fields on the queue, not the B-event.
 
 ---
 
@@ -456,7 +462,7 @@ The companion CSV is returned in the `companionCsv` field of the response envelo
 - `schedules`: for recurring B-events (arrivals), include one entry with `eventId` matching this event's own `id` and either a distribution or a `times[]`/`rows[]` list. Leave as `[]` for completion events.
 - `schedules[].eventId` **is required** — must reference a valid B-event `id`. An entry without `eventId` is silently skipped by the engine and the event will never re-fire (CHK-010 error).
 - `schedules[].isRenege` (boolean, optional): when `true`, this schedule entry is an abandonment timer. If the entity is still waiting when this fires, it reneges. Pair with a B-event whose `effect` is `["RENEGE(ctx)"]`. Only one `isRenege` entry per B-event is meaningful.
-- `balkCondition` (optional): a **predicate object** `{ "variable", "operator", "value" }` — tested at arrival time. If true, the entity does not join the queue. Use `"variable": "Queue.<queueName>.length"` to test queue occupancy. **Never a string** (CHK-011 error).
+- `balkCondition`/`balkProbability` are **not** B-event fields — they belong on the Queue object (see §3 Queues) and are checked on every join attempt, not just at arrival.
 - `routing[].condition` **must be a predicate object** — never a string (CHK-012 error). See §5 Conditional Routing Table.
 - `defaultQueueName` (optional): fallback queue used when no routing condition matches. Must reference a valid queue name. Required when using `routing` without a guaranteed catch-all condition.
 
@@ -596,23 +602,7 @@ Predicate object fields:
 
 ### Optional: Balking
 
-```json
-"balkProbability": 0.1
-```
-
-Or condition-based — `balkCondition` is a **predicate object** (never a string):
-
-```json
-"balkCondition": { "variable": "Queue.Triage Queue.length", "operator": ">", "value": 10 }
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `variable` | string | `Queue.<queueName>.length` to test queue occupancy |
-| `operator` | string | One of `==`, `!=`, `<`, `>`, `<=`, `>=` |
-| `value` | number | The threshold to compare against |
-
-- **Do not use a string condition** (e.g. `"queue(X).length > 10"`) — that format is only valid in C-event `condition` fields; a string `balkCondition` will cause a pre-run error (CHK-011).
+Balking is **not** configured on the B-event — it's a field on the Queue itself (`balkProbability` / `balkCondition`), checked on every join attempt (ARRIVE, RELEASE, routing, batch/split), not just on arrival. See §3 Queues for the full field reference and the predicate-object shape. (Older models with `balkProbability`/`balkCondition` on the ARRIVE B-event are migrated onto the matching queue automatically at load time.)
 
 ### 5.1 Loop Guard (Recirculation)
 
@@ -777,7 +767,7 @@ Combine with `AND`, `OR`, `NOT`. Queue and server names must match exactly (case
 
 #### Format B — Predicate object (entity attribute or queue test)
 
-Used for: `bEvents[].balkCondition`, `bEvents[].routing[].condition`, `cEvents[].cSchedules[].when`.
+Used for: `queues[].balkCondition`, `bEvents[].routing[].condition`, `cEvents[].cSchedules[].when`.
 
 Always a JSON object — never a string:
 
@@ -983,8 +973,8 @@ All generated model JSON MUST pass every blocking rule below.
 | V18 | `probabilisticRouting` probabilities must sum to 1.0 (±0.001). Each branch's `queueName` must reference a defined queue (or `null` for exit). Mutually exclusive with `routing` and `RELEASE(Server, QueueName)`. |
 | V19 | Server entity type `count` must be an integer ≥ 1 |
 | V20 | Queue `capacity`, when set, must be an integer ≥ 1. `overflowDestination`, when set, must reference a defined queue. |
-| V21 | `balkProbability` must be a finite number in [0, 1] |
-| CHK-011 | `balkCondition` **must be a predicate object** `{ variable, operator, value }` — never a string |
+| V21 | Queue `balkProbability` must be a finite number in [0, 1] |
+| CHK-011 | Queue (and, for legacy hygiene, B-event) `balkCondition` **must be a predicate object** `{ variable, operator, value }` — never a string |
 | CHK-012 | `routing[].condition` **must be a predicate object** `{ variable, operator, value }` — never a string |
 | V22 | `BATCH` size must be an integer ≥ 2 and the referenced queue must exist |
 | V23 | `UNBATCH` target queue must reference a defined queue |
@@ -1002,6 +992,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V36 | `mtbfDist` and `mttrDist` are only valid on entity types with `role: "server"` |
 | V37 | When either `mtbfDist` or `mttrDist` is set on a server entity type, **both** must be present with valid distribution parameters |
 | V45 | Every declared queue must appear as a routing destination (ARRIVE, RELEASE 2-arg, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination`). A queue not reachable by any of these is a disconnected fragment. Only enforced when at least one queue is explicitly named in routing (avoids false positives on single-arg `ARRIVE` models). |
+| V46 | `overflowDestination` must not form a cycle (A → B → A). Overflow chains are followed recursively at runtime, so a cycle would otherwise loop; it is instead caught at design time. |
 
 ### Warnings (run proceeds, banner shown)
 
@@ -1315,6 +1306,17 @@ And the renege B-event:
 ```json
 { "id": "b_renege", "name": "Renege", "scheduledTime": "9999", "effect": ["RENEGE(ctx)"], "schedules": [] }
 ```
+
+#### Queue-level automatic reneging (zero-wiring alternative)
+
+Instead of hand-authoring a renege B-event and wiring its `eventId` into every event that feeds a queue, set `renegeDist`/`renegeDistParams` directly on the Queue (§3):
+
+```json
+{ "id": "q_triage", "name": "Triage Queue", "customerType": "Patient", "discipline": "FIFO",
+  "renegeDist": "Exponential", "renegeDistParams": { "mean": "15" } }
+```
+
+The engine automatically schedules a patience timer the moment any entity joins this queue — via `ARRIVE`, `RELEASE`, routing, or batch/split — with no `RENEGE(ctx)` B-event or `schedules[].eventId` wiring required. This is the preferred approach when every path into a queue should share the same patience distribution. The manual `schedules[{isRenege:true}]` pattern above remains valid and can coexist on the same model — use it when only certain paths into a queue should have a renege timer, or when the trigger needs to be conditional rather than purely distribution-based.
 
 ---
 

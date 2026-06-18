@@ -11,7 +11,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin } from "./entities.js";
 
 // ── Private helpers shared across multiple macros ────────────────────────────
 
@@ -46,24 +46,6 @@ function updateContainerMinMax(state, cName, newLevel) {
 function resolveContextEntity(ctx) {
   const custId = ctx.getLastCustId();
   return custId != null ? ctx.entities.find(e => e.id === custId) : null;
-}
-
-function rerouteOrBalk(metricKey, reroutedMsg, exitMsg, { ctx, queueName, typeName, et, qDef, entities, clock, incQueueMetric, noteEntityCreated, setLastCustId, msgs }) {
-  incQueueMetric?.(queueName, metricKey);
-  const dest = qDef?.overflowDestination ?? null;
-  if (dest) {
-    const id       = ctx.nextId();
-    const rerouted = { id, type: typeName, role: et?.role || "customer",
-      queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
-      arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
-    markEntityWaiting(rerouted, clock, dest);
-    entities.push(rerouted);
-    noteEntityCreated?.(rerouted);
-    setLastCustId(id);
-    msgs.push(reroutedMsg(id, dest));
-  } else {
-    msgs.push(exitMsg);
-  }
 }
 
 // ── Safe scalar expression evaluator (replaces new Function in applyScalar) ──
@@ -260,66 +242,16 @@ export const MACROS = [
     apply(match, ctx) {
       const typeName  = match[1].trim();
       const queueName = match[2]?.trim() || (typeName + "Queue");
-      const { entities, model, clock, helpers, setLastCustId, msgs, incQueueMetric, felRef, noteEntityCreated } = ctx;
+      const { model, clock, helpers, msgs, felRef } = ctx;
       const et = (model.entityTypes || []).find(
         e => e.name.trim().toLowerCase() === typeName.trim().toLowerCase()
       );
-      const qDef = (model.queues || []).find(
-        q => q.name?.trim().toLowerCase() === queueName.trim().toLowerCase()
-      );
 
-      // ── F11.2 Balking — evaluated before entity joins ────────────────────
-      // Balk config lives on the B-event (felRef) that fired this ARRIVE.
-      const bEvent = felRef;
-      if (bEvent) {
-        // Condition-based balking
-        if (bEvent.balkCondition) {
-          const qLen = entities.filter(
-            e => e.status === "waiting" && e.queue?.trim().toLowerCase() === queueName.trim().toLowerCase()
-          ).length;
-          const balkState = {
-            ...ctx.state,
-            queues: { [queueName]: { length: qLen } },
-          };
-          const balks = evaluatePredicate(bEvent.balkCondition, balkState);
-          if (balks) {
-            rerouteOrBalk("balkCount",
-              (id, dest) => `#${id} (${typeName}) balked → rerouted to "${dest}"`,
-              `(${typeName}) balked at ${queueName} — not recorded`,
-              { ctx, queueName, typeName, et, qDef, entities, clock, incQueueMetric, noteEntityCreated, setLastCustId, msgs }
-            );
-            return;
-          }
-        }
-        // Probability-based balking
-        if (bEvent.balkProbability != null && ctx.rng() < bEvent.balkProbability) {
-          rerouteOrBalk("balkCount",
-            (id, dest) => `#${id} (${typeName}) balked (p) → rerouted to "${dest}"`,
-            `(${typeName}) balked at ${queueName} — exited`,
-            { ctx, queueName, typeName, et, qDef, entities, clock, incQueueMetric, noteEntityCreated, setLastCustId, msgs }
-          );
-          return;
-        }
-      }
-
-      // ── F11.1 Finite queue capacity — checked after balking ──────────────
-      const cap = qDef?.capacity != null ? parseInt(qDef.capacity, 10) : null;
-      if (cap !== null && Number.isFinite(cap) && cap > 0) {
-        const currentDepth = entities.filter(
-          e => e.status === "waiting" && e.queue?.trim().toLowerCase() === queueName.trim().toLowerCase()
-        ).length;
-        if (currentDepth >= cap) {
-          // F11.3 overflow routing: route to overflowDestination or exit
-          rerouteOrBalk("blockingCount",
-            (id, dest) => `#${id} (${typeName}) blocked (capacity ${cap}) → overflow to "${dest}"`,
-            `(${typeName}) blocked at ${queueName} (capacity ${cap}) → exited system`,
-            { ctx, queueName, typeName, et, qDef, entities, clock, incQueueMetric, noteEntityCreated, setLastCustId, msgs }
-          );
-          return;
-        }
-      }
-
-      // ── Normal join ───────────────────────────────────────────────────────
+      // ── Construct the entity, then run it through the centralized join
+      // check (F11.1/F11.2/F11.3) — balking/capacity/overflow are normally
+      // configured on the Queue itself; the B-event-level balkCondition/
+      // balkProbability fallback below exists only for legacy models authored
+      // before balking moved to the Queue (pre-migration / hand-edited JSON).
       const id = ctx.nextId();
       const sampledAttrs = sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng);
       const rowAttrs = felRef?._scheduleRowAttrs ?? null;
@@ -327,7 +259,6 @@ export const MACROS = [
         id,
         type:           typeName,
         role:           et?.role || "customer",
-        queue:          queueName,
         attrs:          rowAttrs ? { ...sampledAttrs, ...rowAttrs } : sampledAttrs,
         arrivalTime:    clock,
         stages:         [],
@@ -335,11 +266,14 @@ export const MACROS = [
         loopCount:      0,
         _plannedTime:   felRef?._plannedArrivalTime ?? undefined,
       };
-      markEntityWaiting(ent, clock, queueName);
-      entities.push(ent);
-      noteEntityCreated?.(ent);
-      setLastCustId(id);
-      msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${queueName}, depth: ${helpers.waitingOf(typeName).length}]`);
+
+      const joined = attemptQueueJoin(ent, queueName, clock, ctx, {
+        legacyBalkCondition:  felRef?.balkCondition,
+        legacyBalkProbability: felRef?.balkProbability,
+      });
+      if (joined) {
+        msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${queueName}, depth: ${helpers.waitingOf(typeName).length}]`);
+      }
     },
   },
 
@@ -493,7 +427,7 @@ export const MACROS = [
     apply(match, ctx) {
       const srvType     = match[1].trim();
       const targetQueue = match[2]?.trim() || null;
-      const { entities, clock, getLastCustId, getLastSrvId, felRef, msgs, noteQueueDepth } = ctx;
+      const { entities, clock, getLastCustId, getLastSrvId, felRef, msgs } = ctx;
       const custId = felRef?._contextCustId ?? getLastCustId();
       const srvId  = felRef?._contextSrvId  ?? getLastSrvId();
       const srv    = entities.find(e => e.id === srvId && e.role === "server")
@@ -510,12 +444,14 @@ export const MACROS = [
         if (!cust.stages) cust.stages = [];
         cust.stages.push(buildStageRecord(cust, srv, clock));
         cust.lastStageStart = clock;
-        markEntityWaiting(cust, clock, targetQueue || cust.lastQueue || cust.queue);
-        noteQueueDepth?.(cust.queue);
+        const destQueue = targetQueue || cust.lastQueue || cust.queue;
         delete cust.serviceStart;
         releaseServerClaim(cust, srv, clock);
+        const joined = attemptQueueJoin(cust, destQueue, clock, ctx);
         const retired = retireIdleExcessServers(ctx, srv.type);
-        msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done, srv #${srv.id} idle]`);
+        if (joined) {
+          msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done, srv #${srv.id} idle]`);
+        }
         if (retired > 0) {
           msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
         }
@@ -569,7 +505,7 @@ export const MACROS = [
     apply(match, ctx) {
       const queueName = match[1].trim();
       const batchSizeArg = match[2].trim();
-      const { entities, model, clock, msgs, setLastCustId, helpers, nextId, noteEntityCreated } = ctx;
+      const { entities, model, clock, msgs, nextId } = ctx;
 
       const qDef = (model.queues || []).find(
         q => q.name?.trim().toLowerCase() === queueName.trim().toLowerCase()
@@ -630,7 +566,6 @@ export const MACROS = [
         id: parentId,
         type: firstChild.type,
         role: "batch",
-        queue: queueName,
         attrs: { ...(firstChild.attrs || {}) },
         arrivalTime: clock,
         stages: [],
@@ -644,11 +579,10 @@ export const MACROS = [
           })),
         },
       };
-      markEntityWaiting(parent, clock, queueName);
-      entities.push(parent);
-      noteEntityCreated?.(parent);
-      setLastCustId(parentId);
-      msgs.push(`BATCH: #${ids.join(', #')} → batch #${parentId} in "${queueName}" (size=${batchSize})`);
+      const joined = attemptQueueJoin(parent, queueName, clock, ctx);
+      if (joined) {
+        msgs.push(`BATCH: #${ids.join(', #')} → batch #${parentId} in "${queueName}" (size=${batchSize})`);
+      }
     },
   },
 
@@ -658,7 +592,7 @@ export const MACROS = [
     pattern: /^UNBATCH\(([^,)]+)\)$/i,
     apply(match, ctx) {
       const targetQueue = match[1].trim();
-      const { entities, clock, felRef, getLastCustId, msgs, noteQueueDepth } = ctx;
+      const { entities, clock, felRef, getLastCustId, msgs } = ctx;
 
       const parentId = felRef?._contextCustId ?? getLastCustId();
       const parent = entities.find(e => e.id === parentId);
@@ -669,17 +603,18 @@ export const MACROS = [
       }
 
       const children = parent.batch.children;
-      const childIds = [];
+      const restoredIds = [];
       for (const child of children) {
         const restored = {
           ...child,
           attrs: { ...(child.attrs || {}) },
           lastStageStart: clock,
         };
-        markEntityWaiting(restored, clock, targetQueue);
-        entities.push(restored);
-        noteQueueDepth?.(targetQueue);
-        childIds.push(child.id);
+        // Each restored child independently re-enters the queue-join check
+        // (F11.1/F11.2/F11.3) — one child balking/blocking doesn't affect the others.
+        if (attemptQueueJoin(restored, targetQueue, clock, ctx)) {
+          restoredIds.push(child.id);
+        }
       }
 
       clearWaitingState(parent);
@@ -692,7 +627,11 @@ export const MACROS = [
         endedBy: "UNBATCH",
         endedAt: clock,
       });
-      msgs.push(`UNBATCH: batch #${parentId} → restored #${childIds.join(', #')} to "${targetQueue}"`);
+      if (restoredIds.length > 0) {
+        msgs.push(`UNBATCH: batch #${parentId} → restored #${restoredIds.join(', #')} to "${targetQueue}"`);
+      } else {
+        msgs.push(`UNBATCH: batch #${parentId} → all children balked/blocked at "${targetQueue}"`);
+      }
     },
   },
 
@@ -791,7 +730,7 @@ export const MACROS = [
     pattern: /^PREEMPT\(([^,)]+)\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
-      const { entities, clock, helpers, msgs, _arbitration, noteQueueDepth } = ctx;
+      const { entities, clock, helpers, msgs, _arbitration } = ctx;
       const key = normName(sType);
 
       const busyServers = entities.filter(e =>
@@ -812,7 +751,7 @@ export const MACROS = [
         return;
       }
 
-      const remainingService = preemptCustomer(cust, srv, clock, noteQueueDepth);
+      const remainingService = preemptCustomer(cust, srv, clock, ctx);
 
       if (_arbitration && typeof _arbitration === "object") {
         Object.assign(_arbitration, {
@@ -838,7 +777,7 @@ export const MACROS = [
     pattern: /^FAIL\(([^,)]+)\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
-      const { entities, clock, helpers, msgs, noteQueueDepth } = ctx;
+      const { entities, clock, helpers, msgs } = ctx;
       const key = normName(sType);
 
       const servers = entities.filter(e =>
@@ -851,7 +790,7 @@ export const MACROS = [
           const custId = srv.currentCustId;
           const cust = entities.find(e => e.id === custId);
           if (cust) {
-            const remainingService = preemptCustomer(cust, srv, clock, noteQueueDepth);
+            const remainingService = preemptCustomer(cust, srv, clock, ctx);
             msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
           }
         }
@@ -901,7 +840,7 @@ export const MACROS = [
       const entityType = match[1].trim();
       const n = parseInt(match[2], 10);
       const targetQueue = match[3].trim();
-      const { entities, clock, nextId, msgs, setLastCustId, noteEntityCreated } = ctx;
+      const { entities, clock, nextId, msgs, setLastCustId } = ctx;
 
       const custId = ctx.felRef?._contextCustId ?? ctx.getLastCustId?.();
       const cust = entities.find(e => e.id === custId);
@@ -916,6 +855,8 @@ export const MACROS = [
         return;
       }
 
+      // Each clone independently re-enters the queue-join check (F11.1/F11.2/F11.3) —
+      // one clone balking/blocking doesn't affect the others.
       const childIds = [];
       for (let i = 1; i < n; i++) {
         const childId = nextId();
@@ -923,27 +864,28 @@ export const MACROS = [
           id: childId,
           type: entityType,
           role: "customer",
-          status: "waiting",
           arrivalTime: clock,
           attrs: { ...cust.attrs },
-          queue: targetQueue,
           lastQueue: targetQueue,
           stages: [],
           loopCount: 0,
           _splitFrom: cust.id,
           _splitIndex: i,
         };
-        markEntityWaiting(child, clock, targetQueue);
-        entities.push(child);
-        noteEntityCreated?.(child);
-        childIds.push(childId);
+        if (attemptQueueJoin(child, targetQueue, clock, ctx)) {
+          childIds.push(childId);
+        }
       }
 
       cust._splitParent = true;
       cust._splitChildren = childIds;
       setLastCustId?.(cust.id);
 
-      msgs.push(`SPLIT: #${cust.id} → ${n - 1} clones [${childIds.map(id => `#${id}`).join(', ')}] → "${targetQueue}"`);
+      if (childIds.length > 0) {
+        msgs.push(`SPLIT: #${cust.id} → ${childIds.length} clone(s) [${childIds.map(id => `#${id}`).join(', ')}] → "${targetQueue}"`);
+      } else {
+        msgs.push(`SPLIT: #${cust.id} → all ${n - 1} clone(s) balked/blocked at "${targetQueue}"`);
+      }
     },
   },
 
