@@ -67,10 +67,22 @@ export function makeBatchRuntimeMetrics(replicationPayloads, replications, wallC
 // Streaming accumulator: processes each replication's time series as it arrives
 // (O(M) per rep) and accumulates sums into TypedArrays, so the raw per-rep
 // series can be freed immediately rather than held until all reps finish.
-export function makeTimeSeriesAccumulator(maxPoints = 500) {
-  let grid = null;
-  let queueSums = null;
-  let typeSums = null;
+//
+// knownMaxTime (when the run uses time-based termination) seeds the grid as
+// maxPoints evenly spaced points over [0, knownMaxTime] up front, instead of
+// deriving it from whichever replication's addSeries() call happens to land
+// first. Replications complete in non-deterministic worker order, and an
+// individual replication's own clock can stop short of knownMaxTime (e.g. its
+// event list empties early) — anchoring the grid to that one replication would
+// silently truncate every other (correctly longer-running) replication's data
+// past that point. With no knownMaxTime (condition-based termination, no
+// a-priori run length), fall back to deriving the grid from the first series.
+export function makeTimeSeriesAccumulator(maxPoints = 500, knownMaxTime = null) {
+  let grid = Number.isFinite(knownMaxTime) && knownMaxTime > 0
+    ? Array.from({ length: maxPoints }, (_, i) => (i / (maxPoints - 1)) * knownMaxTime)
+    : null;
+  let queueSums = grid ? {} : null;
+  let typeSums = grid ? {} : null;
   let count = 0;
 
   // Queues/types that haven't received any entities yet are simply absent
@@ -108,16 +120,19 @@ export function makeTimeSeriesAccumulator(maxPoints = 500) {
       typeSums = {};
     }
     let j = 0;
+    let lastWaitJ = -1; // dedup: only count a sample's waitN once, at the first grid point that consumes it
     for (let gi = 0; gi < grid.length; gi++) {
       const t = grid[gi];
       while (j < ts.length - 1 && ts[j + 1].t <= t) j++;
       const pt = ts[j]?.t <= t ? ts[j] : null;
       if (!pt) continue;
+      const isFreshSample = j !== lastWaitJ;
+      lastWaitJ = j;
       for (const [k, q] of Object.entries(pt.byQueue || {})) {
         const s = ensureQueueKey(k);
         s.waiting[gi] += q.waiting ?? 0;
         s.total[gi] += q.total ?? 0;
-        if (q.waitN) {
+        if (isFreshSample && q.waitN) {
           s.waitSum[gi] += q.avgWait * q.waitN;
           s.waitN[gi] += q.waitN;
         }
