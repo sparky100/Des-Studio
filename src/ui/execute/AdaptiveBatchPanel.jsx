@@ -213,7 +213,7 @@ export function AdaptiveBatchPanel({
 
   async function runPipeline(signal) {
     try {
-      const tsAccumulator = collectCharts ? makeTimeSeriesAccumulator() : null;
+      const tsAccumulator = collectCharts ? makeTimeSeriesAccumulator(500, maxSimTime) : null;
       const adaptiveResult = await runAdaptiveBatch({
         model,
         tier,

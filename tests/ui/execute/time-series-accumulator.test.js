@@ -72,6 +72,38 @@ describe("makeTimeSeriesAccumulator", () => {
     const t0 = result.find(pt => pt.t === 0);
     expect(t0.byType["Burger Server"]).toEqual({ waiting: 0, busy: 0, idle: 0, total: 0 });
   });
+
+  // Regression: replications complete in non-deterministic worker order, and an
+  // individual replication's own clock can stop short of the configured run
+  // length (e.g. its event list empties early). The grid must span the known
+  // run length regardless of which replication's addSeries() call arrives first.
+  it("does not truncate the grid to a short-finishing replication when knownMaxTime is known", () => {
+    const acc = makeTimeSeriesAccumulator(5, 10);
+    acc.addSeries([
+      { t: 0, byQueue: { "Beer Queue": { waiting: 0, total: 0 } }, byType: {} },
+      { t: 3, byQueue: { "Beer Queue": { waiting: 5, total: 5 } }, byType: {} },
+    ]);
+
+    const result = acc.getResult();
+    expect(result).toHaveLength(5);
+    expect(result[result.length - 1].t).toBe(10);
+    // Carried forward from this replication's last known sample.
+    expect(result[result.length - 1].byQueue["Beer Queue"].waiting).toBe(5);
+  });
+
+  // Regression: a sample's waitN must contribute to the merged result exactly
+  // once, even though it's legitimately carried forward (for state fields like
+  // waiting/total) across every grid point until the next real sample.
+  it("counts a carried-forward sample's waitN only once across the grid", () => {
+    const acc = makeTimeSeriesAccumulator(5, 10);
+    acc.addSeries([
+      { t: 0, byQueue: { "Voucher Queue": { waiting: 0, total: 1, avgWait: 4, waitN: 2 } }, byType: {} },
+    ]);
+
+    const result = acc.getResult();
+    const totalWaitN = result.reduce((sum, pt) => sum + (pt.byQueue["Voucher Queue"]?.waitN || 0), 0);
+    expect(totalWaitN).toBe(2);
+  });
 });
 
 // makeBatchResult falls back to averaging replication timeSeries directly
