@@ -173,6 +173,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
   const [results, setResults] = useState(null);
   const [liveWaitDist, setLiveWaitDist] = useState(null);
+  const [liveTimeSeries, setLiveTimeSeries] = useState(null);
   const [liveSummary, setLiveSummary] = useState(null);
   const [liveFlags, setLiveFlags] = useState([]);
   const [liveFlagsOpen, setLiveFlagsOpen] = useState(false);
@@ -467,6 +468,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setResults(null);
     setLatestRunId(null);
     setLiveWaitDist(null);
+    setLiveTimeSeries(null);
     setLiveSummary(null);
     setLiveFlags([]);
     liveHistThrottleRef.current = 0;
@@ -558,6 +560,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       if (now - liveHistThrottleRef.current > 400) {
         liveHistThrottleRef.current = now;
         setLiveWaitDist(engineRef.current.getWaitDist?.() || null);
+        setLiveTimeSeries(engineRef.current.getTimeSeries?.() || null);
         const ls = engineRef.current.getSummary?.();
         setLiveSummary(ls || null);
         if (ls) setLiveFlags(evaluateLiveHealth(r.snap, ls, model));
@@ -567,6 +570,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (r.done) {
       setMode("done");
       setLiveWaitDist(null);
+      setLiveTimeSeries(null);
       setLiveFlags([]);
       stopAuto();
       const prepareStartedAt = nowPerf();
@@ -736,6 +740,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setCurrentSnap(null);
       setResults(null);
       setLiveSummary(null);
+      setLiveTimeSeries(null);
       onResultsReady?.(null);
     const batchInitLog = [{ phase: "INIT", time: 0, message: `Replication batch started  (N=${replications}, base seed: ${runSeed})` }];
     if (chartDataAutoDisabled) {
@@ -3245,7 +3250,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 selectedEntityId={selectedEntityId}
                 onEntitySelect={setSelectedEntityId}
                 onNodeSelect={setSelectedNodeLabel}
-                timeSeries={results?.timeSeries}
+                timeSeries={liveTimeSeries ?? results?.timeSeries}
                 waitDist={liveWaitDist ?? results?.waitDist}
               />
             </>

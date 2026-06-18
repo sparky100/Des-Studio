@@ -6,6 +6,8 @@ import {
   buildRuntimeMetricsModel,
   buildServerUtilizationSeries,
   buildWaitDistributions,
+  buildWaitDistributionsByAttr,
+  buildWaitTimeSeries,
 } from "../../../src/ui/results/resultsViewModel.js";
 
 const model = {
@@ -46,6 +48,22 @@ describe("results view model", () => {
     expect(series[0].points).toEqual([{ t: 0, value: 7 }, { t: 5, value: 5 }]);
     expect(series[1].points).toEqual([{ t: 0, value: 2 }, { t: 5, value: 6 }]);
     expect(series[0].source).toBe("type-fallback");
+  });
+
+  test("buildWaitTimeSeries reads avgWait per queue on the same time axis as queue depth", () => {
+    const series = buildWaitTimeSeries({
+      timeSeries: [
+        { t: 0, byQueue: { "Queue A": { waiting: 1, avgWait: null, waitN: 0 }, "Queue B": { waiting: 4, avgWait: 2, waitN: 1 } } },
+        { t: 5, byQueue: { "Queue A": { waiting: 2, avgWait: 3, waitN: 2 }, "Queue B": { waiting: 3, avgWait: 1, waitN: 1 } } },
+      ],
+    }, model);
+
+    expect(series.map(s => s.label)).toEqual(["Queue A", "Queue B"]);
+    // Queue A's t=0 sample has no completions yet (avgWait null) and is dropped.
+    expect(series[0].points).toEqual([{ t: 5, value: 3 }]);
+    expect(series[0].hasData).toBe(false);
+    expect(series[1].points).toEqual([{ t: 0, value: 2 }, { t: 5, value: 1 }]);
+    expect(series[1].hasData).toBe(true);
   });
 
   test("buildServerUtilizationSeries normalizes busy servers by capacity", () => {
@@ -92,6 +110,39 @@ describe("results view model", () => {
     expect(distributions[0].n).toBe(6);
     expect(distributions[0].values).toEqual([]);
     expect(distributions[0].histogram).toEqual(histogram);
+  });
+
+  test("buildWaitDistributionsByAttr groups breakdown rows by attribute, queue, and value", () => {
+    const groups = buildWaitDistributionsByAttr({
+      waitDistByAttr: {
+        tier: {
+          "Queue A": {
+            gold: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4 },
+            silver: { n: 1, mean: 6, p50: 6, p90: 6, p95: 6, p99: 6 },
+          },
+        },
+      },
+    }, model);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].attrName).toBe("tier");
+    expect(groups[0].rows).toEqual([
+      { queue: "Queue A", value: "gold", n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4 },
+      { queue: "Queue A", value: "silver", n: 1, mean: 6, p50: 6, p90: 6, p95: 6, p99: 6 },
+    ]);
+  });
+
+  test("buildWaitDistributionsByAttr respects the section filter on queue id", () => {
+    const groups = buildWaitDistributionsByAttr({
+      waitDistByAttr: {
+        tier: {
+          "Queue A": { gold: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4 } },
+          "Queue B": { gold: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4 } },
+        },
+      },
+    }, model, { shouldInclude: id => id === "q-a" });
+
+    expect(groups[0].rows.map(r => r.queue)).toEqual(["Queue A"]);
   });
 
   test("buildResultsViewModel reports chart availability", () => {
@@ -141,10 +192,12 @@ describe("results view model", () => {
       "wait-distribution",
       "server-utilization",
       "queue-depth",
+      "wait-over-time",
     ]);
     expect(sections[0].question).toBe("How much time is spent queueing?");
     expect(sections[0].title).toBe("Waiting time distribution");
     expect(sections[1].method).toMatch(/busy over time/i);
     expect(sections[2].question).toBe("Where do queues build up?");
+    expect(sections[3].question).toBe("When did waits get longer?");
   });
 });

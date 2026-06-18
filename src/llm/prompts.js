@@ -444,7 +444,7 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     ...(shiftCapacity.length ? { shiftCapacity } : {}),
   };
 
-  const goalGaps = buildGoalGaps(model, agg, { ...getSummary(results), waitDist: results?.waitDist });
+  const goalGaps = buildGoalGaps(model, agg, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
   const goalsInstr = goalGaps?.length
     ? ` Performance goals were set. For each goal use this format: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])". Cite exact numbers from the goalGaps data.`
     : "";
@@ -646,6 +646,15 @@ function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}
     if (aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`]?.mean != null) {
       return aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`].mean;
     }
+    if (metric === "summary.maxWIP") {
+      const maxLengths = summary.runtimeMetrics?.max_queue_length_by_queue;
+      if (maxLengths && typeof maxLengths === "object") {
+        if (maxLengths[scope.name] != null) return maxLengths[scope.name];
+        const needle = String(scope.name || "").trim().toLowerCase();
+        const hit = Object.entries(maxLengths).find(([k]) => k.trim().toLowerCase() === needle);
+        if (hit) return hit[1];
+      }
+    }
     const q = resolveWaitDistEntry(summary.waitDist, scope.name, qId);
     if (q) {
       if (metric === "summary.avgWait") return q.mean;
@@ -835,7 +844,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
   }));
 
   const kpis = buildKpis(model, results);
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist });
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
 
   // CI data from aggregateStats (replications)
   const agg = results.aggregateStats || {};
@@ -989,7 +998,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     confidenceIntervals: confidenceIntervals.length ? confidenceIntervals : undefined,
   };
 
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist });
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
   if (goalGaps?.length) payload.goalGaps = goalGaps;
 
   const goalsInstr = goalGaps?.length
@@ -1342,7 +1351,7 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
     "Distinguish clearly between recommendations that are within current capacity and any constraints that make full goal attainment infeasible.",
   ].join(" ");
 
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist });
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
   const queues = extractQueues(model, results);
   const kpiSummary = queues.map(q => ({
     name: q.name,
@@ -1561,7 +1570,7 @@ export function buildReportRecommendationsPrompt(model = {}, results = {}) {
     "confidence is HIGH when supported by replicated CI data, MEDIUM for single-run results, LOW when inferred.",
   ].join(" ");
 
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist });
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
   const entityAnomalies = extractEntityAnomalies(results);
   const queues = extractQueues(model, results);
   const resources = extractResources(model, summary);
@@ -1719,7 +1728,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     ? `±${ciSummary.relativeHalfWidth.toFixed(1)}%`
     : "unknown";
 
-  const goalGaps = buildGoalGaps(model, aggregateStats, { ...getSummary(combinedResult), waitDist: combinedResult?.waitDist });
+  const goalGaps = buildGoalGaps(model, aggregateStats, { ...getSummary(combinedResult), waitDist: combinedResult?.waitDist, runtimeMetrics: combinedResult?.runtimeMetrics });
   const bEvents = extractBEvents(model, combinedResult);
   const cEvents = extractCEvents(model);
   const payload = {

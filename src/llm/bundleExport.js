@@ -327,7 +327,7 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
   }
 
-  const goalGaps = buildGoalGaps(model, aggregateStats, { ...(results.summary || {}), waitDist: results?.waitDist });
+  const goalGaps = buildGoalGaps(model, aggregateStats, { ...(results.summary || {}), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
   if (goalGaps && goalGaps.length) {
     lines.push('### Goals Assessment');
     lines.push('');

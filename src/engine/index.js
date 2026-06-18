@@ -654,6 +654,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let clock = 0;
   const log = [];
   const _timeSeries = collectTimeSeries ? [] : null; // null = disabled, zero overhead
+  let _lastTimeSeriesSampleT = 0; // bucket start for the per-sample avgWait computed below
 
   // G11 — WIP time-average tracking (Little's Law: avgWIP = ∫ WIP dt / T)
   let _wipIntegral = 0;
@@ -1028,12 +1029,22 @@ const cycleLog = [];
     const stepSnap = captureSnap ? snap(clock) : null;
     let liteSnap = null;
     if (_timeSeries !== null) {
+      const recentWaits = computeRecentWaitsByQueue(_lastTimeSeriesSampleT, clock);
+      const withRecentWaits = (byQueueIn) => {
+        const out = {};
+        for (const [qName, qData] of Object.entries(byQueueIn || {})) {
+          const w = recentWaits[qName];
+          out[qName] = { ...qData, avgWait: w ? w.sum / w.n : null, waitN: w ? w.n : 0 };
+        }
+        return out;
+      };
       if (stepSnap) {
-        _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: stepSnap.byQueue });
+        _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: withRecentWaits(stepSnap.byQueue) });
       } else {
         liteSnap = snapLite();
-        _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: liteSnap.byQueue });
+        _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: withRecentWaits(liteSnap.byQueue) });
       }
+      _lastTimeSeriesSampleT = clock;
       // Track max queue depth from this snapshot (same source as charts)
       const byQueue = stepSnap?.byQueue ?? liteSnap?.byQueue;
       if (byQueue) {
@@ -1132,6 +1143,7 @@ const cycleLog = [];
         : { entitySummaryCompact: summarizeEntitySummary(entities) }),
       timeSeries:      _timeSeries ?? undefined,
       waitDist:        computeWaitDist(entities),
+      waitDistByAttr:  computeWaitDistByAttr(entities),
       perQueue:        Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
       trace,
       traceTruncated,
@@ -1227,6 +1239,31 @@ const cycleLog = [];
     return truncateInterval(entity.arrivalTime, endTime);
   }
 
+  // ── time-binned average wait (layered onto the time-series depth chart) ──
+  // Stage records are only created when a stage ends (buildStageRecord, fired
+  // at completion/release), so serviceStartedAt reflects an earlier point in
+  // time than when the record becomes visible. Bucketing on serviceEndedAt
+  // (which equals the current clock for any stage that just ended) means each
+  // stage is picked up exactly once, in the bucket where it became known —
+  // answering "what was the typical wait for entities that cleared the queue
+  // around this time?"
+  function computeRecentWaitsByQueue(sinceT, untilT) {
+    const acc = {};
+    for (const e of entities) {
+      if (e.role === "server" || !e.stages || e.stages.length === 0) continue;
+      for (const stage of e.stages) {
+        const clearedAt = stage.serviceEndedAt;
+        if (clearedAt == null || clearedAt <= sinceT || clearedAt > untilT) continue;
+        const qName = stage.queueName;
+        if (!qName) continue;
+        if (!acc[qName]) acc[qName] = { sum: 0, n: 0 };
+        acc[qName].sum += truncateInterval(stage.waitStartedAt, stage.serviceStartedAt);
+        acc[qName].n++;
+      }
+    }
+    return acc;
+  }
+
   // ── waitDist: per-queue wait-time distribution (F10.4b) ───────────────────
   // Wait time = serviceStart − arrivalTime, recorded for every served customer.
   // Always computed (cheap O(n)) regardless of collectTimeSeries flag.
@@ -1250,6 +1287,52 @@ const cycleLog = [];
       dist[q] = buildWaitDistEntry(sorted);
     }
     return dist;
+  }
+
+  // ── waitDistByAttr: wait-time distribution broken down by entity attribute ─
+  // Only considers fully completed entities (status === "done"), since
+  // in-progress/reneged entities don't have a stable attribute-correlated
+  // outcome yet. Generic over whatever attributes exist on customer types —
+  // no attribute name is hardcoded.
+  function computeWaitDistByAttr(allEntities) {
+    const buckets = {}; // attrName -> queueName -> attrValue -> waits[]
+    for (const e of allEntities) {
+      if (e.role === "server" || e.status !== "done" || !e.stages || e.stages.length === 0) continue;
+      const attrs = e.attrs || {};
+      const attrNames = Object.keys(attrs).filter(name => attrs[name] != null && attrs[name] !== "");
+      if (attrNames.length === 0) continue;
+      for (const stage of e.stages) {
+        const qName = stage.queueName || e.lastQueue || e.queue;
+        if (!qName) continue;
+        const wait = truncateInterval(stage.waitStartedAt, stage.serviceStartedAt);
+        for (const attrName of attrNames) {
+          const attrValue = String(attrs[attrName]);
+          if (!buckets[attrName]) buckets[attrName] = {};
+          if (!buckets[attrName][qName]) buckets[attrName][qName] = {};
+          if (!buckets[attrName][qName][attrValue]) buckets[attrName][qName][attrValue] = [];
+          buckets[attrName][qName][attrValue].push(wait);
+        }
+      }
+    }
+
+    const result = {};
+    for (const [attrName, byQueue] of Object.entries(buckets)) {
+      const queueEntries = {};
+      for (const [qName, byValue] of Object.entries(byQueue)) {
+        // Skip attributes with only one observed value in this queue — a
+        // breakdown with a single row adds nothing beyond the per-queue dist.
+        if (Object.keys(byValue).length < 2) continue;
+        const valueEntries = {};
+        for (const [value, waits] of Object.entries(byValue)) {
+          const sorted = [...waits].sort((a, b) => a - b);
+          if (sorted.length === 0) continue;
+          valueEntries[value] = buildWaitDistEntry(sorted);
+        }
+        if (Object.keys(valueEntries).length > 0) queueEntries[qName] = valueEntries;
+      }
+      if (Object.keys(queueEntries).length > 0) result[attrName] = queueEntries;
+    }
+    return result;
   }
 
   function getSummary() {
@@ -1608,6 +1691,7 @@ const cycleLog = [];
     getRuntimeMetrics,
     getTimeSeries:        () => _timeSeries ?? undefined,
     getWaitDist:          () => computeWaitDist(entities),
+    getWaitDistByAttr:    () => computeWaitDistByAttr(entities),
     getEntitySummary:     () => entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
     updateScheduledTime,
   };

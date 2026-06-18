@@ -16,7 +16,7 @@ const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 140;
 
-const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, serverUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true };
+const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, serverUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true };
 
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
   const { C, FONT } = useTheme();
@@ -488,7 +488,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
         if (!goals.length) return null;
         const storedAgg = results?.aggregateStats && Object.keys(results.aggregateStats).length > 0
           ? results.aggregateStats : null;
-        const summary = { ...(results?.summary || {}), waitDist: results?.waitDist };
+        const summary = { ...(results?.summary || {}), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics };
         const aggForGoals = storedAgg || (() => {
           const s = summary;
           const pt = v => (v != null && Number.isFinite(Number(v)) ? { mean: Number(v), n: 1 } : null);
@@ -909,6 +909,49 @@ function WaitHistogram({ dist, color }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function WaitDistByAttrTable({ group }) {
+  const { C, FONT } = useTheme();
+  const [isOpen, setIsOpen] = useState(false);
+  const rows = Array.isArray(group?.rows) ? group.rows : [];
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div
+        onClick={() => setIsOpen(open => !open)}
+        style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: FONT, fontSize: 10, color: C.muted, letterSpacing: 0.6, fontWeight: 700, marginBottom: isOpen ? 6 : 0, userSelect: "none" }}
+      >
+        <span style={{ fontSize: 8 }}>{isOpen ? "▾" : "▸"}</span>
+        Break down by {group.attrName}
+      </div>
+      {isOpen && (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
+          <thead>
+            <tr>
+              {["Queue", group.attrName, "n", "Mean", "P50", "P90", "P95", "P99"].map((h, idx) => (
+                <th key={h} style={{ textAlign: idx < 2 ? "left" : "right", color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, paddingRight: idx < 2 ? 12 : 0, paddingLeft: idx >= 2 ? 10 : 0, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={`${row.queue}::${row.value}`}>
+                <td style={{ color: C.text, paddingTop: 3, paddingRight: 12, whiteSpace: "nowrap" }}>{row.queue}</td>
+                <td style={{ color: C.text, paddingTop: 3, paddingRight: 12, whiteSpace: "nowrap" }}>{row.value}</td>
+                <td style={{ color: C.muted, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{row.n}</td>
+                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.mean)}</td>
+                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p50)}</td>
+                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p90)}</td>
+                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p95)}</td>
+                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p99)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -1586,7 +1629,9 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const queueSection = chartModel.chartSections.find(section => section.id === "queue-depth");
   const serverSection = chartModel.chartSections.find(section => section.id === "server-utilization");
   const waitSection = chartModel.chartSections.find(section => section.id === "wait-distribution");
+  const waitTimeSection = chartModel.chartSections.find(section => section.id === "wait-over-time");
   const hasWaitDistributions = (waitSection?.distributions || []).length > 0;
+  const hasWaitTimeSeries = (waitTimeSection?.series || []).length > 0;
   const queuePeaks = Array.isArray(chartModel.runtimeMetrics?.metrics?.maxQueueLengthByQueue)
     ? chartModel.runtimeMetrics.metrics.maxQueueLengthByQueue
     : [];
@@ -1814,6 +1859,33 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               </div>
             )}
 
+            {chartModel.hasTimeSeries && hasWaitTimeSeries && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <SectionHeader id="waitOverTime" label="When did waits get longer?" isOpen={sectionsOpen.waitOverTime} onToggle={toggleSection} />
+                <div id="results-section-waitOverTime" style={{ display: sectionsOpen.waitOverTime ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+                  <ChartSectionShell section={waitTimeSection}>
+                    <div aria-label="Average wait over time chart grid" style={CHART_GRID}>
+                      {waitTimeSection.series.map((series, idx) => {
+                        const color = CHART_COLORS[idx % CHART_COLORS.length];
+                        return (
+                          <ChartCard
+                            key={series.id}
+                            title={series.label}
+                            color={color}
+                            sourceLabel={series.sourceLabel}
+                            statItems={lineSeriesStats(series, "avg wait", color)}
+                            dataPreview={<SeriesDataPreview series={series} />}
+                          >
+                            <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="avg wait" />
+                          </ChartCard>
+                        );
+                      })}
+                    </div>
+                  </ChartSectionShell>
+                </div>
+              </div>
+            )}
+
             {/* 3. Wait-time distributions — what did entities experience? */}
             {hasWaitDistributions && (
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -1836,6 +1908,9 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                         );
                       })}
                     </div>
+                    {(waitSection.distributionsByAttr || []).map(group => (
+                      <WaitDistByAttrTable key={group.attrName} group={group} />
+                    ))}
                   </ChartSectionShell>
                 </div>
               </div>
