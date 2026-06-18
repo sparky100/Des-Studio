@@ -58,12 +58,13 @@ export function evaluateResultsHealth(results = {}, model = {}) {
   }
 
   // H11 — Zombie asset (zero utilisation for extended period while system is active)
+  const runLength = Number(results?.finalTime ?? results?.snap?.clock);
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
     const zeroDur = Number(stats?.maxSustainedZeroUtil);
     if (!Number.isFinite(zeroDur) || zeroDur <= 0) continue;
     const totalArrived = Number(summary.total ?? summary.arrived ?? summary.totalArrived ?? 0);
-    const avgInterArrival = totalArrived > 0 && summary.avgSojourn != null
-      ? (summary.maxSimTime ?? (summary.terminatingState?.finalTime ?? 100)) / totalArrived
+    const avgInterArrival = totalArrived > 0 && Number.isFinite(runLength) && runLength > 0
+      ? runLength / totalArrived
       : null;
     if (avgInterArrival != null && zeroDur > avgInterArrival * 5) {
       flags.push({ code: "H11", severity: "warning", resource: typeName,
@@ -75,7 +76,8 @@ export function evaluateResultsHealth(results = {}, model = {}) {
   // H2 — Growing queue (last 20% of run mean > 1.5× first 20%) — requires timeSeries
   if (timeSeries.length >= 10) {
     const splitAt = Math.max(1, Math.floor(timeSeries.length * 0.2));
-    const queueNames = Object.keys(timeSeries[0]?.byQueue || {});
+    const queueNames = new Set();
+    for (const pt of timeSeries) for (const k of Object.keys(pt.byQueue || {})) queueNames.add(k);
     for (const q of queueNames) {
       const avg = (slice) => {
         const sum = slice.reduce((s, pt) => s + (pt.byQueue?.[q]?.waiting ?? 0), 0);
@@ -122,6 +124,21 @@ export function evaluateResultsHealth(results = {}, model = {}) {
     flags.push({ code: "H7", severity: "critical",
       message: `Only ${Math.round(servedRatio * 100)}% of arrivals completed — the system cannot keep up with demand.`,
       suggestion: "Reduce arrival rate or add capacity — the system is severely overwhelmed." });
+  }
+
+  // H12 — High renege rate (entities abandoning queues)
+  const reneged = Number(summary.reneged ?? 0);
+  const renegeRatio = totalArrived > 0 ? reneged / totalArrived : null;
+  if (renegeRatio != null && renegeRatio >= 0.1 && totalArrived >= 10) {
+    if (renegeRatio >= 0.25) {
+      flags.push({ code: "H12", severity: "critical",
+        message: `${Math.round(renegeRatio * 100)}% of arrivals reneged (abandoned a queue) — a large share of demand is being lost.`,
+        suggestion: "Reduce wait times by adding capacity or shortening queues — customers are abandoning before being served." });
+    } else {
+      flags.push({ code: "H12", severity: "warning",
+        message: `${Math.round(renegeRatio * 100)}% of arrivals reneged (abandoned a queue).`,
+        suggestion: "Check queue wait times — a notable share of customers are leaving before being served." });
+    }
   }
 
   // H4 — Peak queue ≥ 2× finite capacity, or > 50 when unbounded
@@ -202,6 +219,15 @@ export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
     if (!Number.isFinite(starvPct) || starvPct <= 0.2) continue;
     flags.push({ code: "L2", severity: "warning", resource: typeName,
       message: `${typeName} starved ${Math.round(starvPct * 100)}% — idle with work queued.` });
+  }
+
+  // L7 — High renege rate (entities abandoning queues)
+  const liveTotalArrived = Number(summary.total ?? summary.arrived ?? summary.totalArrived ?? 0);
+  const liveReneged = Number(summary.reneged ?? 0);
+  const liveRenegeRatio = liveTotalArrived > 0 ? liveReneged / liveTotalArrived : null;
+  if (liveRenegeRatio != null && liveRenegeRatio >= 0.1 && liveTotalArrived >= 10) {
+    flags.push({ code: "L7", severity: liveRenegeRatio >= 0.25 ? "critical" : "warning",
+      message: `${Math.round(liveRenegeRatio * 100)}% of arrivals reneged so far.` });
   }
 
   // L4 — Continuous starvation exceeding 2× mean service time
