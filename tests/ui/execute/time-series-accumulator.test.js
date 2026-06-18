@@ -104,6 +104,27 @@ describe("makeTimeSeriesAccumulator", () => {
     const totalWaitN = result.reduce((sum, pt) => sum + (pt.byQueue["Voucher Queue"]?.waitN || 0), 0);
     expect(totalWaitN).toBe(2);
   });
+
+  // Regression: the engine records one raw sample per event, far denser than
+  // the merged grid (maxPoints). When a grid point's pointer advance skips over
+  // several raw samples at once, every skipped sample's waitN/waitSum must still
+  // be folded in — not just the single last sample reached — or a busy queue's
+  // completions recorded between grid points are silently lost, leaving its
+  // wait-over-time chart with too few points to render (this caused "Beer Queue"
+  // to be missing from the "When did waits get longer?" section entirely).
+  it("sums waitN/waitSum from every raw sample skipped between two grid points", () => {
+    const acc = makeTimeSeriesAccumulator(5, 10); // grid: [0, 2.5, 5, 7.5, 10]
+    acc.addSeries([
+      { t: 0, byQueue: { "Beer Queue": { waiting: 0, total: 0 } }, byType: {} },
+      { t: 1, byQueue: { "Beer Queue": { waiting: 0, total: 1, avgWait: 2, waitN: 1 } }, byType: {} },
+      { t: 2, byQueue: { "Beer Queue": { waiting: 0, total: 1, avgWait: 4, waitN: 1 } }, byType: {} },
+    ]);
+
+    const result = acc.getResult();
+    const t2_5 = result.find(pt => pt.t === 2.5);
+    expect(t2_5.byQueue["Beer Queue"].waitN).toBe(2);
+    expect(t2_5.byQueue["Beer Queue"].avgWait).toBeCloseTo(3); // (2*1 + 4*1) / 2
+  });
 });
 
 // makeBatchResult falls back to averaging replication timeSeries directly

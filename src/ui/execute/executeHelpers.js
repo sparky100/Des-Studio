@@ -120,22 +120,29 @@ export function makeTimeSeriesAccumulator(maxPoints = 500, knownMaxTime = null) 
       typeSums = {};
     }
     let j = 0;
-    let lastWaitJ = -1; // dedup: only count a sample's waitN once, at the first grid point that consumes it
+    let waitConsumedIdx = -1; // highest raw-sample index whose waitN/waitSum has already been folded in
     for (let gi = 0; gi < grid.length; gi++) {
       const t = grid[gi];
       while (j < ts.length - 1 && ts[j + 1].t <= t) j++;
       const pt = ts[j]?.t <= t ? ts[j] : null;
       if (!pt) continue;
-      const isFreshSample = j !== lastWaitJ;
-      lastWaitJ = j;
+      // A coarse grid point can skip over several raw samples (the engine records one
+      // per event, far denser than maxPoints) — fold in every raw sample's waitN/waitSum
+      // since the last grid point that consumed one, not just the last sample reached,
+      // or completions recorded in the skipped samples are silently lost.
+      for (let k = waitConsumedIdx + 1; k <= j; k++) {
+        for (const [qName, q] of Object.entries(ts[k].byQueue || {})) {
+          if (!q.waitN) continue;
+          const s = ensureQueueKey(qName);
+          s.waitSum[gi] += q.avgWait * q.waitN;
+          s.waitN[gi] += q.waitN;
+        }
+      }
+      waitConsumedIdx = j;
       for (const [k, q] of Object.entries(pt.byQueue || {})) {
         const s = ensureQueueKey(k);
         s.waiting[gi] += q.waiting ?? 0;
         s.total[gi] += q.total ?? 0;
-        if (isFreshSample && q.waitN) {
-          s.waitSum[gi] += q.avgWait * q.waitN;
-          s.waitN[gi] += q.waitN;
-        }
       }
       for (const [k, ty] of Object.entries(pt.byType || {})) {
         const s = ensureTypeKey(k);
