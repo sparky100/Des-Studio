@@ -317,6 +317,26 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       ]))
     : lastResult?.waitDistByAttr;
 
+  // Aggregate waitByArrivalAttr across all replications by pooling raw
+  // [arrivalTime, totalWait] points per (attrName, attrValue) — global,
+  // not per-queue, so just concatenate rather than re-deriving distributions.
+  const waitByArrivalAttrAcc = {};
+  for (const payload of replicationPayloads) {
+    const wbaa = payload?.result?.waitByArrivalAttr;
+    if (!wbaa) continue;
+    for (const [attrName, byValue] of Object.entries(wbaa)) {
+      for (const [value, points] of Object.entries(byValue)) {
+        if (!Array.isArray(points)) continue;
+        waitByArrivalAttrAcc[attrName] ??= {};
+        waitByArrivalAttrAcc[attrName][value] ??= [];
+        for (const pt of points) waitByArrivalAttrAcc[attrName][value].push(pt);
+      }
+    }
+  }
+  const waitByArrivalAttr = Object.keys(waitByArrivalAttrAcc).length
+    ? waitByArrivalAttrAcc
+    : lastResult?.waitByArrivalAttr;
+
 // Compute an ensemble-average time series from all replication time series.
 // For each time grid point we take the last-known snapshot per replication
 // (step interpolation — correct for discrete queue counts) and average across reps.
@@ -399,6 +419,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
     timeSeries: precomputedTimeSeries !== undefined ? precomputedTimeSeries : averageBatchTimeSeries(replicationPayloads),
     waitDist,
     waitDistByAttr,
+    waitByArrivalAttr,
     perQueue,
     runtimeMetrics: {
       replications: replicationPayloads.length,

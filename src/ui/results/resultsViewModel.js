@@ -217,12 +217,67 @@ export function buildWaitDistributionsByAttr(results = {}, model = {}, sectionFi
     .filter(group => group.rows.length > 0);
 }
 
+const ARRIVAL_BUCKET_COUNT = 24;
+
+// Bin raw [arrivalTime, totalWait] points into evenly-spaced arrival-time
+// buckets for charting. Mirrors the persistence-layer compaction in
+// src/db/results-persistence.js (compactifyArrivalSeries) so saved/compacted
+// runs (which arrive pre-binned as { buckets: [...] }) render identically to
+// freshly-run "full" detail results (which arrive as raw points).
+function binArrivalPoints(points) {
+  const sorted = [...points].sort((a, b) => a[0] - b[0]);
+  const minT = sorted[0][0];
+  const maxT = sorted[sorted.length - 1][0];
+  if (maxT <= minT) {
+    const mean = sorted.reduce((sum, [, w]) => sum + w, 0) / sorted.length;
+    return [{ t: minT, value: mean, n: sorted.length }];
+  }
+  const bucketWidth = (maxT - minT) / ARRIVAL_BUCKET_COUNT;
+  const sums = new Array(ARRIVAL_BUCKET_COUNT).fill(0);
+  const counts = new Array(ARRIVAL_BUCKET_COUNT).fill(0);
+  for (const [t, w] of sorted) {
+    const idx = Math.min(ARRIVAL_BUCKET_COUNT - 1, Math.floor((t - minT) / bucketWidth));
+    sums[idx] += w;
+    counts[idx]++;
+  }
+  const out = [];
+  for (let i = 0; i < ARRIVAL_BUCKET_COUNT; i++) {
+    if (counts[i] === 0) continue;
+    out.push({ t: minT + (i + 0.5) * bucketWidth, value: sums[i] / counts[i], n: counts[i] });
+  }
+  return out;
+}
+
+export function buildWaitByArrivalAttr(results = {}) {
+  const waitByArrivalAttr = results?.waitByArrivalAttr && typeof results.waitByArrivalAttr === "object"
+    ? results.waitByArrivalAttr
+    : {};
+
+  return Object.entries(waitByArrivalAttr)
+    .map(([attrName, byValue]) => {
+      const series = Object.entries(byValue || {})
+        .map(([value, data]) => {
+          const points = Array.isArray(data)
+            ? (data.length > 0 ? binArrivalPoints(data) : [])
+            : Array.isArray(data?.buckets)
+              ? data.buckets.map(b => ({ t: finiteNumber(b.t), value: finiteNumber(b.mean), n: finiteNumber(b.n) }))
+              : [];
+          return { value, points, hasData: points.length >= 2 };
+        })
+        .filter(s => s.hasData)
+        .sort((a, b) => a.value.localeCompare(b.value));
+      return { attrName, series };
+    })
+    .filter(group => group.series.length > 0);
+}
+
 export function buildChartSections(results = {}, model = {}, sectionFilter = null) {
   const queueDepthSeries = buildQueueDepthSeries(results, model, sectionFilter);
   const serverUtilizationSeries = buildServerUtilizationSeries(results, model, sectionFilter);
   const waitDistributions = buildWaitDistributions(results, model, sectionFilter);
   const waitDistributionsByAttr = buildWaitDistributionsByAttr(results, model, sectionFilter);
   const waitTimeSeries = buildWaitTimeSeries(results, model, sectionFilter).filter(s => s.hasData);
+  const waitByArrivalAttrGroups = buildWaitByArrivalAttr(results);
 
   return [
     {
@@ -261,6 +316,14 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
       emptyMessage: "Run with Detailed output enabled to see wait time over time.",
       series: waitTimeSeries,
       maxValue: Math.max(0, ...waitTimeSeries.map(maxPointValue)),
+    },
+    {
+      id: "wait-by-arrival-attr",
+      title: "Wait time by arrival time, by attribute",
+      question: "Did wait get worse for entities that arrived later — and does that differ by attribute?",
+      method: "Shows each completed entity's total wait (across every queue it passed through), bucketed by when it arrived, split by a chosen entity attribute. This is a whole-journey view, not scoped to a single queue.",
+      emptyMessage: "Run with Detailed output enabled, on a model with entity attributes, to see wait by arrival time.",
+      groups: waitByArrivalAttrGroups,
     },
   ];
 }
