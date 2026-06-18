@@ -1144,6 +1144,7 @@ const cycleLog = [];
       timeSeries:      _timeSeries ?? undefined,
       waitDist:        computeWaitDist(entities),
       waitDistByAttr:  computeWaitDistByAttr(entities),
+      waitByArrivalAttr: computeWaitByArrivalAttr(entities),
       perQueue:        Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
       trace,
       traceTruncated,
@@ -1331,6 +1332,35 @@ const cycleLog = [];
         if (Object.keys(valueEntries).length > 0) queueEntries[qName] = valueEntries;
       }
       if (Object.keys(queueEntries).length > 0) result[attrName] = queueEntries;
+    }
+    return result;
+  }
+
+  // ── waitByArrivalAttr: total wait (across every queue/stage) vs. arrival
+  // time, broken down by entity attribute. Unlike waitDistByAttr (per-queue),
+  // this is a global, whole-journey view answering "did wait get worse for
+  // entities that arrived later, and does that differ by attribute value?"
+  function computeWaitByArrivalAttr(allEntities) {
+    const buckets = {}; // attrName -> attrValue -> [arrivalTime, totalWait][]
+    for (const e of allEntities) {
+      if (e.role === "server" || e.status !== "done" || !e.stages || e.stages.length === 0) continue;
+      const attrs = e.attrs || {};
+      const attrNames = Object.keys(attrs).filter(name => attrs[name] != null && attrs[name] !== "");
+      if (attrNames.length === 0) continue;
+      const totalWait = entityWaitAfterWarmup(e);
+      for (const attrName of attrNames) {
+        const attrValue = String(attrs[attrName]);
+        if (!buckets[attrName]) buckets[attrName] = {};
+        if (!buckets[attrName][attrValue]) buckets[attrName][attrValue] = [];
+        buckets[attrName][attrValue].push([e.arrivalTime, totalWait]);
+      }
+    }
+
+    const result = {};
+    for (const [attrName, byValue] of Object.entries(buckets)) {
+      // Skip attributes with only one observed value — nothing to split.
+      if (Object.keys(byValue).length < 2) continue;
+      result[attrName] = byValue;
     }
     return result;
   }

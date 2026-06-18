@@ -193,11 +193,13 @@ describe("results view model", () => {
       "server-utilization",
       "queue-depth",
       "wait-over-time",
+      "wait-by-arrival-attr",
     ]);
     expect(sections[0].question).toBe("How much time is spent queueing?");
     expect(sections[0].title).toBe("Waiting time distribution");
     expect(sections[1].method).toMatch(/busy over time/i);
     expect(sections[2].question).toBe("Where do queues build up?");
     expect(sections[3].question).toBe("When did waits get longer?");
+    expect(sections[4].question).toMatch(/Did wait get worse for entities that arrived later/i);
   });
 });

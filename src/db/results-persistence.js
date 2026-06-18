@@ -66,6 +66,45 @@ function compactifyWaitDistByAttr(waitDistByAttr = {}) {
   ]));
 }
 
+// Bin raw [arrivalTime, totalWait] points into a fixed number of arrival-time
+// buckets, replacing the (potentially large, one-entry-per-entity) raw array
+// with a small summary — same trade-off as compactifyDistEntry's histogram.
+const ARRIVAL_BUCKET_COUNT = 24;
+
+function compactifyArrivalSeries(points) {
+  if (!Array.isArray(points) || points.length === 0) return { buckets: [] };
+  const sorted = [...points].sort((a, b) => a[0] - b[0]);
+  const minT = sorted[0][0];
+  const maxT = sorted[sorted.length - 1][0];
+  if (maxT <= minT) {
+    const mean = sorted.reduce((sum, [, w]) => sum + w, 0) / sorted.length;
+    return { buckets: [{ t: minT, n: sorted.length, mean }] };
+  }
+  const bucketWidth = (maxT - minT) / ARRIVAL_BUCKET_COUNT;
+  const sums = new Array(ARRIVAL_BUCKET_COUNT).fill(0);
+  const counts = new Array(ARRIVAL_BUCKET_COUNT).fill(0);
+  for (const [t, w] of sorted) {
+    const idx = Math.min(ARRIVAL_BUCKET_COUNT - 1, Math.floor((t - minT) / bucketWidth));
+    sums[idx] += w;
+    counts[idx]++;
+  }
+  const buckets = [];
+  for (let i = 0; i < ARRIVAL_BUCKET_COUNT; i++) {
+    if (counts[i] === 0) continue;
+    buckets.push({ t: minT + (i + 0.5) * bucketWidth, n: counts[i], mean: sums[i] / counts[i] });
+  }
+  return { buckets };
+}
+
+// Same idea as compactifyWaitDistByAttr, but one level shallower (no queue
+// dimension — waitByArrivalAttr is a global, whole-journey breakdown).
+function compactifyWaitByArrivalAttr(waitByArrivalAttr = {}) {
+  return Object.fromEntries(Object.entries(waitByArrivalAttr || {}).map(([attrName, byValue]) => [
+    attrName,
+    Object.fromEntries(Object.entries(byValue || {}).map(([value, points]) => [value, compactifyArrivalSeries(points)])),
+  ]));
+}
+
 // Legacy alias — used only for the payload-size safety guard path below.
 const summarizeWaitDist = compactifyWaitDist;
 
@@ -206,6 +245,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
       trimmedFields.push("waitDistByAttr.values→histogram");
     }
+    if (resultsJson.waitByArrivalAttr && typeof resultsJson.waitByArrivalAttr === "object") {
+      resultsJson.waitByArrivalAttr = compactifyWaitByArrivalAttr(resultsJson.waitByArrivalAttr);
+      trimmedFields.push("waitByArrivalAttr.points→buckets");
+    }
     if (Array.isArray(resultsJson.replications) && resultsJson.replications.length > 0) {
       resultsJson.replications = resultsJson.replications.map(replication => ({
         replicationIndex: replication.replicationIndex,
@@ -244,6 +287,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
       trimmedFields.push("waitDistByAttr.values→histogram");
     }
+    if (resultsJson.waitByArrivalAttr && typeof resultsJson.waitByArrivalAttr === "object") {
+      resultsJson.waitByArrivalAttr = compactifyWaitByArrivalAttr(resultsJson.waitByArrivalAttr);
+      trimmedFields.push("waitByArrivalAttr.points→buckets");
+    }
   }
 
   if (trimmedFields.length > 0) {
@@ -268,6 +315,9 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     }
     if (resultsJson.waitDistByAttr && typeof resultsJson.waitDistByAttr === "object") {
       resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
+    }
+    if (resultsJson.waitByArrivalAttr && typeof resultsJson.waitByArrivalAttr === "object") {
+      resultsJson.waitByArrivalAttr = compactifyWaitByArrivalAttr(resultsJson.waitByArrivalAttr);
     }
     if (Array.isArray(resultsJson.replications)) {
       resultsJson.replications = resultsJson.replications.map(r => ({
