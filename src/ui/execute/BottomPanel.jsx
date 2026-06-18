@@ -707,6 +707,11 @@ function EntityInspector({ entity, snap, onClose }) {
         <span style={{ color: C.kpiArr, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>
           #{entity.id}
         </span>
+        {entity.attrs?.entityId != null && (
+          <span style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
+            ({entity.attrs.entityId})
+          </span>
+        )}
         <span style={{ color: C.text, fontFamily: FONT, fontSize: 12 }}>{entity.type}</span>
         <Tag label={formatStatus(entity.status)} color={entity.status === "waiting" ? C.amber : entity.status === "serving" ? C.accent : entity.status === "batch" ? C.purple : C.green} />
       </div>
@@ -766,11 +771,11 @@ function EntityInspector({ entity, snap, onClose }) {
         )}
       </div>
 
-      {entity.attrs && Object.keys(entity.attrs).length > 0 && (
+      {entity.attrs && Object.keys(entity.attrs).filter(k => k !== "entityId").length > 0 && (
         <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, marginBottom: 4, textTransform: "uppercase" }}>Attributes</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
-            {Object.entries(entity.attrs).map(([k, v]) => (
+            {Object.entries(entity.attrs).filter(([k]) => k !== "entityId").map(([k, v]) => (
               <div key={k} style={rowStyle}>
                 <span style={labelStyle}>{k}</span>
                 <span style={valueStyle}>{formatAttrValue(v)}</span>
@@ -833,7 +838,8 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
         : (e.ceventName || e.lastQueue || e.queue || "");
       return String(e.id).includes(q) ||
         (e.type || "").toLowerCase().includes(q) ||
-        loc.toLowerCase().includes(q);
+        loc.toLowerCase().includes(q) ||
+        String(e.attrs?.entityId ?? "").toLowerCase().includes(q);
     }
     return true;
   });
@@ -899,7 +905,12 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
                         background: isSelected ? `${C.accent}18` : "transparent",
                       }}
                     >
-                      <td style={{ padding: "4px 8px", color: C.kpiArr, fontFamily: FONT, fontWeight: 700 }}>#{e.id}</td>
+                      <td style={{ padding: "4px 8px", color: C.kpiArr, fontFamily: FONT, fontWeight: 700 }}>
+                        #{e.id}
+                        {e.attrs?.entityId != null && (
+                          <span style={{ color: C.muted, fontWeight: 400 }}> ({e.attrs.entityId})</span>
+                        )}
+                      </td>
                       <td style={{ padding: "4px 8px", fontFamily: FONT }}>{e.type}</td>
                       <td style={{ padding: "4px 8px" }}>
                         <Tag label={formatStatus(e.status)} color={e.status === "waiting" ? C.amber : e.status === "serving" ? C.accent : C.green} />

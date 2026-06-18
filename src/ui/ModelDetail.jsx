@@ -1328,7 +1328,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 <input
                   type="datetime-local"
                   value={(model.epoch||"").slice(0,16)}
-                  onChange={canEdit?(e=>setField("epoch", e.target.value ? new Date(e.target.value).toISOString() : "")):undefined}
+                  onChange={canEdit?(e=>setField("epoch", e.target.value ? `${e.target.value}:00` : "")):undefined}
                   disabled={!canEdit}
                   style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:FONT,fontSize:12,padding:"5px 8px",width:240,outline:"none"}}
                 />
