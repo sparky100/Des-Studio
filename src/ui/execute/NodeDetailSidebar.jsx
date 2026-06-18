@@ -62,6 +62,7 @@ function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
       serviceStart: srv._busyStart ?? null,
       customerId: srv.currentCustId ?? null,
       customerType: cust?.type ?? null,
+      customerEntityId: cust?.attrs?.entityId ?? null,
       customerArrivalTime: cust?.arrivalTime ?? null,
       ceventName: cust?.ceventName ?? null,
     };
@@ -137,7 +138,11 @@ function QueueDetail({ label, liveData, onEntitySelect }) {
                   #{i + 1}
                 </span>
                 <span style={{ fontSize: 11, color: C.text, fontFamily: FONT }}>
-                  #{entity.id} <span style={{ color: C.muted }}>{entity.type}</span>
+                  #{entity.id}
+                  {entity.attrs?.entityId != null && (
+                    <span style={{ color: C.muted }}> ({entity.attrs.entityId})</span>
+                  )}{" "}
+                  <span style={{ color: C.muted }}>{entity.type}</span>
                 </span>
                 <span style={{ fontSize: 10, color: C.amber, fontFamily: FONT }}>
                   t={waitTime.toFixed(1)}
@@ -280,6 +285,7 @@ export function ActivityDetail({ label, liveData, onEntitySelect }) {
                         onClick={() => onEntitySelect?.(srv.customerId)}
                       >
                         #{srv.customerId}
+                        {srv.customerEntityId != null ? ` (${srv.customerEntityId})` : ""}
                       </span>
                       {srv.customerType ? ` (${srv.customerType})` : ""}
                     </span>
@@ -336,6 +342,7 @@ export function ActivityDetail({ label, liveData, onEntitySelect }) {
                       {srv.status === "busy" && srv.customerId != null && (
                         <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
                           was serving #{srv.customerId}
+                          {srv.customerEntityId != null ? ` (${srv.customerEntityId})` : ""}
                         </span>
                       )}
                     </div>
