@@ -1442,6 +1442,57 @@ describe('Sprint 71 — persistence layer', () => {
     });
   });
 
+  // ── round-trip: queue-scoped balking/reneging fields (F11.2) ───────────────
+  describe('round-trip — queue balkProbability/balkCondition/renegeDist survive saveModel + norm()', () => {
+    it('the insert payload preserves the new Queue fields', async () => {
+      const queues = [
+        {
+          id: 'q-rt', name: 'Main Queue', customerType: 'Customer', discipline: 'FIFO',
+          balkProbability: 0.25,
+          balkCondition: { variable: 'Queue.Main Queue.length', operator: '>=', value: 3 },
+          renegeDist: 'Exponential',
+          renegeDistParams: { rate: '0.5' },
+        },
+      ];
+      const model = {
+        name: 'Balk RT Model',
+        entityTypes: [], stateVariables: [], bEvents: [], cEvents: [],
+        queues,
+      };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.queues).toEqual(queues);
+    });
+
+    it('norm() preserves the new Queue fields from a DB row', () => {
+      const queues = [
+        {
+          id: 'q-rt', name: 'Main Queue', customerType: 'Customer', discipline: 'FIFO',
+          balkProbability: 0.25,
+          balkCondition: { variable: 'Queue.Main Queue.length', operator: '>=', value: 3 },
+          renegeDist: 'Exponential',
+          renegeDistParams: { rate: '0.5' },
+        },
+      ];
+      const result = norm({
+        id: 'm-rt', name: 'Balk RT Model',
+        entity_types: [], b_events: [], c_events: [], queues,
+        model_json: {},
+      });
+
+      expect(result.queues).toEqual(queues);
+    });
+  });
+
   // ── 71.1.4  Round-trip: model_json.sections survives saveModel insert ────
   describe('round-trip — model_json.sections survives saveModel insert', () => {
     it('the insert payload model_json contains sections from the input object', async () => {

@@ -288,8 +288,8 @@ This section defines every action the engine supports. This is the **complete an
 | **Inputs** | `entityId: string` — the entity that may renege. `queueId: string` — the queue the entity is waiting in. `patienceDist: Distribution` — patience time sampled at arrival. `nextNodeId: string` — Sink or alternative Queue to route the reneging entity to. |
 | **Preconditions** | Entity must still be in `queueId` when the B-Event fires. If the entity has already been seized (SEIZE fired first), the RENEGE B-Event is cancelled silently — this is the standard race condition and is correct behaviour. |
 | **State changes** | 1. If entity is still in queue: entity removed. `Queue.<queueId>.length` decremented by 1. 2. Renege count for this queue incremented by 1. 3. Entity routed to `nextNodeId` per the COMPLETE routing rules. 4. If entity has already been seized: no state change. RENEGE B-Event is a no-op. |
-| **Scheduling** | The RENEGE B-Event is scheduled inside the ARRIVE action at `T_arrival + sample(patienceDist)`. It is not scheduled by a C-Event. The modeller sets `patienceDist` on the Source node, not on the Activity. |
-| **Error conditions** | If `patienceDist` produces a non-positive sample, the engine must raise a validation error. An entity cannot renege before it arrives. |
+| **Scheduling** | The renege timer can be scheduled two ways: (1) manually, as a second `schedules[]` entry (`isRenege: true`) on whichever B-event delivers the entity into the queue — not necessarily the ARRIVE action, since RELEASE/routing/batch/split can all join a queue; or (2) automatically, by setting `renegeDist`/`renegeDistParams` directly on the Queue itself, which the engine schedules at `T_join + sample(renegeDist)` with no B-Event authoring required. Both mechanisms can coexist on the same queue. |
+| **Error conditions** | If `patienceDist`/`renegeDist` produces a non-positive sample, the engine must raise a validation error. An entity cannot renege before it joins the queue. |
 
 ---
 
@@ -651,7 +651,7 @@ The engine must validate the complete model before `buildEngine()` proceeds. Any
 | V18 | B-event `probabilisticRouting`: probabilities must sum to 1.0 (±0.001); every `queueName` must reference a defined queue; mutually exclusive with `routing` and a RELEASE literal queue arg. | Blocking | `B-Event '{name}' probabilistic routing probabilities sum to {sum}, must be 1.0.` |
 | V19 | Server entity type `count` must be an integer ≥ 1. | Blocking | `Server type '{name}' count '{val}' must be an integer ≥ 1.` |
 | V20 | Queue `capacity` must be an integer ≥ 1 when set. If `overflowDestination` is set, it must reference a defined queue. | Blocking | `Queue 'X' capacity 'Y' must be an integer >= 1.` / `Queue 'X' overflowDestination 'Y' does not match any defined queue.` |
-| V21 | `balkProbability` on a B-Event must be between 0 and 1 inclusive. | Blocking | `B-Event 'X' balkProbability 'Y' must be between 0 and 1.` |
+| V21 | `balkProbability` on a Queue must be between 0 and 1 inclusive. | Blocking | `Queue 'X' balkProbability 'Y' must be between 0 and 1.` |
 | V22 | BATCH `batchSize` must be an integer ≥ 2. The referenced queue must exist. | Blocking | `BATCH batchSize must be integer >= 2.` / `BATCH references unknown queue 'X'.` |
 | V23 | UNBATCH `targetQueue` must reference a defined queue. | Blocking | `UNBATCH references unknown queue 'X'.` |
 | V24 | Loop guard `maxLoopCount` must be an integer ≥ 1. `exitQueueName` must reference a defined queue when set. | Blocking | `Loop guard maxLoopCount must be integer >= 1.` / `Loop guard exitQueueName 'X' does not match any defined queue.` |

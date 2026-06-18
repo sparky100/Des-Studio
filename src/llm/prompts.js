@@ -39,7 +39,7 @@ function extractQueues(model = {}, results = {}) {
       const qName = queue.name || queue.id || "Queue";
       const wd = waitDist[qName] || {};
       const pq = perQueue[qName] || {};
-      return {
+      const entry = {
         name: qName,
         discipline: queue.discipline || "FIFO",
         capacity: queue.capacity ?? null,
@@ -56,6 +56,11 @@ function extractQueues(model = {}, results = {}) {
         blockingCount: finiteOrNull(pq.blockingCount),
         balkCount: finiteOrNull(pq.balkCount),
       };
+      // F11.2 — balking/reneging are queue-scoped fields, surfaced here for the LLM digest.
+      if (queue.balkCondition) entry.balkMode = "condition";
+      else if (queue.balkProbability != null) entry.balkMode = `probability:${queue.balkProbability}`;
+      if (queue.renegeDist) entry.renegeDist = queue.renegeDist;
+      return entry;
     });
 }
 
@@ -172,6 +177,7 @@ function extractBEvents(model = {}, results = {}) {
   const bEvents = model.bEvents || [];
   if (!bEvents.length) return undefined;
   const eventCounts = results.snap?.eventCounts || {};
+  const queues = model.queues || [];
   return bEvents.map(ev => {
     const effects = Array.isArray(ev.effect) ? ev.effect : (ev.effect ? [ev.effect] : []);
     const effectTypes = [...new Set(
@@ -186,7 +192,15 @@ function extractBEvents(model = {}, results = {}) {
       routing: routingType,
     };
     if (ev.defaultQueueName) entry.defaultQueue = ev.defaultQueueName;
-    if (ev.balkCondition) entry.balkMode = "condition";
+    // F11.2 — balking is configured on the target queue, not the B-event; fall back to the
+    // legacy B-event field only for pre-migration models that haven't gone through norm() yet.
+    const arriveMatch = effects.map(e => String(e).match(/^ARRIVE\(([^,)]+)(?:\s*,\s*([^,)]+))?\)/i)).find(Boolean);
+    const targetQueueName = arriveMatch ? (arriveMatch[2]?.trim() || (arriveMatch[1].trim() + "Queue")) : null;
+    const targetQueue = targetQueueName
+      ? queues.find(q => (q.name || "").trim().toLowerCase() === targetQueueName.trim().toLowerCase())
+      : null;
+    if (targetQueue?.balkCondition || ev.balkCondition) entry.balkMode = "condition";
+    else if (targetQueue?.balkProbability != null) entry.balkMode = `probability:${targetQueue.balkProbability}`;
     else if (ev.balkProbability != null) entry.balkMode = `probability:${ev.balkProbability}`;
     if (ev.loopConfig?.maxLoopCount) {
       entry.loopGuard = `max ${ev.loopConfig.maxLoopCount}x${ev.loopConfig.exitQueueName ? ` → ${ev.loopConfig.exitQueueName}` : ""}`;

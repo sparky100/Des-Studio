@@ -105,12 +105,15 @@ pattern, consult §10 directly.`,
    ✓ CORRECT: ARRIVE(Patient, Triage Queue) paired with C-event effect "ASSIGN(Triage Queue, Nurse)"
    ✗ WRONG:   ARRIVE(Patient, Discharge Queue) with no C-event that ASSIGN/BATCH/COSEIZE from it
 
-6. balkCondition and routing[].condition MUST be predicate objects, never strings.
+6. balkProbability and balkCondition are fields on the Queue object, not the ARRIVE B-event —
+   they apply uniformly no matter how an entity reaches the queue (ARRIVE, RELEASE, routing,
+   batch/split). balkCondition and routing[].condition MUST be predicate objects, never strings.
    The variable field uses dot notation — NOT the parenthesis form used in C-event conditions.
 
-   ✓ CORRECT: "balkCondition": {"variable": "Queue.Triage Queue.length", "operator": ">", "value": 10}
+   ✓ CORRECT: queue object: {"name": "Triage Queue", ..., "balkCondition": {"variable": "Queue.Triage Queue.length", "operator": ">", "value": 10}}
    ✗ WRONG:   "balkCondition": "queue(Triage Queue).length > 10"  — string form, CHK-011 error
    ✗ WRONG:   "balkCondition": {"variable": "queue(Triage Queue).length", ...}  — parenthesis form invalid in predicate objects
+   ✗ WRONG:   placing balkProbability/balkCondition on the ARRIVE B-event — legacy location, still migrated automatically but not how new models should be authored
 
 7. RELEASE() followed immediately by COMPLETE() in the same effect is always broken.
    RELEASE sets the entity to "waiting" state. COMPLETE requires "serving" state and silently skips.

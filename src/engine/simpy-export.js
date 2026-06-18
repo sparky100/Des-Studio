@@ -479,8 +479,11 @@ class Stats:
       const iaParams = sched?.distParams || { mean: 1 };
       const iaLabel = distLabel(iaDist, iaParams);
 
-      // Check for balking
-      const balkProb = b.balkProbability != null ? parseFloat(b.balkProbability) : null;
+      // Check for balking — balking is configured on the queue itself (F11.2);
+      // fall back to the legacy B-event field for pre-migration models.
+      const targetQueue = queues.find(q => (q.name || '').trim().toLowerCase() === queueName.trim().toLowerCase());
+      const balkProb = targetQueue?.balkProbability != null ? parseFloat(targetQueue.balkProbability)
+        : (b.balkProbability != null ? parseFloat(b.balkProbability) : null);
 
       let fnBody = `def ${fnName}(env, ${storeId}, stats):\n`;
       fnBody += `    """B-event "${b.name}": ARRIVE(${customerTypeName}, ${queueName})"""\n`;

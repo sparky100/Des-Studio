@@ -16,6 +16,8 @@ function makeModel({ queueCapacity = null, overflowDestination = null,
         id: "q-main", name: "Main Queue", customerType: "Customer", discipline: "FIFO",
         ...(queueCapacity    !== null ? { capacity: queueCapacity }                   : {}),
         ...(overflowDestination !== null ? { overflowDestination } : {}),
+        ...(balkProbability !== null ? { balkProbability } : {}),
+        ...(balkCondition   !== null ? { balkCondition }   : {}),
       },
       { id: "q-over", name: "Overflow Queue", customerType: "Customer", discipline: "FIFO" },
     ],
@@ -24,8 +26,6 @@ function makeModel({ queueCapacity = null, overflowDestination = null,
         id: "be-arrive", name: "Customer Arrives", scheduledTime: "0",
         effect: "ARRIVE(Customer, Main Queue)",
         schedules: [],
-        ...(balkProbability !== null ? { balkProbability } : {}),
-        ...(balkCondition   !== null ? { balkCondition }   : {}),
       },
       {
         id: "be-complete", name: "Service Complete", scheduledTime: "9999",
@@ -51,9 +51,6 @@ function makeMultiArrivalModel(n, queueOpts = {}) {
       id: `be-arrive-${i}`, name: `Arrival ${i}`, scheduledTime: String(i * 0.1),
       effect: "ARRIVE(Customer, Main Queue)",
       schedules: [],
-      ...(queueOpts.balkProbability !== null && queueOpts.balkProbability !== undefined
-          ? { balkProbability: queueOpts.balkProbability } : {}),
-      ...(queueOpts.balkCondition   ? { balkCondition: queueOpts.balkCondition } : {}),
     });
   }
   return m;

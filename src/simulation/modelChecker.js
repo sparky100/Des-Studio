@@ -400,10 +400,22 @@ function chk010(model) {
 }
 
 /**
- * CHK-011: B-event balkCondition is a string — must be a predicate object.
+ * CHK-011: balkCondition is a string — must be a predicate object.
+ * Balking is configured on the Queue (F11.2); the B-event check is kept for
+ * legacy-field hygiene on models authored before balking moved to the queue.
  */
 function chk011(model) {
   const issues = [];
+  for (const queue of model.queues || []) {
+    const name = queue.name || queue.id || "?";
+    if (typeof queue.balkCondition === 'string') {
+      issues.push(makeIssue(
+        "error", "CHK-011",
+        `Queue '${name}' has a string balkCondition — must be a predicate object { variable, operator, value }.`,
+        queue.id || null, name
+      ));
+    }
+  }
   for (const bEvent of model.bEvents || []) {
     const name = bEvent.name || bEvent.id || "?";
     if (typeof bEvent.balkCondition === 'string') {

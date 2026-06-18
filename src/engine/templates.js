@@ -660,7 +660,6 @@ const PRIORITY_ED_BALKING = {
   ],
   bEvents: [
     { id: "b_arrive",   name: "Patient Arrives",     scheduledTime: "0",    effect: ["ARRIVE(Patient, Waiting)"],
-      balkProbability: 0.1,
       schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "4" } }] },
     { id: "b_complete", name: "Consultation Done",   scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
   ],
@@ -670,7 +669,7 @@ const PRIORITY_ED_BALKING = {
     effect: ["ASSIGN(Waiting, Doctor)"],
     cSchedules: [{ eventId: "b_complete", dist: "Triangular", distParams: { min: "15", mode: "25", max: "40" }, useEntityCtx: true }],
   }],
-  queues: [{ id: "q_wait", name: "Waiting", customerType: "Patient", capacity: "30", discipline: "PRIORITY" }],
+  queues: [{ id: "q_wait", name: "Waiting", customerType: "Patient", capacity: "30", discipline: "PRIORITY", balkProbability: 0.1 }],
 };
 
 const COST_CALL_CENTRE = {

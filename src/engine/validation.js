@@ -651,13 +651,13 @@ export function validateModel(model) {
     }
   });
 
-  // ── V21: balkProbability must be 0–1; balkCondition must not be a free string (F11.2) ──
-  bEvents.forEach(b => {
-    if (b.balkProbability != null) {
-      const p = parseFloat(b.balkProbability);
+  // ── V21: balkProbability must be 0–1 (F11.2) — balking is configured on the queue ──
+  queues.forEach(q => {
+    if (q.balkProbability != null) {
+      const p = parseFloat(q.balkProbability);
       if (!Number.isFinite(p) || p < 0 || p > 1) {
-        err('V21', `B-Event '${b.name || b.id}' balkProbability '${b.balkProbability}' must be between 0 and 1.`, 'bevents',
-          { eventIds: [b.id] });
+        err('V21', `Queue '${q.name || q.id}' balkProbability '${q.balkProbability}' must be between 0 and 1.`, 'queues',
+          { queueIds: [q.id] });
       }
     }
   });
@@ -985,6 +985,37 @@ export function validateModel(model) {
         }
       });
     }
+  }
+
+  // ── V46: Detect overflowDestination cycles (F11.3) ────────────────────────
+  // At runtime, attemptQueueJoin() recursively reroutes a blocked entity through
+  // overflowDestination chains and is guarded against cycles (it falls back to
+  // "exit system" rather than looping). A cycle is still a design error — flag it
+  // here so it's caught before run, not silently swallowed at runtime.
+  {
+    const destByName = new Map();
+    queues.forEach(q => {
+      if (q.overflowDestination) {
+        destByName.set((q.name || '').trim().toLowerCase(), String(q.overflowDestination).trim().toLowerCase());
+      }
+    });
+    queues.forEach(q => {
+      const startKey = (q.name || '').trim().toLowerCase();
+      if (!destByName.has(startKey)) return;
+      const seen = new Set();
+      let cur = startKey;
+      while (destByName.has(cur)) {
+        if (seen.has(cur)) {
+          err('V46',
+            `Queue overflow chain starting at "${q.name}" cycles back to "${cur}" — entities would loop instead of reaching a terminal queue or exiting the system.`,
+            'queues',
+            { queueIds: [q.id] });
+          break;
+        }
+        seen.add(cur);
+        cur = destByName.get(cur);
+      }
+    });
   }
 
   return { errors, warnings };

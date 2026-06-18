@@ -98,7 +98,7 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 | `index.js` | `buildEngine()` factory, FEL management, run orchestration; module-level WeakMap caches resolved `runtimeModel` across reps |
 | `phases.js` | Phase A (clock advance), Phase B (B-Event fire), Phase C (C-scan with restart rule) |
 | `macros.js` | 19 effect macros: ARRIVE, ASSIGN, BATCH, COMPLETE, COSEIZE, COST, DRAIN, FAIL, FILL, MATCH, PREEMPT, RELEASE, RENEGE, RENEGE_OLDEST, REPAIR, SET, SET_ATTR, SPLIT, UNBATCH |
-| `entities.js` | Entity lifecycle, queue discipline sort functions, server pool management, `_busyStart`/`_busyTime` utilisation tracking |
+| `entities.js` | Entity lifecycle, queue discipline sort functions, server pool management, `_busyStart`/`_busyTime` utilisation tracking. `attemptQueueJoin(entity, queueName, clock, ctx, opts)` is the single centralized join function — called from every queue-join site (ARRIVE, RELEASE, BATCH/UNBATCH/SPLIT, conditional/probabilistic routing, loop-guard exit, preemption re-queue) and enforces balking (F11.2), capacity/overflow (F11.1/F11.3, recursing through `overflowDestination` chains with a `visitedQueues` cycle guard), and queue-level auto-reneging (`renegeDist`) uniformly regardless of how the entity reaches the queue. |
 | `distributions.js` | Sampler registry, seeded RNG (mulberry32), all 11 distribution types |
 | `conditions.js` | Safe predicate evaluator — no `eval`, no `new Function` |
 | `validation.js` | V1–V39 (V7 unused); 38 distinct rules, pre-run gate |
@@ -237,8 +237,11 @@ interface Queue {
   name: string;
   discipline: "FIFO" | "LIFO" | "PRIORITY" | "SPT" | "EDD" | `PRIORITY(${string})`;
   capacity?: number;                    // undefined = infinite
-  balkProbability?: number;             // ∈ [0, 1] (V21)
-  balkCondition?: PredicateNode;
+  overflowDestination?: string;         // queue name to reroute to when full/balked; recursively re-checked (V46 guards cycles)
+  balkProbability?: number;             // ∈ [0, 1] (V21); checked on every join (ARRIVE, RELEASE, routing, batch/split, preemption)
+  balkCondition?: PredicateNode;        // checked on every join, same scope as balkProbability
+  renegeDist?: string;                  // distribution name; auto-schedules a patience timer on join, no RENEGE(ctx) B-event needed
+  renegeDistParams?: Record<string, string>;
 }
 ```
 
