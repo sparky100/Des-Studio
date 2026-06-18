@@ -654,6 +654,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let clock = 0;
   const log = [];
   const _timeSeries = collectTimeSeries ? [] : null; // null = disabled, zero overhead
+  let _lastTimeSeriesSampleT = 0; // bucket start for the per-sample avgWait computed below
 
   // G11 — WIP time-average tracking (Little's Law: avgWIP = ∫ WIP dt / T)
   let _wipIntegral = 0;
@@ -1028,12 +1029,22 @@ const cycleLog = [];
     const stepSnap = captureSnap ? snap(clock) : null;
     let liteSnap = null;
     if (_timeSeries !== null) {
+      const recentWaits = computeRecentWaitsByQueue(_lastTimeSeriesSampleT, clock);
+      const withRecentWaits = (byQueueIn) => {
+        const out = {};
+        for (const [qName, qData] of Object.entries(byQueueIn || {})) {
+          const w = recentWaits[qName];
+          out[qName] = { ...qData, avgWait: w ? w.sum / w.n : null, waitN: w ? w.n : 0 };
+        }
+        return out;
+      };
       if (stepSnap) {
-        _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: stepSnap.byQueue });
+        _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: withRecentWaits(stepSnap.byQueue) });
       } else {
         liteSnap = snapLite();
-        _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: liteSnap.byQueue });
+        _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: withRecentWaits(liteSnap.byQueue) });
       }
+      _lastTimeSeriesSampleT = clock;
       // Track max queue depth from this snapshot (same source as charts)
       const byQueue = stepSnap?.byQueue ?? liteSnap?.byQueue;
       if (byQueue) {
@@ -1225,6 +1236,31 @@ const cycleLog = [];
     const endTime = entity?.completionTime ?? entity?.renegeTime ?? null;
     if (endTime == null) return null;
     return truncateInterval(entity.arrivalTime, endTime);
+  }
+
+  // ── time-binned average wait (layered onto the time-series depth chart) ──
+  // Stage records are only created when a stage ends (buildStageRecord, fired
+  // at completion/release), so serviceStartedAt reflects an earlier point in
+  // time than when the record becomes visible. Bucketing on serviceEndedAt
+  // (which equals the current clock for any stage that just ended) means each
+  // stage is picked up exactly once, in the bucket where it became known —
+  // answering "what was the typical wait for entities that cleared the queue
+  // around this time?"
+  function computeRecentWaitsByQueue(sinceT, untilT) {
+    const acc = {};
+    for (const e of entities) {
+      if (e.role === "server" || !e.stages || e.stages.length === 0) continue;
+      for (const stage of e.stages) {
+        const clearedAt = stage.serviceEndedAt;
+        if (clearedAt == null || clearedAt <= sinceT || clearedAt > untilT) continue;
+        const qName = stage.queueName;
+        if (!qName) continue;
+        if (!acc[qName]) acc[qName] = { sum: 0, n: 0 };
+        acc[qName].sum += truncateInterval(stage.waitStartedAt, stage.serviceStartedAt);
+        acc[qName].n++;
+      }
+    }
+    return acc;
   }
 
   // ── waitDist: per-queue wait-time distribution (F10.4b) ───────────────────

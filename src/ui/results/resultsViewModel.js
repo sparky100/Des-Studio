@@ -122,6 +122,32 @@ export function buildServerUtilizationSeries(results = {}, model = {}, sectionFi
   });
 }
 
+export function buildWaitTimeSeries(results = {}, model = {}, sectionFilter = null) {
+  const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
+  const queues = Array.isArray(model?.queues) ? model.queues : [];
+  const filteredQueues = sectionFilter
+    ? queues.filter(q => sectionFilter.shouldInclude(q.id))
+    : queues;
+
+  return filteredQueues.map(queue => {
+    const queueName = queue.name || queue.id || "Queue";
+    const points = timeSeries
+      .filter(entry => entry?.byQueue?.[queueName]?.avgWait != null)
+      .map(entry => ({
+        t: finiteNumber(entry?.t),
+        value: finiteOrNull(entry.byQueue[queueName].avgWait),
+      }))
+      .filter(p => p.value != null);
+    return {
+      id: queue.id || queueName,
+      label: queueName,
+      points,
+      hasData: points.length >= 2,
+      sourceLabel: "Average wait of entities that cleared the queue since the previous sample, on the same time axis as queue depth",
+    };
+  });
+}
+
 export function buildWaitDistributions(results = {}, model = {}, sectionFilter = null) {
   const waitDist = results?.waitDist && typeof results.waitDist === "object" ? results.waitDist : {};
   const queues = Array.isArray(model?.queues) ? model.queues : [];
@@ -166,6 +192,7 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
   const queueDepthSeries = buildQueueDepthSeries(results, model, sectionFilter);
   const serverUtilizationSeries = buildServerUtilizationSeries(results, model, sectionFilter);
   const waitDistributions = buildWaitDistributions(results, model, sectionFilter);
+  const waitTimeSeries = buildWaitTimeSeries(results, model, sectionFilter).filter(s => s.hasData);
 
   return [
     {
@@ -194,6 +221,15 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
       emptyMessage: "Run with Detailed output enabled to see queue depth over time.",
       series: queueDepthSeries,
       maxValue: Math.max(0, ...queueDepthSeries.map(maxPointValue)),
+    },
+    {
+      id: "wait-over-time",
+      title: "How average wait time changed over time",
+      question: "When did waits get longer?",
+      method: "Shows the average wait of entities that finished waiting in each sampled time window, on the same time axis as queue depth.",
+      emptyMessage: "Run with Detailed output enabled to see wait time over time.",
+      series: waitTimeSeries,
+      maxValue: Math.max(0, ...waitTimeSeries.map(maxPointValue)),
     },
   ];
 }
@@ -234,6 +270,7 @@ export function buildResultsViewModel(results = {}, model = {}, options = {}) {
     queueDepthSeries: chartSections.find(s => s.id === "queue-depth")?.series || [],
     serverUtilizationSeries: chartSections.find(s => s.id === "server-utilization")?.series || [],
     waitDistributions: chartSections.find(s => s.id === "wait-distribution")?.distributions || [],
+    waitTimeSeries: chartSections.find(s => s.id === "wait-over-time")?.series || [],
     chartSections,
     runtimeMetrics,
   };

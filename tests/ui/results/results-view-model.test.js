@@ -6,6 +6,7 @@ import {
   buildRuntimeMetricsModel,
   buildServerUtilizationSeries,
   buildWaitDistributions,
+  buildWaitTimeSeries,
 } from "../../../src/ui/results/resultsViewModel.js";
 
 const model = {
@@ -46,6 +47,22 @@ describe("results view model", () => {
     expect(series[0].points).toEqual([{ t: 0, value: 7 }, { t: 5, value: 5 }]);
     expect(series[1].points).toEqual([{ t: 0, value: 2 }, { t: 5, value: 6 }]);
     expect(series[0].source).toBe("type-fallback");
+  });
+
+  test("buildWaitTimeSeries reads avgWait per queue on the same time axis as queue depth", () => {
+    const series = buildWaitTimeSeries({
+      timeSeries: [
+        { t: 0, byQueue: { "Queue A": { waiting: 1, avgWait: null, waitN: 0 }, "Queue B": { waiting: 4, avgWait: 2, waitN: 1 } } },
+        { t: 5, byQueue: { "Queue A": { waiting: 2, avgWait: 3, waitN: 2 }, "Queue B": { waiting: 3, avgWait: 1, waitN: 1 } } },
+      ],
+    }, model);
+
+    expect(series.map(s => s.label)).toEqual(["Queue A", "Queue B"]);
+    // Queue A's t=0 sample has no completions yet (avgWait null) and is dropped.
+    expect(series[0].points).toEqual([{ t: 5, value: 3 }]);
+    expect(series[0].hasData).toBe(false);
+    expect(series[1].points).toEqual([{ t: 0, value: 2 }, { t: 5, value: 1 }]);
+    expect(series[1].hasData).toBe(true);
   });
 
   test("buildServerUtilizationSeries normalizes busy servers by capacity", () => {
@@ -141,10 +158,12 @@ describe("results view model", () => {
       "wait-distribution",
       "server-utilization",
       "queue-depth",
+      "wait-over-time",
     ]);
     expect(sections[0].question).toBe("How much time is spent queueing?");
     expect(sections[0].title).toBe("Waiting time distribution");
     expect(sections[1].method).toMatch(/busy over time/i);
     expect(sections[2].question).toBe("Where do queues build up?");
+    expect(sections[3].question).toBe("When did waits get longer?");
   });
 });

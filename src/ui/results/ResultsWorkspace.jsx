@@ -16,7 +16,7 @@ const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 140;
 
-const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, serverUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true };
+const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, serverUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true };
 
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
   const { C, FONT } = useTheme();
@@ -1586,7 +1586,9 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const queueSection = chartModel.chartSections.find(section => section.id === "queue-depth");
   const serverSection = chartModel.chartSections.find(section => section.id === "server-utilization");
   const waitSection = chartModel.chartSections.find(section => section.id === "wait-distribution");
+  const waitTimeSection = chartModel.chartSections.find(section => section.id === "wait-over-time");
   const hasWaitDistributions = (waitSection?.distributions || []).length > 0;
+  const hasWaitTimeSeries = (waitTimeSection?.series || []).length > 0;
   const queuePeaks = Array.isArray(chartModel.runtimeMetrics?.metrics?.maxQueueLengthByQueue)
     ? chartModel.runtimeMetrics.metrics.maxQueueLengthByQueue
     : [];
@@ -1805,6 +1807,33 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                             dataPreview={<SeriesDataPreview series={series} />}
                           >
                             <MiniLineChart title="" ariaTitle={title} points={series.points} color={color} yLabel="depth" />
+                          </ChartCard>
+                        );
+                      })}
+                    </div>
+                  </ChartSectionShell>
+                </div>
+              </div>
+            )}
+
+            {chartModel.hasTimeSeries && hasWaitTimeSeries && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <SectionHeader id="waitOverTime" label="When did waits get longer?" isOpen={sectionsOpen.waitOverTime} onToggle={toggleSection} />
+                <div id="results-section-waitOverTime" style={{ display: sectionsOpen.waitOverTime ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+                  <ChartSectionShell section={waitTimeSection}>
+                    <div aria-label="Average wait over time chart grid" style={CHART_GRID}>
+                      {waitTimeSection.series.map((series, idx) => {
+                        const color = CHART_COLORS[idx % CHART_COLORS.length];
+                        return (
+                          <ChartCard
+                            key={series.id}
+                            title={series.label}
+                            color={color}
+                            sourceLabel={series.sourceLabel}
+                            statItems={lineSeriesStats(series, "avg wait", color)}
+                            dataPreview={<SeriesDataPreview series={series} />}
+                          >
+                            <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="avg wait" />
                           </ChartCard>
                         );
                       })}

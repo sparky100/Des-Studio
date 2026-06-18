@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeTimeSeriesAccumulator } from "../../../src/ui/execute/executeHelpers.js";
+import { makeTimeSeriesAccumulator, makeBatchResult } from "../../../src/ui/execute/executeHelpers.js";
 
 // Regression test: queues/types that are empty at t=0 (and so absent from
 // the first sample's byQueue/byType map) must still appear in the batch
@@ -18,9 +18,9 @@ describe("makeTimeSeriesAccumulator", () => {
 
     const result = acc.getResult();
     const t1 = result.find(pt => pt.t === 1);
-    expect(t1.byQueue["Voucher Queue"]).toEqual({ waiting: 2, total: 2 });
+    expect(t1.byQueue["Voucher Queue"]).toEqual({ waiting: 2, total: 2, avgWait: null, waitN: 0 });
     const t0 = result.find(pt => pt.t === 0);
-    expect(t0.byQueue["Voucher Queue"]).toEqual({ waiting: 0, total: 0 });
+    expect(t0.byQueue["Voucher Queue"]).toEqual({ waiting: 0, total: 0, avgWait: null, waitN: 0 });
   });
 
   it("tracks queue keys that only appear in a later replication", () => {
@@ -37,7 +37,26 @@ describe("makeTimeSeriesAccumulator", () => {
     const result = acc.getResult();
     const t1 = result.find(pt => pt.t === 1);
     // Averaged across both replications: rep 1 contributed 0 (absent), rep 2 contributed 4.
-    expect(t1.byQueue["Burger Queue"]).toEqual({ waiting: 2, total: 2 });
+    expect(t1.byQueue["Burger Queue"]).toEqual({ waiting: 2, total: 2, avgWait: null, waitN: 0 });
+  });
+
+  it("weights avgWait by waitN (entities cleared), not by replication count", () => {
+    const acc = makeTimeSeriesAccumulator();
+    acc.addSeries([
+      { t: 0, byQueue: { "Voucher Queue": { waiting: 0, total: 1, avgWait: 4, waitN: 2 } }, byType: {} },
+    ]);
+    acc.addSeries([
+      { t: 0, byQueue: { "Voucher Queue": { waiting: 0, total: 0, avgWait: null, waitN: 0 } }, byType: {} },
+    ]);
+    acc.addSeries([
+      { t: 0, byQueue: { "Voucher Queue": { waiting: 0, total: 1, avgWait: 10, waitN: 1 } }, byType: {} },
+    ]);
+
+    const result = acc.getResult();
+    const t0 = result.find(pt => pt.t === 0);
+    // (4*2 + 10*1) / (2 + 1) = 6, not a simple mean-of-means across 2 contributing reps.
+    expect(t0.byQueue["Voucher Queue"].avgWait).toBeCloseTo(6);
+    expect(t0.byQueue["Voucher Queue"].waitN).toBe(3);
   });
 
   it("tracks entity-type keys that first appear later", () => {
@@ -52,5 +71,26 @@ describe("makeTimeSeriesAccumulator", () => {
     expect(t1.byType["Burger Server"]).toEqual({ waiting: 0, busy: 1, idle: 1, total: 2 });
     const t0 = result.find(pt => pt.t === 0);
     expect(t0.byType["Burger Server"]).toEqual({ waiting: 0, busy: 0, idle: 0, total: 0 });
+  });
+});
+
+// makeBatchResult falls back to averaging replication timeSeries directly
+// (the non-streaming path) when no precomputedTimeSeries is supplied.
+describe("makeBatchResult timeSeries averaging", () => {
+  it("weights avgWait by waitN across replications, not by replication count", () => {
+    const replicationPayloads = [
+      { result: { summary: {}, timeSeries: [
+        { t: 0, byQueue: { "Voucher Queue": { waiting: 0, total: 1, avgWait: 4, waitN: 2 } }, byType: {} },
+      ] } },
+      { result: { summary: {}, timeSeries: [
+        { t: 0, byQueue: { "Voucher Queue": { waiting: 0, total: 1, avgWait: 10, waitN: 1 } }, byType: {} },
+      ] } },
+    ];
+
+    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
+    const t0 = batch.timeSeries.find(pt => pt.t === 0);
+    // (4*2 + 10*1) / (2 + 1) = 6
+    expect(t0.byQueue["Voucher Queue"].avgWait).toBeCloseTo(6);
+    expect(t0.byQueue["Voucher Queue"].waitN).toBe(3);
   });
 });

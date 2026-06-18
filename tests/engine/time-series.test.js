@@ -107,6 +107,29 @@ describe("collectTimeSeries = true", () => {
       }
     }
   });
+
+  test("byQueue entries include avgWait/waitN, populated once entities clear the queue", () => {
+    const result = buildEngine(makeModel(), 42, 0, 20, null, 5000, 500, true).runAll();
+    const samplesWithCompletions = result.timeSeries.filter(e => e.byQueue["Waiting Queue"].waitN > 0);
+    expect(samplesWithCompletions.length).toBeGreaterThan(0);
+    for (const entry of result.timeSeries) {
+      const q = entry.byQueue["Waiting Queue"];
+      expect(typeof q.waitN).toBe("number");
+      if (q.waitN > 0) {
+        expect(typeof q.avgWait).toBe("number");
+        expect(q.avgWait).toBeGreaterThanOrEqual(0);
+      } else {
+        expect(q.avgWait).toBeNull();
+      }
+    }
+  });
+
+  test("avgWait per sample only reflects entities that cleared the queue since the previous sample", () => {
+    const result = buildEngine(makeModel(), 42, 0, 20, null, 5000, 500, true).runAll();
+    const total = result.timeSeries.reduce((sum, e) => sum + (e.byQueue["Waiting Queue"].waitN || 0), 0);
+    const dist = result.waitDist["Waiting Queue"];
+    expect(total).toBeLessThanOrEqual(dist.n);
+  });
 });
 
 // ── F10.4b — waitDist ─────────────────────────────────────────────────────────

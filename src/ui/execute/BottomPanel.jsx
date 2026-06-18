@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 ;
 import { Tag, PhaseTag } from "../shared/components.jsx";
-import { QueueDepthTimePlot, QueueHistogram } from "./SweepViews.jsx";
+import { QueueDepthTimePlot, QueueWaitTimePlot, QueueHistogram } from "./SweepViews.jsx";
 import { formatSimWallTime } from "../../engine/clockUtils.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { ActivityDetail } from "./NodeDetailSidebar.jsx";
@@ -1322,6 +1322,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
                     </div>
                   )}
                   <QueueDepthTimePlot timeSeries={timeSeries} queues={model.queues} timeUnit={model.timeUnit} />
+                  <QueueWaitTimePlot timeSeries={timeSeries} queues={model.queues} timeUnit={model.timeUnit} />
                 </div>
               ) : (
                 <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>

@@ -571,6 +571,90 @@ export function QueueDepthTimePlot({ timeSeries, queues, timeUnit, width = 400, 
   );
 }
 
+// ── QueueWaitTimePlot — time-binned average wait per queue ────────────────────
+// Layered onto the same x-axis as QueueDepthTimePlot: each point is the average
+// wait of entities that cleared the queue since the previous time-series sample,
+// answering "for arrivals around time t, what was their typical wait?"
+export function QueueWaitTimePlot({ timeSeries, queues, timeUnit, width = 400, height = 140 }) {
+  const { C, FONT } = useTheme();
+  const QUEUE_COLORS = [C.accent, C.amber, C.green, C.purple, C.reneged, C.kpiArr, C.pink, C.server];
+  const queueNames = (queues || []).map(q => q.name || q.id || "Queue").filter(Boolean);
+
+  const series = queueNames.map(qName => ({
+    qName,
+    points: (timeSeries || [])
+      .map(entry => ({ t: entry?.t ?? 0, v: entry?.byQueue?.[qName]?.avgWait }))
+      .filter(p => Number.isFinite(p.v)),
+  }));
+  const hasData = series.some(s => s.points.length >= 2);
+
+  if (!hasData) {
+    return (
+      <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, padding: 12, textAlign: "center", background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
+        No completed waits yet. This chart fills in as entities clear each queue.
+      </div>
+    );
+  }
+  if (queueNames.length === 0) return null;
+
+  const PAD = { top: 12, right: 12, bottom: 22, left: 40 };
+  const plotW = width - PAD.left - PAD.right;
+  const plotH = height - PAD.top - PAD.bottom;
+
+  const allPoints = series.flatMap(s => s.points);
+  const tMin = Math.min(...allPoints.map(p => p.t));
+  const tMax = Math.max(...allPoints.map(p => p.t));
+  const tRange = tMax - tMin || 1;
+  const maxWait = Math.max(1, ...allPoints.map(p => p.v));
+
+  const xScale = (t) => PAD.left + (t - tMin) / tRange * plotW;
+  const yScale = (v) => PAD.top + plotH - (v / maxWait) * plotH;
+
+  const yTicks = Array.from({ length: 4 }, (_, i) => +((i / 3) * maxWait).toFixed(1));
+
+  return (
+    <div style={{ background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 12, overflow: "hidden" }}>
+      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
+        AVERAGE WAIT OVER TIME
+      </div>
+      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+        {yTicks.map((tick, i) => (
+          <g key={i}>
+            <line x1={PAD.left} y1={yScale(tick)} x2={width - PAD.right} y2={yScale(tick)} stroke={C.chartGrid} strokeWidth={1} />
+            <text x={PAD.left - 4} y={yScale(tick) + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace">
+              {tick}
+            </text>
+          </g>
+        ))}
+        {series.map(({ qName, points }, qi) => {
+          const color = QUEUE_COLORS[qi % QUEUE_COLORS.length];
+          if (points.length < 2) return null;
+          const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${xScale(p.t).toFixed(1)},${yScale(p.v).toFixed(1)}`).join(" ");
+          return (
+            <g key={qName}>
+              <path d={linePath} fill="none" stroke={color} strokeWidth={2.5} />
+            </g>
+          );
+        })}
+        <text x={width / 2} y={height - 2} textAnchor="middle" fill={C.muted} fontSize={11} fontFamily="monospace">
+          {timeUnit ? `Time (${timeUnit})` : "Simulation time"}
+        </text>
+        <text x={PAD.left - 2} y={PAD.top + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace" transform={`rotate(-90, ${PAD.left - 14}, ${height / 2})`}>
+          Avg wait
+        </text>
+      </svg>
+      <div style={{ display: "flex", gap: 12, marginTop: 4, flexWrap: "wrap" }}>
+        {queueNames.map((qName, qi) => (
+          <span key={qName} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.muted, fontFamily: FONT }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: QUEUE_COLORS[qi % QUEUE_COLORS.length], display: "inline-block" }} />
+            {qName}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── QueueHistogram — per-queue wait time distribution bar chart ───────────────
 export function QueueHistogram({ waitDist }) {
   const { C, FONT } = useTheme();

@@ -81,7 +81,15 @@ export function makeTimeSeriesAccumulator(maxPoints = 500) {
   // any queue/type that was empty at t=0 would be silently dropped from
   // every subsequent average forever.
   function ensureQueueKey(k) {
-    if (!queueSums[k]) queueSums[k] = { waiting: new Float64Array(grid.length), total: new Float64Array(grid.length) };
+    if (!queueSums[k]) queueSums[k] = {
+      waiting: new Float64Array(grid.length),
+      total: new Float64Array(grid.length),
+      // avgWait is weighted by waitN (entities that cleared the queue in this
+      // bucket), not by replication count — a rep with no completions in a
+      // bucket contributes nothing rather than diluting the average toward 0.
+      waitSum: new Float64Array(grid.length),
+      waitN: new Float64Array(grid.length),
+    };
     return queueSums[k];
   }
   function ensureTypeKey(k) {
@@ -109,6 +117,10 @@ export function makeTimeSeriesAccumulator(maxPoints = 500) {
         const s = ensureQueueKey(k);
         s.waiting[gi] += q.waiting ?? 0;
         s.total[gi] += q.total ?? 0;
+        if (q.waitN) {
+          s.waitSum[gi] += q.avgWait * q.waitN;
+          s.waitN[gi] += q.waitN;
+        }
       }
       for (const [k, ty] of Object.entries(pt.byType || {})) {
         const s = ensureTypeKey(k);
@@ -126,7 +138,12 @@ export function makeTimeSeriesAccumulator(maxPoints = 500) {
     return grid.map((t, gi) => {
       const byQueue = {}, byType = {};
       for (const [k, s] of Object.entries(queueSums))
-        byQueue[k] = { waiting: s.waiting[gi] / count, total: s.total[gi] / count };
+        byQueue[k] = {
+          waiting: s.waiting[gi] / count,
+          total: s.total[gi] / count,
+          avgWait: s.waitN[gi] > 0 ? s.waitSum[gi] / s.waitN[gi] : null,
+          waitN: s.waitN[gi],
+        };
       for (const [k, s] of Object.entries(typeSums))
         byType[k] = { waiting: s.waiting[gi] / count, busy: s.busy[gi] / count, idle: s.idle[gi] / count, total: s.total[gi] / count };
       return { t, byQueue, byType };
@@ -295,12 +312,20 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
     const byType = {};
 
     for (const qName of queueNames) {
-      let sumWaiting = 0, sumTotal = 0, count = 0;
+      let sumWaiting = 0, sumTotal = 0, count = 0, waitSum = 0, waitN = 0;
       for (const snaps of repSnapshots) {
         const q = snaps[gi]?.byQueue?.[qName];
-        if (q != null) { sumWaiting += q.waiting ?? 0; sumTotal += q.total ?? 0; count++; }
+        if (q != null) {
+          sumWaiting += q.waiting ?? 0; sumTotal += q.total ?? 0; count++;
+          if (q.waitN) { waitSum += q.avgWait * q.waitN; waitN += q.waitN; }
+        }
       }
-      if (count > 0) byQueue[qName] = { waiting: sumWaiting / count, total: sumTotal / count };
+      if (count > 0) byQueue[qName] = {
+        waiting: sumWaiting / count,
+        total: sumTotal / count,
+        avgWait: waitN > 0 ? waitSum / waitN : null,
+        waitN,
+      };
     }
 
     for (const tName of typeNames) {
