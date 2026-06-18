@@ -913,6 +913,49 @@ function WaitHistogram({ dist, color }) {
   );
 }
 
+function WaitDistByAttrTable({ group }) {
+  const { C, FONT } = useTheme();
+  const [isOpen, setIsOpen] = useState(false);
+  const rows = Array.isArray(group?.rows) ? group.rows : [];
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div
+        onClick={() => setIsOpen(open => !open)}
+        style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: FONT, fontSize: 10, color: C.muted, letterSpacing: 0.6, fontWeight: 700, marginBottom: isOpen ? 6 : 0, userSelect: "none" }}
+      >
+        <span style={{ fontSize: 8 }}>{isOpen ? "▾" : "▸"}</span>
+        Break down by {group.attrName}
+      </div>
+      {isOpen && (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
+          <thead>
+            <tr>
+              {["Queue", group.attrName, "n", "Mean", "P50", "P90", "P95", "P99"].map((h, idx) => (
+                <th key={h} style={{ textAlign: idx < 2 ? "left" : "right", color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, paddingRight: idx < 2 ? 12 : 0, paddingLeft: idx >= 2 ? 10 : 0, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={`${row.queue}::${row.value}`}>
+                <td style={{ color: C.text, paddingTop: 3, paddingRight: 12, whiteSpace: "nowrap" }}>{row.queue}</td>
+                <td style={{ color: C.text, paddingTop: 3, paddingRight: 12, whiteSpace: "nowrap" }}>{row.value}</td>
+                <td style={{ color: C.muted, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{row.n}</td>
+                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.mean)}</td>
+                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p50)}</td>
+                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p90)}</td>
+                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p95)}</td>
+                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p99)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function ChartSectionShell({ section, children }) {
   const { C, FONT } = useTheme();
   return (
@@ -1865,6 +1908,9 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                         );
                       })}
                     </div>
+                    {(waitSection.distributionsByAttr || []).map(group => (
+                      <WaitDistByAttrTable key={group.attrName} group={group} />
+                    ))}
                   </ChartSectionShell>
                 </div>
               </div>

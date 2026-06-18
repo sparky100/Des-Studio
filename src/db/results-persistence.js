@@ -36,20 +36,33 @@ function buildLogSummary(logEntries = []) {
  * This lets the WaitHistogram component render for any saved run, regardless of
  * detail level, without storing tens of KB of raw observation arrays.
  */
+function compactifyDistEntry(d) {
+  return d ? {
+    n:    d.n    ?? 0,
+    mean: d.mean ?? null,
+    p50:  d.p50  ?? null,
+    p90:  d.p90  ?? null,
+    p95:  d.p95  ?? null,
+    p99:  d.p99  ?? null,
+    histogram: Array.isArray(d.values) && d.values.length > 1
+      ? buildHistogramFD(d.values, { maxBins: 20 })
+      : null,
+  } : null;
+}
+
 function compactifyWaitDist(waitDist = {}) {
-  return Object.fromEntries(Object.entries(waitDist || {}).map(([qName, d]) => [
-    qName,
-    d ? {
-      n:    d.n    ?? 0,
-      mean: d.mean ?? null,
-      p50:  d.p50  ?? null,
-      p90:  d.p90  ?? null,
-      p95:  d.p95  ?? null,
-      p99:  d.p99  ?? null,
-      histogram: Array.isArray(d.values) && d.values.length > 1
-        ? buildHistogramFD(d.values, { maxBins: 20 })
-        : null,
-    } : null,
+  return Object.fromEntries(Object.entries(waitDist || {}).map(([qName, d]) => [qName, compactifyDistEntry(d)]));
+}
+
+// Same compaction as compactifyWaitDist, applied one level deeper
+// (attrName -> queueName -> attrValue -> dist) for the entity-attribute breakdown.
+function compactifyWaitDistByAttr(waitDistByAttr = {}) {
+  return Object.fromEntries(Object.entries(waitDistByAttr || {}).map(([attrName, byQueue]) => [
+    attrName,
+    Object.fromEntries(Object.entries(byQueue || {}).map(([qName, byValue]) => [
+      qName,
+      Object.fromEntries(Object.entries(byValue || {}).map(([value, d]) => [value, compactifyDistEntry(d)])),
+    ])),
   ]));
 }
 
@@ -189,6 +202,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
       trimmedFields.push("waitDist.values→histogram");
     }
+    if (resultsJson.waitDistByAttr && typeof resultsJson.waitDistByAttr === "object") {
+      resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
+      trimmedFields.push("waitDistByAttr.values→histogram");
+    }
     if (Array.isArray(resultsJson.replications) && resultsJson.replications.length > 0) {
       resultsJson.replications = resultsJson.replications.map(replication => ({
         replicationIndex: replication.replicationIndex,
@@ -223,6 +240,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
       trimmedFields.push("waitDist.values→histogram");
     }
+    if (resultsJson.waitDistByAttr && typeof resultsJson.waitDistByAttr === "object") {
+      resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
+      trimmedFields.push("waitDistByAttr.values→histogram");
+    }
   }
 
   if (trimmedFields.length > 0) {
@@ -244,6 +265,9 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     }
     if (resultsJson.waitDist && typeof resultsJson.waitDist === "object") {
       resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
+    }
+    if (resultsJson.waitDistByAttr && typeof resultsJson.waitDistByAttr === "object") {
+      resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
     }
     if (Array.isArray(resultsJson.replications)) {
       resultsJson.replications = resultsJson.replications.map(r => ({

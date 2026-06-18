@@ -188,10 +188,40 @@ export function buildWaitDistributions(results = {}, model = {}, sectionFilter =
     });
 }
 
+export function buildWaitDistributionsByAttr(results = {}, model = {}, sectionFilter = null) {
+  const waitDistByAttr = results?.waitDistByAttr && typeof results.waitDistByAttr === "object" ? results.waitDistByAttr : {};
+  const queues = Array.isArray(model?.queues) ? model.queues : [];
+  const nameToId = Object.fromEntries(queues.map(q => [q.name, q.id]));
+
+  return Object.entries(waitDistByAttr)
+    .map(([attrName, byQueue]) => {
+      const rows = Object.entries(byQueue)
+        .filter(([qName]) => {
+          if (!sectionFilter) return true;
+          const qid = nameToId[qName];
+          return qid && sectionFilter.shouldInclude(qid);
+        })
+        .flatMap(([qName, byValue]) => Object.entries(byValue).map(([value, dist]) => ({
+          queue: qName,
+          value,
+          n: finiteNumber(dist.n),
+          mean: finiteNumber(dist.mean),
+          p50: finiteNumber(dist.p50),
+          p90: finiteNumber(dist.p90),
+          p95: finiteNumber(dist.p95),
+          p99: finiteNumber(dist.p99),
+        })))
+        .sort((a, b) => a.queue.localeCompare(b.queue) || a.value.localeCompare(b.value));
+      return { attrName, rows };
+    })
+    .filter(group => group.rows.length > 0);
+}
+
 export function buildChartSections(results = {}, model = {}, sectionFilter = null) {
   const queueDepthSeries = buildQueueDepthSeries(results, model, sectionFilter);
   const serverUtilizationSeries = buildServerUtilizationSeries(results, model, sectionFilter);
   const waitDistributions = buildWaitDistributions(results, model, sectionFilter);
+  const waitDistributionsByAttr = buildWaitDistributionsByAttr(results, model, sectionFilter);
   const waitTimeSeries = buildWaitTimeSeries(results, model, sectionFilter).filter(s => s.hasData);
 
   return [
@@ -202,6 +232,7 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
       method: "Shows the range of completed waiting times, with percentile markers.",
       emptyMessage: "Complete at least two customer waits to see wait-time distributions.",
       distributions: waitDistributions,
+      distributionsByAttr: waitDistributionsByAttr,
       maxValue: Math.max(0, ...waitDistributions.map(d => finiteNumber(d.p99))),
     },
     {
@@ -270,6 +301,7 @@ export function buildResultsViewModel(results = {}, model = {}, options = {}) {
     queueDepthSeries: chartSections.find(s => s.id === "queue-depth")?.series || [],
     serverUtilizationSeries: chartSections.find(s => s.id === "server-utilization")?.series || [],
     waitDistributions: chartSections.find(s => s.id === "wait-distribution")?.distributions || [],
+    waitDistributionsByAttr: chartSections.find(s => s.id === "wait-distribution")?.distributionsByAttr || [],
     waitTimeSeries: chartSections.find(s => s.id === "wait-over-time")?.series || [],
     chartSections,
     runtimeMetrics,

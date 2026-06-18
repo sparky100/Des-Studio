@@ -6,6 +6,7 @@ import {
   buildRuntimeMetricsModel,
   buildServerUtilizationSeries,
   buildWaitDistributions,
+  buildWaitDistributionsByAttr,
   buildWaitTimeSeries,
 } from "../../../src/ui/results/resultsViewModel.js";
 
@@ -109,6 +110,39 @@ describe("results view model", () => {
     expect(distributions[0].n).toBe(6);
     expect(distributions[0].values).toEqual([]);
     expect(distributions[0].histogram).toEqual(histogram);
+  });
+
+  test("buildWaitDistributionsByAttr groups breakdown rows by attribute, queue, and value", () => {
+    const groups = buildWaitDistributionsByAttr({
+      waitDistByAttr: {
+        tier: {
+          "Queue A": {
+            gold: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4 },
+            silver: { n: 1, mean: 6, p50: 6, p90: 6, p95: 6, p99: 6 },
+          },
+        },
+      },
+    }, model);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].attrName).toBe("tier");
+    expect(groups[0].rows).toEqual([
+      { queue: "Queue A", value: "gold", n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4 },
+      { queue: "Queue A", value: "silver", n: 1, mean: 6, p50: 6, p90: 6, p95: 6, p99: 6 },
+    ]);
+  });
+
+  test("buildWaitDistributionsByAttr respects the section filter on queue id", () => {
+    const groups = buildWaitDistributionsByAttr({
+      waitDistByAttr: {
+        tier: {
+          "Queue A": { gold: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4 } },
+          "Queue B": { gold: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4 } },
+        },
+      },
+    }, model, { shouldInclude: id => id === "q-a" });
+
+    expect(groups[0].rows.map(r => r.queue)).toEqual(["Queue A"]);
   });
 
   test("buildResultsViewModel reports chart availability", () => {

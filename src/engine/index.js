@@ -1143,6 +1143,7 @@ const cycleLog = [];
         : { entitySummaryCompact: summarizeEntitySummary(entities) }),
       timeSeries:      _timeSeries ?? undefined,
       waitDist:        computeWaitDist(entities),
+      waitDistByAttr:  computeWaitDistByAttr(entities),
       perQueue:        Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
       trace,
       traceTruncated,
@@ -1286,6 +1287,52 @@ const cycleLog = [];
       dist[q] = buildWaitDistEntry(sorted);
     }
     return dist;
+  }
+
+  // ── waitDistByAttr: wait-time distribution broken down by entity attribute ─
+  // Only considers fully completed entities (status === "done"), since
+  // in-progress/reneged entities don't have a stable attribute-correlated
+  // outcome yet. Generic over whatever attributes exist on customer types —
+  // no attribute name is hardcoded.
+  function computeWaitDistByAttr(allEntities) {
+    const buckets = {}; // attrName -> queueName -> attrValue -> waits[]
+    for (const e of allEntities) {
+      if (e.role === "server" || e.status !== "done" || !e.stages || e.stages.length === 0) continue;
+      const attrs = e.attrs || {};
+      const attrNames = Object.keys(attrs).filter(name => attrs[name] != null && attrs[name] !== "");
+      if (attrNames.length === 0) continue;
+      for (const stage of e.stages) {
+        const qName = stage.queueName || e.lastQueue || e.queue;
+        if (!qName) continue;
+        const wait = truncateInterval(stage.waitStartedAt, stage.serviceStartedAt);
+        for (const attrName of attrNames) {
+          const attrValue = String(attrs[attrName]);
+          if (!buckets[attrName]) buckets[attrName] = {};
+          if (!buckets[attrName][qName]) buckets[attrName][qName] = {};
+          if (!buckets[attrName][qName][attrValue]) buckets[attrName][qName][attrValue] = [];
+          buckets[attrName][qName][attrValue].push(wait);
+        }
+      }
+    }
+
+    const result = {};
+    for (const [attrName, byQueue] of Object.entries(buckets)) {
+      const queueEntries = {};
+      for (const [qName, byValue] of Object.entries(byQueue)) {
+        // Skip attributes with only one observed value in this queue — a
+        // breakdown with a single row adds nothing beyond the per-queue dist.
+        if (Object.keys(byValue).length < 2) continue;
+        const valueEntries = {};
+        for (const [value, waits] of Object.entries(byValue)) {
+          const sorted = [...waits].sort((a, b) => a - b);
+          if (sorted.length === 0) continue;
+          valueEntries[value] = buildWaitDistEntry(sorted);
+        }
+        if (Object.keys(valueEntries).length > 0) queueEntries[qName] = valueEntries;
+      }
+      if (Object.keys(queueEntries).length > 0) result[attrName] = queueEntries;
+    }
+    return result;
   }
 
   function getSummary() {
@@ -1644,6 +1691,7 @@ const cycleLog = [];
     getRuntimeMetrics,
     getTimeSeries:        () => _timeSeries ?? undefined,
     getWaitDist:          () => computeWaitDist(entities),
+    getWaitDistByAttr:    () => computeWaitDistByAttr(entities),
     getEntitySummary:     () => entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
     updateScheduledTime,
   };

@@ -264,6 +264,37 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       }))
     : lastResult?.waitDist;
 
+  // Aggregate waitDistByAttr across all replications the same way: pool raw
+  // values per (attrName, queueName, attrValue).
+  const waitDistByAttrAcc = {};
+  for (const payload of replicationPayloads) {
+    const wdba = payload?.result?.waitDistByAttr;
+    if (!wdba) continue;
+    for (const [attrName, byQueue] of Object.entries(wdba)) {
+      for (const [qName, byValue] of Object.entries(byQueue)) {
+        for (const [value, dist] of Object.entries(byValue)) {
+          if (!Array.isArray(dist.values)) continue;
+          waitDistByAttrAcc[attrName] ??= {};
+          waitDistByAttrAcc[attrName][qName] ??= {};
+          waitDistByAttrAcc[attrName][qName][value] ??= [];
+          for (const v of dist.values) waitDistByAttrAcc[attrName][qName][value].push(v);
+        }
+      }
+    }
+  }
+  const waitDistByAttr = Object.keys(waitDistByAttrAcc).length
+    ? Object.fromEntries(Object.entries(waitDistByAttrAcc).map(([attrName, byQueue]) => [
+        attrName,
+        Object.fromEntries(Object.entries(byQueue).map(([qName, byValue]) => [
+          qName,
+          Object.fromEntries(Object.entries(byValue).map(([value, vals]) => {
+            const sorted = [...vals].sort((a, b) => a - b);
+            return [value, buildWaitDistEntry(sorted)];
+          })),
+        ])),
+      ]))
+    : lastResult?.waitDistByAttr;
+
 // Compute an ensemble-average time series from all replication time series.
 // For each time grid point we take the last-known snapshot per replication
 // (step interpolation — correct for discrete queue counts) and average across reps.
@@ -345,6 +376,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
     snap: { clock: finalTime },
     timeSeries: precomputedTimeSeries !== undefined ? precomputedTimeSeries : averageBatchTimeSeries(replicationPayloads),
     waitDist,
+    waitDistByAttr,
     perQueue,
     runtimeMetrics: {
       replications: replicationPayloads.length,
