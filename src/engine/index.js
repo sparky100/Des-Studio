@@ -1541,6 +1541,7 @@ const cycleLog = [];
       avgPlanDeviation,
       outcomes:          Object.keys(outcomes).length      ? outcomes      : undefined,
       perResource:       Object.keys(perResource).length   ? perResource   : undefined,
+      perQueue:          Object.keys(_perQueue).length     ? { ..._perQueue } : undefined,
       containerLevels:   Object.keys(containerLevels).length ? containerLevels : undefined,
       sections:          Object.keys(sectionStats).length  ? sectionStats  : undefined,
       journeys:          Object.keys(journeys).length      ? journeys      : undefined,

@@ -233,4 +233,44 @@ describe("ResultsWorkspace", () => {
     expect(within(runtimeSection).getByText(/replications/i)).toBeInTheDocument();
     expect(within(runtimeSection).getByText("300")).toBeInTheDocument();
   });
+
+  test("shows Balked/Blocked columns in the queue table when perQueue has rejections", () => {
+    const sectionModel = {
+      ...model,
+      sections: [{ id: "sec1", name: "Section 1", color: "#4488ff", memberIds: ["q1"] }],
+    };
+    const sectionResults = {
+      ...results,
+      perQueue: { "Queue A": { balkCount: 5, blockingCount: 3 } },
+      summary: { sections: { sec1: { count: 10, avgSojourn: 5 } }, journeys: {} },
+    };
+
+    render(<ResultsWorkspace results={sectionResults} model={sectionModel} />);
+
+    fireEvent.click(screen.getByText(/QUEUE WAIT TIMES/i));
+
+    expect(screen.getByText("Balked")).toBeInTheDocument();
+    expect(screen.getByText("Blocked")).toBeInTheDocument();
+    const table = screen.getByText("Mean").closest("table");
+    expect(within(table).getByText("5")).toBeInTheDocument();
+    expect(within(table).getByText("3")).toBeInTheDocument();
+  });
+
+  test("hides Balked/Blocked columns when no perQueue data is present", () => {
+    const sectionModel = {
+      ...model,
+      sections: [{ id: "sec1", name: "Section 1", color: "#4488ff", memberIds: ["q1"] }],
+    };
+    const sectionResults = {
+      ...results,
+      summary: { sections: { sec1: { count: 10, avgSojourn: 5 } }, journeys: {} },
+    };
+
+    render(<ResultsWorkspace results={sectionResults} model={sectionModel} />);
+
+    fireEvent.click(screen.getByText(/QUEUE WAIT TIMES/i));
+
+    expect(screen.queryByText("Balked")).not.toBeInTheDocument();
+    expect(screen.queryByText("Blocked")).not.toBeInTheDocument();
+  });
 });

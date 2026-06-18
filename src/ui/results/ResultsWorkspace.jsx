@@ -1344,15 +1344,17 @@ function JourneysPanel({ queueJourneys, queueNames, repCount = 1, C, FONT }) {
   );
 }
 
-function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, queues, repCount = 1, C, FONT }) {
+function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, perQueue, queues, repCount = 1, C, FONT }) {
   const queueNameById = {};
   for (const q of queues || []) { if (q.id && q.name) queueNameById[q.id] = q.name; }
   const sectionById = {};
   for (const s of sectionsDef || []) sectionById[s.id] = s;
 
-  // waitDist keys come from engine scripts (case may differ from q.name) — normalise for lookup
+  // waitDist/perQueue keys come from engine scripts (case may differ from q.name) — normalise for lookup
   const waitDistNorm = {};
   for (const [k, v] of Object.entries(waitDist || {})) waitDistNorm[k.trim().toLowerCase()] = v;
+  const perQueueNorm = {};
+  for (const [k, v] of Object.entries(perQueue || {})) perQueueNorm[k.trim().toLowerCase()] = v;
 
   const fmtT = v => v == null ? "—" : formatNumber(v, 1);
 
@@ -1381,9 +1383,13 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
           .map(id => {
             const name = queueNameById[id];
             const dist = name && waitDistNorm[name.trim().toLowerCase()];
-            return dist ? { name, dist } : null;
+            const rejection = name && perQueueNorm[name.trim().toLowerCase()];
+            return dist ? { name, dist, rejection } : null;
           })
           .filter(Boolean);
+        const showRejectionCols = memberQueueRows.some(({ rejection }) =>
+          (rejection?.balkCount || 0) > 0 || (rejection?.blockingCount || 0) > 0
+        );
         const terminalCount = Object.entries(journeys || {}).reduce((sum, [key, n]) => {
           const parts = key.split("→");
           const lastPart = parts[parts.length - 1];
@@ -1452,15 +1458,24 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
                         {["Mean", "P50", "P95"].map(h => (
                           <th key={h} style={{ textAlign: "right", width: 48, minWidth: 48, color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}` }}>{h}</th>
                         ))}
+                        {showRejectionCols && ["Balked", "Blocked"].map(h => (
+                          <th key={h} style={{ textAlign: "right", width: 48, minWidth: 48, color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {memberQueueRows.map(({ name, dist }) => (
+                      {memberQueueRows.map(({ name, dist, rejection }) => (
                         <tr key={name}>
                           <td style={{ color: C.text, paddingTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</td>
                           <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 48 }}>{fmtT(dist.mean)}</td>
                           <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 48 }}>{fmtT(dist.p50)}</td>
                           <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 48 }}>{fmtT(dist.p95)}</td>
+                          {showRejectionCols && (
+                            <>
+                              <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 48 }}>{rejection?.balkCount ? fmtCount(rejection.balkCount) : "—"}</td>
+                              <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 48 }}>{rejection?.blockingCount ? fmtCount(rejection.blockingCount) : "—"}</td>
+                            </>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -1649,6 +1664,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                 sectionStats={sectionStats}
                 journeys={sectionJourneys}
                 waitDist={results.waitDist}
+                perQueue={results.perQueue}
                 queues={model.queues}
                 repCount={repCountRW}
                 C={C}
@@ -1839,6 +1855,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               sectionStats={sectionStats}
               journeys={sectionJourneys}
               waitDist={results.waitDist}
+              perQueue={results.perQueue}
               queues={model.queues}
               repCount={repCountRW}
               C={C}

@@ -216,6 +216,19 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
   }
   const queueJourneys = Object.keys(queueJourneyAcc).length ? queueJourneyAcc : undefined;
 
+  // Aggregate per-queue balk/block counts across all replications (F11.2/F11.1/F11.3)
+  const perQueueAcc = {};
+  for (const payload of replicationPayloads) {
+    const pq = payload?.result?.perQueue;
+    if (!pq) continue;
+    for (const [qName, counts] of Object.entries(pq)) {
+      if (!perQueueAcc[qName]) perQueueAcc[qName] = { blockingCount: 0, balkCount: 0 };
+      perQueueAcc[qName].blockingCount += counts.blockingCount || 0;
+      perQueueAcc[qName].balkCount     += counts.balkCount || 0;
+    }
+  }
+  const perQueue = Object.keys(perQueueAcc).length ? perQueueAcc : undefined;
+
   // Aggregate waitDist across all replications by pooling raw values per queue
   const waitDistAcc = {};
   for (const payload of replicationPayloads) {
@@ -307,6 +320,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
     snap: { clock: finalTime },
     timeSeries: precomputedTimeSeries !== undefined ? precomputedTimeSeries : averageBatchTimeSeries(replicationPayloads),
     waitDist,
+    perQueue,
     runtimeMetrics: {
       replications: replicationPayloads.length,
     },

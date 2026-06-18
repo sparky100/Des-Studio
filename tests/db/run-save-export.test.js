@@ -171,6 +171,26 @@ describe('batch run (5 reps) → save → export', () => {
     expect(batchResult.summary.avgWait).toBeCloseTo(aggregateStats['summary.avgWait'].mean, 10);
   });
 
+  it('sums perQueue balk/block counts across replications', () => {
+    const payloadsWithPerQueue = payloads.map((p, i) => ({
+      ...p,
+      result: {
+        ...p.result,
+        perQueue: {
+          'Queue A': { balkCount: i + 1, blockingCount: i },
+          'Queue B': { balkCount: 0, blockingCount: 2 },
+        },
+      },
+    }));
+
+    const result = makeBatchResult(payloadsWithPerQueue, aggregateStats, MAX_SIM_TIME, 0);
+
+    // Queue A: balkCount 1+2+3+4+5=15, blockingCount 0+1+2+3+4=10
+    expect(result.perQueue['Queue A']).toEqual({ balkCount: 15, blockingCount: 10 });
+    // Queue B: balkCount 0, blockingCount 2*5=10
+    expect(result.perQueue['Queue B']).toEqual({ balkCount: 0, blockingCount: 10 });
+  });
+
   it('builds save payload with aggregateStats and replication array', () => {
     const replicationResults = payloads.map(p => ({
       replicationIndex: p.replicationIndex,
