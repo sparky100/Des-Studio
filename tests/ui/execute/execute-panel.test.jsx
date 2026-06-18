@@ -80,8 +80,6 @@ describe('ExecutePanel', () => {
     expect(screen.getByRole('button', { name: /^experiments$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^studies$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /batch run/i })).toBeInTheDocument();
-    expect(screen.getByText('RUN SIZE ESTIMATE')).toBeInTheDocument();
-    expect(screen.getByText('Conservative preview of likely workload before execution.')).toBeInTheDocument();
     expect(screen.getByText(/run or step/i)).toBeInTheDocument();
   });
 

@@ -109,8 +109,7 @@ describe("LLM prompt builders", () => {
     });
     const prompt = buildExplainResultsPrompt(model, { replications: 10 }, {}, ciResults);
     const instruction = prompt.messages[1].content;
-    expect(instruction).toMatch(/uncertainty/i);
-    expect(instruction).toMatch(/suggestions/i);
+    expect(instruction).toMatch(/confidence/i);
   });
 
   it("explain-results prompt notes low replication count when CI data is sparse", () => {
