@@ -492,10 +492,73 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
   );
 }
 
-// G15 — Live queue-depth time-plot chart
-export function QueueDepthTimePlot({ timeSeries, queues, timeUnit, width = 400, height = 140 }) {
+// ── SingleQueueLinePlot — one line chart for a single queue's series ─────────
+// Shared by QueueDepthTimePlot and QueueWaitTimePlot below, mirroring the
+// per-queue-card grid pattern used by QueueHistogram for wait distributions.
+function SingleQueueLinePlot({ name, points, color, yLabel, timeUnit, width = 280, height = 140 }) {
   const { C, FONT } = useTheme();
-  const QUEUE_COLORS = [C.accent, C.amber, C.green, C.purple, C.reneged, C.kpiArr, C.pink, C.server];
+  const [tip, setTip] = useState(null);
+  const PAD = { top: 12, right: 10, bottom: 26, left: 36 };
+  const plotW = width - PAD.left - PAD.right;
+  const plotH = height - PAD.top - PAD.bottom;
+
+  const tMin = points[0].t;
+  const tMax = points[points.length - 1].t;
+  const tRange = tMax - tMin || 1;
+  const maxV = Math.max(1, ...points.map(p => p.v));
+
+  const xScale = (t) => PAD.left + (t - tMin) / tRange * plotW;
+  const yScale = (v) => PAD.top + plotH - (v / maxV) * plotH;
+
+  const yTicks = Array.from({ length: 4 }, (_, i) => +((i / 3) * maxV).toFixed(1));
+  const xTicks = [tMin, tMin + tRange / 2, tMax];
+
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${xScale(p.t).toFixed(1)},${yScale(p.v).toFixed(1)}`).join(" ");
+
+  return (
+    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+      <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, fontWeight: 700, marginBottom: 4 }}>{name}</div>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block", width: "100%" }}
+        onMouseLeave={() => setTip(null)}>
+        {yTicks.map((tick, i) => (
+          <g key={i}>
+            <line x1={PAD.left} y1={yScale(tick)} x2={width - PAD.right} y2={yScale(tick)} stroke={C.chartGrid} strokeWidth={1} />
+            <text x={PAD.left - 4} y={yScale(tick) + 4} textAnchor="end" fill={C.muted} fontSize={10} fontFamily="monospace">
+              {tick}
+            </text>
+          </g>
+        ))}
+        <path d={linePath} fill="none" stroke={color} strokeWidth={2.5} />
+        {points.map((p, i) => (
+          <circle key={i} cx={xScale(p.t)} cy={yScale(p.v)} r={5} fill="transparent" style={{ cursor: "crosshair" }}
+            onMouseEnter={() => setTip({ x: xScale(p.t), y: yScale(p.v), label: `t = ${Math.round(p.t)}`, value: `${yLabel}: ${p.v.toFixed(1)}` })} />
+        ))}
+        {xTicks.map((t, i) => (
+          <text key={i} x={xScale(t)} y={height - 4} textAnchor="middle" fill={C.muted} fontSize={10} fontFamily="monospace">
+            {Math.round(t)}
+          </text>
+        ))}
+        {tip && (() => {
+          const TW = 110, TH = 36, TX = Math.min(Math.max(tip.x - TW / 2, PAD.left), width - PAD.right - TW), TY = Math.max(tip.y - TH - 6, PAD.top);
+          return (
+            <g style={{ pointerEvents: "none" }}>
+              <rect x={TX} y={TY} width={TW} height={TH} rx={4} fill={C.panel} stroke={C.accent} strokeWidth={1} opacity={0.97} />
+              <text x={TX + TW / 2} y={TY + 13} textAnchor="middle" fill={C.muted} fontSize={9} fontFamily={FONT}>{tip.label}</text>
+              <text x={TX + TW / 2} y={TY + 27} textAnchor="middle" fill={C.text} fontSize={10} fontFamily={FONT} fontWeight={700}>{tip.value}</text>
+            </g>
+          );
+        })()}
+      </svg>
+      <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginTop: 3 }}>
+        {timeUnit ? `time (${timeUnit})` : "simulation time"} · {yLabel}
+      </div>
+    </div>
+  );
+}
+
+// G15 — Live queue-depth time-plot chart: one mini chart per queue
+export function QueueDepthTimePlot({ timeSeries, queues, timeUnit }) {
+  const { C, FONT } = useTheme();
   if (!timeSeries || timeSeries.length < 2) {
     return (
       <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, padding: 12, textAlign: "center", background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
@@ -507,77 +570,36 @@ export function QueueDepthTimePlot({ timeSeries, queues, timeUnit, width = 400, 
   const queueNames = (queues || []).map(q => q.name || q.id || "Queue").filter(Boolean);
   if (queueNames.length === 0) return null;
 
-  const PAD = { top: 12, right: 12, bottom: 22, left: 40 };
-  const plotW = width - PAD.left - PAD.right;
-  const plotH = height - PAD.top - PAD.bottom;
+  const series = queueNames.map(qName => ({
+    qName,
+    points: timeSeries.map(entry => ({
+      t: entry?.t ?? 0,
+      v: entry?.byQueue?.[qName]?.waiting ?? entry?.byType?.[qName]?.waiting ?? 0,
+    })).filter(p => Number.isFinite(p.v)),
+  })).filter(s => s.points.length >= 2);
 
-  const tMin = timeSeries[0]?.t ?? 0;
-  const tMax = timeSeries[timeSeries.length - 1]?.t ?? 1;
-  const tRange = tMax - tMin || 1;
-
-  const maxDepth = Math.max(1, ...timeSeries.flatMap(entry =>
-    queueNames.map(qName => entry?.byQueue?.[qName]?.waiting ?? entry?.byType?.[qName]?.waiting ?? 0).filter(Number.isFinite)
-  ));
-
-  const xScale = (t) => PAD.left + (t - tMin) / tRange * plotW;
-  const yScale = (v) => PAD.top + plotH - (v / maxDepth) * plotH;
-
-  const yTicks = Array.from({ length: 4 }, (_, i) => Math.round((i / 3) * maxDepth));
+  if (!series.length) return null;
 
   return (
-    <div style={{ background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 12, overflow: "hidden" }}>
-      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
-        QUEUE DEPTH OVER TIME
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+        QUEUE DEPTH OVER TIME (per queue)
       </div>
-      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
-        {yTicks.map((tick, i) => (
-          <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={width - PAD.right} y2={yScale(tick)} stroke={C.chartGrid} strokeWidth={1} />
-            <text x={PAD.left - 4} y={yScale(tick) + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace">
-              {tick}
-            </text>
-          </g>
-        ))}
-        {queueNames.map((qName, qi) => {
-          const color = QUEUE_COLORS[qi % QUEUE_COLORS.length];
-          const points = timeSeries.map(entry => ({
-            t: entry?.t ?? 0,
-            v: entry?.byQueue?.[qName]?.waiting ?? entry?.byType?.[qName]?.waiting ?? 0,
-          })).filter(p => Number.isFinite(p.v));
-          if (points.length < 2) return null;
-          const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${xScale(p.t).toFixed(1)},${yScale(p.v).toFixed(1)}`).join(" ");
-          return (
-            <g key={qName}>
-              <path d={linePath} fill="none" stroke={color} strokeWidth={2.5} />
-            </g>
-          );
-        })}
-        <text x={width / 2} y={height - 2} textAnchor="middle" fill={C.muted} fontSize={11} fontFamily="monospace">
-          {timeUnit ? `Time (${timeUnit})` : "Simulation time"}
-        </text>
-        <text x={PAD.left - 2} y={PAD.top + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace" transform={`rotate(-90, ${PAD.left - 14}, ${height / 2})`}>
-          Queue depth
-        </text>
-      </svg>
-      <div style={{ display: "flex", gap: 12, marginTop: 4, flexWrap: "wrap" }}>
-        {queueNames.map((qName, qi) => (
-          <span key={qName} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.muted, fontFamily: FONT }}>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: QUEUE_COLORS[qi % QUEUE_COLORS.length], display: "inline-block" }} />
-            {qName}
-          </span>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+        {series.map(({ qName, points }) => (
+          <SingleQueueLinePlot key={qName} name={qName} points={points} color={C.accent} yLabel="depth" timeUnit={timeUnit} />
         ))}
       </div>
     </div>
   );
 }
 
-// ── QueueWaitTimePlot — time-binned average wait per queue ────────────────────
-// Layered onto the same x-axis as QueueDepthTimePlot: each point is the average
-// wait of entities that cleared the queue since the previous time-series sample,
-// answering "for arrivals around time t, what was their typical wait?"
-export function QueueWaitTimePlot({ timeSeries, queues, timeUnit, width = 400, height = 140 }) {
+// ── QueueWaitTimePlot — time-binned average wait per queue, one chart each ────
+// Each point is the average wait of entities that cleared the queue since the
+// previous time-series sample, answering "for arrivals around time t, what was
+// their typical wait?" Queues with no completed waits yet are omitted.
+export function QueueWaitTimePlot({ timeSeries, queues, timeUnit }) {
   const { C, FONT } = useTheme();
-  const QUEUE_COLORS = [C.accent, C.amber, C.green, C.purple, C.reneged, C.kpiArr, C.pink, C.server];
   const queueNames = (queues || []).map(q => q.name || q.id || "Queue").filter(Boolean);
 
   const series = queueNames.map(qName => ({
@@ -585,70 +607,24 @@ export function QueueWaitTimePlot({ timeSeries, queues, timeUnit, width = 400, h
     points: (timeSeries || [])
       .map(entry => ({ t: entry?.t ?? 0, v: entry?.byQueue?.[qName]?.avgWait }))
       .filter(p => Number.isFinite(p.v)),
-  }));
-  const hasData = series.some(s => s.points.length >= 2);
+  })).filter(s => s.points.length >= 2);
 
-  if (!hasData) {
+  if (!series.length) {
     return (
       <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, padding: 12, textAlign: "center", background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
         No completed waits yet. This chart fills in as entities clear each queue.
       </div>
     );
   }
-  if (queueNames.length === 0) return null;
-
-  const PAD = { top: 12, right: 12, bottom: 22, left: 40 };
-  const plotW = width - PAD.left - PAD.right;
-  const plotH = height - PAD.top - PAD.bottom;
-
-  const allPoints = series.flatMap(s => s.points);
-  const tMin = Math.min(...allPoints.map(p => p.t));
-  const tMax = Math.max(...allPoints.map(p => p.t));
-  const tRange = tMax - tMin || 1;
-  const maxWait = Math.max(1, ...allPoints.map(p => p.v));
-
-  const xScale = (t) => PAD.left + (t - tMin) / tRange * plotW;
-  const yScale = (v) => PAD.top + plotH - (v / maxWait) * plotH;
-
-  const yTicks = Array.from({ length: 4 }, (_, i) => +((i / 3) * maxWait).toFixed(1));
 
   return (
-    <div style={{ background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 12, overflow: "hidden" }}>
-      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
-        AVERAGE WAIT OVER TIME
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+        AVERAGE WAIT OVER TIME (per queue)
       </div>
-      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
-        {yTicks.map((tick, i) => (
-          <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={width - PAD.right} y2={yScale(tick)} stroke={C.chartGrid} strokeWidth={1} />
-            <text x={PAD.left - 4} y={yScale(tick) + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace">
-              {tick}
-            </text>
-          </g>
-        ))}
-        {series.map(({ qName, points }, qi) => {
-          const color = QUEUE_COLORS[qi % QUEUE_COLORS.length];
-          if (points.length < 2) return null;
-          const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${xScale(p.t).toFixed(1)},${yScale(p.v).toFixed(1)}`).join(" ");
-          return (
-            <g key={qName}>
-              <path d={linePath} fill="none" stroke={color} strokeWidth={2.5} />
-            </g>
-          );
-        })}
-        <text x={width / 2} y={height - 2} textAnchor="middle" fill={C.muted} fontSize={11} fontFamily="monospace">
-          {timeUnit ? `Time (${timeUnit})` : "Simulation time"}
-        </text>
-        <text x={PAD.left - 2} y={PAD.top + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace" transform={`rotate(-90, ${PAD.left - 14}, ${height / 2})`}>
-          Avg wait
-        </text>
-      </svg>
-      <div style={{ display: "flex", gap: 12, marginTop: 4, flexWrap: "wrap" }}>
-        {queueNames.map((qName, qi) => (
-          <span key={qName} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.muted, fontFamily: FONT }}>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: QUEUE_COLORS[qi % QUEUE_COLORS.length], display: "inline-block" }} />
-            {qName}
-          </span>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+        {series.map(({ qName, points }) => (
+          <SingleQueueLinePlot key={qName} name={qName} points={points} color={C.amber} yLabel="avg wait" timeUnit={timeUnit} />
         ))}
       </div>
     </div>

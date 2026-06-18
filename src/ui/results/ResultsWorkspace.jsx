@@ -1038,7 +1038,7 @@ export function MiniLineChart({ title, ariaTitle, points, color, yLabel, formatY
         {/* X axis tick labels (no vertical grid lines) */}
         {xTicks.map((t, i) => (
           <text key={`xl-${i}`} x={toX(t)} y={CHART_H - 22} textAnchor="middle" fontSize={11}
-            fill={C.muted} fontFamily="monospace">{formatNumber(t)}</text>
+            fill={C.muted} fontFamily="monospace">{formatNumber(t, 0)}</text>
         ))}
         <polygon points={fillPts} fill={color} fillOpacity={0.12} />
         <polyline points={linePts} fill="none" stroke={color} strokeWidth={2.5}
