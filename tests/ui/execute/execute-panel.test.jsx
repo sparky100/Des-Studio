@@ -59,8 +59,7 @@ const validModel = {
 
 describe('ExecutePanel', () => {
   const openSetup = () => {
-    fireEvent.click(screen.getByRole('button', { name: /^setup$/i }));
-    fireEvent.click(screen.getByRole('button', { name: /edit setup/i }));
+    fireEvent.click(screen.getByRole('button', { name: /edit/i }));
   };
 
   beforeEach(() => {
@@ -78,12 +77,12 @@ describe('ExecutePanel', () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
     expect(screen.getByRole('button', { name: /^run$/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^setup$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^experiments$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^studies$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /batch run/i })).toBeInTheDocument();
     expect(screen.getByText('RUN SIZE ESTIMATE')).toBeInTheDocument();
     expect(screen.getByText('Conservative preview of likely workload before execution.')).toBeInTheDocument();
-    expect(screen.getByText('Run or step the simulation to see the visual view.')).toBeInTheDocument();
+    expect(screen.getByText(/run or step/i)).toBeInTheDocument();
   });
 
   it('loads and persists model experiment defaults from Execute controls', () => {

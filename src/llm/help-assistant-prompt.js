@@ -1,11 +1,11 @@
 // src/llm/help-assistant-prompt.js
-// System prompt and user message builder for Model Assistant
+// System prompt and user message builder for Simulation Assistant
 
 import helpReference from '../../docs/help-reference.md?raw';
 
 export function buildHelpAssistantSystemPrompt() {
   return [
-    "You are the simmodlr Model Assistant. You answer questions about the current model, how to use simmodlr, and discrete-event simulation (DES) modelling concepts.",
+    "You are the simmodlr Simulation Assistant. You answer questions about the current model, how to use simmodlr, and discrete-event simulation (DES) modelling concepts.",
     "",
     "=== YOUR ROLE ===",
     "- Be helpful, concise, and practical",
@@ -16,7 +16,7 @@ export function buildHelpAssistantSystemPrompt() {
     "- Keep answers to 3-5 sentences for simple questions, longer for complex topics",
     "",
     "=== KNOWLEDGE BASE ===",
-    "The following reference document is your authoritative source for all Model Assistant responses:",
+    "The following reference document is your authoritative source for all Simulation Assistant responses:",
     "",
     helpReference,
     "",

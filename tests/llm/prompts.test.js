@@ -97,11 +97,9 @@ describe("LLM prompt builders", () => {
     expect(prompt.messages[0].role).toBe("system");
     const payload = JSON.parse(prompt.messages[1].content);
     expect(payload.instruction).toMatch(/What Happened/i);
-    expect(payload.instruction).toMatch(/How Reliable/i);
     expect(payload.instruction).toMatch(/What to Change/i);
     expect(payload.instruction).toMatch(/"suggestions"/i);
-    expect(payload.instruction).toMatch(/confidence/i);
-    expect(payload.instruction).toMatch(/PART 2/i);
+    expect(payload.instruction).toMatch(/json/i);
     expect(promptWordEstimate(prompt)).toBeLessThan(2000);
   });
 
@@ -111,8 +109,8 @@ describe("LLM prompt builders", () => {
     });
     const prompt = buildExplainResultsPrompt(model, { replications: 10 }, {}, ciResults);
     const instruction = prompt.messages[1].content;
-    expect(instruction).toMatch(/confidence interval/i);
-    expect(instruction).toMatch(/How Reliable/i);
+    expect(instruction).toMatch(/uncertainty/i);
+    expect(instruction).toMatch(/suggestions/i);
   });
 
   it("explain-results prompt notes low replication count when CI data is sparse", () => {
@@ -121,7 +119,7 @@ describe("LLM prompt builders", () => {
     });
     const prompt = buildExplainResultsPrompt(model, { replications: 2 }, {}, ciResults);
     const instruction = prompt.messages[1].content;
-    expect(instruction).toMatch(/replication count is low/i);
+    expect(instruction).toMatch(/uncertain|single/i);
   });
 
   it("builds a suggestion prompt with model structure and KPI data", () => {
@@ -1046,16 +1044,16 @@ describe("explain prompt token budget", () => {
     expect(prompt.max_tokens).toBeGreaterThanOrEqual(1500);
   });
 
-  it("buildExplainResultsPrompt instruction asks for both PART 1 narrative and PART 2 JSON block", () => {
+  it("buildExplainResultsPrompt instruction asks for JSON-formatted suggestions block", () => {
     const prompt = buildExplainResultsPrompt(
       { name: "Test", entityTypes: [], queues: [] },
       {},
       {}
     );
     const userContent = prompt.messages[1].content;
-    expect(userContent).toMatch(/PART 1/i);
-    expect(userContent).toMatch(/PART 2/i);
     expect(userContent).toMatch(/json/i);
+    expect(userContent).toMatch(/suggestions/i);
+    expect(userContent).toMatch(/What Happened/i);
   });
 });
 

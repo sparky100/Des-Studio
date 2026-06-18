@@ -220,7 +220,7 @@ describe("saveSimulationRun payload metadata", () => {
     expect(insertPayload.results_json._model_snapshot).toEqual({ id: "model-1", name: "Snapshot Model" });
     expect(insertPayload.results_json._experiment_config).toEqual(expect.objectContaining({ replications: 2, seed: 654 }));
     expect(insertPayload.results_json._result_detail_level).toBe("full");
-    expect(insertPayload.results_json.log).toEqual([{ phase: "END", time: 25, message: "Run finished" }]);
+    expect(insertPayload.results_json.logSummary).toEqual({ entries: 1, finalPhase: "END", finalTime: 25, finalMessage: "Run finished" });
     expect(insertPayload.results_json.entitySummary).toEqual([{ type: "Customer", status: "done", count: 1 }]);
     expect(insertPayload.results_json.timeSeries).toHaveLength(1);
     expect(insertPayload.results_json.waitDist.Main.values).toEqual([2, 4]);
