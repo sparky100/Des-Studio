@@ -454,12 +454,12 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
                   )}
                   {/* Main value */}
                   <div style={{ fontSize: 20, fontWeight: 800, color: C.bg, lineHeight: 1, fontFamily: FONT }}>
-                    {Number.isFinite(mean) ? fmtMetric(metric, mean) : "—"}
+                    {fmtMetric(metric, mean)}
                   </div>
                   {/* CI half-width */}
                   {halfWidth != null && halfWidth > 0 && (
                     <div style={{ fontSize: 9, color: alpha(C.bg, 0.6), marginTop: 3, fontFamily: FONT, lineHeight: 1 }}>
-                      ±{fmt(halfWidth)}
+                      ±{fmtMetric(metric, halfWidth)}
                     </div>
                   )}
                 </div>

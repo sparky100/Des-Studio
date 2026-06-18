@@ -2202,7 +2202,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                             return (
                               <div key={m} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
                                 <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, marginBottom: 2 }}>{METRIC_LABELS[m] || m}</div>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, fontFamily: FONT }}>{s?.mean != null ? fmtMetric(m, s.mean) : "—"}</div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, fontFamily: FONT }}>{fmtMetric(m, s?.mean)}</div>
                                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>n={s?.n || 0}</div>
                               </div>
                             );
