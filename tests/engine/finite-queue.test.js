@@ -136,6 +136,16 @@ describe("F11.1 — Finite queue capacity", () => {
     expect(mainQMetrics).toBeDefined();
     expect(mainQMetrics.blockingCount).toBeGreaterThanOrEqual(1); // at least 2 blocked
   });
+
+  test("getSummary() exposes perQueue mid-run for live health checks", () => {
+    const m = makeMultiArrivalModel(4, { queueCapacity: 2, overflowDestination: null });
+    m.cEvents = [];
+    const eng = buildEngine(m, 1, 0, 5);
+    for (let i = 0; i < 20; i++) { const r = eng.step(); if (r.done) break; }
+    const liveMetrics = eng.getSummary().perQueue?.["Main Queue"];
+    expect(liveMetrics).toBeDefined();
+    expect(liveMetrics.blockingCount).toBeGreaterThanOrEqual(1);
+  });
 });
 
 // ── F11.2 — Balking ───────────────────────────────────────────────────────────

@@ -124,36 +124,45 @@ export function evaluateResultsHealth(results = {}, model = {}) {
       suggestion: "Reduce arrival rate or add capacity — the system is severely overwhelmed." });
   }
 
-  // H4 — Peak queue ≥ 2× finite capacity, or > 50 when unbounded
+  // H4 — Peak queue > 50 when unbounded, or entities blocked/overflowed at capacity (F11.1/F11.3)
   const maxLengths = results?.runtimeMetrics?.max_queue_length_by_queue || {};
   for (const queue of model?.queues || []) {
-    const peak = Number(maxLengths[queue.name]);
-    if (!Number.isFinite(peak) || peak < 1) continue;
     const capacity = Number(queue.capacity);
     if (Number.isFinite(capacity) && capacity > 0) {
-      if (peak >= capacity * 2) {
-        flags.push({ code: "H4", severity: "warning", resource: queue.name,
-          message: `${queue.name} peaked at ${peak} waiting (${Math.round(peak / capacity)}× its capacity of ${capacity}).`,
+      const blockingCount = Number(results?.perQueue?.[queue.name]?.blockingCount) || 0;
+      if (blockingCount <= 0) continue;
+      const blockedPct = totalArrived > 0 ? blockingCount / totalArrived : 0;
+      if (blockedPct >= 0.1) {
+        flags.push({ code: "H4", severity: "critical", resource: queue.name,
+          message: `${queue.name} rejected ${blockingCount} arrival(s) at capacity (${Math.round(blockedPct * 100)}% of all arrivals) — the queue is full and entities are being blocked or overflowed.`,
           suggestion: `Increase ${queue.name} capacity or add an overflow route to handle peak demand.` });
+      } else {
+        flags.push({ code: "H4", severity: "warning", resource: queue.name,
+          message: `${queue.name} rejected ${blockingCount} arrival(s) at capacity — the queue reached its limit of ${capacity}.`,
+          suggestion: `Consider increasing ${queue.name} capacity or adding an overflow route.` });
       }
-    } else if (peak > 50) {
+    } else {
+      const peak = Number(maxLengths[queue.name]);
+      if (!Number.isFinite(peak) || peak < 1 || peak <= 50) continue;
       flags.push({ code: "H4", severity: "warning", resource: queue.name,
         message: `${queue.name} peaked at ${peak} waiting.`,
         suggestion: `Consider adding a capacity limit or overflow route to ${queue.name}.` });
     }
   }
 
-  // H6 — Queue exceeded capacity but not severely enough for H4
+  // H6 — Balking (entities declined to join a queue rather than wait, F11.2)
   for (const queue of model?.queues || []) {
-    const peak = Number(maxLengths[queue.name]);
-    if (!Number.isFinite(peak) || peak < 1) continue;
-    const capacity = Number(queue.capacity);
-    if (Number.isFinite(capacity) && capacity > 0) {
-      if (peak > capacity && peak < capacity * 2) {
-        flags.push({ code: "H6", severity: "warning", resource: queue.name,
-          message: `${queue.name} peaked at ${peak} waiting — exceeded its capacity of ${capacity} (${Math.round(peak / capacity)}×).`,
-          suggestion: `Consider increasing ${queue.name} capacity or adding overflow routing.` });
-      }
+    const balkCount = Number(results?.perQueue?.[queue.name]?.balkCount) || 0;
+    if (balkCount <= 0) continue;
+    const balkPct = totalArrived > 0 ? balkCount / totalArrived : 0;
+    if (balkPct >= 0.1) {
+      flags.push({ code: "H6", severity: "critical", resource: queue.name,
+        message: `${balkCount} entities balked at ${queue.name} (${Math.round(balkPct * 100)}% of all arrivals) — they left rather than join this queue.`,
+        suggestion: `Review ${queue.name}'s balk probability/condition — a large share of demand is being turned away before it even joins the queue.` });
+    } else {
+      flags.push({ code: "H6", severity: "warning", resource: queue.name,
+        message: `${balkCount} entit${balkCount === 1 ? "y" : "ies"} balked at ${queue.name} — declined to join rather than wait.`,
+        suggestion: `Review ${queue.name}'s balk probability/condition if this is unintended.` });
     }
   }
 
@@ -235,16 +244,24 @@ export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
     }
   }
 
-  // L3 — Queue depth exceeds capacity
+  // L3 — Entities blocked/overflowed at capacity (F11.1/F11.3)
   for (const queue of model?.queues || []) {
     const qName = queue.name;
-    const capacity = Number(queue.capacity);
-    if (!Number.isFinite(capacity) || capacity < 1 || !qName) continue;
-    const waiting = snap.byQueue?.[qName]?.waiting ?? 0;
-    if (waiting > capacity) {
-      flags.push({ code: "L3", severity: "warning", resource: qName,
-        message: `${qName} at ${waiting} waiting — exceeded capacity of ${capacity} (${Math.round(waiting / capacity)}×).` });
-    }
+    if (!qName) continue;
+    const blockingCount = Number(summary?.perQueue?.[qName]?.blockingCount) || 0;
+    if (blockingCount <= 0) continue;
+    flags.push({ code: "L3", severity: "warning", resource: qName,
+      message: `${qName} has rejected ${blockingCount} arrival(s) at capacity so far.` });
+  }
+
+  // L7 — Balking (entities declined to join a queue rather than wait, F11.2)
+  for (const queue of model?.queues || []) {
+    const qName = queue.name;
+    if (!qName) continue;
+    const balkCount = Number(summary?.perQueue?.[qName]?.balkCount) || 0;
+    if (balkCount <= 0) continue;
+    flags.push({ code: "L7", severity: "warning", resource: qName,
+      message: `${balkCount} entit${balkCount === 1 ? "y" : "ies"} balked at ${qName} so far.` });
   }
 
   // Critical first, then by code

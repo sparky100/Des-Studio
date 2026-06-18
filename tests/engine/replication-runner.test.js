@@ -62,6 +62,22 @@ describe('runReplications', () => {
     expect(payload.result.runtimeMetrics).toEqual(expect.objectContaining({ events_processed: 12, entities_completed: 1 }));
   });
 
+  test('preserves perQueue balk/block counts on compaction', () => {
+    const payload = compactReplicationPayload({
+      replicationIndex: 0,
+      seed: 1,
+      result: {
+        finalTime: 10,
+        snap: { clock: 10 },
+        summary: { served: 1 },
+        perQueue: { 'Burger Queue': { balkCount: 3, blockingCount: 2 } },
+        log: [],
+      },
+    });
+
+    expect(payload.result.perQueue).toEqual({ 'Burger Queue': { balkCount: 3, blockingCount: 2 } });
+  });
+
   test('assigns deterministic independent seeds', () => {
     const { workers, createWorker } = deferredWorkerFactory();
 
