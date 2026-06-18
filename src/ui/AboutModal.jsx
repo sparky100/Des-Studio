@@ -4,6 +4,8 @@ import { SPACE, RADIUS, TYPO, Z, alpha } from "./shared/tokens.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION;
+const BUILD_SHA = import.meta.env.VITE_BUILD_SHA;
+const BUILD_TIME = import.meta.env.VITE_BUILD_TIME;
 
 const headingId = "about-modal-heading";
 
@@ -115,6 +117,7 @@ export function AboutModal({ isOpen, onClose }) {
           {/* Details grid */}
           <div style={{ display: "flex", flexDirection: "column", gap: SPACE.sm }}>
             <Row label="Version"   value={`v${APP_VERSION || "—"}`} />
+            <Row label="Build"     value={BUILD_SHA ? `${BUILD_SHA} · ${formatBuildTime(BUILD_TIME)}` : "—"} />
             <Row label="Copyright" value="© 2026 SimModlr. All rights reserved." />
             <Row
               label="Contact"
@@ -144,6 +147,11 @@ export function AboutModal({ isOpen, onClose }) {
       </div>
     </div>
   );
+}
+
+function formatBuildTime(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
 }
 
 function Row({ label, value }) {
