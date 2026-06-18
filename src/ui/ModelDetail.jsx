@@ -1187,8 +1187,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               const res = hydrateResultsFromHistoryRow(lastRow);
               const s = res?.summary;
               if (!s) return null;
+              const repCount = lastRow.replications > 0 ? lastRow.replications : 1;
               const metrics = [
-                s.served != null && { label: "Served", value: s.served, fmt: v => Math.round(v).toLocaleString() },
+                s.served != null && { label: "Served", value: s.served / repCount, fmt: v => Math.round(v).toLocaleString() },
                 s.avgWait != null && { label: "Avg wait", value: s.avgWait, fmt: v => `${v.toFixed(1)} ${model.timeUnit||"min"}` },
                 s.avgSojourn != null && { label: "Avg time in system", value: s.avgSojourn, fmt: v => `${v.toFixed(1)} ${model.timeUnit||"min"}` },
                 s.servedRatio != null && { label: "Completion rate", value: s.servedRatio, fmt: v => `${(v*100).toFixed(1)}%` },
