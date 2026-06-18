@@ -69,6 +69,8 @@ export function compactReplicationPayload(payload) {
       log: [],
       timeSeries: result.timeSeries,
       waitDist: result.waitDist,
+      waitDistByAttr: result.waitDistByAttr,
+      waitByArrivalAttr: result.waitByArrivalAttr,
       perQueue: result.perQueue,
     },
   };

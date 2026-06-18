@@ -1722,6 +1722,7 @@ const cycleLog = [];
     getTimeSeries:        () => _timeSeries ?? undefined,
     getWaitDist:          () => computeWaitDist(entities),
     getWaitDistByAttr:    () => computeWaitDistByAttr(entities),
+    getWaitByArrivalAttr: () => computeWaitByArrivalAttr(entities),
     getEntitySummary:     () => entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
     updateScheduledTime,
   };
