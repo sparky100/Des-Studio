@@ -1315,7 +1315,14 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
                 </div>
               )}
               {timeSeries ? (
-                <QueueDepthTimePlot timeSeries={timeSeries} queues={model.queues} timeUnit={model.timeUnit} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {!hasResults && (
+                    <div style={{ fontSize: 10, color: C.green, fontFamily: FONT, fontWeight: 700, letterSpacing: 1.2 }}>
+                      ● LIVE — queue depth updating as simulation runs
+                    </div>
+                  )}
+                  <QueueDepthTimePlot timeSeries={timeSeries} queues={model.queues} timeUnit={model.timeUnit} />
+                </div>
               ) : (
                 <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
                   Queue depth over time: run with "Collect time-series" enabled.
