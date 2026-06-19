@@ -99,11 +99,11 @@ pattern, consult §10 directly.`,
 
 5. Every queue that receives entities MUST have a C-event that consumes from it.
    A queue populated by ARRIVE() or RELEASE() with no C-event whose effect contains
-   ASSIGN(QueueName,...), BATCH(QueueName,N), COSEIZE(QueueName,...), or MATCH(...) will
-   fill indefinitely — entities never leave (CHK-013).
+   ASSIGN(QueueName,...), DELAY(QueueName), BATCH(QueueName,N), COSEIZE(QueueName,...), or
+   MATCH(...) will fill indefinitely — entities never leave (CHK-013).
 
    ✓ CORRECT: ARRIVE(Patient, Triage Queue) paired with C-event effect "ASSIGN(Triage Queue, Nurse)"
-   ✗ WRONG:   ARRIVE(Patient, Discharge Queue) with no C-event that ASSIGN/BATCH/COSEIZE from it
+   ✗ WRONG:   ARRIVE(Patient, Discharge Queue) with no C-event that ASSIGN/DELAY/BATCH/COSEIZE from it
 
 6. balkProbability and balkCondition are fields on the Queue object, not the ARRIVE B-event —
    they apply uniformly no matter how an entity reaches the queue (ARRIVE, RELEASE, routing,
@@ -190,7 +190,19 @@ pattern, consult §10 directly.`,
     Do not use short-form keys ("avgWait") or invent other paths — the engine evaluates no other path.
     For queue-scoped goals, add: "scope": { "type": "queue", "id": "q_...", "name": "..." }.
     For resource.utilisation and container.* metrics, "scope" is required (set type/id/name).
-    Time metrics (avgWait, avgSvc, avgSojourn, avgTimeInSystem) support percentile operators: "p50" | "p75" | "p90" | "p95" | "p99".`,
+    Time metrics (avgWait, avgSvc, avgSojourn, avgTimeInSystem) support percentile operators: "p50" | "p75" | "p90" | "p95" | "p99".
+
+14. NEVER invent a server type to model a resource-free wait (cooling period, mandatory
+    hold, recovery time, paperwork delay where nothing is actually staffed/equipped).
+    Use DELAY(QueueName) instead of ASSIGN(QueueName, ServerType) — it holds the entity
+    for the cSchedules duration without seizing a server. DELAY must be the entire effect;
+    never add ASSIGN/RELEASE alongside it. The completion B-event still needs
+    "useEntityCtx": true and may use COMPLETE() or a routing-table exit, same as a normal
+    ASSIGN-based completion. See SCHEMA REFERENCE §6.2.
+
+    ✓ CORRECT: "effect": ["DELAY(Recovery Queue)"], cSchedules useEntityCtx:true → completion B-event
+    ✗ WRONG:   "effect": ["ASSIGN(Recovery Queue, Recovery Room)"] when "Recovery Room" is not a
+               real staffed/equipped resource the user described — fabricated server type`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:

@@ -190,7 +190,7 @@ function buildStageRecord(cust, srv, clock) {
     ? Math.max(0, clock - serviceStartedAt)
     : 0;
   return {
-    serverType: srv?.type || "unknown",
+    serverType: srv?.type || (cust._isDelay ? "delay" : "unknown"),
     queueName: cust.lastQueue || cust.queue || null,
     waitStartedAt,
     serviceStartedAt: serviceStartedAt ?? clock,
@@ -414,7 +414,7 @@ export const MACROS = [
         return;
       }
       if (cust.status === "serving") {
-        if (!cust._isDelay && !srv) {
+        if (!srv && !cust._isDelay) {
           msgs.push(`COMPLETE skipped — #${cust.id} has no matching busy server`);
           return;
         }
