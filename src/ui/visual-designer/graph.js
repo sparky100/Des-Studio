@@ -227,12 +227,15 @@ export function deriveGraphFromModel(model = {}) {
 
   cEvents.forEach(event => {
     const id = nodeId(VISUAL_NODE_TYPES.ACTIVITY, event.id || event.name);
+    const effectCalls = macroCalls(event.effect);
+    const isDelay = effectCalls.some(c => c.macro === "DELAY");
     const queueRefs = [
       ...queueRefsFromCondition(event.condition),
-      ...macroCalls(event.effect)
-        .filter(call => call.macro === "ASSIGN")
+      // Both ASSIGN(Queue, Server) and DELAY(Queue) carry the source queue as args[0]
+      ...effectCalls
+        .filter(call => call.macro === "ASSIGN" || call.macro === "DELAY")
         .map(call => call.args[0])
-        .filter(queueName => queueByName.has(norm(queueName))),
+        .filter(queueName => queueName && queueByName.has(norm(queueName))),
     ];
     const uniqueQueueRefs = [...new Set(queueRefs.map(clean).filter(Boolean))];
 
@@ -242,7 +245,7 @@ export function deriveGraphFromModel(model = {}) {
       type: VISUAL_NODE_TYPES.ACTIVITY,
       refId: event.id || null,
       label: event.name || "Activity",
-      sublabel: `Priority ${event.priority || 1}`,
+      sublabel: isDelay ? `Delay · Priority ${event.priority || 1}` : `Priority ${event.priority || 1}`,
       badges: hasWhen ? ["when"] : [],
     });
 
@@ -332,6 +335,47 @@ export function deriveGraphFromModel(model = {}) {
           }
         }
       });
+
+      // ── DELAY completion: B-events with no RELEASE but with routing or COMPLETE ──
+      // Standard RELEASE routing is handled inside the calls.forEach above. For DELAY
+      // completion B-events the effect has no RELEASE, so we process their routing here.
+      const hasRelease = calls.some(c => c.macro === "RELEASE");
+      if (!hasRelease) {
+        if (Array.isArray(bEvent.routing) && bEvent.routing.length > 0) {
+          bEvent.routing.forEach((branch, branchIdx) => {
+            const condLabel = conditionLabel(branch.condition);
+            if (!branch.queueName) {
+              const sinkId = getExitSinkId();
+              edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-dr-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: condLabel });
+            } else {
+              const nextQueueId = queueNodeByName.get(norm(branch.queueName));
+              if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-dr-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: condLabel });
+            }
+          });
+          if (bEvent.defaultQueueName) {
+            const defQueueId = queueNodeByName.get(norm(bEvent.defaultQueueName));
+            if (defQueueId) edges.push({ id: edgeId(id, defQueueId, `${schedule.eventId}-dr-default`), from: id, to: defQueueId, source: "routing", label: "fallback" });
+          } else if (bEvent.defaultQueueName === null) {
+            const sinkId = getExitSinkId();
+            edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-dr-default`), from: id, to: sinkId, source: "terminal", label: "default" });
+          }
+        } else if (Array.isArray(bEvent.probabilisticRouting) && bEvent.probabilisticRouting.length > 0) {
+          bEvent.probabilisticRouting.forEach((branch, branchIdx) => {
+            const probLabel = `${Math.round((branch.probability ?? 0) * 100)}%`;
+            if (!branch.queueName) {
+              const sinkId = getExitSinkId();
+              edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-dp-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: probLabel });
+            } else {
+              const nextQueueId = queueNodeByName.get(norm(branch.queueName));
+              if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-dp-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: probLabel });
+            }
+          });
+        } else {
+          // No routing — just COMPLETE/RENEGE on the B-event itself
+          const sinkId = sinkNodeByBEventId.get(bEvent.id);
+          if (sinkId) edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-dc`), from: id, to: sinkId, source: "terminal" });
+        }
+      }
     });
   });
 
