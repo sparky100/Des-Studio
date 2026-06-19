@@ -357,29 +357,37 @@ export const MACROS = [
       const queueToken = match[1].trim();
       const { entities, helpers, clock, setLastCustId, msgs } = ctx;
 
-      const matchedQ  = helpers.findQueueConfig?.(queueToken);
+      const matchedQ   = helpers.findQueueConfig?.(queueToken);
       const discipline = matchedQ?.discipline || 'FIFO';
-      const token     = matchedQ ? matchedQ.name : queueToken;
+      const token      = matchedQ ? matchedQ.name : queueToken;
 
       const filterFn = ctx.entityFilter
         ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
 
-      const cust = selectWaiting(token, discipline, entities, filterFn, !!matchedQ);
+      // DELAY has no server capacity — all waiting entities start simultaneously.
+      // Process every entity in the queue in one Phase C invocation so N entities
+      // need 1 pass rather than N passes.
+      const waiting = listWaiting(token, discipline, entities, filterFn, !!matchedQ);
 
-      if (cust) {
-        const queuedAt = cust.queue;
-        clearWaitingState(cust);
-        cust.status       = "serving";
-        cust.serviceStart = clock;
-        cust.lastQueue    = queuedAt ?? cust.lastQueue;
-        cust.ceventName   = ctx.ceventName;
-        cust._isDelay     = true;
-        delete cust.queue;
-        setLastCustId(cust.id);
-        msgs.push(
-          `#${cust.id} (${cust.type}) → delay [queue: ${token}, waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
-        );
+      if (waiting.length > 0) {
+        const delayedIds = [];
+        for (const cust of waiting) {
+          const queuedAt = cust.queue;
+          clearWaitingState(cust);
+          cust.status       = "serving";
+          cust.serviceStart = clock;
+          cust.lastQueue    = queuedAt ?? cust.lastQueue;
+          cust.ceventName   = ctx.ceventName;
+          cust._isDelay     = true;
+          delete cust.queue;
+          delayedIds.push(cust.id);
+          msgs.push(
+            `#${cust.id} (${cust.type}) → delay [queue: ${token}, waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
+          );
+        }
+        setLastCustId(delayedIds[0]);
+        ctx._delayedCustIds = delayedIds;
       } else {
         msgs.push(`DELAY(${queueToken}): no entity waiting`);
       }
@@ -406,11 +414,11 @@ export const MACROS = [
         return;
       }
       if (cust.status === "serving") {
-        if (!srv) {
+        if (!cust._isDelay && !srv) {
           msgs.push(`COMPLETE skipped — #${cust.id} has no matching busy server`);
           return;
         }
-        if (!claimMatchesPair(cust, srv)) {
+        if (srv && !claimMatchesPair(cust, srv)) {
           msgs.push(`COMPLETE skipped — stale or contradictory claim for customer #${cust.id} and server #${srv.id}`);
           return;
         }
