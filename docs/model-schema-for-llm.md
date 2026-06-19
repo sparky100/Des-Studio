@@ -47,7 +47,7 @@ Read every row in the TOP LLM MISTAKES table. For each one, confirm your model d
 
 ### Step 4 — Validate before output
 Before returning any JSON, check every blocking rule in §10 programmatically or by inspection.
-A model with any blocking error (V1–V45, CHK-001 to CHK-013) must not be returned to the user.
+A model with any blocking error (V1–V47, CHK-001 to CHK-013) must not be returned to the user.
 Fix all errors first.
 
 ### Step 5 — Planned arrivals: check row count
@@ -78,12 +78,13 @@ Read this before writing any model JSON.
 | 8 | Distribution params as numbers | Must be strings: `"distParams": { "mean": "5" }` — never `{ "mean": 5 }`. Blocked by V5. |
 | 9 | `RENEGE(Patient)` instead of `RENEGE(ctx)` | Always use `RENEGE(ctx)`. The entity-type form silently fails. Blocked by V25. |
 | 10 | No `COMPLETE()` or `RENEGE()` sink | Every model needs at least one exit path. Missing sinks = entities accumulate forever. Blocked by V8 / CHK-002. |
-| 11 | Queue fed but no C-event consumes it | Every queue receiving entities via `ARRIVE()`, `RELEASE()`, or routing must have a C-event whose `effect` includes `ASSIGN(QueueName,...)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH`. Warning CHK-013. |
+| 11 | Queue fed but no C-event consumes it | Every queue receiving entities via `ARRIVE()`, `RELEASE()`, or routing must have a C-event whose `effect` includes `ASSIGN(QueueName,...)`, `DELAY(QueueName)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH`. Warning CHK-013. |
 | 12 | `RENEGE_OLDEST(CustomerType)` with non-existent type | The customer type argument must exactly match a defined entity type name (case-sensitive). A typo silently does nothing. |
 | 13 | Missing `sections[]` on large models | Any model with ≥8 queues or ≥3 named stages MUST include a populated `sections[]`. Use `memberIds` (not `elementIds`). See §12.1. |
 | 14 | Server `count` as a string instead of integer | `count` must be a JSON integer: `"count": 3`, never `"count": "3"`. When a `shiftSchedule` is present, always set `count` equal to `shiftSchedule[0].capacity`. Blocked by V19. |
 | 15 | Disconnected queue/activity fragment | Every declared queue must be reachable from an arrival source. A queue that is never named as a destination in any `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination` field is a fragment — it will never receive entities. Remove it, or add routing that targets it. Blocked by V45. |
 | 16 | rows[] placed directly on the B-event instead of inside `schedules[]` | Move rows into `"schedules": [{"eventId": "b_arrive", "rows": [...]}]`. A top-level `rows[]` with empty `schedules[]` is silently ignored — V8 fires because the engine finds no arrival source. |
+| 17 | Using `ASSIGN(QueueName, ServerType)` with an invented server type for a resource-free wait | If the activity does not claim any equipment/staff (a cooling period, mandatory hold, recovery time, paperwork delay), use `DELAY(QueueName)` instead — it holds the entity for the cSchedule duration without seizing a server. Never add `ASSIGN`/`RELEASE` alongside `DELAY` in the same C-event; `DELAY` is the entire effect. Blocked/flagged by V47. See §6.2. |
 
 ---
 
@@ -722,6 +723,7 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | Macro | Syntax | Meaning |
 |-------|--------|---------|
 | `ASSIGN` | `ASSIGN(QueueName, ServerType)` | Seizes a server of `ServerType`, starts serving the front entity from `QueueName`. Schedules `cSchedules` B-events. Both `QueueName` and `ServerType` must reference defined objects. |
+| `DELAY` | `DELAY(QueueName)` | Holds the front entity from `QueueName` for the duration sampled by the `cSchedules` entry, **without seizing any server**. Use for resource-free waits (cooling period, mandatory hold, recovery, paperwork delay). `DELAY` must be the entire effect — never combine with `ASSIGN`/`RELEASE` in the same C-event. The completion B-event needs `"useEntityCtx": true` to know which entity to route, and may use `COMPLETE()` or routing-table exit, same as a normal service completion. `QueueName` must reference a defined queue (V47). See §6.2. |
 | `BATCH` | `BATCH(QueueName, N)` | Accumulates N entities from `QueueName` into a parent batch entity. N ≥ 2 (V22). `QueueName` must reference a defined queue. |
 | `COSEIZE` | `COSEIZE(QueueName, Srv1, Srv2, ...)` | Atomically seizes one entity and multiple server types simultaneously. Fails cleanly if any server is unavailable. All server type names must reference defined server entity types. |
 | `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each of `QueueA` and `QueueB` into a combined batch in `TargetQueue`. All queue names must reference defined queues. `TypeA` and `TypeB` must match defined customer entity type names. |
@@ -732,6 +734,25 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id` (V27). |
 | `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not) (V27). |
 | `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2. `QueueName` must reference a defined queue. |
+
+### 6.2 Resource-Free Activities (`DELAY`)
+
+Use `DELAY` instead of `ASSIGN` whenever the activity does not actually claim a piece of equipment or staff — only time passes. Examples: a mandatory cooling-off period, an unmonitored recovery wait, a paperwork hold, a fixed dwell time.
+
+```json
+{ "id": "c_recover", "name": "Recover", "priority": 1,
+  "condition": "queue(Recovery Queue).length >= 1",
+  "effect": ["DELAY(Recovery Queue)"],
+  "cSchedules": [{ "eventId": "b_recovery_done", "useEntityCtx": true, "dist": "Exponential", "distParams": { "mean": "180" } }] }
+```
+
+Rules:
+- `DELAY(QueueName)` is the **entire** effect — never pair it with `ASSIGN`, `RELEASE`, or any server macro in the same C-event.
+- Never invent a `ServerType` to model a resource-free wait. If nothing is actually seized, there is no server type to declare.
+- The C-event's `cSchedules` entry MUST set `"useEntityCtx": true` so the completion B-event knows which entity to route — same requirement as `ASSIGN`.
+- The completion B-event may end the entity's journey with `COMPLETE()`, or with a routing table / `defaultQueueName` exit (`queueName: null`) — both work for `DELAY` chains.
+- `DELAY(QueueName)` counts as a valid consumer of `QueueName` for CHK-013 — do not add a redundant `ASSIGN`/`BATCH` just to silence that check.
+- `QueueName` must reference a defined queue (V47, parity with the `BATCH`/`FILL`/`DRAIN` queue checks).
 
 ### 6.1 Condition Formats — Two Different Systems
 
@@ -993,6 +1014,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V37 | When either `mtbfDist` or `mttrDist` is set on a server entity type, **both** must be present with valid distribution parameters |
 | V45 | Every declared queue must appear as a routing destination (ARRIVE, RELEASE 2-arg, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination`). A queue not reachable by any of these is a disconnected fragment. Only enforced when at least one queue is explicitly named in routing (avoids false positives on single-arg `ARRIVE` models). |
 | V46 | `overflowDestination` must not form a cycle (A → B → A). Overflow chains are followed recursively at runtime, so a cycle would otherwise loop; it is instead caught at design time. |
+| V47 | `DELAY(QueueName)` must reference a defined queue. A C-event whose effect contains `DELAY` should also set `"useEntityCtx": true` on its `cSchedules` entry, or its completion B-event will not know which entity to route (warning). |
 
 ### Warnings (run proceeds, banner shown)
 
@@ -1785,10 +1807,11 @@ Every queue that receives entities must have at least one C-event that consumes 
 
 | Pattern | When to Use | Example |
 |---|---|---|
-| **✓ Every fed queue consumed** | Each queue receiving entities has a C-event ASSIGN/BATCH/COSEIZE | `ARRIVE(Patient, Triage Queue)` + C-event `ASSIGN(Triage Queue, Nurse)` |
+| **✓ Every fed queue consumed** | Each queue receiving entities has a C-event ASSIGN/DELAY/BATCH/COSEIZE | `ARRIVE(Patient, Triage Queue)` + C-event `ASSIGN(Triage Queue, Nurse)` |
+| **✓ Resource-free queue consumed** | A queue feeding a no-resource wait is consumed by `DELAY`, not `ASSIGN` | `RELEASE(Nurse, Recovery Queue)` + C-event `DELAY(Recovery Queue)` |
 | **✗ Orphan queue** | Queue receives entities but no C-event drains it — entities pile up | `RELEASE(Nurse, Discharge Bay)` + no C-event referencing `Discharge Bay` |
 
-**Rule:** For every queue in `queues[]`, trace which B-event places entities into it (via `ARRIVE`, `RELEASE`, routing, or `defaultQueueName`) and confirm there is a C-event whose `effect` contains `ASSIGN(QueueName,...)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH(…,QueueName,…)`. Multi-stage pipelines are the most common source of orphan queues: a stage-1 completion event `RELEASE(Nurse, Treatment Queue)` must always be paired with a stage-2 C-event `ASSIGN(Treatment Queue, Doctor)`.
+**Rule:** For every queue in `queues[]`, trace which B-event places entities into it (via `ARRIVE`, `RELEASE`, routing, or `defaultQueueName`) and confirm there is a C-event whose `effect` contains `ASSIGN(QueueName,...)`, `DELAY(QueueName)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH(…,QueueName,…)`. Multi-stage pipelines are the most common source of orphan queues: a stage-1 completion event `RELEASE(Nurse, Treatment Queue)` must always be paired with a stage-2 C-event `ASSIGN(Treatment Queue, Doctor)` — or, for a resource-free stage, `DELAY(Treatment Queue)`.
 
 ---
 

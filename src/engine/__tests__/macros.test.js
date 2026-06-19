@@ -275,6 +275,40 @@ describe('ASSIGN(Customer, Server)', () => {
   });
 });
 
+// ── DELAY ─────────────────────────────────────────────────────────────────────
+describe('DELAY(QueueName)', () => {
+  function makeDelayModel() {
+    return {
+      entityTypes: [{ name: 'Customer', role: 'customer', attrDefs: [] }],
+      bEvents: [], cEvents: [],
+      queues: [{ name: 'RecoveryQueue', customerType: 'Customer', discipline: 'FIFO' }],
+    };
+  }
+
+  test('marks waiting entity as serving without claiming a server', () => {
+    const customer = {
+      id: 1, type: 'Customer', role: 'customer', status: 'waiting',
+      queue: 'RecoveryQueue', arrivalTime: 0, stages: [],
+    };
+    const entities = [customer];
+    const ctx = makeCtx(entities, {}, makeDelayModel(), 5);
+    applyEffect('DELAY(RecoveryQueue)', ctx);
+
+    expect(customer.status).toBe('serving');
+    expect(customer.serviceStart).toBe(5);
+    expect(customer._isDelay).toBe(true);
+    expect(customer.lastQueue).toBe('RecoveryQueue');
+    expect(customer.queue).toBeUndefined();
+    expect(ctx._lastSrvId).toBeNull();
+  });
+
+  test('no-op with a message when no entity is waiting', () => {
+    const entities = [];
+    const ctx = makeCtx(entities, {}, makeDelayModel(), 0);
+    expect(() => applyEffect('DELAY(RecoveryQueue)', ctx)).not.toThrow();
+  });
+});
+
 // ── COMPLETE ─────────────────────────────────────────────────────────────────
 describe('COMPLETE()', () => {
   let entities, customer, server, state;
@@ -363,6 +397,18 @@ describe('COMPLETE()', () => {
     applyEffect('COMPLETE()', ctx);
     expect(customer.status).toBe('serving');
     expect(state.__served).toBe(0);
+  });
+
+  test('completes a DELAY entity with no server claim (no false "no matching busy server" skip)', () => {
+    customer._isDelay = true;
+    entities = [customer]; // no server entity at all — DELAY never claims one
+    const ctx = makeCtx(entities, state, baseModel, 3,
+      { _contextCustId: customer.id, _contextSrvId: null });
+    applyEffect('COMPLETE()', ctx);
+    expect(customer.status).toBe('done');
+    expect(customer.sojournTime).toBeCloseTo(3, 4);
+    expect(state.__served).toBe(1);
+    expect(customer.stages[0].serverType).toBe('delay');
   });
 });
 

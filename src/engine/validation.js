@@ -714,6 +714,27 @@ export function validateModel(model) {
     }
   });
 
+  // ── V47: DELAY must reference a declared queue; nudge useEntityCtx on its cSchedule ──
+  cEvents.forEach(c => {
+    const text = effectText(c.effect);
+    const delayHits = [...text.matchAll(/DELAY\s*\(\s*([^,)]+)\s*\)/gi)];
+    delayHits.forEach(m => {
+      const qName = m[1].trim();
+      if (!queueNamesLower.has(qName.toLowerCase())) {
+        err('V47', `C-Event '${c.name || c.id}' DELAY references unknown queue '${qName}'.`, 'cevents',
+          { eventIds: [c.id] });
+      }
+    });
+    if (delayHits.length > 0) {
+      (c.cSchedules || []).forEach(cs => {
+        if (!cs.useEntityCtx) {
+          warn('V47', `C-Event '${c.name || c.id}' uses DELAY but a cSchedule (targeting '${cs.eventId || '?'}') does not have "Pass entity context" (useEntityCtx) enabled — the completion B-event will not know which entity to route.`, 'cevents',
+            { eventIds: [c.id] });
+        }
+      });
+    }
+  });
+
   // ── V24: Loop guard configuration validation ─────────────────────────────────
   bEvents.forEach(b => {
     if (!b.loopConfig) return;

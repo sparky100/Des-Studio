@@ -38,6 +38,18 @@ describe("model builder prompts", () => {
     });
   });
 
+  it("teaches the LLM about DELAY for resource-free activities", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/\bDELAY\(/);
+    expect(prompt).toMatch(/resource-free/i);
+    expect(prompt).toMatch(/useEntityCtx/);
+  });
+
+  it("warns against inventing a server type for a resource-free wait", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/NEVER invent a server type/i);
+  });
+
   it("lists all four intent values in the response format", () => {
     const prompt = buildModelBuilderSystemPrompt();
     expect(prompt).toMatch(/clarify/);

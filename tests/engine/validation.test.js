@@ -886,6 +886,51 @@ describe("V27 — FILL/DRAIN must reference declared container", () => {
   });
 });
 
+describe("V47 — DELAY queue reference and useEntityCtx nudge", () => {
+  it("passes when DELAY references a declared queue and useEntityCtx is set", () => {
+    const model = {
+      ...baseModel,
+      queues: [{ id: "q", name: "RecoveryQueue", discipline: "FIFO" }],
+      cEvents: [{
+        id: "c1", name: "Delay", condition: "queue(RecoveryQueue).length >= 1",
+        effect: "DELAY(RecoveryQueue)",
+        cSchedules: [{ eventId: "b1", dist: "Fixed", distParams: { value: "5" }, useEntityCtx: true }],
+      }],
+    };
+    const { errors, warnings } = validateModel(model);
+    expect(errors.filter(e => e.code === "V47")).toHaveLength(0);
+    expect(warnings.filter(w => w.code === "V47")).toHaveLength(0);
+  });
+
+  it("errors when DELAY references an undeclared queue", () => {
+    const model = {
+      ...baseModel,
+      queues: [],
+      cEvents: [{
+        id: "c1", name: "Delay", condition: "true",
+        effect: "DELAY(GhostQueue)",
+        cSchedules: [{ eventId: "b1", dist: "Fixed", distParams: { value: "5" }, useEntityCtx: true }],
+      }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V47")).toBe(true);
+  });
+
+  it("warns when a DELAY C-event's cSchedule lacks useEntityCtx", () => {
+    const model = {
+      ...baseModel,
+      queues: [{ id: "q", name: "RecoveryQueue", discipline: "FIFO" }],
+      cEvents: [{
+        id: "c1", name: "Delay", condition: "true",
+        effect: "DELAY(RecoveryQueue)",
+        cSchedules: [{ eventId: "b1", dist: "Fixed", distParams: { value: "5" } }],
+      }],
+    };
+    const { warnings } = validateModel(model);
+    expect(warnings.some(w => w.code === "V47")).toBe(true);
+  });
+});
+
 // ── S40.1 — EntityAttr skips distribution parameter validation ────────────────
 
 describe("V5 — EntityAttr skips dist validation", () => {
