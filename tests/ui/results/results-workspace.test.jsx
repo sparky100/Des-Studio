@@ -19,12 +19,12 @@ const results = {
     {
       t: 0,
       byQueue: { "Queue A": { waiting: 1 } },
-      byType: { Customer: { waiting: 1 }, Clerk: { busy: 0 } },
+      byType: { Customer: { waiting: 1 }, Clerk: { busy: 0, total: 1 } },
     },
     {
       t: 5,
       byQueue: { "Queue A": { waiting: 3 } },
-      byType: { Customer: { waiting: 3 }, Clerk: { busy: 1 } },
+      byType: { Customer: { waiting: 3 }, Clerk: { busy: 1, total: 1 } },
     },
   ],
   waitDist: {
@@ -287,10 +287,40 @@ describe("ResultsWorkspace", () => {
     expect(within(systemTrendsRegion).getByText("Total wait vs. arrival time")).toBeInTheDocument();
     expect(within(systemTrendsRegion).getByText("Whole-journey sojourn time")).toBeInTheDocument();
 
+    // The wait-by-arrival card now gets the same Peak/At t/Final/N stat cards as its siblings.
+    expect(within(systemTrendsRegion).getAllByText("PEAK").length).toBeGreaterThanOrEqual(3);
+    expect(within(systemTrendsRegion).getAllByText("FINAL").length).toBeGreaterThanOrEqual(3);
+
     // Wait-by-arrival has moved out of "Where Are the Bottlenecks?" entirely.
     const bottlenecksRegion = container.querySelector("#results-section-bottlenecks");
     expect(bottlenecksRegion).toBeInTheDocument();
     expect(within(bottlenecksRegion).queryByText("Total wait vs. arrival time")).not.toBeInTheDocument();
+
+    // System-Level Trends now renders right under Results Summary, before the bottlenecks section.
+    const sectionIds = Array.from(container.querySelectorAll('[id^="results-section-"]')).map(el => el.id);
+    expect(sectionIds.indexOf("results-section-summary")).toBeLessThan(sectionIds.indexOf("results-section-systemTrends"));
+    expect(sectionIds.indexOf("results-section-systemTrends")).toBeLessThan(sectionIds.indexOf("results-section-bottlenecks"));
+  });
+
+  test("hides charts whose entire series is all zero", () => {
+    const allZeroResults = {
+      timeSeries: [
+        { t: 0, byQueue: { "Queue A": { waiting: 0 } }, byType: { Customer: { waiting: 0 }, Clerk: { busy: 1, total: 2 } }, wip: 0, completed: 0 },
+        { t: 5, byQueue: { "Queue A": { waiting: 0 } }, byType: { Customer: { waiting: 0 }, Clerk: { busy: 2, total: 2 } }, wip: 0, completed: 0 },
+      ],
+      waitByArrival: [[0, 0], [10, 0]],
+    };
+
+    const { container } = render(<ResultsWorkspace results={allZeroResults} model={model} />);
+
+    // Queue A never had any entities waiting — its chart should not render.
+    expect(screen.queryByText(/Where do queues build up\?/i)).not.toBeInTheDocument();
+    // Server utilisation has real (non-zero) data, so its section still renders.
+    expect(screen.getAllByText(/How busy are resources\?/i).length).toBeGreaterThanOrEqual(1);
+
+    // wip/throughput/wait-by-arrival are all zero and there's no sojournDist —
+    // System-Level Trends has nothing left to show.
+    expect(container.querySelector("#results-section-systemTrends")).not.toBeInTheDocument();
   });
 
   test("hides Balked/Blocked columns when no perQueue data is present", () => {
