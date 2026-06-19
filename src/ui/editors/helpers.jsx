@@ -53,24 +53,25 @@ const conditionOptions = (entityTypes, stateVariables=[], queues=[]) => {
   return opts;
 };
 
-const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName="", containerTypes=[]) => {
+const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName="", containerTypes=[], contextServer=null) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
+  const activeServers = contextServer ? servers.filter(s=>s===contextServer) : servers;
   const opts = [{label:'— select effect —',value:''}];
   const cName = contextName || "service";
   // Queue-based ASSIGN combinations
-  if(queues.length > 0) {
+  if(queues.length > 0 && activeServers.length > 0) {
     opts.push({label:'── Start service from queue ──', value:'', disabled:true});
     queues.forEach(q => {
-      servers.forEach(s => {
+      activeServers.forEach(s => {
         opts.push({label:`Start ${cName} with ${s} and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`, value:`ASSIGN(${q.name}, ${s})`});
       });
     });
   }
   // ASSIGN combinations
-  if(custs.length>0&&servers.length>0){
+  if(custs.length>0&&activeServers.length>0){
     opts.push({label:'── ASSIGN ──',value:'',disabled:true});
-    custs.forEach(c=>servers.forEach(s=>{
+    custs.forEach(c=>activeServers.forEach(s=>{
       opts.push({label:`Start ${cName} with ${s} and ${c}`,value:`ASSIGN(${c}, ${s})`});
     }));
   }
@@ -127,9 +128,10 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
   return opts;
 };
 
-const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerTypes=[]) => {
+const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerTypes=[], contextServer=null) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
+  const activeServers = contextServer ? servers.filter(s=>s===contextServer) : servers;
   const opts = [{label:'— select effect —',value:''}];
   if(queues.length > 0) {
     opts.push({label:'── Add arriving entity to queue ──', value:'', disabled:true});
@@ -151,15 +153,15 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerType
   custs.forEach(c=>{
     opts.push({label:`Cancel oldest waiting ${c} from its queue`,value:`RENEGE_OLDEST(${c})`});
   });
-  if(servers.length>0){
+  if(activeServers.length>0){
     opts.push({label:'── Release server (multi-stage routing) ──',value:'',disabled:true});
-    servers.forEach(s=>{
+    activeServers.forEach(s=>{
       opts.push({label:`Release ${s} (entity stays in current stage)`,value:`RELEASE(${s})`});
     });
   }
-  if(queues.length > 0 && servers.length > 0) {
+  if(queues.length > 0 && activeServers.length > 0) {
     opts.push({label:'── Release server and route entity to next queue ──', value:'', disabled:true});
-    servers.forEach(s => {
+    activeServers.forEach(s => {
       queues.forEach(q => {
         const entityLabel = q.customerType ? normTypeName(q.customerType) : 'entity';
         opts.push({
@@ -209,9 +211,9 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerType
   opts.push({label:'COST(1) — flat rate',value:'COST(1)'});
   custAttrs.forEach(a=>{opts.push({label:`COST(Entity.${a})`,value:`COST(Entity.${a})`});});
   // PREEMPT, FAIL, REPAIR
-  if(servers.length>0){
+  if(activeServers.length>0){
     opts.push({label:'── Server interruption / failure ──',value:'',disabled:true});
-    servers.forEach(s=>{
+    activeServers.forEach(s=>{
       opts.push({label:`PREEMPT ${s} — interrupt current service`,value:`PREEMPT(${s})`});
       opts.push({label:`FAIL all ${s} servers`,value:`FAIL(${s})`});
       opts.push({label:`REPAIR ${s} servers`,value:`REPAIR(${s})`});

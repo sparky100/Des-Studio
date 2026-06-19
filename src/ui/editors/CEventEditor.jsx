@@ -205,15 +205,22 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               {/* Effects */}
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>EFFECTS</span>
+                {(()=>{
+                  const effectArr=Array.isArray(ev.effect)?ev.effect.filter(Boolean):(ev.effect?ev.effect.split(';').map(s=>s.trim()).filter(Boolean):[]);
+                  const assignMatch=effectArr.map(eff=>typeof eff==='string'?eff.match(/^ASSIGN\s*\([^,)]+,\s*(\S+?)\s*\)/i):null).find(Boolean);
+                  const contextServer=assignMatch?normTypeName(assignMatch[1]):null;
+                  return (
                 <EffectPicker
-                  effects={Array.isArray(ev.effect) ? ev.effect.filter(Boolean) : (ev.effect ? ev.effect.split(';').map(s=>s.trim()).filter(Boolean) : [])}
-                  options={assignOptions(entityTypes, stateVariables, queues, ev.name, containerTypes)}
+                  effects={effectArr}
+                  options={assignOptions(entityTypes, stateVariables, queues, ev.name, containerTypes, contextServer)}
                   expressionContext={{
                     stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
                     attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean))
                   }}
                   onChange={arr=>upd(i,'effect',arr)}
                 />
+                  );
+                })()}
               </div>
 
               {/* Structured B-event schedules */}

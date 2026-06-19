@@ -121,11 +121,22 @@ Reference model:
 Use when:
 
 - an entity’s next queue depends on an attribute or a branch probability
+- an entity should leave the system based on an attribute value (not just go to the next queue)
 
 Pattern:
 
 - service completion B-event uses `RELEASE(ResourceType)`
-- routing or `probabilisticRouting` determines destination queue or exit
+- routing or `probabilisticRouting` determines destination queue **or exit**
+
+**Configuring an exit-system route in the UI:**
+
+In the B-Event editor, under **Release Routing → Conditional routing**, each routing row has a queue dropdown. Select **"Exit system (leave)"** to route entities out of the system when the condition matches. The same option appears in the **DEFAULT** fallback dropdown for the case where no condition matches.
+
+Example: Patient is discharged (exits) unless their `outcome` attribute is `"ICU"`, in which case they go to the ICU Queue.
+- Add one routing row: `IF Entity.outcome == "ICU" → ICU Queue`
+- Set DEFAULT to: `Exit system (leave)`
+
+In the schema this serialises as `defaultQueueName: null` (see ADR-011).
 
 What Sprint 26 adds:
 
@@ -134,8 +145,8 @@ What Sprint 26 adds:
 
 Best use cases:
 
-- triage disposition
-- routing to fast-track vs detailed processing
+- triage disposition (route to ward, ICU, or discharge)
+- routing to fast-track vs detailed processing vs exit
 - overflow to alternate queue vs exit
 
 ### 6. Finite capacity, overflow, and balking
