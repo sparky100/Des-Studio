@@ -502,7 +502,7 @@ B-Event `"Recovery Complete"` — probabilistic routing:
 1. Create a Queue for the waiting entities (e.g. `"Recovery Queue"`).
 2. Create a C-Event with condition `queue(Recovery Queue).length >= 1`. Set activity type to **"Delay (no resource)"** and select `Recovery Queue` as the source queue. This stores the effect as `DELAY(Recovery Queue)`.
 3. In the C-Event's Schedule section, add a cSchedule: select the completion B-Event, choose a duration distribution, and **check "Pass entity context"** (`useEntityCtx: true`).
-4. Create the completion B-Event (e.g. `"Recovery Complete"`). Add no effect (or use `COMPLETE()` for a terminal exit). Configure routing (conditional, probabilistic, or a fixed queue) to determine where the entity goes after the delay.
+4. Create the completion B-Event (e.g. `"Recovery Complete"`). **Leave the effect empty when using routing.** Use `COMPLETE()` only if the entity always exits with no routing — `COMPLETE()` fires before routing and will prevent any routing from executing. The exit/null routing branch already calls `completeEntity` internally. Configure routing (conditional, probabilistic, or a fixed queue) in the B-event's Routing panel.
 5. No server type is needed. Do **not** add an `ASSIGN` or `RELEASE` effect.
 
 ---

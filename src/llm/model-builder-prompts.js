@@ -149,7 +149,21 @@ pattern, consult §10 directly.`,
     ✓ CORRECT: "effect": ["RELEASE(Nurse)"], "probabilisticRouting": [{"queueName": "Treatment Queue", "probability": 0.7}, {"queueName": "Diagnostics Queue", "probability": 0.3}]
     ✗ WRONG:   "effect": ["RELEASE(Nurse, Treatment Queue)"], "probabilisticRouting": [...]  — V18 error
 
-11. C-event name MUST NOT start with the word "Start".
+11. DELAY completion B-events must have an EMPTY effect when routing is used.
+    DELAY (activityType:'delay') moves an entity to "serving" state with no server.
+    The completion B-event (scheduledTime:"9999") handles where the entity goes next.
+    COMPLETE() fires BEFORE routing and sets the entity to "done" — any routing configured
+    on the same B-event is then silently skipped because the entity is no longer "serving".
+    The exit/null routing branch (queueName:null) automatically completes the entity internally.
+
+    ✓ CORRECT — routing to two queues:
+      "effect": [], "probabilisticRouting": [{"queueName": "Voucher Queue", "probability": 0.9}, {"queueName": null, "probability": 0.1}]
+    ✓ CORRECT — always exits, no routing needed:
+      "effect": ["COMPLETE()"], no probabilisticRouting field
+    ✗ WRONG — COMPLETE() blocks the routing, entity exits immediately and never routes:
+      "effect": ["COMPLETE()"], "probabilisticRouting": [{"queueName": "Voucher Queue", "probability": 0.9}, {"queueName": null, "probability": 0.1}]
+
+13. C-event name MUST NOT start with the word "Start".
     The effect picker prepends "Start" automatically — a C-event named "Start Triage"
     displays as "Start Start Triage with…" in the UI.
 
@@ -159,7 +173,7 @@ pattern, consult §10 directly.`,
     ✗ WRONG:   "name": "Start Triage"      → displays "Start Start Triage with…"
     ✗ WRONG:   "name": "Start Assessment Minor"
 
-12. SET_ATTR must follow a context macro in the same effect array.
+14. SET_ATTR must follow a context macro in the same effect array.
     SET_ATTR(attr) with no preceding ARRIVE/ASSIGN/COSEIZE/SEIZE/BATCH/SPLIT is silently
     skipped at runtime (V44 warning).
 
@@ -167,7 +181,7 @@ pattern, consult §10 directly.`,
     ✗ WRONG:   "effect": ["SET_ATTR(severity, 3)", "ARRIVE(Patient, Queue)"]
     ✗ WRONG:   "effect": ["SET_ATTR(priority, 1)"]  — B-event with no context macro, silently skipped
 
-13. goals[].metric MUST be one of these exact values:
+15. goals[].metric MUST be one of these exact values:
     "summary.avgWait" | "summary.avgSvc" | "summary.avgSojourn" | "summary.avgTimeInSystem"
     "summary.avgWIP" | "summary.maxWIP" | "summary.served" | "summary.servedRatio"
     "summary.reneged" | "summary.totalCost" | "summary.costPerServed"

@@ -538,7 +538,8 @@ export function validateModel(model) {
       const qName = branch.queueName == null ? null : String(branch.queueName).trim();
       return qName === null || qName === '';
     });
-    if (hasNullRoutingBranch && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr) || hasReleaseEffect(effectStr))) {
+    const isDelayFollowOnConditional = parseFloat(b.scheduledTime) >= 900 && !hasReleaseEffect(effectStr);
+    if (hasNullRoutingBranch && !isDelayFollowOnConditional && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr) || hasReleaseEffect(effectStr))) {
       err('V31',
         `${bLabel} routes entities to exit (null queue) but does not explicitly end the lifecycle with COMPLETE(), RENEGE(ctx), or RELEASE().`,
         'bevents',
@@ -603,7 +604,10 @@ export function validateModel(model) {
     });
 
     // V30: If probabilisticRouting has null queue, effect must include COMPLETE() or exact RENEGE(ctx)
-    if (hasNullRouting && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr) || hasReleaseEffect(effectStr))) {
+    // Exception: scheduled follow-on B-events (scheduledTime >= 900) with no RELEASE are DELAY
+    // completion events — their exit branch calls completeEntity internally via applyRoute(null).
+    const isDelayFollowOn = parseFloat(b.scheduledTime) >= 900 && !hasReleaseEffect(effectStr);
+    if (hasNullRouting && !isDelayFollowOn && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr) || hasReleaseEffect(effectStr))) {
       err('V30',
         `${bLabel} routes entities to exit (null queue) but has no COMPLETE(), RENEGE(ctx), or RELEASE() effect — entities will not be counted as served.`,
         'bevents',

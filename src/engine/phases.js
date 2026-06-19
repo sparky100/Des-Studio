@@ -197,6 +197,7 @@ export function applyEffect(effect, ctx) {
   // Store last IDs back into context for use by callers (e.g. C-event schedules)
   ctx._lastCustId = lastCustId;
   ctx._lastSrvId  = lastSrvId;
+  if (macroCtx._delayedCustIds) ctx._delayedCustIds = macroCtx._delayedCustIds;
 
   return { msgs, felEntries };
 }
@@ -437,54 +438,60 @@ export function fireCEvent(ev, ctx) {
       continue;
     }
 
-    // Resolve delay
-    let delay = 0;
-    if (cs.dist === "ServerAttr") {
-      const srvId    = effectCtx._lastSrvId;
-      const srv      = ctx.entities.find(e => e.id === srvId);
-      const attrName = cs.distParams?.attr || "serviceTime";
-      delay = Math.max(0, parseFloat(srv?.attrs?.[attrName]) || 1);
-      msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [server.${attrName}=${delay}]`);
-    } else if (cs.dist === "EntityAttr") {
-      const custId   = effectCtx._lastCustId;
-      const cust     = custId ? ctx.entities.find(e => e.id === custId) : null;
-      const attrName = cs.distParams?.attr || "serviceTime";
-      const raw      = cust?.attrs?.[attrName];
-      if (raw == null) {
-        msgs.push(`EntityAttr: entity #${custId} has no attribute '${attrName}' — delay = 0`);
-      }
-      delay = Math.max(0, parseFloat(raw) || 0);
-      msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [entity.${attrName}=${delay}]`);
-    } else {
-      // Check if the customer has remaining service from preemption/failure
-      const custId = effectCtx._lastCustId;
-      const cust = custId ? ctx.entities.find(e => e.id === custId) : null;
-      if (cust && cust._remainingService != null && cust._remainingService > 0) {
-        delay = cust._remainingService;
-        delete cust._remainingService;
-        msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [remaining service]`);
+    // When DELAY batched multiple entities (no when-predicate path), create one
+    // completion B-event per entity with an independently sampled delay.
+    const batchIds = (cs.useEntityCtx && !hasAnyWhen && effectCtx._delayedCustIds?.length > 0)
+      ? effectCtx._delayedCustIds
+      : [cs.useEntityCtx ? effectCtx._lastCustId : undefined];
+
+    for (const perCustId of batchIds) {
+      // Resolve delay
+      let delay = 0;
+      if (cs.dist === "ServerAttr") {
+        const srvId    = effectCtx._lastSrvId;
+        const srv      = ctx.entities.find(e => e.id === srvId);
+        const attrName = cs.distParams?.attr || "serviceTime";
+        delay = Math.max(0, parseFloat(srv?.attrs?.[attrName]) || 1);
+        msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [server.${attrName}=${delay}]`);
+      } else if (cs.dist === "EntityAttr") {
+        const cust     = perCustId ? ctx.entities.find(e => e.id === perCustId) : null;
+        const attrName = cs.distParams?.attr || "serviceTime";
+        const raw      = cust?.attrs?.[attrName];
+        if (raw == null) {
+          msgs.push(`EntityAttr: entity #${perCustId} has no attribute '${attrName}' — delay = 0`);
+        }
+        delay = Math.max(0, parseFloat(raw) || 0);
+        msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [entity.${attrName}=${delay}]`);
       } else {
-        const resolvedCParams = ctx.registry
-          ? ctx.registry.resolve(cs.distParams || {}, cs.paramSource)
-          : (cs.distParams || {});
-        delay = Math.max(0, sample(cs.dist || "Fixed", resolvedCParams, ctx.rng, null, { clock, streamName: `service:${ev.id}`, streamRegistry: ctx.streamRegistry }));
-        msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${cs.dist}(${delay.toFixed(3)})]`);
+        // Check if the customer has remaining service from preemption/failure
+        const cust = perCustId ? ctx.entities.find(e => e.id === perCustId) : null;
+        if (cust && cust._remainingService != null && cust._remainingService > 0) {
+          delay = cust._remainingService;
+          delete cust._remainingService;
+          msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [remaining service]`);
+        } else {
+          const resolvedCParams = ctx.registry
+            ? ctx.registry.resolve(cs.distParams || {}, cs.paramSource)
+            : (cs.distParams || {});
+          delay = Math.max(0, sample(cs.dist || "Fixed", resolvedCParams, ctx.rng, null, { clock, streamName: `service:${ev.id}`, streamRegistry: ctx.streamRegistry }));
+          msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${cs.dist}(${delay.toFixed(3)})]`);
+        }
       }
-    }
 
-    felEntries.push({
-      ...tmpl,
-      scheduledTime:       clock + delay,
-      _sampledDelay:       `${cs.dist}(${delay.toFixed(3)})`,
-      _contextCustId:      cs.useEntityCtx ? effectCtx._lastCustId : undefined,
-      _contextSrvId:       cs.useEntityCtx ? effectCtx._lastSrvId  : undefined,
-      _requiresCtxEntity:  cs.useEntityCtx ? true : undefined,
-    });
+      felEntries.push({
+        ...tmpl,
+        scheduledTime:       clock + delay,
+        _sampledDelay:       `${cs.dist}(${delay.toFixed(3)})`,
+        _contextCustId:      cs.useEntityCtx ? perCustId : undefined,
+        _contextSrvId:       cs.useEntityCtx ? effectCtx._lastSrvId  : undefined,
+        _requiresCtxEntity:  cs.useEntityCtx ? true : undefined,
+      });
 
-    // Store scheduled duration on server for preemption/failure remaining-service calculation
-    if (cs.useEntityCtx && effectCtx._lastSrvId) {
-      const srv = ctx.entities.find(e => e.id === effectCtx._lastSrvId);
-      if (srv) srv._scheduledDuration = delay;
+      // Store scheduled duration on server for preemption/failure remaining-service calculation
+      if (cs.useEntityCtx && effectCtx._lastSrvId) {
+        const srv = ctx.entities.find(e => e.id === effectCtx._lastSrvId);
+        if (srv) srv._scheduledDuration = delay;
+      }
     }
   }
 
