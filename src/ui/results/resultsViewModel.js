@@ -17,6 +17,12 @@ function maxPointValue(series) {
   return Math.max(0, ...((series?.points || []).map(p => finiteNumber(p.value))));
 }
 
+// A series whose every point is zero carries no information — hide it rather
+// than render a flat line at zero.
+function hasNonZeroValue(series) {
+  return (series?.points || []).some(p => finiteNumber(p.value) !== 0);
+}
+
 function finiteOrNull(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
@@ -281,14 +287,15 @@ export function buildSystemSojournDistribution(results = {}) {
 }
 
 export function buildChartSections(results = {}, model = {}, sectionFilter = null) {
-  const queueDepthSeries = buildQueueDepthSeries(results, model, sectionFilter);
-  const serverUtilizationSeries = buildServerUtilizationSeries(results, model, sectionFilter);
+  const queueDepthSeries = buildQueueDepthSeries(results, model, sectionFilter).filter(hasNonZeroValue);
+  const serverUtilizationSeries = buildServerUtilizationSeries(results, model, sectionFilter).filter(hasNonZeroValue);
   const waitDistributions = buildWaitDistributions(results, model, sectionFilter);
-  const waitTimeSeries = buildWaitTimeSeries(results, model, sectionFilter).filter(s => s.hasData);
+  const waitTimeSeries = buildWaitTimeSeries(results, model, sectionFilter).filter(s => s.hasData && hasNonZeroValue(s));
   const waitByArrival = buildWaitByArrival(results);
-  const wipSeries = buildWipSeries(results).filter(s => s.hasData);
-  const throughputSeries = buildThroughputSeries(results).filter(s => s.hasData);
+  const wipSeries = buildWipSeries(results).filter(s => s.hasData && hasNonZeroValue(s));
+  const throughputSeries = buildThroughputSeries(results).filter(s => s.hasData && hasNonZeroValue(s));
   const systemSojournDistributions = buildSystemSojournDistribution(results);
+  const hasNonZeroWaitByArrival = waitByArrival.hasData && hasNonZeroValue(waitByArrival);
 
   return [
     {
@@ -333,7 +340,7 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
       question: "Did wait get worse for entities that arrived later?",
       method: "Shows each completed entity's total wait (across every queue it passed through), bucketed by when it arrived. This is a whole-journey view, not scoped to a single queue.",
       emptyMessage: "Run with Detailed output enabled to see wait by arrival time.",
-      series: waitByArrival.points,
+      series: hasNonZeroWaitByArrival ? waitByArrival.points : [],
     },
     {
       id: "system-wip",

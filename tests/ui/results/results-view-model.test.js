@@ -158,7 +158,10 @@ describe("results view model", () => {
   });
 
   test("buildResultsViewModel reports chart availability", () => {
-    const vm = buildResultsViewModel({ timeSeries: [{ t: 0, byType: {} }], waitDist: {} }, model);
+    const vm = buildResultsViewModel({
+      timeSeries: [{ t: 0, byQueue: { "Queue A": { waiting: 1 }, "Queue B": { waiting: 2 } }, byType: { Clerk: { busy: 1, total: 2 } } }],
+      waitDist: {},
+    }, model);
     expect(vm.hasTimeSeries).toBe(true);
     expect(vm.queueDepthSeries).toHaveLength(2);
     expect(vm.serverUtilizationSeries).toHaveLength(1);
@@ -217,5 +220,35 @@ describe("results view model", () => {
     expect(sections[3].question).toBe("When did waits get longer?");
     expect(sections[4].question).toMatch(/Did wait get worse for entities that arrived later/i);
     expect(sections[4].question).not.toMatch(/attribute/i);
+  });
+
+  test("buildChartSections hides queue-depth and server-utilization series that are all zero", () => {
+    const sections = buildChartSections({
+      timeSeries: [
+        { t: 0, byQueue: { "Queue A": { waiting: 0 }, "Queue B": { waiting: 3 } }, byType: { Clerk: { busy: 0, total: 2 } } },
+        { t: 5, byQueue: { "Queue A": { waiting: 0 }, "Queue B": { waiting: 1 } }, byType: { Clerk: { busy: 0, total: 2 } } },
+      ],
+    }, model);
+
+    const queueDepth = sections.find(s => s.id === "queue-depth");
+    expect(queueDepth.series.map(s => s.label)).toEqual(["Queue B"]);
+
+    const serverUtilization = sections.find(s => s.id === "server-utilization");
+    expect(serverUtilization.series).toEqual([]);
+  });
+
+  test("buildChartSections hides wait-over-time, wip, throughput, and wait-by-arrival when all-zero", () => {
+    const sections = buildChartSections({
+      timeSeries: [
+        { t: 0, byQueue: { "Queue A": { waiting: 0, avgWait: 0, waitN: 1 } }, wip: 0, completed: 0 },
+        { t: 5, byQueue: { "Queue A": { waiting: 0, avgWait: 0, waitN: 1 } }, wip: 0, completed: 0 },
+      ],
+      waitByArrival: [[0, 0], [10, 0], [20, 0]],
+    }, model);
+
+    expect(sections.find(s => s.id === "wait-over-time").series).toEqual([]);
+    expect(sections.find(s => s.id === "system-wip").series).toEqual([]);
+    expect(sections.find(s => s.id === "system-throughput").series).toEqual([]);
+    expect(sections.find(s => s.id === "wait-by-arrival-attr").series).toEqual([]);
   });
 });
