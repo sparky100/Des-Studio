@@ -896,7 +896,7 @@ function WaitHistogram({ dist, color }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(72px, 1fr))", gap: 6, marginTop: 8 }}>
         {[
           { label: "n", value: dist.n, color: C.muted, desc: "samples" },
-          { label: "avg", value: dist.mean, color: C.accent, desc: "mean wait" },
+          { label: "avg", value: dist.mean, color: C.accent, desc: "mean wait", decimal: true },
           { label: "p50", value: dist.p50, color: C.green, desc: "median" },
           { label: "p90", value: dist.p90, color: C.amber, desc: "90th %ile" },
           { label: "p95", value: dist.p95, color: C.amber, desc: "95th %ile" },
@@ -904,7 +904,7 @@ function WaitHistogram({ dist, color }) {
         ].map(s => (
           <div key={s.label} style={{ background: C.bg, border: `1px solid ${s.color}44`, borderRadius: 5, padding: "6px 8px", textAlign: "center" }}>
             <div style={{ fontSize: 9, fontWeight: 700, color: s.color, fontFamily: FONT, letterSpacing: 1, marginBottom: 2 }}>{s.label.toUpperCase()}</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>{typeof s.value === "number" ? Math.round(s.value) : s.value}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>{typeof s.value === "number" ? (s.decimal ? s.value.toFixed(1) : Math.round(s.value)) : s.value}</div>
             <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT }}>{s.desc}</div>
           </div>
         ))}

@@ -85,6 +85,14 @@ describe("ResultsWorkspace", () => {
     expect(screen.getByText("P99")).toBeInTheDocument();
   });
 
+  test("shows wait distribution AVG to 1 decimal place", () => {
+    render(<ResultsWorkspace results={results} model={model} />);
+
+    // Queue A's waitDist mean is 4 (an integer); AVG should still render as "4.0",
+    // not rounded to "4" like the other stat cards (N/P50/P90/P95/P99).
+    expect(screen.getByText("4.0")).toBeInTheDocument();
+  });
+
   test("renders runtime metrics when present", () => {
     render(<ResultsWorkspace results={results} model={model} />);
     const runtimeSection = screen.getByRole("region", { name: /runtime metrics/i });
