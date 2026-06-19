@@ -46,6 +46,25 @@ The RELEASE B-event gains two optional fields:
 3. If no condition matches and `defaultQueueName` is absent, a runtime warning is emitted and the entity's queue is unchanged.
 4. `routing`, `probabilisticRouting`, and a RELEASE literal queue arg are mutually exclusive on the same B-event (V17 validation).
 
+**Exit-system routing:** Setting `queueName: null` in any routing row (or `defaultQueueName: null`) causes the entity to leave the system immediately — equivalent to reaching a Sink node. The UI surfaces this as the explicit option `"Exit system (leave)"` in the queue dropdown rather than leaving an empty selection ambiguous.
+
+```json
+{
+  "id": "be-triage-complete",
+  "name": "Triage Complete",
+  "effect": "RELEASE(Triage Nurse)",
+  "routing": [
+    {
+      "condition": { "variable": "Entity.outcome", "operator": "==", "value": "ICU" },
+      "queueName": "ICU Queue"
+    }
+  ],
+  "defaultQueueName": null
+}
+```
+
+In this example entities whose `outcome` is not `"ICU"` leave the system via the default route (`null`).
+
 **Probabilistic routing** is a parallel optional field using the same B-event slot:
 
 ```json
@@ -54,12 +73,12 @@ The RELEASE B-event gains two optional fields:
   "effect": "RELEASE(Doctor)",
   "probabilisticRouting": [
     { "probability": 0.7, "queueName": "Ward Queue" },
-    { "probability": 0.3, "queueName": "ICU Queue" }
+    { "probability": 0.3, "queueName": null }
   ]
 }
 ```
 
-Probabilities must sum to 1.0 (±0.001). Sampled using the replication's seeded RNG.
+`queueName: null` is a valid branch in probabilistic routing (entity exits). Probabilities must sum to 1.0 (±0.001). Sampled using the replication's seeded RNG.
 
 ## Alternatives Considered
 

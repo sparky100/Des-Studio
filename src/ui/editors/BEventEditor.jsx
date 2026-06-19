@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
-import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker, SectionFilterTabs, filterBySection } from "./helpers.jsx";
+import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker, SectionFilterTabs, filterBySection, normTypeName } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
@@ -198,15 +198,21 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
               {/* Effects — chip picker */}
               <div style={{display:'flex',flexDirection:'column',gap:4}}>
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>EFFECTS</span>
+                {(()=>{
+                  const releaseMatch=effects.map(eff=>typeof eff==='string'?eff.match(/^RELEASE\s*\(\s*(\S+?)[\s,)]/i):null).find(Boolean);
+                  const contextServer=releaseMatch?normTypeName(releaseMatch[1]):null;
+                  return (
                 <EffectPicker
                   effects={effects}
-                  options={bEffectOptions(entityTypes,queues,stateVariables,containerTypes)}
+                  options={bEffectOptions(entityTypes,queues,stateVariables,containerTypes,contextServer)}
                   expressionContext={{
                     stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
                     attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean))
                   }}
                   onChange={updEffects}
                 />
+                  );
+                })()}
               </div>
 
               {/* Routing — collapsible, shown only when a RELEASE effect is present */}
@@ -238,9 +244,12 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                           <input value={row.condition?.value||""} onChange={e=>updRoutingRow(j,{condition:{...row.condition,value:e.target.value}})} placeholder="value"
                             style={{width:80,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}/>
                           <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
-                          <select value={row.queueName||""} onChange={e=>updRoutingRow(j,{queueName:e.target.value})}
-                            style={{flex:1,minWidth:100,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                          <select
+                            value={row.queueName==null?"__EXIT__":(row.queueName||"")}
+                            onChange={e=>updRoutingRow(j,{queueName:e.target.value==="__EXIT__"?null:e.target.value})}
+                            style={{flex:1,minWidth:100,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:row.queueName==null?C.green:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
                             <option value="">— queue —</option>
+                            <option value="__EXIT__">Exit system (leave)</option>
                             {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
                           </select>
                           <Btn small variant="danger" ariaLabel={`Remove routing row ${j+1}`} onClick={()=>remRoutingRow(j)}>✕</Btn>
@@ -248,10 +257,13 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                       </div>
                     ))}
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT,whiteSpace:"nowrap"}}>FALLBACK →</span>
-                      <select value={ev.defaultQueueName||""} onChange={e=>upd(i,"defaultQueueName",e.target.value)}
-                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
-                        <option value="">— required fallback queue —</option>
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT,whiteSpace:"nowrap"}}>DEFAULT →</span>
+                      <select
+                        value={ev.defaultQueueName==null?"__EXIT__":(ev.defaultQueueName||"")}
+                        onChange={e=>{const v=e.target.value;upd(i,"defaultQueueName",v==="__EXIT__"?null:v);}}
+                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:ev.defaultQueueName==null?C.green:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                        <option value="">— queue or exit system —</option>
+                        <option value="__EXIT__">Exit system (leave)</option>
                         {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
                       </select>
                     </div>
