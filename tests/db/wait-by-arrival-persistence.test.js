@@ -1,7 +1,7 @@
 // Schema contract round-trip test (see CLAUDE.md): waitByArrival flows into
 // results_json via buildPersistedResultsJson, so its persistence shape — and
-// its compaction (raw points → binned buckets) at non-"full" detail levels,
-// mirroring waitByArrivalAttr — needs explicit coverage.
+// its compaction (raw points → binned buckets) at non-"full" detail levels —
+// needs explicit coverage.
 
 import { describe, it, expect } from 'vitest';
 import { buildPersistedResultsJson } from '../../src/db/results-persistence.js';

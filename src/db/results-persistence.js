@@ -54,18 +54,6 @@ function compactifyWaitDist(waitDist = {}) {
   return Object.fromEntries(Object.entries(waitDist || {}).map(([qName, d]) => [qName, compactifyDistEntry(d)]));
 }
 
-// Same compaction as compactifyWaitDist, applied one level deeper
-// (attrName -> queueName -> attrValue -> dist) for the entity-attribute breakdown.
-function compactifyWaitDistByAttr(waitDistByAttr = {}) {
-  return Object.fromEntries(Object.entries(waitDistByAttr || {}).map(([attrName, byQueue]) => [
-    attrName,
-    Object.fromEntries(Object.entries(byQueue || {}).map(([qName, byValue]) => [
-      qName,
-      Object.fromEntries(Object.entries(byValue || {}).map(([value, d]) => [value, compactifyDistEntry(d)])),
-    ])),
-  ]));
-}
-
 // Bin raw [arrivalTime, totalWait] points into a fixed number of arrival-time
 // buckets, replacing the (potentially large, one-entry-per-entity) raw array
 // with a small summary — same trade-off as compactifyDistEntry's histogram.
@@ -94,15 +82,6 @@ function compactifyArrivalSeries(points) {
     buckets.push({ t: minT + (i + 0.5) * bucketWidth, n: counts[i], mean: sums[i] / counts[i] });
   }
   return { buckets };
-}
-
-// Same idea as compactifyWaitDistByAttr, but one level shallower (no queue
-// dimension — waitByArrivalAttr is a global, whole-journey breakdown).
-function compactifyWaitByArrivalAttr(waitByArrivalAttr = {}) {
-  return Object.fromEntries(Object.entries(waitByArrivalAttr || {}).map(([attrName, byValue]) => [
-    attrName,
-    Object.fromEntries(Object.entries(byValue || {}).map(([value, points]) => [value, compactifyArrivalSeries(points)])),
-  ]));
 }
 
 // Legacy alias — used only for the payload-size safety guard path below.
@@ -241,17 +220,9 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
       trimmedFields.push("waitDist.values→histogram");
     }
-    if (resultsJson.waitDistByAttr && typeof resultsJson.waitDistByAttr === "object") {
-      resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
-      trimmedFields.push("waitDistByAttr.values→histogram");
-    }
     if (Array.isArray(resultsJson.waitByArrival) && resultsJson.waitByArrival.length > 0) {
       resultsJson.waitByArrival = compactifyArrivalSeries(resultsJson.waitByArrival);
       trimmedFields.push("waitByArrival.points→buckets");
-    }
-    if (resultsJson.waitByArrivalAttr && typeof resultsJson.waitByArrivalAttr === "object") {
-      resultsJson.waitByArrivalAttr = compactifyWaitByArrivalAttr(resultsJson.waitByArrivalAttr);
-      trimmedFields.push("waitByArrivalAttr.points→buckets");
     }
     if (Array.isArray(resultsJson.replications) && resultsJson.replications.length > 0) {
       resultsJson.replications = resultsJson.replications.map(replication => ({
@@ -287,17 +258,9 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
       trimmedFields.push("waitDist.values→histogram");
     }
-    if (resultsJson.waitDistByAttr && typeof resultsJson.waitDistByAttr === "object") {
-      resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
-      trimmedFields.push("waitDistByAttr.values→histogram");
-    }
     if (Array.isArray(resultsJson.waitByArrival) && resultsJson.waitByArrival.length > 0) {
       resultsJson.waitByArrival = compactifyArrivalSeries(resultsJson.waitByArrival);
       trimmedFields.push("waitByArrival.points→buckets");
-    }
-    if (resultsJson.waitByArrivalAttr && typeof resultsJson.waitByArrivalAttr === "object") {
-      resultsJson.waitByArrivalAttr = compactifyWaitByArrivalAttr(resultsJson.waitByArrivalAttr);
-      trimmedFields.push("waitByArrivalAttr.points→buckets");
     }
   }
 
@@ -318,17 +281,18 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     if (Array.isArray(resultsJson.timeSeries) && resultsJson.timeSeries.length > 0) {
       resultsJson.timeSeries = sampleEvenly(resultsJson.timeSeries, MINIMAL_TIME_SERIES_MAX_POINTS);
     }
-    if (resultsJson.waitDist && typeof resultsJson.waitDist === "object") {
-      resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
-    }
-    if (resultsJson.waitDistByAttr && typeof resultsJson.waitDistByAttr === "object") {
-      resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
-    }
-    if (Array.isArray(resultsJson.waitByArrival) && resultsJson.waitByArrival.length > 0) {
-      resultsJson.waitByArrival = compactifyArrivalSeries(resultsJson.waitByArrival);
-    }
-    if (resultsJson.waitByArrivalAttr && typeof resultsJson.waitByArrivalAttr === "object") {
-      resultsJson.waitByArrivalAttr = compactifyWaitByArrivalAttr(resultsJson.waitByArrivalAttr);
+    // Only re-compact here when detailLevel === "full": for "compact" saves,
+    // the branch above has already converted .values/.points into
+    // histogram/buckets, and these helpers are not idempotent — calling them
+    // again on already-compacted data finds no raw values left and silently
+    // nulls the histogram, hiding the chart entirely.
+    if (detailLevel === "full") {
+      if (resultsJson.waitDist && typeof resultsJson.waitDist === "object") {
+        resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
+      }
+      if (Array.isArray(resultsJson.waitByArrival) && resultsJson.waitByArrival.length > 0) {
+        resultsJson.waitByArrival = compactifyArrivalSeries(resultsJson.waitByArrival);
+      }
     }
     if (Array.isArray(resultsJson.replications)) {
       resultsJson.replications = resultsJson.replications.map(r => ({
