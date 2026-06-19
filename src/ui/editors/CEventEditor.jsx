@@ -205,15 +205,17 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               {/* Activity type toggle + Effects */}
               {(()=>{
                 const effectArr=Array.isArray(ev.effect)?ev.effect.filter(Boolean):(ev.effect?ev.effect.split(';').map(s=>s.trim()).filter(Boolean):[]);
-                const delayMatch=effectArr.map(e=>typeof e==='string'?e.match(/^DELAY\(([^)]+)\)/i):null).find(Boolean);
+                // Match DELAY() with optional queue name so the mode flag persists before a queue is chosen
+                const delayMatch=effectArr.map(e=>typeof e==='string'?e.match(/^DELAY\(([^)]*)\)/i):null).find(Boolean);
                 const isDelay=!!delayMatch;
                 const delayQueue=delayMatch?.[1]?.trim()||"";
 
                 const setDelayMode=(on)=>{
-                  if(on) upd(i,'effect',delayQueue?[`DELAY(${delayQueue})`]:[]);
+                  // Always write DELAY() (empty queue) so the detection works before a queue is selected
+                  if(on) upd(i,'effect',[`DELAY(${delayQueue})`]);
                   else upd(i,'effect',[]);
                 };
-                const setDelayQueue=(qName)=>upd(i,'effect',qName?[`DELAY(${qName})`]:[]);
+                const setDelayQueue=(qName)=>upd(i,'effect',[`DELAY(${qName})`]);
 
                 return (<>
                   {/* Activity type selector */}
