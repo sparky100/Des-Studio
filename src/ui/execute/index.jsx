@@ -513,7 +513,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSweepResults(null);
     setSweepStatus("idle");
     setSweepProgress(null);
-  }, [model, effectiveModel, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, onRunComplete]);
+  }, [model, effectiveModel, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, activeSchedulesMap, purgePeriodEnabled, onRunComplete]);
 
   const stopAuto = useCallback(() => {
     if (autoRef.current) {
