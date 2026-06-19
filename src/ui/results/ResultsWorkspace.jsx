@@ -16,7 +16,7 @@ const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 140;
 
-const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, waitByArrivalAttr: true, serverUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true };
+const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, waitByArrival: true, serverUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true };
 
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
   const { C, FONT } = useTheme();
@@ -913,49 +913,6 @@ function WaitHistogram({ dist, color }) {
   );
 }
 
-function WaitDistByAttrTable({ group }) {
-  const { C, FONT } = useTheme();
-  const [isOpen, setIsOpen] = useState(false);
-  const rows = Array.isArray(group?.rows) ? group.rows : [];
-  if (rows.length === 0) return null;
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div
-        onClick={() => setIsOpen(open => !open)}
-        style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: FONT, fontSize: 10, color: C.muted, letterSpacing: 0.6, fontWeight: 700, marginBottom: isOpen ? 6 : 0, userSelect: "none" }}
-      >
-        <span style={{ fontSize: 8 }}>{isOpen ? "▾" : "▸"}</span>
-        Break down by {group.attrName}
-      </div>
-      {isOpen && (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
-          <thead>
-            <tr>
-              {["Queue", group.attrName, "n", "Mean", "P50", "P90", "P95", "P99"].map((h, idx) => (
-                <th key={h} style={{ textAlign: idx < 2 ? "left" : "right", color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, paddingRight: idx < 2 ? 12 : 0, paddingLeft: idx >= 2 ? 10 : 0, borderBottom: `1px solid ${C.border}` }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(row => (
-              <tr key={`${row.queue}::${row.value}`}>
-                <td style={{ color: C.text, paddingTop: 3, paddingRight: 12, whiteSpace: "nowrap" }}>{row.queue}</td>
-                <td style={{ color: C.text, paddingTop: 3, paddingRight: 12, whiteSpace: "nowrap" }}>{row.value}</td>
-                <td style={{ color: C.muted, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{row.n}</td>
-                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.mean)}</td>
-                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p50)}</td>
-                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p90)}</td>
-                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p95)}</td>
-                <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 10 }}>{formatNumber(row.p99)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
-
 function ChartSectionShell({ section, children }) {
   const { C, FONT } = useTheme();
   return (
@@ -1078,87 +1035,6 @@ export function MiniLineChart({ title, ariaTitle, points, color, yLabel, formatY
 // (e.g. tier=gold, tier=silver), sharing a single time/value scale so the
 // lines are directly comparable. Used by the "wait by arrival time, by
 // attribute" section, where MiniLineChart's single-series shape doesn't fit.
-export function MultiLineChart({ title, ariaTitle, series, colors, yLabel, xLabel = "arrival time", formatY = v => formatNumber(v) }) {
-  const { C, FONT } = useTheme();
-  const [tip, setTip] = useState(null);
-  const plottable = (series || []).filter(s => s.points && s.points.length >= 2);
-  if (plottable.length === 0) return null;
-  const accessibleName = ariaTitle ?? title;
-  const allPoints = plottable.flatMap(s => s.points);
-  const maxY = Math.max(...allPoints.map(p => p.value), 1);
-  const minY = Math.min(...allPoints.map(p => p.value), 0);
-  const maxT = Math.max(...allPoints.map(p => p.t), 1);
-  const minT = Math.min(...allPoints.map(p => p.t), 0);
-  const PAD = { top: 14, right: 16, bottom: 38, left: 46 };
-  const w = CHART_W - PAD.left - PAD.right;
-  const h = CHART_H - PAD.top - PAD.bottom;
-  const tSpan = Math.max(maxT - minT, 1);
-  const ySpan = Math.max(maxY - minY, 1);
-  const toX = t => PAD.left + ((t - minT) / tSpan) * w;
-  const toY = v => PAD.top + h - ((v - minY) / ySpan) * h;
-  const yTicks = [minY, minY + ySpan / 2, maxY];
-  const xTicks = [minT, minT + tSpan / 2, maxT];
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      {title && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{title}</span>
-          <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{yLabel}</span>
-        </div>
-      )}
-      <svg width={CHART_W} height={CHART_H} style={{ display: "block", width: "100%", minWidth: 0, minHeight: 110 }}
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`${accessibleName} ${yLabel} by ${xLabel} chart`}
-        onMouseLeave={() => setTip(null)}>
-        {yTicks.map((t, i) => {
-          const y = toY(t);
-          return (
-            <g key={`${t}-${i}`}>
-              <line x1={PAD.left} y1={y} x2={PAD.left + w} y2={y} stroke={C.chartGrid} strokeWidth={1} />
-              <text x={PAD.left - 4} y={y + 4} textAnchor="end" fontSize={11} fill={C.muted} fontFamily="monospace">{formatY(t)}</text>
-            </g>
-          );
-        })}
-        {xTicks.map((t, i) => (
-          <text key={`xl-${i}`} x={toX(t)} y={CHART_H - 22} textAnchor="middle" fontSize={11}
-            fill={C.muted} fontFamily="monospace">{formatNumber(t, 0)}</text>
-        ))}
-        {plottable.map((s, idx) => {
-          const color = colors[idx % colors.length];
-          const linePts = s.points.map(p => `${toX(p.t).toFixed(1)},${toY(p.value).toFixed(1)}`).join(" ");
-          return (
-            <g key={s.label}>
-              <polyline points={linePts} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-              {s.points.map((p, i) => (
-                <circle key={i} cx={toX(p.t)} cy={toY(p.value)} r={5} fill="transparent"
-                  style={{ cursor: "crosshair" }}
-                  onMouseEnter={() => setTip({ x: toX(p.t), y: toY(p.value), label: `${s.label} · t = ${formatNumber(p.t)}`, value: `${yLabel}: ${formatY(p.value)}` })} />
-              ))}
-            </g>
-          );
-        })}
-        <text x={PAD.left + w / 2} y={CHART_H - 7} textAnchor="middle" fontSize={11} fill={C.muted} fontFamily="monospace">{xLabel}</text>
-        <text x={11} y={PAD.top + h / 2} textAnchor="middle" fontSize={11}
-          fill={C.muted} fontFamily="monospace" transform={`rotate(-90 11 ${PAD.top + h / 2})`}>{yLabel}</text>
-        {tip && (() => {
-          const TW = 150, TH = 36, TX = Math.min(Math.max(tip.x - TW/2, PAD.left), PAD.left + w - TW), TY = Math.max(tip.y - TH - 8, PAD.top);
-          return (
-            <g style={{ pointerEvents: "none" }}>
-              <rect x={TX} y={TY} width={TW} height={TH} rx={4} fill={C.panel} stroke={C.accent} strokeWidth={1} opacity={0.97} />
-              <text x={TX + TW/2} y={TY + 13} textAnchor="middle" fill={C.muted} fontSize={9} fontFamily={FONT}>{tip.label}</text>
-              <text x={TX + TW/2} y={TY + 27} textAnchor="middle" fill={C.text} fontSize={10} fontFamily={FONT} fontWeight={700}>{tip.value}</text>
-            </g>
-          );
-        })()}
-      </svg>
-      <div aria-label={`${accessibleName} chart legend`} style={{ display: "flex", gap: 10, flexWrap: "wrap", fontFamily: FONT, fontSize: 9, color: C.muted }}>
-        {plottable.map((s, idx) => (
-          <span key={s.label}><span aria-hidden="true" style={{ color: colors[idx % colors.length] }}>●</span> {s.label}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function CollapsibleRunDetails({ label, children, C, FONT }) {
   const [open, setOpen] = useState(false);
   return (
@@ -1715,15 +1591,10 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const serverSection = chartModel.chartSections.find(section => section.id === "server-utilization");
   const waitSection = chartModel.chartSections.find(section => section.id === "wait-distribution");
   const waitTimeSection = chartModel.chartSections.find(section => section.id === "wait-over-time");
-  const waitByArrivalAttrSection = chartModel.chartSections.find(section => section.id === "wait-by-arrival-attr");
+  const waitByArrivalSection = chartModel.chartSections.find(section => section.id === "wait-by-arrival-attr");
   const hasWaitDistributions = (waitSection?.distributions || []).length > 0;
   const hasWaitTimeSeries = (waitTimeSection?.series || []).length > 0;
-  const hasWaitByArrival = (waitByArrivalAttrSection?.series || []).length > 0;
-  const hasWaitByArrivalAttr = (waitByArrivalAttrSection?.groups || []).length > 0;
-  const [selectedArrivalAttrName, setSelectedArrivalAttrName] = useState(null);
-  const arrivalAttrGroup = hasWaitByArrivalAttr
-    ? (waitByArrivalAttrSection.groups.find(g => g.attrName === selectedArrivalAttrName) || waitByArrivalAttrSection.groups[0])
-    : null;
+  const hasWaitByArrival = (waitByArrivalSection?.series || []).length > 0;
   const queuePeaks = Array.isArray(chartModel.runtimeMetrics?.metrics?.maxQueueLengthByQueue)
     ? chartModel.runtimeMetrics.metrics.maxQueueLengthByQueue
     : [];
@@ -1973,9 +1844,6 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                         );
                       })}
                     </div>
-                    {(waitSection.distributionsByAttr || []).map(group => (
-                      <WaitDistByAttrTable key={group.attrName} group={group} />
-                    ))}
                   </ChartSectionShell>
                 </div>
               </div>
@@ -2008,58 +1876,22 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               </div>
             )}
 
-            {(hasWaitByArrival || hasWaitByArrivalAttr) && (
+            {hasWaitByArrival && (
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                <SectionHeader id="waitByArrivalAttr" label="Did wait get worse for later arrivals?" isOpen={sectionsOpen.waitByArrivalAttr} onToggle={toggleSection} />
-                <div id="results-section-waitByArrivalAttr" style={{ display: sectionsOpen.waitByArrivalAttr ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
-                  <ChartSectionShell section={waitByArrivalAttrSection}>
-                    {hasWaitByArrival && (
-                      <div aria-label="Wait by arrival time chart grid" style={CHART_GRID}>
-                        <ChartCard title="Total wait vs. arrival time" color={C.accent}>
-                          <MiniLineChart
-                            title=""
-                            ariaTitle="Wait by arrival time"
-                            points={waitByArrivalAttrSection.series}
-                            color={C.accent}
-                            yLabel="total wait"
-                          />
-                        </ChartCard>
-                      </div>
-                    )}
-                    {hasWaitByArrivalAttr && waitByArrivalAttrSection.groups.length > 1 && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 0.6, fontWeight: 700 }} htmlFor="wait-by-arrival-attr-picker">
-                          ATTRIBUTE
-                        </label>
-                        <select
-                          id="wait-by-arrival-attr-picker"
-                          value={arrivalAttrGroup?.attrName || ""}
-                          onChange={e => setSelectedArrivalAttrName(e.target.value)}
-                          style={{ background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 4, fontFamily: FONT, fontSize: 11, padding: "3px 6px" }}
-                        >
-                          {waitByArrivalAttrSection.groups.map(g => (
-                            <option key={g.attrName} value={g.attrName}>{g.attrName}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {hasWaitByArrivalAttr && arrivalAttrGroup && (
-                      <div aria-label="Wait by arrival time, by attribute chart grid" style={CHART_GRID}>
-                        <ChartCard
-                          key={arrivalAttrGroup.attrName}
-                          title={`Total wait vs. arrival time, by ${arrivalAttrGroup.attrName}`}
+                <SectionHeader id="waitByArrival" label="Did wait get worse for later arrivals?" isOpen={sectionsOpen.waitByArrival} onToggle={toggleSection} />
+                <div id="results-section-waitByArrival" style={{ display: sectionsOpen.waitByArrival ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+                  <ChartSectionShell section={waitByArrivalSection}>
+                    <div aria-label="Wait by arrival time chart grid" style={CHART_GRID}>
+                      <ChartCard title="Total wait vs. arrival time" color={C.accent}>
+                        <MiniLineChart
+                          title=""
+                          ariaTitle="Wait by arrival time"
+                          points={waitByArrivalSection.series}
                           color={C.accent}
-                        >
-                          <MultiLineChart
-                            title=""
-                            ariaTitle={`Wait by arrival time, by ${arrivalAttrGroup.attrName}`}
-                            series={arrivalAttrGroup.series.map(s => ({ label: s.value, points: s.points }))}
-                            colors={CHART_COLORS}
-                            yLabel="total wait"
-                          />
-                        </ChartCard>
-                      </div>
-                    )}
+                          yLabel="total wait"
+                        />
+                      </ChartCard>
+                    </div>
                   </ChartSectionShell>
                 </div>
               </div>

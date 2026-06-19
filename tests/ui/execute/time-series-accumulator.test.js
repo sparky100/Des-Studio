@@ -147,36 +147,6 @@ describe("makeBatchResult timeSeries averaging", () => {
     expect(t0.byQueue["Voucher Queue"].waitN).toBe(3);
   });
 
-  it("pools waitDistByAttr raw values across replications, keyed by attribute/queue/value", () => {
-    const replicationPayloads = [
-      { result: { summary: {}, waitDistByAttr: {
-        tier: { Queue: { gold: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4, values: [2, 4] } } },
-      } } },
-      { result: { summary: {}, waitDistByAttr: {
-        tier: { Queue: { gold: { n: 1, mean: 6, p50: 6, p90: 6, p95: 6, p99: 6, values: [6] } } },
-      } } },
-    ];
-
-    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
-    const goldDist = batch.waitDistByAttr.tier.Queue.gold;
-    expect(goldDist.n).toBe(3);
-    expect(goldDist.values).toEqual([2, 4, 6]);
-  });
-
-  it("pools waitByArrivalAttr raw points across replications, keyed by attribute/value", () => {
-    const replicationPayloads = [
-      { result: { summary: {}, waitByArrivalAttr: {
-        tier: { gold: [[0, 2], [4, 4]] },
-      } } },
-      { result: { summary: {}, waitByArrivalAttr: {
-        tier: { gold: [[8, 6]] },
-      } } },
-    ];
-
-    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
-    expect(batch.waitByArrivalAttr.tier.gold).toEqual([[0, 2], [4, 4], [8, 6]]);
-  });
-
   it("pools waitByArrival raw points across replications", () => {
     const replicationPayloads = [
       { result: { summary: {}, waitByArrival: [[0, 2], [4, 4]] } },

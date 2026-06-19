@@ -286,37 +286,6 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       }))
     : lastResult?.waitDist;
 
-  // Aggregate waitDistByAttr across all replications the same way: pool raw
-  // values per (attrName, queueName, attrValue).
-  const waitDistByAttrAcc = {};
-  for (const payload of replicationPayloads) {
-    const wdba = payload?.result?.waitDistByAttr;
-    if (!wdba) continue;
-    for (const [attrName, byQueue] of Object.entries(wdba)) {
-      for (const [qName, byValue] of Object.entries(byQueue)) {
-        for (const [value, dist] of Object.entries(byValue)) {
-          if (!Array.isArray(dist.values)) continue;
-          waitDistByAttrAcc[attrName] ??= {};
-          waitDistByAttrAcc[attrName][qName] ??= {};
-          waitDistByAttrAcc[attrName][qName][value] ??= [];
-          for (const v of dist.values) waitDistByAttrAcc[attrName][qName][value].push(v);
-        }
-      }
-    }
-  }
-  const waitDistByAttr = Object.keys(waitDistByAttrAcc).length
-    ? Object.fromEntries(Object.entries(waitDistByAttrAcc).map(([attrName, byQueue]) => [
-        attrName,
-        Object.fromEntries(Object.entries(byQueue).map(([qName, byValue]) => [
-          qName,
-          Object.fromEntries(Object.entries(byValue).map(([value, vals]) => {
-            const sorted = [...vals].sort((a, b) => a - b);
-            return [value, buildWaitDistEntry(sorted)];
-          })),
-        ])),
-      ]))
-    : lastResult?.waitDistByAttr;
-
   // Aggregate waitByArrival across all replications by pooling raw
   // [arrivalTime, totalWait] points — global, not per-queue or per-attribute,
   // so just concatenate rather than re-deriving distributions.
@@ -327,26 +296,6 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
     for (const pt of points) waitByArrivalAcc.push(pt);
   }
   const waitByArrival = waitByArrivalAcc.length ? waitByArrivalAcc : lastResult?.waitByArrival;
-
-  // Aggregate waitByArrivalAttr across all replications by pooling raw
-  // [arrivalTime, totalWait] points per (attrName, attrValue) — global,
-  // not per-queue, so just concatenate rather than re-deriving distributions.
-  const waitByArrivalAttrAcc = {};
-  for (const payload of replicationPayloads) {
-    const wbaa = payload?.result?.waitByArrivalAttr;
-    if (!wbaa) continue;
-    for (const [attrName, byValue] of Object.entries(wbaa)) {
-      for (const [value, points] of Object.entries(byValue)) {
-        if (!Array.isArray(points)) continue;
-        waitByArrivalAttrAcc[attrName] ??= {};
-        waitByArrivalAttrAcc[attrName][value] ??= [];
-        for (const pt of points) waitByArrivalAttrAcc[attrName][value].push(pt);
-      }
-    }
-  }
-  const waitByArrivalAttr = Object.keys(waitByArrivalAttrAcc).length
-    ? waitByArrivalAttrAcc
-    : lastResult?.waitByArrivalAttr;
 
 // Compute an ensemble-average time series from all replication time series.
 // For each time grid point we take the last-known snapshot per replication
@@ -429,9 +378,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
     snap: { clock: finalTime },
     timeSeries: precomputedTimeSeries !== undefined ? precomputedTimeSeries : averageBatchTimeSeries(replicationPayloads),
     waitDist,
-    waitDistByAttr,
     waitByArrival,
-    waitByArrivalAttr,
     perQueue,
     runtimeMetrics: {
       replications: replicationPayloads.length,

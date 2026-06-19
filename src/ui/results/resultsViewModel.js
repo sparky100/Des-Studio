@@ -188,35 +188,6 @@ export function buildWaitDistributions(results = {}, model = {}, sectionFilter =
     });
 }
 
-export function buildWaitDistributionsByAttr(results = {}, model = {}, sectionFilter = null) {
-  const waitDistByAttr = results?.waitDistByAttr && typeof results.waitDistByAttr === "object" ? results.waitDistByAttr : {};
-  const queues = Array.isArray(model?.queues) ? model.queues : [];
-  const nameToId = Object.fromEntries(queues.map(q => [q.name, q.id]));
-
-  return Object.entries(waitDistByAttr)
-    .map(([attrName, byQueue]) => {
-      const rows = Object.entries(byQueue)
-        .filter(([qName]) => {
-          if (!sectionFilter) return true;
-          const qid = nameToId[qName];
-          return qid && sectionFilter.shouldInclude(qid);
-        })
-        .flatMap(([qName, byValue]) => Object.entries(byValue).map(([value, dist]) => ({
-          queue: qName,
-          value,
-          n: finiteNumber(dist.n),
-          mean: finiteNumber(dist.mean),
-          p50: finiteNumber(dist.p50),
-          p90: finiteNumber(dist.p90),
-          p95: finiteNumber(dist.p95),
-          p99: finiteNumber(dist.p99),
-        })))
-        .sort((a, b) => a.queue.localeCompare(b.queue) || a.value.localeCompare(b.value));
-      return { attrName, rows };
-    })
-    .filter(group => group.rows.length > 0);
-}
-
 const ARRIVAL_BUCKET_COUNT = 24;
 
 // Bin raw [arrivalTime, totalWait] points into evenly-spaced arrival-time
@@ -258,37 +229,12 @@ export function buildWaitByArrival(results = {}) {
   return { points, hasData: points.length >= 2 };
 }
 
-export function buildWaitByArrivalAttr(results = {}) {
-  const waitByArrivalAttr = results?.waitByArrivalAttr && typeof results.waitByArrivalAttr === "object"
-    ? results.waitByArrivalAttr
-    : {};
-
-  return Object.entries(waitByArrivalAttr)
-    .map(([attrName, byValue]) => {
-      const series = Object.entries(byValue || {})
-        .map(([value, data]) => {
-          const points = Array.isArray(data)
-            ? (data.length > 0 ? binArrivalPoints(data) : [])
-            : Array.isArray(data?.buckets)
-              ? data.buckets.map(b => ({ t: finiteNumber(b.t), value: finiteNumber(b.mean), n: finiteNumber(b.n) }))
-              : [];
-          return { value, points, hasData: points.length >= 2 };
-        })
-        .filter(s => s.hasData)
-        .sort((a, b) => a.value.localeCompare(b.value));
-      return { attrName, series };
-    })
-    .filter(group => group.series.length > 0);
-}
-
 export function buildChartSections(results = {}, model = {}, sectionFilter = null) {
   const queueDepthSeries = buildQueueDepthSeries(results, model, sectionFilter);
   const serverUtilizationSeries = buildServerUtilizationSeries(results, model, sectionFilter);
   const waitDistributions = buildWaitDistributions(results, model, sectionFilter);
-  const waitDistributionsByAttr = buildWaitDistributionsByAttr(results, model, sectionFilter);
   const waitTimeSeries = buildWaitTimeSeries(results, model, sectionFilter).filter(s => s.hasData);
   const waitByArrival = buildWaitByArrival(results);
-  const waitByArrivalAttrGroups = buildWaitByArrivalAttr(results);
 
   return [
     {
@@ -298,7 +244,6 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
       method: "Shows the range of completed waiting times, with percentile markers.",
       emptyMessage: "Complete at least two customer waits to see wait-time distributions.",
       distributions: waitDistributions,
-      distributionsByAttr: waitDistributionsByAttr,
       maxValue: Math.max(0, ...waitDistributions.map(d => finiteNumber(d.p99))),
     },
     {
@@ -332,10 +277,9 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
       id: "wait-by-arrival-attr",
       title: "Wait time by arrival time",
       question: "Did wait get worse for entities that arrived later?",
-      method: "Shows each completed entity's total wait (across every queue it passed through), bucketed by when it arrived. This is a whole-journey view, not scoped to a single queue. On models with entity attributes, the breakdown below also splits this by a chosen attribute.",
+      method: "Shows each completed entity's total wait (across every queue it passed through), bucketed by when it arrived. This is a whole-journey view, not scoped to a single queue.",
       emptyMessage: "Run with Detailed output enabled to see wait by arrival time.",
       series: waitByArrival.points,
-      groups: waitByArrivalAttrGroups,
     },
   ];
 }
@@ -376,7 +320,6 @@ export function buildResultsViewModel(results = {}, model = {}, options = {}) {
     queueDepthSeries: chartSections.find(s => s.id === "queue-depth")?.series || [],
     serverUtilizationSeries: chartSections.find(s => s.id === "server-utilization")?.series || [],
     waitDistributions: chartSections.find(s => s.id === "wait-distribution")?.distributions || [],
-    waitDistributionsByAttr: chartSections.find(s => s.id === "wait-distribution")?.distributionsByAttr || [],
     waitTimeSeries: chartSections.find(s => s.id === "wait-over-time")?.series || [],
     chartSections,
     runtimeMetrics,
