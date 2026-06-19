@@ -1718,6 +1718,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const waitByArrivalAttrSection = chartModel.chartSections.find(section => section.id === "wait-by-arrival-attr");
   const hasWaitDistributions = (waitSection?.distributions || []).length > 0;
   const hasWaitTimeSeries = (waitTimeSection?.series || []).length > 0;
+  const hasWaitByArrival = (waitByArrivalAttrSection?.series || []).length > 0;
   const hasWaitByArrivalAttr = (waitByArrivalAttrSection?.groups || []).length > 0;
   const [selectedArrivalAttrName, setSelectedArrivalAttrName] = useState(null);
   const arrivalAttrGroup = hasWaitByArrivalAttr
@@ -1950,6 +1951,36 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               </div>
             )}
 
+            {/* 3. Wait-time distributions — what did entities experience? */}
+            {hasWaitDistributions && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <SectionHeader id="waitDist" label="How much time is spent queueing?" isOpen={sectionsOpen.waitDist} onToggle={toggleSection} />
+                <div id="results-section-waitDist" style={{ display: sectionsOpen.waitDist ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+                  <ChartSectionShell section={waitSection}>
+                    <div aria-label="Wait-time distribution grid" style={CHART_GRID}>
+                      {waitSection.distributions.map((dist, idx) => {
+                        const color = CHART_COLORS[idx % CHART_COLORS.length];
+                        return (
+                          <ChartCard
+                            key={dist.label}
+                            title={dist.label}
+                            color={color}
+                            sourceLabel={dist.sourceLabel}
+                            dataPreview={<WaitValuesPreview dist={dist} />}
+                          >
+                            <WaitHistogram dist={dist} color={color} />
+                          </ChartCard>
+                        );
+                      })}
+                    </div>
+                    {(waitSection.distributionsByAttr || []).map(group => (
+                      <WaitDistByAttrTable key={group.attrName} group={group} />
+                    ))}
+                  </ChartSectionShell>
+                </div>
+              </div>
+            )}
+
             {chartModel.hasTimeSeries && hasWaitTimeSeries && (
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 <SectionHeader id="waitOverTime" label="When did waits get longer?" isOpen={sectionsOpen.waitOverTime} onToggle={toggleSection} />
@@ -1977,12 +2008,25 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               </div>
             )}
 
-            {hasWaitByArrivalAttr && (
+            {(hasWaitByArrival || hasWaitByArrivalAttr) && (
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                <SectionHeader id="waitByArrivalAttr" label="Did wait get worse for later arrivals — by attribute?" isOpen={sectionsOpen.waitByArrivalAttr} onToggle={toggleSection} />
+                <SectionHeader id="waitByArrivalAttr" label="Did wait get worse for later arrivals?" isOpen={sectionsOpen.waitByArrivalAttr} onToggle={toggleSection} />
                 <div id="results-section-waitByArrivalAttr" style={{ display: sectionsOpen.waitByArrivalAttr ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
                   <ChartSectionShell section={waitByArrivalAttrSection}>
-                    {waitByArrivalAttrSection.groups.length > 1 && (
+                    {hasWaitByArrival && (
+                      <div aria-label="Wait by arrival time chart grid" style={CHART_GRID}>
+                        <ChartCard title="Total wait vs. arrival time" color={C.accent}>
+                          <MiniLineChart
+                            title=""
+                            ariaTitle="Wait by arrival time"
+                            points={waitByArrivalAttrSection.series}
+                            color={C.accent}
+                            yLabel="total wait"
+                          />
+                        </ChartCard>
+                      </div>
+                    )}
+                    {hasWaitByArrivalAttr && waitByArrivalAttrSection.groups.length > 1 && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 0.6, fontWeight: 700 }} htmlFor="wait-by-arrival-attr-picker">
                           ATTRIBUTE
@@ -1999,7 +2043,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                         </select>
                       </div>
                     )}
-                    {arrivalAttrGroup && (
+                    {hasWaitByArrivalAttr && arrivalAttrGroup && (
                       <div aria-label="Wait by arrival time, by attribute chart grid" style={CHART_GRID}>
                         <ChartCard
                           key={arrivalAttrGroup.attrName}
@@ -2016,36 +2060,6 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                         </ChartCard>
                       </div>
                     )}
-                  </ChartSectionShell>
-                </div>
-              </div>
-            )}
-
-            {/* 3. Wait-time distributions — what did entities experience? */}
-            {hasWaitDistributions && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                <SectionHeader id="waitDist" label="How much time is spent queueing?" isOpen={sectionsOpen.waitDist} onToggle={toggleSection} />
-                <div id="results-section-waitDist" style={{ display: sectionsOpen.waitDist ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
-                  <ChartSectionShell section={waitSection}>
-                    <div aria-label="Wait-time distribution grid" style={CHART_GRID}>
-                      {waitSection.distributions.map((dist, idx) => {
-                        const color = CHART_COLORS[idx % CHART_COLORS.length];
-                        return (
-                          <ChartCard
-                            key={dist.label}
-                            title={dist.label}
-                            color={color}
-                            sourceLabel={dist.sourceLabel}
-                            dataPreview={<WaitValuesPreview dist={dist} />}
-                          >
-                            <WaitHistogram dist={dist} color={color} />
-                          </ChartCard>
-                        );
-                      })}
-                    </div>
-                    {(waitSection.distributionsByAttr || []).map(group => (
-                      <WaitDistByAttrTable key={group.attrName} group={group} />
-                    ))}
                   </ChartSectionShell>
                 </div>
               </div>

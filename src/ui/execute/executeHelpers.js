@@ -317,6 +317,17 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       ]))
     : lastResult?.waitDistByAttr;
 
+  // Aggregate waitByArrival across all replications by pooling raw
+  // [arrivalTime, totalWait] points — global, not per-queue or per-attribute,
+  // so just concatenate rather than re-deriving distributions.
+  const waitByArrivalAcc = [];
+  for (const payload of replicationPayloads) {
+    const points = payload?.result?.waitByArrival;
+    if (!Array.isArray(points)) continue;
+    for (const pt of points) waitByArrivalAcc.push(pt);
+  }
+  const waitByArrival = waitByArrivalAcc.length ? waitByArrivalAcc : lastResult?.waitByArrival;
+
   // Aggregate waitByArrivalAttr across all replications by pooling raw
   // [arrivalTime, totalWait] points per (attrName, attrValue) — global,
   // not per-queue, so just concatenate rather than re-deriving distributions.
@@ -419,6 +430,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
     timeSeries: precomputedTimeSeries !== undefined ? precomputedTimeSeries : averageBatchTimeSeries(replicationPayloads),
     waitDist,
     waitDistByAttr,
+    waitByArrival,
     waitByArrivalAttr,
     perQueue,
     runtimeMetrics: {

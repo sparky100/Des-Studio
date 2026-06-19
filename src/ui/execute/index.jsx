@@ -593,6 +593,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         timeSeries:    engineRef.current.getTimeSeries?.(),
         waitDist:      engineRef.current.getWaitDist?.(),
         waitDistByAttr:  engineRef.current.getWaitDistByAttr?.(),
+        waitByArrival:   engineRef.current.getWaitByArrival?.(),
         waitByArrivalAttr: engineRef.current.getWaitByArrivalAttr?.(),
         entitySummary: engineRef.current.getEntitySummary?.(),
         runtimeMetrics: {

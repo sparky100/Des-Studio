@@ -176,4 +176,14 @@ describe("makeBatchResult timeSeries averaging", () => {
     const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
     expect(batch.waitByArrivalAttr.tier.gold).toEqual([[0, 2], [4, 4], [8, 6]]);
   });
+
+  it("pools waitByArrival raw points across replications", () => {
+    const replicationPayloads = [
+      { result: { summary: {}, waitByArrival: [[0, 2], [4, 4]] } },
+      { result: { summary: {}, waitByArrival: [[8, 6]] } },
+    ];
+
+    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
+    expect(batch.waitByArrival).toEqual([[0, 2], [4, 4], [8, 6]]);
+  });
 });

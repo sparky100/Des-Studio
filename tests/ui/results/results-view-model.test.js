@@ -201,5 +201,6 @@ describe("results view model", () => {
     expect(sections[2].question).toBe("Where do queues build up?");
     expect(sections[3].question).toBe("When did waits get longer?");
     expect(sections[4].question).toMatch(/Did wait get worse for entities that arrived later/i);
+    expect(sections[4].question).not.toMatch(/attribute/i);
   });
 });
