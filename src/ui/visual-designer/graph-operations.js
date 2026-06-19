@@ -31,6 +31,7 @@ export const VISUAL_PATTERNS = Object.freeze([
   { id: "batching", label: "Batching", hint: "Wait until a group is ready, then process it" },
   { id: "server-failure", label: "Server failure and repair", hint: "Add failure and repair timing to a server" },
   { id: "cost-tracking", label: "Cost tracking", hint: "Track service cost in the results" },
+  { id: "delay-activity", label: "Delay (no resource)", hint: "Timed hold with no server — recovery, cooling, paperwork" },
 ]);
 
 function ensureEntityTypes(model) {
@@ -658,6 +659,57 @@ export function addVisualPattern(model, patternId, options = {}) {
       server,
       completionEffect: ["COMPLETE()", "COST(5)"],
     });
+  } else if (patternId === "delay-activity") {
+    const bEvents = [...(next.bEvents || [])];
+    const cEvents = [...(next.cEvents || [])];
+    const queues = [...(next.queues || [])];
+    const allIds = new Set([...bEvents, ...cEvents, ...queues, ...(next.entityTypes || [])].map(item => item.id || item.name));
+    const queueNames = new Set(queues.map(q => clean(q.name).toLowerCase()).filter(Boolean));
+    const bNames = new Set(bEvents.map(e => clean(e.name).toLowerCase()).filter(Boolean));
+    const cNames = new Set(cEvents.map(e => clean(e.name).toLowerCase()).filter(Boolean));
+
+    const queueId   = makeId("delay-queue",    allIds); allIds.add(queueId);
+    const arrivalId = makeId("delay-arrival",  allIds); allIds.add(arrivalId);
+    const doneId    = makeId("delay-done",     allIds); allIds.add(doneId);
+    const activityId = makeId("delay-activity", allIds);
+
+    const queueName    = uniqueName("Waiting Area",       queueNames);
+    const arrivalName  = uniqueName("Customer Arrival",   bNames);
+    const doneName     = uniqueName("Delay Complete",     bNames);
+    const activityName = uniqueName("Hold",               cNames);
+
+    queues.push({ id: queueId, name: queueName, customerType: customer, discipline: "FIFO" });
+
+    bEvents.push(
+      {
+        id: arrivalId,
+        name: arrivalName,
+        scheduledTime: "0",
+        effect: `ARRIVE(${customer}, ${queueName})`,
+        schedules: [{ eventId: arrivalId, dist: "Exponential", distParams: { mean: "5" } }],
+      },
+      {
+        // No effect — routing handles completion. Exit system (null) is the default branch.
+        id: doneId,
+        name: doneName,
+        scheduledTime: "9999",
+        effect: [],
+        schedules: [],
+        probabilisticRouting: [{ probability: 1, queueName: null }],
+      },
+    );
+
+    const priority = nextPriority(cEvents);
+    cEvents.push({
+      id: activityId,
+      name: activityName,
+      priority,
+      condition: { variable: `queue(${queueName}).length`, operator: ">", value: 0 },
+      effect: `DELAY(${queueName})`,
+      cSchedules: [{ eventId: doneId, dist: "Fixed", distParams: { value: "5" }, useEntityCtx: true }],
+    });
+
+    next = { ...next, bEvents, cEvents, queues };
   } else {
     return { model: next, appliedToSelection: false };
   }
