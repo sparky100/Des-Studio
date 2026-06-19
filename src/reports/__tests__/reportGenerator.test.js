@@ -209,4 +209,40 @@ describe('generateReport', () => {
     expect(html).toContain('<title>');
     expect(html).toContain('Test Clinic');
   });
+
+  test('reports per-run average counts (not pooled totals) for batch runs', async () => {
+    callLLMOnce.mockResolvedValue('');
+    // Pooled totals across 4 replications would be served=780/reneged=20; the
+    // report must show the per-run average (195/5) sourced from aggregateStats.
+    const batchResults = {
+      ...minimalResults,
+      summary: { ...minimalResults.summary, served: 780, reneged: 20 },
+      aggregateStats: {
+        'summary.served':  { n: 4, mean: 195, lower: 190, upper: 200 },
+        'summary.reneged': { n: 4, mean: 5,   lower: 3,   upper: 7 },
+      },
+    };
+    const batchConfig = { ...experimentConfig, replications: 4 };
+
+    const html = await generateReport(minimalModel, batchResults, batchConfig, runMeta, {
+      aggregateStats: batchResults.aggregateStats,
+    });
+
+    expect(html).toContain('195');
+    expect(html).not.toContain('780');
+    expect(html).not.toContain('20</div>');
+  });
+
+  test('formats percentage figures as whole integers', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithRatio = {
+      ...minimalResults,
+      summary: { ...minimalResults.summary, servedRatio: 0.8523 },
+    };
+
+    const html = await generateReport(minimalModel, resultsWithRatio, experimentConfig, runMeta);
+
+    expect(html).toContain('85%');
+    expect(html).not.toMatch(/85\.\d%/);
+  });
 });

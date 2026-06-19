@@ -52,10 +52,10 @@ function formatInt(value) {
   return Number.isFinite(n) ? String(Math.round(n)) : null;
 }
 
-// Formats a decimal ratio (0–1) as a percentage string
+// Formats a decimal ratio (0–1) as a whole-number percentage string
 function formatPct(value) {
   const n = Number(value);
-  return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : null;
+  return Number.isFinite(n) ? `${Math.round(n * 100)}%` : null;
 }
 
 // Formats financial values in English: £1.24 million, £45.34 thousand, £123
