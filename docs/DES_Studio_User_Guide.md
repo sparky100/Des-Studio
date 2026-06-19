@@ -22,6 +22,7 @@
    - 4.6 [Share results with stakeholders](#46-share-results-with-stakeholders)
    - 4.7 [Additional features](#47-additional-features)
    - 4.8 [Export results for external analysis](#48-export-results-for-external-analysis)
+   - 4.9 [Share a model directly (Access tab)](#49-share-a-model-directly-access-tab)
 5. [Troubleshooting](#5-troubleshooting)
 6. [Glossary](#6-glossary)
 
@@ -433,6 +434,26 @@ run$results$replications[, c("replicationIndex", "seed")]
 **Note on event log availability.** At the default storage level the event log is condensed to a 4-field summary (`logSummary`). Full event-by-event logs are only retained when `resultDetailLevel = "full"` is requested at run time (no UI control exists for this setting in the current release). The API response includes a `_trimmed_fields` array listing any fields that were condensed.
 
 Full API reference: `docs/architecture/results-api-design.md`.
+
+### 4.9 Share a model directly (Access tab)
+
+**When to use this.** You want to hand a specific person a link that opens *this model* — not a read-only results dashboard, the actual model in the Model Library — using whatever access they already have (or will be granted).
+
+1. Open the model and go to the **Access** tab.
+2. In the **Sharing** section, set visibility: **🔒 Private** (default — only you, plus anyone you've explicitly granted access, can open it) or **🌐 Public** (anyone signed in can open it read-only and fork their own editable copy).
+3. To grant a specific collaborator access without making the model public, add them below with **viewer** or **editor** rights.
+4. Click **🔗 Copy link**. This copies a URL ending in `#model/<modelId>` to your clipboard — send it by email, chat, or however you'd share any link.
+
+**What the recipient sees when they open the link:**
+
+| Recipient's access | Result |
+|---------------------|--------|
+| Owner, or granted `editor`/`viewer` | Opens straight into the full model, same as clicking it in their own library. |
+| No access yet, but model is public | Opens read-only with a prompt to fork their own editable copy. |
+| Not signed in | Taken to sign-in/sign-up first; the link resumes automatically once they're signed in. |
+| No access, model not public, or model deleted | Lands on their normal Model Library with no error — the link simply doesn't unlock anything new. |
+
+**This is not the same as the run-results Share link** (§4.6) — that creates a public, anonymous, read-only dashboard for one simulation run and needs no login at all. A model link (`#model/<id>`) only opens the door that your visibility/access settings already allow; it never bypasses login or grants new permissions on its own.
 
 ---
 

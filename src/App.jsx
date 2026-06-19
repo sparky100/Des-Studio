@@ -121,6 +121,7 @@ export default function App({ onThemeChange }){
   const [shareToken,setShareToken]=useState(null)
   const [showKeyboardShortcuts,setShowKeyboardShortcuts]=useState(false)
   const [pendingImport,setPendingImport]=useState(null)
+  const [pendingModelId,setPendingModelId]=useState(null)
   const [helpOpen,setHelpOpen]=useState(false)
   const [tierPolicies,setTierPolicies]=useState(null)
   const [signedInThisSession,setSignedInThisSession]=useState(false)
@@ -139,6 +140,11 @@ export default function App({ onThemeChange }){
         const {errors,warnings}=validateLinkModel(model)
         setPendingImport({model,errors,warnings})
       }catch(_){}
+    }
+    const modelLinkMatch=hash.match(/^#model\/([^/?]+)/)
+    if(modelLinkMatch){
+      setPendingModelId(modelLinkMatch[1])
+      sessionStorage.setItem('des.pendingModelId',modelLinkMatch[1])
     }
   },[])
 
@@ -161,6 +167,11 @@ export default function App({ onThemeChange }){
             setPendingImport({model,errors,warnings})
             sessionStorage.removeItem('des.pendingImport')
           }catch(_){}
+        }
+        const storedModelId=sessionStorage.getItem('des.pendingModelId')
+        if(storedModelId){
+          setPendingModelId(storedModelId)
+          sessionStorage.removeItem('des.pendingModelId')
         }
       }
     })
@@ -264,6 +275,14 @@ export default function App({ onThemeChange }){
       setOpenId(model.id);
     }
   }, [uid]);
+
+  useEffect(()=>{
+    if(!pendingModelId || !session || loading) return
+    const target=models.find(m=>m.id===pendingModelId)
+    if(target) handleOpenModel(target)
+    setPendingModelId(null)
+    if(window.location.hash.startsWith('#model/')) window.location.hash=''
+  },[pendingModelId,session,loading,models,handleOpenModel])
 
   const confirmFork = useCallback(async () => {
     if (!modelToFork || !uid) return;

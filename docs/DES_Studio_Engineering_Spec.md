@@ -580,6 +580,18 @@ restoreModelVersion(versionId): Promise<Model>
 submitFeedback(category, message, context): Promise<void>
 ```
 
+#### 3.3.1 Hash-based deep links (`App.jsx`)
+
+`App.jsx` parses `window.location.hash` on mount and on `hashchange`, no router library. Three route prefixes are handled, each with a different trust boundary:
+
+| Prefix | Auth required | Mechanism |
+|--------|---------------|-----------|
+| `#import` | Yes (post-auth) | Decodes a model from the URL (`src/utils/importLink.js`), shows `ImportPreview`, then saves into the signed-in user's library on confirm. |
+| `#model/<modelId>` | Yes (post-auth) | Resolves `modelId` against the already-fetched `models` array (the same `fetchModels(userId)` union the Model Library uses) and calls the existing `handleOpenModel(model)`. No new query, table, or RLS policy — it is a routing shortcut into access the recipient already has (owner, public, or per-user `viewer`/`editor` grant in `access`). Unresolvable IDs (deleted, private with no grant) silently no-op back to the Model Library. |
+| `#share/<token>` | **No** (intentionally bypasses auth) | Renders `DashboardView` directly against the `share_links` table (anonymous `SELECT` permitted by RLS while `revoked_at IS NULL` and not expired). Unrelated mechanism — do not conflate with `#model/<id>`. |
+
+For `#import` and `#model/<id>`, the target is also written to `sessionStorage` (`des.pendingImport`, `des.pendingModelId`) so it survives any in-page UI transition to the login form (dismissing the import preview, or following the link while signed out) and is resumed on the `SIGNED_IN`/`SIGNED_UP` auth event. Since `AuthShell.jsx`'s normal sign-in/sign-up never navigates the page, the hash itself usually survives anyway — `sessionStorage` exists as a backup, not the primary mechanism.
+
 ### 3.4 Supabase Edge Functions
 
 | Function | Trigger | Description |
@@ -745,6 +757,7 @@ DES Studio `DRAIN` fails immediately if container level < amount (guard). SimPy 
 | **Dynamic code execution** | No `eval()`, no `new Function()`, no `Function()` constructor anywhere in the engine or condition evaluator. Predicates are parsed JSON trees evaluated by `conditions.js:evaluateCondition()`. |
 | **Injection via model fields** | All model fields are consumed as data, never concatenated into code strings. Distribution parameters are numbers; predicate nodes are typed JSON objects. |
 | **Database access control** | Supabase RLS enforces `owner_id = auth.uid()` on `des_models` and `run_by = auth.uid()` on `simulation_runs`. No shared-state tables. Public models are exposed via a read-only view. |
+| **Model deep links** | `#model/<id>` (§3.3.1) is a client-side routing shortcut, not a new permission grant — it resolves against the same RLS-filtered `fetchModels()` result every signed-in user already gets, so a link can never expose a model the recipient's account couldn't already see in the Model Library. |
 | **LLM prompt injection** | LLM responses are parsed and validated against the model JSON schema before `Apply` is offered. Malformed or schema-violating responses are rejected with a user-visible error. |
 | **Credential exposure** | LLM API keys are held exclusively in Supabase Edge Function environment variables. The `llm-proxy` function proxies all LLM calls server-side. No AI provider key is ever sent to or stored in the browser. |
 | **WCAG 2.1 AA** | All interactive elements have ARIA labels. Colour contrast meets AA minimums. Keyboard navigation supported throughout. |
