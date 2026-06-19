@@ -211,9 +211,9 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 })()}
               </div>
 
-              {/* Routing — collapsible, shown only when a RELEASE effect is present */}
-              {hasRelease&&(
-                <SectionPanel label="Release Routing" status={routingStatus} color={C.bEvent}>
+              {/* Routing — shown for RELEASE effects and for scheduled follow-on B-events (DELAY completion) */}
+              {(hasRelease||isTmpl)&&(
+                <SectionPanel label={hasRelease?"Release Routing":"Routing"} status={routingStatus} color={C.bEvent}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Mode:</span>
                     <select value={routingMode} onChange={e=>setRoutingMode(e.target.value)}
@@ -290,7 +290,10 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                     </div>
                     {(ev.probabilisticRouting||[]).some(r=>r.queueName==null)&&(
                       <div style={{fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.6,padding:"4px 2px"}}>
-                        Use <strong style={{color:C.text}}>RELEASE()</strong> in Effects to free the server — the exit branch counts patients as served automatically. Do not add COMPLETE() here; it has no effect after RELEASE().
+                        {hasRelease
+                          ? <>Use <strong style={{color:C.text}}>RELEASE()</strong> in Effects to free the server — the exit branch counts entities as served automatically. Do not add COMPLETE() here; it has no effect after RELEASE().</>
+                          : <>The exit branch automatically completes the entity — do not add <strong style={{color:C.text}}>COMPLETE()</strong> to the effect. COMPLETE() fires before routing and prevents the entity from being routed.</>
+                        }
                       </div>
                     )}
                   </>)}

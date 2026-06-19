@@ -1690,7 +1690,7 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
       "Give concrete, specific answers that reference the model's actual entities, queues, events, and attributes by name.",
       "When asked to review a specific editor tab (entity types, queues, B-events, C-events, sections, state variables), focus your analysis on that area.",
       "If the model has C-events, you can reason about conditional event logic and whether the conditions and effects are correctly wired.",
-      "A C-event with activityType:'delay' uses the DELAY macro — the entity waits for a sampled duration without occupying any server. No server type is needed. The duration comes from the cSchedule. The completion B-event handles routing.",
+      "A C-event with activityType:'delay' uses the DELAY macro — the entity waits for a sampled duration without occupying any server. No server type is needed. The duration comes from the cSchedule. The completion B-event handles routing. IMPORTANT: the completion B-event effect must be EMPTY when routing is used — do NOT add COMPLETE() alongside probabilistic or conditional routing because COMPLETE() fires before routing and prevents it from executing. The exit/null routing branch automatically completes the entity. Use COMPLETE() only when the entity always exits with no routing at all.",
       "If the model has performance goals, you can assess whether the model structure is sufficient to measure them.",
       "If a question requires running the simulation to answer definitively (e.g. 'what is the average wait?'), say so — you can only reason about the model definition, not predict results.",
       "Do not invent data not present in the model context above.",
