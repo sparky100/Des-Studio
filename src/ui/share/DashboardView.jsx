@@ -173,7 +173,7 @@ export default function DashboardView({ token, onBack }) {
         maxSimTime: run.maxSimulationTime,
         warmupPeriod: run.warmupPeriod || 0,
         replications: run.replications || 1,
-      }, meta, null);
+      }, meta, { aggregateStats: resultsJson?.aggregateStats || {} });
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
