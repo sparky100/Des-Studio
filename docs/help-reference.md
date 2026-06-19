@@ -3,7 +3,7 @@
 **Purpose:** System context for Help Assistant LLM responses  
 **Audience:** LLM consuming as prompt context (machine-readable)  
 **Maintenance:** Updated at end of each sprint alongside core documents  
-**Last updated:** 2026-06-11 (Sprint 85)
+**Last updated:** 2026-06-19
 
 ---
 
@@ -450,6 +450,24 @@ Create named version snapshots of your model from the **Versions** tab (visible 
 **Creating a version:** Click **+ Create version**, optionally name it and add notes. The version number is auto-assigned. Structural changes (entity types, queues, events) are detected and flagged automatically.
 
 **Version badge:** The latest version number appears on the model card in the library immediately after creation.
+
+### Access & Sharing
+
+Each model has an **Access** tab (visible to owners) with a **Sharing** section controlling who can open it.
+
+**Visibility:** A model is **🔒 Private** (default — only the owner, plus anyone explicitly granted access, can open it) or **🌐 Public** (read-only for everyone; any signed-in user can fork it into their own editable copy).
+
+**Per-user access grants:** Owners can grant individual users `viewer` or `editor` on a private model via the `access` map, without making the whole model public.
+
+**Copy link (`#model/<id>` deep link):** The Access tab has a **🔗 Copy link** button next to the Private/Public toggle. It copies a URL containing the model's ID as a hash fragment (`#model/<modelId>`). Opening that link:
+
+- If the recipient already has access (owner, granted viewer/editor, or the model is public) and is signed in, it opens the model directly — full editor if they can edit, read-only with a fork prompt if it's a public model they don't own.
+- If the recipient is signed out, the target model ID is held (via `sessionStorage`) through sign-in/sign-up and resolved immediately afterwards.
+- If the model does not exist, was deleted, or the recipient has no access, the link silently falls through to the recipient's normal Model Library — no error is shown.
+
+This is purely a client-side routing shortcut into the same `fetchModels()` query and Supabase RLS policies that already gate the Model Library — it does not create a new token, table, or anonymous-access mode. It is unrelated to the separate run-level share-link feature (Run History → **Share**), which creates a `share_links` row for anonymous, read-only viewing of one simulation run's results dashboard — that feature requires no login and works even for users with no model access at all.
+
+If a private model has no collaborators and isn't public yet, the Access tab shows a hint that the link won't open it for anyone else until the model is made public or a collaborator is added.
 
 ---
 

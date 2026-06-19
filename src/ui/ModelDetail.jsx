@@ -1629,7 +1629,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"private").then(onRefresh);}} small>🔒 Private</Btn>
                 <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"public").then(onRefresh);}} small>🌐 Public</Btn>
+                <Btn variant="ghost" small onClick={()=>{
+                  const url=`${window.location.origin}${window.location.pathname}#model/${modelId}`;
+                  navigator.clipboard?.writeText(url).then(()=>toast.success("Link copied")).catch(()=>toast.error("Could not copy link"));
+                }}>🔗 Copy link</Btn>
               </div>
+              {model.visibility==="private"&&!Object.values(model.access||{}).some(r=>r==="viewer"||r==="editor")&&(
+                <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>
+                  This model is private with no one else granted access — a link won't open it for anyone else yet. Make it public or add a collaborator below.
+                </div>
+              )}
             </section>
             <section aria-label="Export model" style={{display:"flex",flexDirection:"column",gap:10}}>
               <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS,borderBottom:`1px solid ${C.border}`,paddingBottom:4}}>Export</div>
