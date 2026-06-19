@@ -229,12 +229,66 @@ export function buildWaitByArrival(results = {}) {
   return { points, hasData: points.length >= 2 };
 }
 
+export function buildWipSeries(results = {}) {
+  const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
+  const points = timeSeries
+    .filter(entry => entry?.wip != null)
+    .map(entry => ({ t: finiteNumber(entry.t), value: finiteNumber(entry.wip) }));
+  return [{
+    id: "wip",
+    label: "Entities in system",
+    points,
+    hasData: points.length >= 2,
+    sourceLabel: "Count of entities in the model (excluding servers, completed, and reneged entities) at each sampled time point",
+  }];
+}
+
+export function buildThroughputSeries(results = {}) {
+  const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
+  const points = timeSeries
+    .filter(entry => entry?.completed != null)
+    .map(entry => ({ t: finiteNumber(entry.t), value: finiteNumber(entry.completed) }));
+  return [{
+    id: "throughput",
+    label: "Completions per interval",
+    points,
+    hasData: points.length >= 2,
+    sourceLabel: "Entities that completed (excluding reneges) since the previous sampled time point",
+  }];
+}
+
+export function buildSystemSojournDistribution(results = {}) {
+  const dist = results?.sojournDist;
+  if (!dist) return [];
+  const values = Array.isArray(dist.values)
+    ? [...dist.values].map(v => finiteNumber(v)).sort((a, b) => a - b)
+    : [];
+  const hasHistogram = Array.isArray(dist.histogram?.bins) && dist.histogram.bins.length >= 2;
+  if (!(values.length >= 2 || hasHistogram)) return [];
+  const n = finiteNumber(dist.n, values.length);
+  return [{
+    label: "Whole-journey sojourn time",
+    n,
+    mean: finiteNumber(dist.mean),
+    p50: finiteNumber(dist.p50),
+    p90: finiteNumber(dist.p90),
+    p95: finiteNumber(dist.p95),
+    p99: finiteNumber(dist.p99),
+    values,
+    histogram: dist.histogram || null,
+    sourceLabel: `${n} entity sojourn times (arrival to completion, across the whole system)`,
+  }];
+}
+
 export function buildChartSections(results = {}, model = {}, sectionFilter = null) {
   const queueDepthSeries = buildQueueDepthSeries(results, model, sectionFilter);
   const serverUtilizationSeries = buildServerUtilizationSeries(results, model, sectionFilter);
   const waitDistributions = buildWaitDistributions(results, model, sectionFilter);
   const waitTimeSeries = buildWaitTimeSeries(results, model, sectionFilter).filter(s => s.hasData);
   const waitByArrival = buildWaitByArrival(results);
+  const wipSeries = buildWipSeries(results).filter(s => s.hasData);
+  const throughputSeries = buildThroughputSeries(results).filter(s => s.hasData);
+  const systemSojournDistributions = buildSystemSojournDistribution(results);
 
   return [
     {
@@ -280,6 +334,33 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
       method: "Shows each completed entity's total wait (across every queue it passed through), bucketed by when it arrived. This is a whole-journey view, not scoped to a single queue.",
       emptyMessage: "Run with Detailed output enabled to see wait by arrival time.",
       series: waitByArrival.points,
+    },
+    {
+      id: "system-wip",
+      title: "Entities in system over time",
+      question: "How many entities are in the system at once?",
+      method: "Shows the number of entities present in the model (waiting, in service, or otherwise in progress) at each sampled time point. A system-wide measure, not scoped to a single queue or resource.",
+      emptyMessage: "Run with Detailed output enabled to see entities in system over time.",
+      series: wipSeries,
+      maxValue: Math.max(0, ...wipSeries.map(maxPointValue)),
+    },
+    {
+      id: "system-throughput",
+      title: "Throughput over time",
+      question: "How many entities complete per interval?",
+      method: "Shows the number of entities that completed (excluding reneges) since the previous sampled time point, on the same time axis as the other system trend charts.",
+      emptyMessage: "Run with Detailed output enabled to see throughput over time.",
+      series: throughputSeries,
+      maxValue: Math.max(0, ...throughputSeries.map(maxPointValue)),
+    },
+    {
+      id: "system-sojourn",
+      title: "System-wide sojourn-time distribution",
+      question: "How long do entities spend in the system overall?",
+      method: "Shows the range of total time-in-system (arrival to completion) across every completed entity, pooled across all queues and stages.",
+      emptyMessage: "Complete at least two entities to see the system-wide sojourn-time distribution.",
+      distributions: systemSojournDistributions,
+      maxValue: Math.max(0, ...systemSojournDistributions.map(d => finiteNumber(d.p99))),
     },
   ];
 }

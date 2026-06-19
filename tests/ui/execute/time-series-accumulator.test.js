@@ -125,6 +125,41 @@ describe("makeTimeSeriesAccumulator", () => {
     expect(t2_5.byQueue["Beer Queue"].waitN).toBe(2);
     expect(t2_5.byQueue["Beer Queue"].avgWait).toBeCloseTo(3); // (2*1 + 4*1) / 2
   });
+
+  it("averages wip (a level metric) across replications", () => {
+    const acc = makeTimeSeriesAccumulator();
+    acc.addSeries([{ t: 0, byQueue: {}, byType: {}, wip: 4, completed: 0 }]);
+    acc.addSeries([{ t: 0, byQueue: {}, byType: {}, wip: 6, completed: 0 }]);
+
+    const result = acc.getResult();
+    expect(result.find(pt => pt.t === 0).wip).toBeCloseTo(5);
+  });
+
+  // Regression: "completed" is a delta-since-last-sample counter, just like
+  // waitN above, so a coarse grid point that skips several raw samples must
+  // fold in every skipped sample's completed count, not just the one it lands
+  // on, or throughput recorded between grid points is silently lost.
+  it("sums completed from every raw sample skipped between two grid points", () => {
+    const acc = makeTimeSeriesAccumulator(5, 10); // grid: [0, 2.5, 5, 7.5, 10]
+    acc.addSeries([
+      { t: 0, byQueue: {}, byType: {}, wip: 0, completed: 0 },
+      { t: 1, byQueue: {}, byType: {}, wip: 1, completed: 1 },
+      { t: 2, byQueue: {}, byType: {}, wip: 1, completed: 1 },
+    ]);
+
+    const result = acc.getResult();
+    const t2_5 = result.find(pt => pt.t === 2.5);
+    expect(t2_5.completed).toBe(2);
+  });
+
+  it("averages completed across replications, not by replication count alone", () => {
+    const acc = makeTimeSeriesAccumulator();
+    acc.addSeries([{ t: 0, byQueue: {}, byType: {}, wip: 0, completed: 3 }]);
+    acc.addSeries([{ t: 0, byQueue: {}, byType: {}, wip: 0, completed: 1 }]);
+
+    const result = acc.getResult();
+    expect(result.find(pt => pt.t === 0).completed).toBeCloseTo(2);
+  });
 });
 
 // makeBatchResult falls back to averaging replication timeSeries directly
@@ -155,5 +190,29 @@ describe("makeBatchResult timeSeries averaging", () => {
 
     const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
     expect(batch.waitByArrival).toEqual([[0, 2], [4, 4], [8, 6]]);
+  });
+
+  it("averages wip and completed across replications (per-run average, not summed)", () => {
+    const replicationPayloads = [
+      { result: { summary: {}, timeSeries: [{ t: 0, byQueue: {}, byType: {}, wip: 4, completed: 2 }] } },
+      { result: { summary: {}, timeSeries: [{ t: 0, byQueue: {}, byType: {}, wip: 6, completed: 4 }] } },
+    ];
+
+    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
+    const t0 = batch.timeSeries.find(pt => pt.t === 0);
+    expect(t0.wip).toBeCloseTo(5);
+    expect(t0.completed).toBeCloseTo(3);
+  });
+
+  it("pools sojournDist raw values across replications, mirroring waitDist", () => {
+    const replicationPayloads = [
+      { result: { summary: {}, sojournDist: { values: [2, 4] } } },
+      { result: { summary: {}, sojournDist: { values: [6] } } },
+    ];
+
+    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
+    expect(batch.sojournDist.n).toBe(3);
+    expect(batch.sojournDist.values).toEqual([2, 4, 6]);
+    expect(batch.sojournDist.mean).toBe(4);
   });
 });

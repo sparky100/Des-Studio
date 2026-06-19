@@ -5,8 +5,11 @@ import {
   buildResultsViewModel,
   buildRuntimeMetricsModel,
   buildServerUtilizationSeries,
+  buildSystemSojournDistribution,
+  buildThroughputSeries,
   buildWaitDistributions,
   buildWaitTimeSeries,
+  buildWipSeries,
 } from "../../../src/ui/results/resultsViewModel.js";
 
 const model = {
@@ -111,6 +114,49 @@ describe("results view model", () => {
     expect(distributions[0].histogram).toEqual(histogram);
   });
 
+  test("buildWipSeries reads the wip field from timeSeries entries", () => {
+    const series = buildWipSeries({
+      timeSeries: [{ t: 0, wip: 3 }, { t: 5, wip: 7 }, { t: 10, wip: 4 }],
+    });
+
+    expect(series).toHaveLength(1);
+    expect(series[0].id).toBe("wip");
+    expect(series[0].points).toEqual([{ t: 0, value: 3 }, { t: 5, value: 7 }, { t: 10, value: 4 }]);
+    expect(series[0].hasData).toBe(true);
+  });
+
+  test("buildWipSeries reports no data when wip is absent (older saved runs)", () => {
+    const series = buildWipSeries({ timeSeries: [{ t: 0 }, { t: 5 }] });
+    expect(series[0].points).toEqual([]);
+    expect(series[0].hasData).toBe(false);
+  });
+
+  test("buildThroughputSeries reads the completed field from timeSeries entries", () => {
+    const series = buildThroughputSeries({
+      timeSeries: [{ t: 0, completed: 0 }, { t: 5, completed: 4 }, { t: 10, completed: 2 }],
+    });
+
+    expect(series).toHaveLength(1);
+    expect(series[0].id).toBe("throughput");
+    expect(series[0].points).toEqual([{ t: 0, value: 0 }, { t: 5, value: 4 }, { t: 10, value: 2 }]);
+    expect(series[0].hasData).toBe(true);
+  });
+
+  test("buildSystemSojournDistribution wraps results.sojournDist in the WaitHistogram shape", () => {
+    const distributions = buildSystemSojournDistribution({
+      sojournDist: { n: 3, mean: 5, p50: 5, p90: 8, p95: 8, p99: 8, values: [2, 5, 8] },
+    });
+
+    expect(distributions).toHaveLength(1);
+    expect(distributions[0].label).toBe("Whole-journey sojourn time");
+    expect(distributions[0].values).toEqual([2, 5, 8]);
+    expect(distributions[0].n).toBe(3);
+  });
+
+  test("buildSystemSojournDistribution returns empty array when sojournDist is absent", () => {
+    expect(buildSystemSojournDistribution({})).toEqual([]);
+  });
+
   test("buildResultsViewModel reports chart availability", () => {
     const vm = buildResultsViewModel({ timeSeries: [{ t: 0, byType: {} }], waitDist: {} }, model);
     expect(vm.hasTimeSeries).toBe(true);
@@ -160,6 +206,9 @@ describe("results view model", () => {
       "queue-depth",
       "wait-over-time",
       "wait-by-arrival-attr",
+      "system-wip",
+      "system-throughput",
+      "system-sojourn",
     ]);
     expect(sections[0].question).toBe("How much time is spent queueing?");
     expect(sections[0].title).toBe("Waiting time distribution");

@@ -22,6 +22,7 @@ function completeEntity(cust, ev, clock, state) {
   cust.lastQueue      = previousQueue;
   delete cust.queue;
   state.__served = (state.__served || 0) + 1;
+  state.__completedSinceSample = (state.__completedSinceSample || 0) + 1;
   return {
     endedAt: clock,
     ...(ev.id   ? { sourceEventId:   ev.id   } : {}),
