@@ -412,6 +412,46 @@ export const MACROS = [
     },
   },
 
+// ── DELAY(QueueName) — resource-free activity ──────────────────────────────
+// Removes entity from queue and marks it as serving without claiming any server.
+// The C-Event cSchedules mechanism provides the delay duration; the completion
+// B-Event handles routing via the standard conditional/probabilistic routing table.
+  {
+    name:    "DELAY",
+    pattern: /^DELAY\(([^,)]+)\)$/i,
+    apply(match, ctx) {
+      const queueToken = match[1].trim();
+      const { entities, helpers, clock, setLastCustId, msgs } = ctx;
+
+      const matchedQ  = helpers.findQueueConfig?.(queueToken);
+      const discipline = matchedQ?.discipline || 'FIFO';
+      const token     = matchedQ ? matchedQ.name : queueToken;
+
+      const filterFn = ctx.entityFilter
+        ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
+        : null;
+
+      const cust = selectWaiting(token, discipline, entities, filterFn, !!matchedQ);
+
+      if (cust) {
+        const queuedAt = cust.queue;
+        clearWaitingState(cust);
+        cust.status       = "serving";
+        cust.serviceStart = clock;
+        cust.lastQueue    = queuedAt ?? cust.lastQueue;
+        cust.ceventName   = ctx.ceventName;
+        cust._isDelay     = true;
+        delete cust.queue;
+        setLastCustId(cust.id);
+        msgs.push(
+          `#${cust.id} (${cust.type}) → delay [queue: ${token}, waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
+        );
+      } else {
+        msgs.push(`DELAY(${queueToken}): no entity waiting`);
+      }
+    },
+  },
+
   // ── COMPLETE() ─────────────────────────────────────────────────────────────
   {
     name:    "COMPLETE",

@@ -267,7 +267,9 @@ export function fireBEvent(ev, ctx) {
   if (hasConditionalRouting) {
     const custId = effectCtx._lastCustId;
     const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
-    if (cust && cust.status === "waiting") {
+    // Accept entities in "serving" state when this is a DELAY completion (no server context)
+    const isDelayCompletion = cust?.status === "serving" && ev._contextCustId != null && !ev._contextSrvId;
+    if (cust && (cust.status === "waiting" || isDelayCompletion)) {
       let routed;
       for (const branch of routingBranches) {
         if (branch.condition && evaluatePredicate(branch.condition, { currentEntity: cust })) {
@@ -290,7 +292,9 @@ export function fireBEvent(ev, ctx) {
   if (Array.isArray(ev.probabilisticRouting) && ev.probabilisticRouting.length > 0) {
     const custId = effectCtx._lastCustId;
     const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
-    if (cust && cust.status === "waiting") {
+    // Accept entities in "serving" state when this is a DELAY completion (no server context)
+    const isDelayCompletion = cust?.status === "serving" && ev._contextCustId != null && !ev._contextSrvId;
+    if (cust && (cust.status === "waiting" || isDelayCompletion)) {
       const roll = ctx.rng();
       let cumulative = 0;
       let chosen = ev.probabilisticRouting[ev.probabilisticRouting.length - 1].queueName;

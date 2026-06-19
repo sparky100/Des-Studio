@@ -149,7 +149,31 @@ Best use cases:
 - routing to fast-track vs detailed processing vs exit
 - overflow to alternate queue vs exit
 
-### 6. Finite capacity, overflow, and balking
+### 6. Resource-free timed activities (Delay activities)
+
+Use when:
+
+- an entity must wait for a fixed or sampled duration but no server or room is consumed during that time
+- examples: mandatory recovery period, cooling delay, paperwork processing, inspection hold, patient rest in an unmonitored bed
+
+Pattern:
+
+- Create a queue for entities awaiting the delay (e.g. `"Recovery Queue"`)
+- Create a C-Event with activity type **"Delay (no resource)"** and select the source queue — this stores the effect as `DELAY(RecoveryQueue)`
+- In the C-Event's Schedule section add a cSchedule: choose the completion B-Event, set the duration distribution, and **enable "Pass entity context"**
+- Create the completion B-Event with conditional or probabilistic routing (or `COMPLETE()` for terminal exit)
+- No server entity type is needed at all
+
+What the engine does:
+
+- `DELAY(QueueName)` removes the entity from the queue, marks it "serving" (without claiming any server), and sets the entity context
+- The completion B-Event fires after the sampled delay and routes the entity exactly as a standard RELEASE event would
+
+**Do not** add an ASSIGN or RELEASE effect alongside DELAY — the delay macro is the entire C-Event effect.
+
+Reference: `docs/addition1_entity_model.md` — MACRO 14 — DELAY
+
+### 7. Finite capacity, overflow, and balking (was section 6)
 
 Use when:
 
@@ -193,7 +217,7 @@ Reference:
 
 - sample import: [recirculation-exit-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/examples/sprint-26/recirculation-exit-demo.json)
 
-### 8. Batch and unbatch flows
+### 8. Batch and unbatch flows (was section 7)
 
 Use when:
 
