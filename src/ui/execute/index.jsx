@@ -1023,7 +1023,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSingleRunStatus("cancelling");
   }, [singleRunStatus]);
 
-  const toggleAuto = () => {
+  const toggleAuto = async () => {
     if (autoRunning) {
       stopAuto();
     } else {
@@ -1033,7 +1033,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         setReplicationResults([]);
         setAggregateStats({});
       }
-      if (mode === "idle") initEngine();
+      if (mode === "idle") await initEngine();
       setAutoRunning(true);
     }
   };
