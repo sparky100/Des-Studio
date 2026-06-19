@@ -393,6 +393,7 @@ export const MACROS = [
           sourceEventName: felRef?.name || null,
         });
         state.__served      = (state.__served || 0) + 1;
+        state.__completedSinceSample = (state.__completedSinceSample || 0) + 1;
         msgs.push(`#${cust.id} done [sojourn ${cust.sojournTime.toFixed(2)} t, ${cust.stages.length} stage(s)]`);
       }
       if (srv) {

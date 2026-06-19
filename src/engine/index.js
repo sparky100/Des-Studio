@@ -471,7 +471,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   };
 
   // ── Initialise scalar state ───────────────────────────────────────────────
-  const state = { __served: 0, __reneged: 0 };
+  const state = { __served: 0, __reneged: 0, __completedSinceSample: 0 };
   for (const sv of runtimeModel.stateVariables || []) {
     try   { state[sv.name] = JSON.parse(sv.initialValue); }
     catch { state[sv.name] = sv.initialValue; }
@@ -832,6 +832,7 @@ const cycleLog = [];
         log.push(_trace("WARMUP", { message: msg }));
         state.__served = 0;
         state.__reneged = 0;
+        state.__completedSinceSample = 0;
         for (const srv of entities.filter(e => e.role === 'server')) {
           srv._busyTime = 0;
           if (srv.status === 'busy') srv._busyStart = clock;
@@ -1038,12 +1039,15 @@ const cycleLog = [];
         }
         return out;
       };
+      const wipCountAtSample = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged").length;
+      const completedSinceSample = state.__completedSinceSample || 0;
       if (stepSnap) {
-        _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: withRecentWaits(stepSnap.byQueue) });
+        _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: withRecentWaits(stepSnap.byQueue), wip: wipCountAtSample, completed: completedSinceSample });
       } else {
         liteSnap = snapLite();
-        _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: withRecentWaits(liteSnap.byQueue) });
+        _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: withRecentWaits(liteSnap.byQueue), wip: wipCountAtSample, completed: completedSinceSample });
       }
+      state.__completedSinceSample = 0;
       _lastTimeSeriesSampleT = clock;
       // Track max queue depth from this snapshot (same source as charts)
       const byQueue = stepSnap?.byQueue ?? liteSnap?.byQueue;
@@ -1143,6 +1147,7 @@ const cycleLog = [];
         : { entitySummaryCompact: summarizeEntitySummary(entities) }),
       timeSeries:      _timeSeries ?? undefined,
       waitDist:        computeWaitDist(entities),
+      sojournDist:     computeSojournDist(entities),
       waitByArrival:   computeWaitByArrival(entities),
       perQueue:        Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
       trace,
@@ -1287,6 +1292,20 @@ const cycleLog = [];
       dist[q] = buildWaitDistEntry(sorted);
     }
     return dist;
+  }
+
+  // ── sojournDist: system-wide total-time-in-system distribution ───────────
+  // Pools sojournTime (clock − arrivalTime) across every completed entity,
+  // independent of which queues/stages it passed through.
+  function computeSojournDist(allEntities) {
+    const sojourns = [];
+    for (const e of allEntities) {
+      if (e.role === "server" || e.status !== "done") continue;
+      if (typeof e.sojournTime === "number") sojourns.push(e.sojournTime);
+    }
+    const sorted = sojourns.sort((a, b) => a - b);
+    if (sorted.length === 0) return null;
+    return buildWaitDistEntry(sorted);
   }
 
   // ── waitByArrival: total wait (across every queue/stage) vs. arrival time,

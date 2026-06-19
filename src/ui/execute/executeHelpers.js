@@ -83,6 +83,8 @@ export function makeTimeSeriesAccumulator(maxPoints = 500, knownMaxTime = null) 
     : null;
   let queueSums = grid ? {} : null;
   let typeSums = grid ? {} : null;
+  let wipSums = grid ? new Float64Array(grid.length) : null;
+  let completedSums = grid ? new Float64Array(grid.length) : null;
   let count = 0;
 
   // Queues/types that haven't received any entities yet are simply absent
@@ -118,6 +120,8 @@ export function makeTimeSeriesAccumulator(maxPoints = 500, knownMaxTime = null) 
         : times.slice();
       queueSums = {};
       typeSums = {};
+      wipSums = new Float64Array(grid.length);
+      completedSums = new Float64Array(grid.length);
     }
     let j = 0;
     let waitConsumedIdx = -1; // highest raw-sample index whose waitN/waitSum has already been folded in
@@ -137,6 +141,10 @@ export function makeTimeSeriesAccumulator(maxPoints = 500, knownMaxTime = null) 
           s.waitSum[gi] += q.avgWait * q.waitN;
           s.waitN[gi] += q.waitN;
         }
+        // completed is a delta-since-last-sample counter (like waitN above),
+        // not a level — fold in every skipped raw sample's count, or
+        // completions recorded between grid points are silently lost.
+        if (typeof ts[k].completed === "number") completedSums[gi] += ts[k].completed;
       }
       waitConsumedIdx = j;
       for (const [k, q] of Object.entries(pt.byQueue || {})) {
@@ -151,6 +159,7 @@ export function makeTimeSeriesAccumulator(maxPoints = 500, knownMaxTime = null) 
         s.idle[gi] += ty.idle ?? 0;
         s.total[gi] += ty.total ?? 0;
       }
+      if (typeof pt.wip === "number") wipSums[gi] += pt.wip;
     }
     count++;
   }
@@ -168,7 +177,7 @@ export function makeTimeSeriesAccumulator(maxPoints = 500, knownMaxTime = null) 
         };
       for (const [k, s] of Object.entries(typeSums))
         byType[k] = { waiting: s.waiting[gi] / count, busy: s.busy[gi] / count, idle: s.idle[gi] / count, total: s.total[gi] / count };
-      return { t, byQueue, byType };
+      return { t, byQueue, byType, wip: wipSums[gi] / count, completed: completedSums[gi] / count };
     });
   }
 
@@ -286,6 +295,17 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       }))
     : lastResult?.waitDist;
 
+  // Aggregate sojournDist across all replications by pooling raw values
+  const sojournDistAcc = [];
+  for (const payload of replicationPayloads) {
+    const sd = payload?.result?.sojournDist;
+    if (!sd || !Array.isArray(sd.values)) continue;
+    for (const v of sd.values) sojournDistAcc.push(v);
+  }
+  const sojournDist = sojournDistAcc.length
+    ? buildWaitDistEntry([...sojournDistAcc].sort((a, b) => a - b))
+    : lastResult?.sojournDist;
+
   // Aggregate waitByArrival across all replications by pooling raw
   // [arrivalTime, totalWait] points — global, not per-queue or per-attribute,
   // so just concatenate rather than re-deriving distributions.
@@ -343,6 +363,15 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
   return timeGrid.map((t, gi) => {
     const byQueue = {};
     const byType = {};
+    let sumWip = 0, sumCompleted = 0, wipCount = 0, completedCount = 0;
+    for (const snaps of repSnapshots) {
+      const pt = snaps[gi];
+      if (pt == null) continue;
+      if (typeof pt.wip === "number") { sumWip += pt.wip; wipCount++; }
+      if (typeof pt.completed === "number") { sumCompleted += pt.completed; completedCount++; }
+    }
+    const wip = wipCount > 0 ? sumWip / wipCount : undefined;
+    const completed = completedCount > 0 ? sumCompleted / completedCount : undefined;
 
     for (const qName of queueNames) {
       let sumWaiting = 0, sumTotal = 0, count = 0, waitSum = 0, waitN = 0;
@@ -370,7 +399,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
       if (count > 0) byType[tName] = { waiting: sumWaiting / count, busy: sumBusy / count, idle: sumIdle / count, total: sumTotal / count };
     }
 
-    return { t, byQueue, byType };
+    return { t, byQueue, byType, ...(wip !== undefined ? { wip } : {}), ...(completed !== undefined ? { completed } : {}) };
   });
 }
 
@@ -378,6 +407,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
     snap: { clock: finalTime },
     timeSeries: precomputedTimeSeries !== undefined ? precomputedTimeSeries : averageBatchTimeSeries(replicationPayloads),
     waitDist,
+    sojournDist,
     waitByArrival,
     perQueue,
     runtimeMetrics: {

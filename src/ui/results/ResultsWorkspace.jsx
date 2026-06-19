@@ -16,7 +16,7 @@ const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 140;
 
-const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, waitByArrival: true, serverUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true };
+const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, waitByArrival: true, serverUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true, systemTrends: true };
 
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
   const { C, FONT } = useTheme();
@@ -1592,9 +1592,15 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const waitSection = chartModel.chartSections.find(section => section.id === "wait-distribution");
   const waitTimeSection = chartModel.chartSections.find(section => section.id === "wait-over-time");
   const waitByArrivalSection = chartModel.chartSections.find(section => section.id === "wait-by-arrival-attr");
+  const wipSection = chartModel.chartSections.find(section => section.id === "system-wip");
+  const throughputSection = chartModel.chartSections.find(section => section.id === "system-throughput");
+  const systemSojournSection = chartModel.chartSections.find(section => section.id === "system-sojourn");
   const hasWaitDistributions = (waitSection?.distributions || []).length > 0;
   const hasWaitTimeSeries = (waitTimeSection?.series || []).length > 0;
   const hasWaitByArrival = (waitByArrivalSection?.series || []).length > 0;
+  const hasWip = (wipSection?.series || []).length > 0;
+  const hasThroughput = (throughputSection?.series || []).length > 0;
+  const hasSystemSojourn = (systemSojournSection?.distributions || []).length > 0;
   const queuePeaks = Array.isArray(chartModel.runtimeMetrics?.metrics?.maxQueueLengthByQueue)
     ? chartModel.runtimeMetrics.metrics.maxQueueLengthByQueue
     : [];
@@ -1876,27 +1882,78 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               </div>
             )}
 
-            {hasWaitByArrival && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                <SectionHeader id="waitByArrival" label="Did wait get worse for later arrivals?" isOpen={sectionsOpen.waitByArrival} onToggle={toggleSection} />
-                <div id="results-section-waitByArrival" style={{ display: sectionsOpen.waitByArrival ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
-                  <ChartSectionShell section={waitByArrivalSection}>
-                    <div aria-label="Wait by arrival time chart grid" style={CHART_GRID}>
-                      <ChartCard title="Total wait vs. arrival time" color={C.accent}>
-                        <MiniLineChart
-                          title=""
-                          ariaTitle="Wait by arrival time"
-                          points={waitByArrivalSection.series}
-                          color={C.accent}
-                          yLabel="total wait"
-                        />
-                      </ChartCard>
-                    </div>
-                  </ChartSectionShell>
-                </div>
-              </div>
-            )}
+          </div>
+        </div>
+      )}
 
+      {/* ── 2b. System-level trends — whole-system charts, not queue/resource-specific ── */}
+      {(hasWaitByArrival || hasWip || hasThroughput || hasSystemSojourn) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <SectionHeader id="systemTrends" label="System-Level Trends" isOpen={sectionsOpen.systemTrends} onToggle={toggleSection} />
+          <div id="results-section-systemTrends" style={{ display: sectionsOpen.systemTrends ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+            <ChartSectionShell section={{
+              question: "How is the system behaving as a whole?",
+              title: "System-level trends",
+              method: "Whole-system measures — not scoped to a single queue or resource.",
+            }}>
+              <div aria-label="System trends chart grid" style={CHART_GRID}>
+                {hasWip && wipSection.series.map((series, idx) => {
+                  const color = CHART_COLORS[idx % CHART_COLORS.length];
+                  return (
+                    <ChartCard
+                      key={series.id}
+                      title={series.label}
+                      color={color}
+                      sourceLabel={series.sourceLabel}
+                      statItems={lineSeriesStats(series, "entities", color)}
+                      dataPreview={<SeriesDataPreview series={series} />}
+                    >
+                      <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="entities" />
+                    </ChartCard>
+                  );
+                })}
+                {hasThroughput && throughputSection.series.map((series, idx) => {
+                  const color = CHART_COLORS[(idx + 1) % CHART_COLORS.length];
+                  return (
+                    <ChartCard
+                      key={series.id}
+                      title={series.label}
+                      color={color}
+                      sourceLabel={series.sourceLabel}
+                      statItems={lineSeriesStats(series, "completions", color)}
+                      dataPreview={<SeriesDataPreview series={series} />}
+                    >
+                      <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="completions" />
+                    </ChartCard>
+                  );
+                })}
+                {hasWaitByArrival && (
+                  <ChartCard title="Total wait vs. arrival time" color={C.purple}>
+                    <MiniLineChart
+                      title=""
+                      ariaTitle="Wait by arrival time"
+                      points={waitByArrivalSection.series}
+                      color={C.purple}
+                      yLabel="total wait"
+                    />
+                  </ChartCard>
+                )}
+                {hasSystemSojourn && systemSojournSection.distributions.map((dist, idx) => {
+                  const color = CHART_COLORS[(idx + 2) % CHART_COLORS.length];
+                  return (
+                    <ChartCard
+                      key={dist.label}
+                      title={dist.label}
+                      color={color}
+                      sourceLabel={dist.sourceLabel}
+                      dataPreview={<WaitValuesPreview dist={dist} />}
+                    >
+                      <WaitHistogram dist={dist} color={color} />
+                    </ChartCard>
+                  );
+                })}
+              </div>
+            </ChartSectionShell>
           </div>
         </div>
       )}

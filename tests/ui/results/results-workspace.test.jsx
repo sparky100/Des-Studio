@@ -264,6 +264,35 @@ describe("ResultsWorkspace", () => {
     expect(within(table).getByText("3")).toBeInTheDocument();
   });
 
+  test("renders a System-Level Trends section with WIP, throughput, wait-by-arrival, and sojourn cards", () => {
+    const systemTrendsResults = {
+      ...results,
+      timeSeries: [
+        { t: 0, byQueue: { "Queue A": { waiting: 1 } }, byType: { Customer: { waiting: 1 }, Clerk: { busy: 0 } }, wip: 1, completed: 0 },
+        { t: 5, byQueue: { "Queue A": { waiting: 3 } }, byType: { Customer: { waiting: 3 }, Clerk: { busy: 1 } }, wip: 3, completed: 1 },
+        { t: 10, byQueue: { "Queue A": { waiting: 2 } }, byType: { Customer: { waiting: 2 }, Clerk: { busy: 1 } }, wip: 2, completed: 2 },
+      ],
+      waitByArrival: [[0, 2], [10, 4], [20, 6], [30, 8]],
+      sojournDist: { n: 4, mean: 5, p50: 5, p90: 8, p95: 8, p99: 8, values: [2, 4, 6, 8] },
+    };
+
+    const { container } = render(<ResultsWorkspace results={systemTrendsResults} model={model} />);
+
+    expect(screen.getAllByText(/System-Level Trends/i).length).toBeGreaterThanOrEqual(1);
+
+    const systemTrendsRegion = container.querySelector("#results-section-systemTrends");
+    expect(systemTrendsRegion).toBeInTheDocument();
+    expect(within(systemTrendsRegion).getByText("Entities in system")).toBeInTheDocument();
+    expect(within(systemTrendsRegion).getByText("Completions per interval")).toBeInTheDocument();
+    expect(within(systemTrendsRegion).getByText("Total wait vs. arrival time")).toBeInTheDocument();
+    expect(within(systemTrendsRegion).getByText("Whole-journey sojourn time")).toBeInTheDocument();
+
+    // Wait-by-arrival has moved out of "Where Are the Bottlenecks?" entirely.
+    const bottlenecksRegion = container.querySelector("#results-section-bottlenecks");
+    expect(bottlenecksRegion).toBeInTheDocument();
+    expect(within(bottlenecksRegion).queryByText("Total wait vs. arrival time")).not.toBeInTheDocument();
+  });
+
   test("hides Balked/Blocked columns when no perQueue data is present", () => {
     const sectionModel = {
       ...model,

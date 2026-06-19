@@ -220,6 +220,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
       trimmedFields.push("waitDist.values→histogram");
     }
+    if (resultsJson.sojournDist) {
+      resultsJson.sojournDist = compactifyDistEntry(resultsJson.sojournDist);
+      trimmedFields.push("sojournDist.values→histogram");
+    }
     if (Array.isArray(resultsJson.waitByArrival) && resultsJson.waitByArrival.length > 0) {
       resultsJson.waitByArrival = compactifyArrivalSeries(resultsJson.waitByArrival);
       trimmedFields.push("waitByArrival.points→buckets");
@@ -258,6 +262,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
       trimmedFields.push("waitDist.values→histogram");
     }
+    if (resultsJson.sojournDist) {
+      resultsJson.sojournDist = compactifyDistEntry(resultsJson.sojournDist);
+      trimmedFields.push("sojournDist.values→histogram");
+    }
     if (Array.isArray(resultsJson.waitByArrival) && resultsJson.waitByArrival.length > 0) {
       resultsJson.waitByArrival = compactifyArrivalSeries(resultsJson.waitByArrival);
       trimmedFields.push("waitByArrival.points→buckets");
@@ -289,6 +297,9 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     if (detailLevel === "full") {
       if (resultsJson.waitDist && typeof resultsJson.waitDist === "object") {
         resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
+      }
+      if (resultsJson.sojournDist) {
+        resultsJson.sojournDist = compactifyDistEntry(resultsJson.sojournDist);
       }
       if (Array.isArray(resultsJson.waitByArrival) && resultsJson.waitByArrival.length > 0) {
         resultsJson.waitByArrival = compactifyArrivalSeries(resultsJson.waitByArrival);
