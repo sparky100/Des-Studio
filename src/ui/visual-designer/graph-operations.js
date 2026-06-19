@@ -308,11 +308,13 @@ function updateByRef(items, refId, updater) {
 
 function replaceQueueName(text = "", oldName, newName) {
   if (!oldName || !newName) return text;
+  const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return String(text || "")
-    .replace(new RegExp(`queue\\(${oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)`, "gi"), `queue(${newName})`)
-    .replace(new RegExp(`ARRIVE\\(([^,)]+),\\s*${oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)`, "gi"), `ARRIVE($1, ${newName})`)
-    .replace(new RegExp(`ASSIGN\\(${oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},`, "gi"), `ASSIGN(${newName},`)
-    .replace(new RegExp(`RELEASE\\(([^,)]+),\\s*${oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)`, "gi"), `RELEASE($1, ${newName})`);
+    .replace(new RegExp(`queue\\(${esc}\\)`, "gi"), `queue(${newName})`)
+    .replace(new RegExp(`ARRIVE\\(([^,)]+),\\s*${esc}\\)`, "gi"), `ARRIVE($1, ${newName})`)
+    .replace(new RegExp(`ASSIGN\\(${esc},`, "gi"), `ASSIGN(${newName},`)
+    .replace(new RegExp(`DELAY\\(${esc}\\)`, "gi"), `DELAY(${newName})`)
+    .replace(new RegExp(`RELEASE\\(([^,)]+),\\s*${esc}\\)`, "gi"), `RELEASE($1, ${newName})`);
 }
 
 function replaceServerName(text = "", oldName, newName) {
@@ -722,11 +724,23 @@ export function connectVisualNodes(model, graph, from, to) {
   }
 
   if (source.type === VISUAL_NODE_TYPES.QUEUE && target.type === VISUAL_NODE_TYPES.ACTIVITY) {
-    next.cEvents = updateByRef(next.cEvents, target.refId, event => ({
-      ...event,
-      condition: `queue(${source.label}).length > 0 AND idle(${server}).count > 0`,
-      effect: `ASSIGN(${source.label}, ${server})`,
-    }));
+    next.cEvents = updateByRef(next.cEvents, target.refId, event => {
+      const existingEffect = Array.isArray(event.effect) ? event.effect.join(";") : (event.effect || "");
+      const isDelay = /^DELAY\(/i.test(existingEffect.trim());
+      if (isDelay) {
+        // Preserve delay mode — just update the queue name in the DELAY effect and condition
+        return {
+          ...event,
+          condition: `queue(${source.label}).length > 0`,
+          effect: [`DELAY(${source.label})`],
+        };
+      }
+      return {
+        ...event,
+        condition: `queue(${source.label}).length > 0 AND idle(${server}).count > 0`,
+        effect: `ASSIGN(${source.label}, ${server})`,
+      };
+    });
   }
 
   // F11.5: Queue → Queue overflow connection
@@ -810,14 +824,14 @@ export function findNodeDependents(model, node) {
     if (queue && queue.name) {
       const esc = escRe(queue.name);
       const condPat = new RegExp(`queue\\(${esc}\\)`, "i");
-      const effPat = new RegExp(`ASSIGN\\(${esc}`, "i");
+      const effPat = new RegExp(`(?:ASSIGN|DELAY)\\(${esc}[,)]`, "i");
       const arrivePat = new RegExp(`ARRIVE\\([^,]+,\\s*${esc}\\)`, "i");
       const releasePat = new RegExp(`RELEASE\\([^,]+,\\s*${esc}\\)`, "i");
 
       const affectedCIds = new Set();
       cEvents.forEach(ce => {
         const cond = typeof ce.condition === "string" ? ce.condition : "";
-        const eff = typeof ce.effect === "string" ? ce.effect : "";
+        const eff = Array.isArray(ce.effect) ? ce.effect.join(";") : (typeof ce.effect === "string" ? ce.effect : "");
         if (condPat.test(cond) || effPat.test(eff)) {
           affectedCIds.add(ce.id);
           deps.push({ name: ce.name || ce.id, elementType: "C-Event", description: "will be deleted" });
@@ -908,10 +922,10 @@ export function deleteVisualEdge(model, graph, edgeId) {
     );
   }
 
-  // Queue → Activity ("condition"): clear queue-specific condition and ASSIGN effect
+  // Queue → Activity ("condition"): clear queue-specific condition and ASSIGN/DELAY effect
   if (edge.source === "condition" && fromNode.type === VISUAL_NODE_TYPES.QUEUE && toNode.type === VISUAL_NODE_TYPES.ACTIVITY) {
     next.cEvents = cEvents.map(ce =>
-      ce.id !== toNode.refId ? ce : { ...ce, condition: "", effect: "" }
+      ce.id !== toNode.refId ? ce : { ...ce, condition: "", effect: [] }
     );
   }
 
@@ -994,7 +1008,7 @@ export function deleteVisualNode(model, node) {
         cEvents
           .filter(ce => {
             const cond = typeof ce.condition === "string" ? ce.condition : "";
-            const eff = typeof ce.effect === "string" ? ce.effect : "";
+            const eff = Array.isArray(ce.effect) ? ce.effect.join(";") : (typeof ce.effect === "string" ? ce.effect : "");
             return condPat.test(cond) || effPat.test(eff);
           })
           .map(ce => ce.id)

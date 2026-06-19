@@ -989,6 +989,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               onNodeSelect={selectNode}
               onNodeSelectionChange={syncSelection}
               onEdgeSelect={selectEdge}
+              onDeleteEdge={canEdit ? deleteEdge : null}
               onNodeMove={moveNode}
               onNodesMove={moveNodes}
               onViewportChange={changeViewport}

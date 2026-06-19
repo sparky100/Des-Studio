@@ -102,7 +102,8 @@ function DesNode({ data, selected }) {
         <Handle
           type="target"
           position={Position.Left}
-          style={{ width: 14, height: 14, background: color, borderColor: C.bg }}
+          title="Drop here to connect"
+          style={{ width: 16, height: 16, background: color, borderColor: C.bg }}
         />
       )}
       <div style={{
@@ -143,7 +144,8 @@ function DesNode({ data, selected }) {
         <Handle
           type="source"
           position={Position.Right}
-          style={{ width: 14, height: 14, background: color, borderColor: C.bg }}
+          title="Drag from here to connect to another node"
+          style={{ width: 16, height: 16, background: color, borderColor: C.bg }}
         />
       )}
     </div>
@@ -160,8 +162,9 @@ function DesEdge({
   sourcePosition, targetPosition,
   label, labelStyle, labelBgStyle, labelBgPadding,
   style, markerEnd, selected, interactionWidth,
+  data,
 }) {
-  const { C } = useTheme();
+  const { C, FONT } = useTheme();
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
@@ -172,6 +175,9 @@ function DesEdge({
   const edgeStyle = selected
     ? { ...style, stroke: C.accent, strokeWidth: (style?.strokeWidth || 1.5) + 1 }
     : style;
+  // Delete button appears at midpoint when edge is selected
+  const btnX = labelX;
+  const btnY = labelY + yOffset + (label ? 18 : 0);
   return (
     <>
       <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={edgeStyle} interactionWidth={interactionWidth} />
@@ -200,6 +206,35 @@ function DesEdge({
           >
             {label}
           </span>
+        </EdgeLabelRenderer>
+      )}
+      {selected && data?.onDelete && (
+        <EdgeLabelRenderer>
+          <button
+            className="nodrag nopan"
+            title="Delete connection (or press Delete / Backspace)"
+            onClick={e => { e.stopPropagation(); data.onDelete(id); }}
+            style={{
+              position: "absolute",
+              transform: `translate(-50%,-50%) translate(${btnX}px,${btnY}px)`,
+              background: C.red,
+              border: "none",
+              borderRadius: "50%",
+              width: 18,
+              height: 18,
+              cursor: "pointer",
+              color: "#fff",
+              fontFamily: FONT,
+              fontSize: 11,
+              fontWeight: 700,
+              lineHeight: "18px",
+              textAlign: "center",
+              padding: 0,
+              boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+            }}
+          >
+            ×
+          </button>
         </EdgeLabelRenderer>
       )}
     </>
@@ -335,7 +370,7 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
             padding: "5px 12px",
             whiteSpace: "nowrap",
           }}>
-            Drag = select &nbsp;·&nbsp; Space/middle-drag = pan &nbsp;·&nbsp; Scroll = pan &nbsp;·&nbsp; Ctrl+Scroll = zoom &nbsp;·&nbsp; Del = delete &nbsp;·&nbsp; Esc = deselect &nbsp;·&nbsp; Arrows = nudge (Shift = grid)
+            Connect: drag from the <strong>●</strong> handle on a node's right edge to another node's left handle &nbsp;·&nbsp; Click a connection to select it, then press Del or click the <strong style={{color:"#e55"}}>×</strong> button to delete &nbsp;·&nbsp; Drag canvas = pan &nbsp;·&nbsp; Scroll = pan &nbsp;·&nbsp; Ctrl+Scroll = zoom
           </div>
         </Panel>
       )}
@@ -374,6 +409,7 @@ export function FlowDiagramReactFlow({
   onNodeSelect,
   onNodeSelectionChange,
   onEdgeSelect,
+  onDeleteEdge,
   onNodeMove,
   onNodesMove,
   onViewportChange,
@@ -446,7 +482,8 @@ export function FlowDiagramReactFlow({
       const flowEdge = {
         ...toFlowEdge(e, C, FONT),
         selected: selectedEdgeId === e.id,
-        interactionWidth: 16,
+        interactionWidth: 20,
+        data: { onDelete: canEdit ? onDeleteEdge : null },
       };
       if (showSections && focusedSectionId != null) {
         const fromNode = nodeById.get(e.from);
@@ -463,7 +500,7 @@ export function FlowDiagramReactFlow({
       }
       return flowEdge;
     });
-  }, [graph.edges, C, FONT, showSections, focusedSectionId, nodeById, selectedEdgeId]);
+  }, [graph.edges, C, FONT, showSections, focusedSectionId, nodeById, selectedEdgeId, canEdit, onDeleteEdge]);
 
   const isValidConnection = useCallback(connection => {
     const validation = validateVisualConnection(graph, connection.source, connection.target);
