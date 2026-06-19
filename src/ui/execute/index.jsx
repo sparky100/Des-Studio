@@ -55,6 +55,30 @@ function collectEnvSecrets(dataSources) {
   return secrets;
 }
 
+/**
+ * Resolves dataSources/schedule feeds into `baseModel` when liveDataMode is
+ * set, so every engine-building path (Step, Auto Run, Reset, Run All, Batch)
+ * sees the same live data instead of only the multi-replication path.
+ */
+async function resolveLiveDataModel(model, baseModel, setSaveStatus) {
+  const liveDataMode = model.experimentDefaults?.liveDataMode;
+  if (!liveDataMode) return baseModel;
+  setSaveStatus({ state: 'saving', message: '⏳ Fetching live data…' });
+  let runModel = baseModel;
+  try {
+    const envSecrets = collectEnvSecrets(model.dataSources);
+    const registry = new AdapterRegistry(model.dataSources || [], envSecrets);
+    await registry.prefetchAll();
+    runModel = await registry.prefetchScheduleFeeds(runModel);
+    runModel = registry.resolveAllParamSources(runModel);
+    registry.dispose();
+  } catch (err) {
+    console.warn('[LiveData] Prefetch failed — running with static model:', err);
+  }
+  setSaveStatus(null);
+  return runModel;
+}
+
 const numberDefault = (value, fallback) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -434,7 +458,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     : "No blocking issues found for this scenario.";
   const readinessIssues = runAdmission.hardErrors;
 
-  const initEngine = useCallback(() => {
+  const initEngine = useCallback(async () => {
     if (hasValidationErrors) return;
     // Cancel any in-flight batch or sweep workers before rebuilding
     if (runnerRef.current) { runnerRef.current.cancel(); runnerRef.current = null; }
@@ -446,8 +470,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setResolvedSeed(seed);
     setLoadedRunSnapshot(null);
     runStartPerfRef.current = nowPerf();
+    const runModel = await resolveLiveDataModel(model, effectiveModel, setSaveStatus);
     engineRef.current = buildEngine(
-      effectiveModel,
+      runModel,
       seed,
       warmupPeriod,
       terminationMode === 'time' ? maxSimTime : null,
@@ -486,7 +511,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSweepResults(null);
     setSweepStatus("idle");
     setSweepProgress(null);
-  }, [model, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, onRunComplete]);
+  }, [model, effectiveModel, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, onRunComplete]);
 
   const stopAuto = useCallback(() => {
     if (autoRef.current) {
@@ -711,22 +736,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     // Resolve all dataSources before handing the model to the engine or workers.
     // The resulting runModel has live values baked into distParams and sched.rows
     // so the engine and web workers stay stateless (no registry needed in workers).
-    let runModel = effectiveModel;
-    const liveDataMode = model.experimentDefaults?.liveDataMode;
-    if (liveDataMode) {
-      setSaveStatus({ state: 'saving', message: '⏳ Fetching live data…' });
-      try {
-        const envSecrets = collectEnvSecrets(model.dataSources);
-        const registry = new AdapterRegistry(model.dataSources || [], envSecrets);
-        await registry.prefetchAll();
-        runModel = await registry.prefetchScheduleFeeds(runModel);
-        runModel = registry.resolveAllParamSources(runModel);
-        registry.dispose();
-      } catch (err) {
-        console.warn('[LiveData] Prefetch failed — running with static model:', err);
-      }
-      setSaveStatus(null);
-    }
+    const runModel = await resolveLiveDataModel(model, effectiveModel, setSaveStatus);
     // ─────────────────────────────────────────────────────────────────────
 
     if (replications > 1) {
