@@ -1144,6 +1144,7 @@ const cycleLog = [];
       timeSeries:      _timeSeries ?? undefined,
       waitDist:        computeWaitDist(entities),
       waitDistByAttr:  computeWaitDistByAttr(entities),
+      waitByArrival:   computeWaitByArrival(entities),
       waitByArrivalAttr: computeWaitByArrivalAttr(entities),
       perQueue:        Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
       trace,
@@ -1334,6 +1335,18 @@ const cycleLog = [];
       if (Object.keys(queueEntries).length > 0) result[attrName] = queueEntries;
     }
     return result;
+  }
+
+  // ── waitByArrival: total wait (across every queue/stage) vs. arrival time,
+  // pooled across all completed entities — no attribute breakdown. The
+  // overall counterpart to computeWaitByArrivalAttr below.
+  function computeWaitByArrival(allEntities) {
+    const points = [];
+    for (const e of allEntities) {
+      if (e.role === "server" || e.status !== "done" || !e.stages || e.stages.length === 0) continue;
+      points.push([e.arrivalTime, entityWaitAfterWarmup(e)]);
+    }
+    return points;
   }
 
   // ── waitByArrivalAttr: total wait (across every queue/stage) vs. arrival
@@ -1722,6 +1735,7 @@ const cycleLog = [];
     getTimeSeries:        () => _timeSeries ?? undefined,
     getWaitDist:          () => computeWaitDist(entities),
     getWaitDistByAttr:    () => computeWaitDistByAttr(entities),
+    getWaitByArrival:     () => computeWaitByArrival(entities),
     getWaitByArrivalAttr: () => computeWaitByArrivalAttr(entities),
     getEntitySummary:     () => entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
     updateScheduledTime,

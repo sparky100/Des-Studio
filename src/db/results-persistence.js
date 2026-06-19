@@ -245,6 +245,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
       trimmedFields.push("waitDistByAttr.values→histogram");
     }
+    if (Array.isArray(resultsJson.waitByArrival) && resultsJson.waitByArrival.length > 0) {
+      resultsJson.waitByArrival = compactifyArrivalSeries(resultsJson.waitByArrival);
+      trimmedFields.push("waitByArrival.points→buckets");
+    }
     if (resultsJson.waitByArrivalAttr && typeof resultsJson.waitByArrivalAttr === "object") {
       resultsJson.waitByArrivalAttr = compactifyWaitByArrivalAttr(resultsJson.waitByArrivalAttr);
       trimmedFields.push("waitByArrivalAttr.points→buckets");
@@ -287,6 +291,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
       trimmedFields.push("waitDistByAttr.values→histogram");
     }
+    if (Array.isArray(resultsJson.waitByArrival) && resultsJson.waitByArrival.length > 0) {
+      resultsJson.waitByArrival = compactifyArrivalSeries(resultsJson.waitByArrival);
+      trimmedFields.push("waitByArrival.points→buckets");
+    }
     if (resultsJson.waitByArrivalAttr && typeof resultsJson.waitByArrivalAttr === "object") {
       resultsJson.waitByArrivalAttr = compactifyWaitByArrivalAttr(resultsJson.waitByArrivalAttr);
       trimmedFields.push("waitByArrivalAttr.points→buckets");
@@ -315,6 +323,9 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     }
     if (resultsJson.waitDistByAttr && typeof resultsJson.waitDistByAttr === "object") {
       resultsJson.waitDistByAttr = compactifyWaitDistByAttr(resultsJson.waitDistByAttr);
+    }
+    if (Array.isArray(resultsJson.waitByArrival) && resultsJson.waitByArrival.length > 0) {
+      resultsJson.waitByArrival = compactifyArrivalSeries(resultsJson.waitByArrival);
     }
     if (resultsJson.waitByArrivalAttr && typeof resultsJson.waitByArrivalAttr === "object") {
       resultsJson.waitByArrivalAttr = compactifyWaitByArrivalAttr(resultsJson.waitByArrivalAttr);

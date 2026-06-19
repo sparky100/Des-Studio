@@ -248,6 +248,16 @@ function binArrivalPoints(points) {
   return out;
 }
 
+export function buildWaitByArrival(results = {}) {
+  const data = results?.waitByArrival;
+  const points = Array.isArray(data)
+    ? (data.length > 0 ? binArrivalPoints(data) : [])
+    : Array.isArray(data?.buckets)
+      ? data.buckets.map(b => ({ t: finiteNumber(b.t), value: finiteNumber(b.mean), n: finiteNumber(b.n) }))
+      : [];
+  return { points, hasData: points.length >= 2 };
+}
+
 export function buildWaitByArrivalAttr(results = {}) {
   const waitByArrivalAttr = results?.waitByArrivalAttr && typeof results.waitByArrivalAttr === "object"
     ? results.waitByArrivalAttr
@@ -277,6 +287,7 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
   const waitDistributions = buildWaitDistributions(results, model, sectionFilter);
   const waitDistributionsByAttr = buildWaitDistributionsByAttr(results, model, sectionFilter);
   const waitTimeSeries = buildWaitTimeSeries(results, model, sectionFilter).filter(s => s.hasData);
+  const waitByArrival = buildWaitByArrival(results);
   const waitByArrivalAttrGroups = buildWaitByArrivalAttr(results);
 
   return [
@@ -319,10 +330,11 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
     },
     {
       id: "wait-by-arrival-attr",
-      title: "Wait time by arrival time, by attribute",
-      question: "Did wait get worse for entities that arrived later — and does that differ by attribute?",
-      method: "Shows each completed entity's total wait (across every queue it passed through), bucketed by when it arrived, split by a chosen entity attribute. This is a whole-journey view, not scoped to a single queue.",
-      emptyMessage: "Run with Detailed output enabled, on a model with entity attributes, to see wait by arrival time.",
+      title: "Wait time by arrival time",
+      question: "Did wait get worse for entities that arrived later?",
+      method: "Shows each completed entity's total wait (across every queue it passed through), bucketed by when it arrived. This is a whole-journey view, not scoped to a single queue. On models with entity attributes, the breakdown below also splits this by a chosen attribute.",
+      emptyMessage: "Run with Detailed output enabled to see wait by arrival time.",
+      series: waitByArrival.points,
       groups: waitByArrivalAttrGroups,
     },
   ];
