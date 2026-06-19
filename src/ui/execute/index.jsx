@@ -279,6 +279,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
   const autoRef = useRef(null);
+  const startAutoAfterInitRef = useRef(false);
   const liveHistThrottleRef = useRef(0);
   const runnerRef = useRef(null);
   const singleRunCancelRef = useRef(false);
@@ -487,7 +488,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     logRef.current = initLog;
     setLog(initLog);
     setMode("idle");
-    setAutoRunning(false);
+    setAutoRunning(startAutoAfterInitRef.current ? true : false);
+    startAutoAfterInitRef.current = false;
     setSaveStatus(null);
     setPhaseCTruncated(false);
     setResults(null);
@@ -1023,7 +1025,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSingleRunStatus("cancelling");
   }, [singleRunStatus]);
 
-  const toggleAuto = async () => {
+  const toggleAuto = () => {
     if (autoRunning) {
       stopAuto();
     } else {
@@ -1033,8 +1035,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         setReplicationResults([]);
         setAggregateStats({});
       }
-      if (mode === "idle") await initEngine();
-      setAutoRunning(true);
+      if (mode === "idle") {
+        startAutoAfterInitRef.current = true;
+        initEngine();
+      } else {
+        setAutoRunning(true);
+      }
     }
   };
 
