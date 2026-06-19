@@ -463,6 +463,50 @@ When a B-Event with `loopConfig` fires and routes an entity, the engine incremen
 
 ---
 
+### MACRO 14 — DELAY
+
+| Field | Detail |
+|---|---|
+| **Category** | C-Event action (conditional) |
+| **Purpose** | Starts a resource-free timed activity. Removes an entity from a queue, marks it as "serving" without claiming any server, and sets the entity context for the follow-on completion B-Event. The duration is specified in the C-Event's `cSchedules` entry (not on the macro itself). Routing (exit or next queue) is configured on the completion B-Event exactly as it is for a standard RELEASE event. |
+| **Called by** | Activity node configured as "Delay (no resource)" — C-Event phase. |
+| **Inputs** | `queueName: string` — the queue to draw the entity from. |
+| **Syntax** | `DELAY(QueueName)` |
+| **Preconditions** | At least one entity must be waiting in `queueName`. The queue's configured discipline (FIFO/LIFO/PRIORITY etc.) governs entity selection. |
+| **State changes** | 1. Entity selected from the queue per the queue discipline. 2. Entity removed from the queue. 3. `entity.status` set to `"serving"`. 4. `entity.serviceStart` set to `T_now`. 5. `entity.lastQueue` updated. 6. `entity._isDelay = true` (flags this entity as delay-mode for routing guards). 7. `lastCustId` set to `entity.id`. `lastSrvId` is **not** set (no server is claimed). |
+| **Routing** | The completion B-Event scheduled via `cSchedules` carries the entity context (`_contextCustId` set, `_contextSrvId` absent). The B-Event engine recognises the `_isDelay` flag and accepts the entity in `"serving"` status for conditional or probabilistic routing. Use `queueName: null` (UI: "Exit system (leave)") to discharge the entity; use a queue name to route it to the next stage. The standard `defaultQueueName` fallback applies. |
+| **When to use** | Any activity that consumes time but requires no server or resource — a mandatory waiting period, cooling delay, inspection hold, patient recovery in an unmonitored bed, paperwork processing, or any scenario where the entity is "busy" for a duration but not occupying a resource. |
+| **When NOT to use** | If a server or room must be reserved during the activity, use `ASSIGN(QueueName, ServerType)` instead. DELAY leaves the resource pool completely unaffected. |
+| **Error conditions** | If no entity is waiting in `queueName`, the macro is a no-op with a warning logged. |
+
+**Example — mandatory recovery delay before discharge:**
+
+C-Event (fires when `queue(RecoveryQueue).length >= 1`):
+```
+DELAY(Recovery Queue)
+```
+cSchedule: B-Event `"Recovery Complete"`, distribution `Fixed(30)`, `useEntityCtx: true`.
+
+B-Event `"Recovery Complete"` — probabilistic routing:
+```json
+{
+  "probabilisticRouting": [
+    { "probability": 0.8, "queueName": null },
+    { "probability": 0.2, "queueName": "ICU Queue" }
+  ]
+}
+```
+
+**LLM guidance — how to set up a resource-free activity:**
+
+1. Create a Queue for the waiting entities (e.g. `"Recovery Queue"`).
+2. Create a C-Event with condition `queue(Recovery Queue).length >= 1`. Set activity type to **"Delay (no resource)"** and select `Recovery Queue` as the source queue. This stores the effect as `DELAY(Recovery Queue)`.
+3. In the C-Event's Schedule section, add a cSchedule: select the completion B-Event, choose a duration distribution, and **check "Pass entity context"** (`useEntityCtx: true`).
+4. Create the completion B-Event (e.g. `"Recovery Complete"`). Add no effect (or use `COMPLETE()` for a terminal exit). Configure routing (conditional, probabilistic, or a fixed queue) to determine where the entity goes after the delay.
+5. No server type is needed. Do **not** add an `ASSIGN` or `RELEASE` effect.
+
+---
+
 ## 5a. Container Types
 
 Containers are continuous-level state objects (tanks, buffers, inventories) that accumulate and deplete over time. They are declared in `model.containerTypes` and manipulated via the FILL and DRAIN macros.
@@ -688,7 +732,7 @@ The following must be added to `CLAUDE.md` before Sprint 1 begins. Copy this sec
 - allowedValues is only valid for string valueType
 
 ### Action Vocabulary — Open Set (as of Sprint 33+)
-- The 13 currently implemented macros are: ARRIVE, SEIZE/ASSIGN, COMPLETE, RENEGE, BATCH, UNBATCH, RENEGE_OLDEST, FILL, DRAIN, SET, SET_ATTR, COST, PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, MATCH
+- The currently implemented macros are: ARRIVE, SEIZE/ASSIGN, COMPLETE, DELAY, RENEGE, BATCH, UNBATCH, RENEGE_OLDEST, FILL, DRAIN, SET, SET_ATTR, COST, PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, MATCH
 - SEIZE and ASSIGN are engine synonyms for the resource-claiming action (C-Event phase)
 - BATCH is a C-Event only macro; UNBATCH is a B-Event only macro
 - FILL and DRAIN operate on container levels; containers must be declared in containerTypes
@@ -810,6 +854,7 @@ The complete macro set implemented in the engine. This is the authoritative list
 | SET | B or C-Event | post-33 | Assigns a computed arithmetic expression to a user-defined state variable |
 | SET_ATTR | B or C-Event | post-33 | Mutates a named attribute on the context entity using an arithmetic expression |
 | COST | B or C-Event | post-33 | Accumulates a cost amount to `state.__totalCost` and per-entity `__cost` attribute |
+| DELAY | C-Event | post-33 | Resource-free timed activity — removes entity from queue, marks "serving" without claiming any server; completion B-Event handles routing |
 
 ## 12. Extended Queue Disciplines (Post-Sprint 3)
 

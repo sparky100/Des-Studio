@@ -202,26 +202,83 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                 />
               </div>
 
-              {/* Effects */}
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>EFFECTS</span>
-                {(()=>{
-                  const effectArr=Array.isArray(ev.effect)?ev.effect.filter(Boolean):(ev.effect?ev.effect.split(';').map(s=>s.trim()).filter(Boolean):[]);
-                  const assignMatch=effectArr.map(eff=>typeof eff==='string'?eff.match(/^ASSIGN\s*\([^,)]+,\s*(\S+?)\s*\)/i):null).find(Boolean);
-                  const contextServer=assignMatch?normTypeName(assignMatch[1]):null;
-                  return (
-                <EffectPicker
-                  effects={effectArr}
-                  options={assignOptions(entityTypes, stateVariables, queues, ev.name, containerTypes, contextServer)}
-                  expressionContext={{
-                    stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
-                    attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean))
-                  }}
-                  onChange={arr=>upd(i,'effect',arr)}
-                />
-                  );
-                })()}
-              </div>
+              {/* Activity type toggle + Effects */}
+              {(()=>{
+                const effectArr=Array.isArray(ev.effect)?ev.effect.filter(Boolean):(ev.effect?ev.effect.split(';').map(s=>s.trim()).filter(Boolean):[]);
+                const delayMatch=effectArr.map(e=>typeof e==='string'?e.match(/^DELAY\(([^)]+)\)/i):null).find(Boolean);
+                const isDelay=!!delayMatch;
+                const delayQueue=delayMatch?.[1]?.trim()||"";
+
+                const setDelayMode=(on)=>{
+                  if(on) upd(i,'effect',delayQueue?[`DELAY(${delayQueue})`]:[]);
+                  else upd(i,'effect',[]);
+                };
+                const setDelayQueue=(qName)=>upd(i,'effect',qName?[`DELAY(${qName})`]:[]);
+
+                return (<>
+                  {/* Activity type selector */}
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>ACTIVITY TYPE</span>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>setDelayMode(false)}
+                        style={{padding:"4px 12px",borderRadius:4,border:`1px solid ${!isDelay?C.cEvent:C.border}`,
+                          background:!isDelay?`${C.cEvent}22`:"transparent",
+                          color:!isDelay?C.cEvent:C.muted,fontFamily:FONT,fontSize:11,cursor:"pointer"}}>
+                        Service (claim resource)
+                      </button>
+                      <button onClick={()=>setDelayMode(true)}
+                        style={{padding:"4px 12px",borderRadius:4,border:`1px solid ${isDelay?C.amber:C.border}`,
+                          background:isDelay?`${C.amber}22`:"transparent",
+                          color:isDelay?C.amber:C.muted,fontFamily:FONT,fontSize:11,cursor:"pointer"}}>
+                        Delay (no resource)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Effects */}
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>EFFECTS</span>
+                    {isDelay?(
+                      <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,borderRadius:5,padding:"10px 12px",border:`1px solid ${C.amber}33`}}>
+                        <div style={{fontSize:11,color:C.amber,fontFamily:FONT,fontWeight:600}}>Delay activity — entity held for sampled duration with no server claimed</div>
+                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                          <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>Source queue:</span>
+                          <select value={delayQueue}
+                            onChange={e=>setDelayQueue(e.target.value)}
+                            style={{flex:1,background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
+                              color:delayQueue?C.amber:C.muted,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}>
+                            <option value="">— select queue to draw from —</option>
+                            {(queues||[]).map(q=>(
+                              <option key={q.id||q.name} value={q.name}>{q.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {delayQueue&&(
+                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,background:C.panel,borderRadius:4,padding:"5px 8px"}}>
+                            Effect: <code style={{color:C.amber}}>DELAY({delayQueue})</code> — entity leaves queue, enters delay, completion B-event handles routing
+                          </div>
+                        )}
+                      </div>
+                    ):(
+                      (()=>{
+                        const assignMatch=effectArr.map(eff=>typeof eff==='string'?eff.match(/^ASSIGN\s*\([^,)]+,\s*(\S+?)\s*\)/i):null).find(Boolean);
+                        const contextServer=assignMatch?normTypeName(assignMatch[1]):null;
+                        return (
+                          <EffectPicker
+                            effects={effectArr}
+                            options={assignOptions(entityTypes, stateVariables, queues, ev.name, containerTypes, contextServer)}
+                            expressionContext={{
+                              stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
+                              attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean))
+                            }}
+                            onChange={arr=>upd(i,'effect',arr)}
+                          />
+                        );
+                      })()
+                    )}
+                  </div>
+                </>);
+              })()}
 
               {/* Structured B-event schedules */}
               <div style={{background:C.surface,borderRadius:6,padding:12,

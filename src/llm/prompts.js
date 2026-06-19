@@ -240,10 +240,16 @@ function extractCEvents(model = {}) {
     const effectTypes = [...new Set(
       effects.map(e => String(e).match(/^\w+/)?.[0]?.toUpperCase()).filter(Boolean)
     )];
+    const delayMatch = effects.map(e => typeof e === "string" ? e.match(/^DELAY\(([^)]+)\)/i) : null).find(Boolean);
     const entry = {
       name: ev.name || ev.id || "Event",
       effectTypes: effectTypes.length ? effectTypes : ["(none)"],
     };
+    if (delayMatch) {
+      // Delay activities: no resource claimed — flag explicitly so the LLM understands
+      entry.activityType = "delay";
+      entry.delayQueue = delayMatch[1].trim();
+    }
     if (ev.priority != null) entry.priority = ev.priority;
     // Include service distribution so the LLM can suggest specific numeric param changes.
     // Only populated for single-schedule events where the target is unambiguous.
@@ -825,6 +831,8 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "When the model has a failure/repair model on a resource, factor availability into capacity calculations.",
     "When a loop guard is present, consider whether the loop count limit is causing premature exits.",
     "When state variables are present, they may represent conditions that affect routing or service rates.",
+    "A cEvent with activityType:'delay' uses the DELAY macro — the entity is held for a sampled duration but NO server is claimed.",
+    "Delay activities have no resource utilisation to report; focus on queue wait time and delay duration distribution when analysing them.",
   ].join(" ");
 
   const entityTypes = (model.entityTypes || []).map(e => {
@@ -1682,6 +1690,7 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
       "Give concrete, specific answers that reference the model's actual entities, queues, events, and attributes by name.",
       "When asked to review a specific editor tab (entity types, queues, B-events, C-events, sections, state variables), focus your analysis on that area.",
       "If the model has C-events, you can reason about conditional event logic and whether the conditions and effects are correctly wired.",
+      "A C-event with activityType:'delay' uses the DELAY macro — the entity waits for a sampled duration without occupying any server. No server type is needed. The duration comes from the cSchedule. The completion B-event handles routing.",
       "If the model has performance goals, you can assess whether the model structure is sufficient to measure them.",
       "If a question requires running the simulation to answer definitively (e.g. 'what is the average wait?'), say so — you can only reason about the model definition, not predict results.",
       "Do not invent data not present in the model context above.",
