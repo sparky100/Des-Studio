@@ -756,7 +756,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setReplicationResults([]);
       setAggregateStats({});
 
-      const tsAccumulator = effectiveCollectTimeSeries ? makeTimeSeriesAccumulator(500, maxTimeForRun) : null;
+      const tsAccumulator = effectiveCollectTimeSeries ? makeTimeSeriesAccumulator(150, maxTimeForRun) : null;
 
       runnerRef.current = runReplications({
         model: runModel,

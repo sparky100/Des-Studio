@@ -77,7 +77,7 @@ export function makeBatchRuntimeMetrics(replicationPayloads, replications, wallC
 // silently truncate every other (correctly longer-running) replication's data
 // past that point. With no knownMaxTime (condition-based termination, no
 // a-priori run length), fall back to deriving the grid from the first series.
-export function makeTimeSeriesAccumulator(maxPoints = 500, knownMaxTime = null) {
+export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) {
   let grid = Number.isFinite(knownMaxTime) && knownMaxTime > 0
     ? Array.from({ length: maxPoints }, (_, i) => (i / (maxPoints - 1)) * knownMaxTime)
     : null;
@@ -320,7 +320,7 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
 // Compute an ensemble-average time series from all replication time series.
 // For each time grid point we take the last-known snapshot per replication
 // (step interpolation — correct for discrete queue counts) and average across reps.
-function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
+function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
   const allSeries = replicationPayloads
     .map(p => p?.result?.timeSeries)
     .filter(ts => Array.isArray(ts) && ts.length > 0);
