@@ -94,6 +94,11 @@ vi.mock('@xyflow/react', () => ({
             Mock select queue
           </button>
         )}
+        {overflow && (
+          <button type="button" onClick={() => onNodeClick?.({}, overflow)}>
+            Mock select consult queue
+          </button>
+        )}
         {source && overflow && (
           <button type="button" onClick={() => onConnect?.({ source: source.id, target: overflow.id })}>
             Mock connect source to consultant queue
@@ -530,6 +535,33 @@ describe('Visual Designer shell', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(onModelChange).toHaveBeenCalledOnce();
     expect(onModelChange.mock.calls[0][0].bEvents).toHaveLength(0);
+  });
+
+  it('links a new Activity to the selected Queue instead of defaulting to the first queue', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    // Select the *second* queue (Consultant Queue) — not queues[0] (Triage Queue)
+    await user.click(screen.getByRole('button', { name: /mock select consult queue/i }));
+    await user.click(screen.getByRole('button', { name: /^add activity$/i }));
+
+    expect(onModelChange).toHaveBeenCalled();
+    const next = onModelChange.mock.calls[onModelChange.mock.calls.length - 1][0];
+    const newActivity = next.cEvents.find(ce => !['start-triage', 'start-consult'].includes(ce.id));
+
+    expect(newActivity).toBeDefined();
+    const effect = Array.isArray(newActivity.effect) ? newActivity.effect.join(';') : newActivity.effect;
+    expect(effect).toContain('Consultant Queue');
+    expect(effect).not.toContain('Triage Queue');
+    expect(screen.getByText(/linked to/i)).toBeInTheDocument();
   });
 
   it('supports dropping a palette node onto the canvas and saving its position', async () => {
