@@ -94,7 +94,14 @@ function optionalPositiveIntTransform(raw) {
   return Number.isFinite(n) && n > 0 ? String(n) : "";
 }
 
-export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode, onDeleteNode, onClose }) {
+// Coerces to a probability in [0, 1], falling back to "0" when blank/invalid.
+function probabilityTransform(raw) {
+  const n = parseFloat(String(raw || "").trim());
+  if (!Number.isFinite(n)) return "0";
+  return String(Math.max(0, Math.min(1, n)));
+}
+
+export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode, onDeleteNode, onAddBranch, onUpdateBranchQueue, onUpdateBranchProbability, onDeleteBranch, onClose }) {
   const { C, FONT } = useTheme();
   const node = (graph.nodes || []).find(item => item.id === selectedNodeId);
   const customers = (model.entityTypes || []).filter(type => type.role === "customer");
@@ -125,6 +132,14 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
   const sinkMacro = String(bEvent?.effect || "").toUpperCase().includes("RENEGE") ? "RENEGE" : "COMPLETE";
   const sourceSchedule = bEvent?.schedules?.[0] || {};
   const activitySchedule = cEvent?.cSchedules?.[0] || {};
+  const probabilisticBEvent = (model.bEvents || []).find(be =>
+    Array.isArray(be.probabilisticRouting) &&
+    be.probabilisticRouting.length > 0 &&
+    (cEvent?.cSchedules || []).some(s => s.eventId === be.id)
+  );
+  const probTotal = probabilisticBEvent
+    ? parseFloat(probabilisticBEvent.probabilisticRouting.reduce((sum, b) => sum + (parseFloat(b.probability) || 0), 0).toFixed(4))
+    : 0;
   const activityServer = effectValue(cEvent?.effect, /ASSIGN\([^,)]+,\s*([^)]+)\)/i);
   const isDelayActivity = /DELAY\(/i.test(String(cEvent?.effect || ""));
 
@@ -318,6 +333,70 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                 />
               </div>
             </>
+          )}
+          {probabilisticBEvent && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
+                  Probabilistic routing
+                </div>
+                <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 700, color: Math.abs(probTotal - 1) > 0.001 ? C.red : C.green }}>
+                  {probTotal.toFixed(2)}{Math.abs(probTotal - 1) > 0.001 ? " ≠ 1" : " ✓"}
+                </span>
+              </div>
+              {probabilisticBEvent.probabilisticRouting.map((branch, idx) => (
+                <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <div style={{ width: 64 }}>
+                    <CommitInput
+                      value={String(branch.probability ?? 0)}
+                      onCommit={value => onUpdateBranchProbability(probabilisticBEvent.id, idx, value)}
+                      transform={probabilityTransform}
+                      disabled={!canEdit}
+                      ariaLabel={`Branch ${idx + 1} probability`}
+                      style={{
+                        background: C.bg,
+                        border: `1px solid ${C.border}`,
+                        borderRadius: 5,
+                        color: C.text,
+                        fontFamily: FONT,
+                        fontSize: 12,
+                        padding: "8px 10px",
+                        outline: "none",
+                        width: "100%",
+                        boxSizing: "border-box",
+                        opacity: canEdit ? 1 : 0.5,
+                      }}
+                    />
+                  </div>
+                  <select
+                    value={branch.queueName == null ? "__EXIT__" : branch.queueName}
+                    disabled={!canEdit}
+                    onChange={e => onUpdateBranchQueue(probabilisticBEvent.id, idx, e.target.value === "__EXIT__" ? null : e.target.value)}
+                    aria-label={`Branch ${idx + 1} destination`}
+                    style={{
+                      flex: 1,
+                      background: C.bg,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 5,
+                      color: C.text,
+                      fontFamily: FONT,
+                      fontSize: 12,
+                      padding: "8px 10px",
+                      outline: "none",
+                      opacity: canEdit ? 1 : 0.5,
+                    }}
+                  >
+                    <option value="__EXIT__">Exit system</option>
+                    {queues.map(q => <option key={q.id || q.name} value={q.name}>{q.name}</option>)}
+                  </select>
+                  <Btn small variant="danger" disabled={!canEdit} ariaLabel={`Remove branch ${idx + 1}`}
+                       onClick={() => onDeleteBranch(probabilisticBEvent.id, idx)}>x</Btn>
+                </div>
+              ))}
+              <Btn small variant="ghost" disabled={!canEdit} onClick={() => onAddBranch(probabilisticBEvent.id)}>
+                + Add branch
+              </Btn>
+            </div>
           )}
         </>
       )}

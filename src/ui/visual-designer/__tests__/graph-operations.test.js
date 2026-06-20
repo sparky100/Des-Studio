@@ -1,6 +1,6 @@
 // Tests for graph-operations fixes: cSchedules append, auto-link guard, deleteVisualNode overflow cleanup
 import { describe, test, expect } from 'vitest';
-import { connectVisualNodes, addVisualNode, deleteVisualNode, deleteVisualEdge, duplicateVisualNodes, updateProbabilisticBranchProbability, alignNodes, distributeNodes } from '../graph-operations.js';
+import { connectVisualNodes, addVisualNode, deleteVisualNode, deleteVisualEdge, duplicateVisualNodes, updateProbabilisticBranchProbability, updateProbabilisticBranchQueue, addProbabilisticBranch, alignNodes, distributeNodes } from '../graph-operations.js';
 import { deriveGraphFromModel, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from '../graph.js';
 
 // Model with Triage activity already routing to Queue 2.
@@ -445,6 +445,70 @@ describe('updateProbabilisticBranchProbability', () => {
     const conditionEdge = graph.edges.find(e => e.source === 'condition');
 
     const next = updateProbabilisticBranchProbability(model, conditionEdge, 0.9);
+    expect(next).toBe(model);
+  });
+});
+
+describe('updateProbabilisticBranchQueue', () => {
+  test('retargets one branch, leaving the other branch untouched', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = updateProbabilisticBranchQueue(model, edge, 'Queue 3');
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+
+    expect(bEvent.probabilisticRouting[0].queueName).toBe('Queue 3');
+    expect(bEvent.probabilisticRouting[0].probability).toBe(0.7);
+    expect(bEvent.probabilisticRouting[1].queueName).toBe('Queue 3');
+  });
+
+  test('retargeting to "" or null sets queueName to null (exit)', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = updateProbabilisticBranchQueue(model, edge, '');
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+    expect(bEvent.probabilisticRouting[0].queueName).toBeNull();
+  });
+
+  test('returns the model unchanged when the edge has no bEventId/branchIndex (non-probabilistic edge)', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const conditionEdge = graph.edges.find(e => e.source === 'condition');
+
+    const next = updateProbabilisticBranchQueue(model, conditionEdge, 'Queue 3');
+    expect(next).toBe(model);
+  });
+});
+
+describe('addProbabilisticBranch', () => {
+  test('appends a 0%/exit branch without touching existing branches', () => {
+    const model = makeProbabilisticModel();
+
+    const next = addProbabilisticBranch(model, 'route-activity-1-queue-2');
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+
+    expect(bEvent.probabilisticRouting).toHaveLength(3);
+    expect(bEvent.probabilisticRouting[0]).toEqual({ probability: 0.7, queueName: 'Queue 2' });
+    expect(bEvent.probabilisticRouting[1]).toEqual({ probability: 0.3, queueName: 'Queue 3' });
+    expect(bEvent.probabilisticRouting[2]).toEqual({ probability: 0, queueName: null });
+
+    const nextGraph = deriveGraphFromModel(next);
+    const branchEdges = nextGraph.edges.filter(e => e.bEventId === 'route-activity-1-queue-2');
+    expect(branchEdges).toHaveLength(3);
+  });
+
+  test('returns the model unchanged when the bEvent has no probabilisticRouting array', () => {
+    const model = makeModel();
+    const next = addProbabilisticBranch(model, 'route-activity-1-queue-2');
+    expect(next).toBe(model);
+  });
+
+  test('returns the model unchanged when bEventId does not exist', () => {
+    const model = makeProbabilisticModel();
+    const next = addProbabilisticBranch(model, 'does-not-exist');
     expect(next).toBe(model);
   });
 });

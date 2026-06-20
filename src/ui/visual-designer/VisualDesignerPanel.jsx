@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
-import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, updateProbabilisticBranchProbability, findNodeDependents, updateGraphLayout, validateVisualConnection, alignNodes, distributeNodes, VISUAL_PATTERNS } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, updateProbabilisticBranchProbability, updateProbabilisticBranchQueue, addProbabilisticBranch, findNodeDependents, updateGraphLayout, validateVisualConnection, alignNodes, distributeNodes, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
@@ -605,6 +605,24 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     if (!canEdit) return;
     applyModel(updateProbabilisticBranchProbability(model, edge, probability));
   };
+  const addBranch = (bEventId) => {
+    if (!canEdit) return;
+    applyModel(addProbabilisticBranch(model, bEventId));
+  };
+  const updateBranchQueue = (bEventId, branchIndex, queueName) => {
+    if (!canEdit) return;
+    applyModel(updateProbabilisticBranchQueue(model, { bEventId, branchIndex }, queueName));
+  };
+  const updateBranchProbability = (bEventId, branchIndex, probability) => {
+    if (!canEdit) return;
+    applyModel(updateProbabilisticBranchProbability(model, { bEventId, branchIndex }, probability));
+  };
+  const deleteBranch = (bEventId, branchIndex) => {
+    if (!canEdit) return;
+    const edge = graph.edges.find(e => e.bEventId === bEventId && e.branchIndex === branchIndex);
+    if (!edge) return;
+    applyModel(deleteVisualEdge(model, graph, edge.id));
+  };
   kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit, selectedEdgeId, deleteEdge, clearSelection, copySelectedNodes, pasteFromClipboard, duplicateSelectedNodes };
   const resetLayout = () => {
     if (!canEdit) return;
@@ -1163,6 +1181,10 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               canEdit={canEdit}
               onPatchNode={patchNode}
               onDeleteNode={canEdit ? deleteNode : null}
+              onAddBranch={addBranch}
+              onUpdateBranchQueue={updateBranchQueue}
+              onUpdateBranchProbability={updateBranchProbability}
+              onDeleteBranch={deleteBranch}
               onClose={() => setInspectorCollapsed(true)}
             />
           </div>

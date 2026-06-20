@@ -1135,6 +1135,46 @@ export function updateProbabilisticBranchProbability(model, edge, probability) {
   return updateGraphLayout(next, deriveGraphFromModel(next));
 }
 
+// Retargets one probabilistic-routing branch's destination queue; null means
+// "exit system" (terminal), matching BEventEditor's "__EXIT__" select sentinel
+// (callers map the sentinel to null before calling this). Other branches and
+// the branch's own probability are left untouched.
+export function updateProbabilisticBranchQueue(model, edge, queueName) {
+  if (!edge || edge.bEventId == null || edge.branchIndex == null) return model;
+  const next = {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => {
+      if (be.id !== edge.bEventId) return be;
+      const probabilisticRouting = (be.probabilisticRouting || []).map((branch, idx) =>
+        idx === edge.branchIndex ? { ...branch, queueName: queueName || null } : branch
+      );
+      return { ...be, probabilisticRouting };
+    }),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+// Appends a new branch (0% probability, exit/terminal target) to an existing
+// probabilisticRouting array. Does not rebalance other branches' probabilities —
+// matches BEventEditor's addProbRow, the shipped precedent for this mutation.
+// Takes bEventId directly rather than an edge, since there's no edge yet for a
+// branch that doesn't exist.
+export function addProbabilisticBranch(model, bEventId) {
+  const bEvents = model.bEvents || [];
+  const bEvent = bEvents.find(be => be.id === bEventId);
+  if (!bEvent || !Array.isArray(bEvent.probabilisticRouting)) return model;
+  const next = {
+    ...model,
+    bEvents: bEvents.map(be =>
+      be.id !== bEventId ? be : {
+        ...be,
+        probabilisticRouting: [...be.probabilisticRouting, { probability: 0, queueName: null }],
+      }
+    ),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
 // Clones one or more selected canvas nodes, offsetting their copies on the canvas.
 // Connections are never copied — duplicates land disconnected, same as a freshly
 // added node, since auto-replicating edges to (possibly non-duplicated) neighbours
