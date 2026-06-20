@@ -1,6 +1,6 @@
 // Tests for graph-operations fixes: cSchedules append, auto-link guard, deleteVisualNode overflow cleanup
 import { describe, test, expect } from 'vitest';
-import { connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes, updateProbabilisticBranchProbability, alignNodes, distributeNodes } from '../graph-operations.js';
+import { connectVisualNodes, addVisualNode, deleteVisualNode, deleteVisualEdge, duplicateVisualNodes, updateProbabilisticBranchProbability, alignNodes, distributeNodes } from '../graph-operations.js';
 import { deriveGraphFromModel, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from '../graph.js';
 
 // Model with Triage activity already routing to Queue 2.
@@ -331,6 +331,86 @@ describe('deriveGraphFromModel — probabilistic routing edges', () => {
     expect(branchEdges).toHaveLength(1);
     expect(branchEdges[0].source).toBe('terminal');
     expect(branchEdges[0].label).toBe('100%');
+  });
+});
+
+describe('deleteVisualEdge — probabilistic routing branch', () => {
+  test('deleting one branch removes only that branch, leaving the other branch and its cSchedule intact', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = deleteVisualEdge(model, graph, edge.id);
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+
+    expect(bEvent).toBeTruthy();
+    expect(bEvent.probabilisticRouting).toHaveLength(1);
+    expect(bEvent.probabilisticRouting[0].queueName).toBe('Queue 3');
+
+    const cEvent = next.cEvents.find(ce => ce.id === 'activity-1');
+    expect(cEvent.cSchedules.some(s => s.eventId === 'route-activity-1-queue-2')).toBe(true);
+
+    const nextGraph = deriveGraphFromModel(next);
+    const remainingBranchEdges = nextGraph.edges.filter(e => e.bEventId === 'route-activity-1-queue-2');
+    expect(remainingBranchEdges).toHaveLength(1);
+    expect(remainingBranchEdges[0].branchIndex).toBe(0);
+    expect(remainingBranchEdges[0].label).toBe('30%');
+  });
+
+  test('deleting the last remaining branch drops the cSchedule and the unshared bEvent', () => {
+    const model = makeProbabilisticModel();
+    model.bEvents = model.bEvents.map(be =>
+      be.id === 'route-activity-1-queue-2'
+        ? { ...be, probabilisticRouting: [{ probability: 1, queueName: 'Queue 2' }] }
+        : be
+    );
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = deleteVisualEdge(model, graph, edge.id);
+
+    expect(next.bEvents.find(be => be.id === 'route-activity-1-queue-2')).toBeUndefined();
+    const cEvent = next.cEvents.find(ce => ce.id === 'activity-1');
+    expect(cEvent.cSchedules.some(s => s.eventId === 'route-activity-1-queue-2')).toBe(false);
+  });
+
+  test('deleting a branch routed to a null-queueName exit removes only that branch', () => {
+    const model = makeProbabilisticModel();
+    model.bEvents = model.bEvents.map(be =>
+      be.id === 'route-activity-1-queue-2'
+        ? {
+            ...be,
+            probabilisticRouting: [
+              { probability: 0.4, queueName: null },
+              { probability: 0.6, queueName: 'Queue 2' },
+            ],
+          }
+        : be
+    );
+    const graph = deriveGraphFromModel(model);
+    const exitEdge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+    expect(exitEdge.source).toBe('terminal');
+
+    const next = deleteVisualEdge(model, graph, exitEdge.id);
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+
+    expect(bEvent.probabilisticRouting).toHaveLength(1);
+    expect(bEvent.probabilisticRouting[0].queueName).toBe('Queue 2');
+  });
+});
+
+describe('deleteVisualEdge — non-probabilistic routing (regression guard)', () => {
+  test('deleting a plain Activity→Queue routing edge still removes its cSchedule and bEvent', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.source === 'routing' && e.to === 'queue:queue-2');
+    expect(edge).toBeTruthy();
+    expect(edge.bEventId).toBeUndefined();
+
+    const next = deleteVisualEdge(model, graph, edge.id);
+    expect(next.bEvents.find(be => be.id === 'route-activity-1-queue-2')).toBeUndefined();
+    const cEvent = next.cEvents.find(ce => ce.id === 'activity-1');
+    expect(cEvent.cSchedules.some(s => s.eventId === 'route-activity-1-queue-2')).toBe(false);
   });
 });
 

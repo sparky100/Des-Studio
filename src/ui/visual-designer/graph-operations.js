@@ -1008,6 +1008,40 @@ export function deleteVisualEdge(model, graph, edgeId) {
   const cEvents = model.cEvents || [];
   let next = { ...model };
 
+  // Activity → Queue/Sink, probabilistic-routing branch (F10.2): every branch of
+  // a probabilisticRouting table shares one cSchedule entry on the RELEASE/DELAY-
+  // completion bEvent, so the generic routing/terminal handling below (which
+  // drops the whole cSchedule entry) would erase every other branch along with
+  // the one the user clicked. Edges for these branches carry bEventId/branchIndex
+  // (set in graph.js), so splice out just that branch instead; only drop the
+  // cSchedule (and the bEvent, if unshared) once no branches remain.
+  if (edge.bEventId != null && edge.branchIndex != null && fromNode.type === VISUAL_NODE_TYPES.ACTIVITY) {
+    const bEvent = bEvents.find(be => be.id === edge.bEventId);
+    if (bEvent && Array.isArray(bEvent.probabilisticRouting)) {
+      const remaining = bEvent.probabilisticRouting.filter((_, i) => i !== edge.branchIndex);
+      next.bEvents = bEvents.map(be => (be.id !== bEvent.id ? be : { ...be, probabilisticRouting: remaining }));
+
+      if (remaining.length === 0) {
+        const cEvent = cEvents.find(ce => ce.id === fromNode.refId);
+        if (cEvent) {
+          const otherRefs = new Set(
+            cEvents.filter(ce => ce.id !== cEvent.id).flatMap(ce => (ce.cSchedules || []).map(s => s.eventId))
+          );
+          next.cEvents = cEvents.map(ce =>
+            ce.id !== cEvent.id ? ce : {
+              ...ce,
+              cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== bEvent.id),
+            }
+          );
+          if (!otherRefs.has(bEvent.id)) {
+            next.bEvents = next.bEvents.filter(be => be.id !== bEvent.id);
+          }
+        }
+      }
+    }
+    return updateGraphLayout(next, deriveGraphFromModel(next));
+  }
+
   // Source → Queue ("arrival"): remove queue target from ARRIVE effect
   if (edge.source === "arrival" && fromNode.type === VISUAL_NODE_TYPES.SOURCE) {
     const esc = escRe(toNode.label || "");
