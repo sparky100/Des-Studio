@@ -298,14 +298,21 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   [graph, storedViewport]);
   const visualIssues = useMemo(() => validateVisualGraph(graph), [graph]);
   const modelValidation = useMemo(() => validateModel(model || {}), [model]);
-  // Derived set of canvas node IDs that have active validation issues — never stored in model_json
+  // Derived map of canvas node ID -> validation messages — never stored in model_json.
+  // A Map (not just a Set) so the canvas badge can show the message on hover instead of
+  // forcing the user to switch to the Validate tab to learn why a node is flagged.
   const errorNodeIds = useMemo(() => {
-    const ids = new Set();
-    visualIssues.forEach(issue => { if (issue.nodeId) ids.add(issue.nodeId); });
+    const messagesByNode = new Map();
+    const addMessage = (nodeId, message) => {
+      if (!nodeId || !message) return;
+      const existing = messagesByNode.get(nodeId) || [];
+      if (!existing.includes(message)) messagesByNode.set(nodeId, [...existing, message]);
+    };
+    visualIssues.forEach(issue => addMessage(issue.nodeId, issue.message));
     [...modelValidation.errors, ...modelValidation.warnings].forEach(item => {
-      findNodesForError(item, graph).forEach(id => ids.add(id));
+      findNodesForError(item, graph).forEach(id => addMessage(id, item.message));
     });
-    return ids;
+    return messagesByNode;
   }, [visualIssues, modelValidation, graph]);
 
   const isStarterBlank = !(model?.queues || []).length &&

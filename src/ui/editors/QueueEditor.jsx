@@ -2,19 +2,9 @@ import { useState } from "react";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { disciplineBase, disciplineAttr } from "../shared/utils.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
-
-const disciplineBase = d => {
-  if (!d || d.toUpperCase() === 'FIFO') return 'FIFO';
-  const m = String(d).match(/^PRIORITY\((\w+)\)$/i);
-  if (m) return m[1].toLowerCase() === 'priority' ? 'PRIORITY' : 'PRIORITY_ATTR';
-  return String(d).toUpperCase();
-};
-const disciplineAttr = d => {
-  const m = String(d || '').match(/^PRIORITY\((\w+)\)$/i);
-  return m ? m[1] : 'priority';
-};
 
 const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[], errorFilter=null, onClearErrorFilter, onChange}) => {
   const { C, FONT } = useTheme();

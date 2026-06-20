@@ -1,9 +1,10 @@
 import { useId } from "react";
 ;
-import { Btn, DistPicker, Field, SH, Tag } from "../shared/components.jsx";
+import { Btn, CommitInput, DistPicker, SH, Tag } from "../shared/components.jsx";
 import { ConditionBuilder, EntityFilterBuilder } from "../editors/index.jsx";
 import { VISUAL_NODE_TYPES } from "./graph.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { disciplineAttr, disciplineBase } from "../shared/utils.js";
 
 function effectValue(effect = "", pattern) {
 
@@ -39,6 +40,58 @@ function SelectField({ label, value, onChange, children, disabled }) {
       </select>
     </div>
   );
+}
+
+// Commits on blur/Enter rather than every keystroke — matches every other model editor
+// (QueueEditor, BEventEditor, etc.) and avoids flooding the model's 20-entry undo stack
+// with one entry per character typed.
+function CommitField({ label, value, onChange, disabled, transform, placeholder }) {
+  const { C, FONT } = useTheme();
+  const id = `visual-commit-${useId()}`;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      <label htmlFor={id} style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
+        {label}
+      </label>
+      <CommitInput
+        value={value}
+        onCommit={onChange}
+        transform={transform}
+        disabled={disabled}
+        placeholder={placeholder}
+        ariaLabel={label}
+        style={{
+          background: C.bg,
+          border: `1px solid ${C.border}`,
+          borderRadius: 5,
+          color: C.text,
+          fontFamily: FONT,
+          fontSize: 12,
+          padding: "8px 10px",
+          outline: "none",
+          width: "100%",
+          boxSizing: "border-box",
+          opacity: disabled ? 0.5 : 1,
+        }}
+      />
+    </div>
+  );
+}
+
+// Coerces to a positive integer string, falling back to fallback when the input is empty/invalid.
+function positiveIntTransform(fallback) {
+  return raw => {
+    const n = parseInt(String(raw || "").trim(), 10);
+    return Number.isFinite(n) && n > 0 ? String(n) : fallback;
+  };
+}
+
+// Coerces to a positive integer string, or "" (unlimited) when blank/invalid.
+function optionalPositiveIntTransform(raw) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return "";
+  const n = parseInt(trimmed, 10);
+  return Number.isFinite(n) && n > 0 ? String(n) : "";
 }
 
 export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode, onDeleteNode, onClose }) {
@@ -106,7 +159,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
 
       {node.type === VISUAL_NODE_TYPES.SOURCE && bEvent && (
         <>
-          <Field label="Source name" value={bEvent.name} onChange={canEdit ? value => onPatchNode(node, { name: value }) : null} />
+          <CommitField label="Source name" value={bEvent.name} disabled={!canEdit} onChange={value => onPatchNode(node, { name: value })} />
           <SelectField label="Customer type" value={sourceCustomer} disabled={!canEdit} onChange={value => onPatchNode(node, { customerType: value })}>
             {customers.map(type => <option key={type.id || type.name} value={type.name}>{type.name}</option>)}
           </SelectField>
@@ -129,20 +182,40 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
 
       {node.type === VISUAL_NODE_TYPES.QUEUE && queue && (
         <>
-          <Field label="Queue name" value={queue.name} onChange={canEdit ? value => onPatchNode(node, { name: value }) : null} />
+          <CommitField label="Queue name" value={queue.name} disabled={!canEdit} onChange={value => onPatchNode(node, { name: value })} />
           <SelectField label="Customer type" value={queue.customerType} disabled={!canEdit} onChange={value => onPatchNode(node, { customerType: value })}>
             {customers.map(type => <option key={type.id || type.name} value={type.name}>{type.name}</option>)}
           </SelectField>
-          <SelectField label="Discipline" value={queue.discipline || "FIFO"} disabled={!canEdit} onChange={value => onPatchNode(node, { discipline: value })}>
-            <option value="FIFO">FIFO</option>
-            <option value="LIFO">LIFO</option>
-            <option value="PRIORITY">Priority</option>
+          <SelectField
+            label="Discipline"
+            value={disciplineBase(queue.discipline)}
+            disabled={!canEdit}
+            onChange={value => onPatchNode(node, {
+              discipline: value === "PRIORITY_ATTR" ? `PRIORITY(${disciplineAttr(queue.discipline) || "priority"})` : value,
+            })}
+          >
+            <option value="FIFO">FIFO — First In, First Out</option>
+            <option value="LIFO">LIFO — Last In, First Out</option>
+            <option value="PRIORITY">Priority (uses "priority" attr)</option>
+            <option value="PRIORITY_ATTR">Priority (custom attribute)…</option>
+            <option value="SPT">SPT — Shortest Processing Time</option>
+            <option value="EDD">EDD — Earliest Due Date</option>
           </SelectField>
-          <Field
+          {disciplineBase(queue.discipline) === "PRIORITY_ATTR" && (
+            <CommitField
+              label="Priority attribute"
+              value={disciplineAttr(queue.discipline)}
+              disabled={!canEdit}
+              placeholder="e.g. severity"
+              onChange={value => onPatchNode(node, { discipline: `PRIORITY(${value || "priority"})` })}
+            />
+          )}
+          <CommitField
             label="Max queue length (blank = unlimited)"
             value={queue.capacity || ""}
-            type="number"
-            onChange={canEdit ? value => onPatchNode(node, { capacity: value || null }) : null}
+            disabled={!canEdit}
+            transform={optionalPositiveIntTransform}
+            onChange={value => onPatchNode(node, { capacity: value || null })}
           />
           {queue.capacity && (
             <SelectField
@@ -162,8 +235,14 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
 
       {node.type === VISUAL_NODE_TYPES.ACTIVITY && cEvent && (
         <>
-          <Field label="Activity name" value={cEvent.name} onChange={canEdit ? value => onPatchNode(node, { name: value }) : null} />
-          <Field label="Priority" value={String(cEvent.priority || 1)} onChange={canEdit ? value => onPatchNode(node, { priority: value }) : null} />
+          <CommitField label="Activity name" value={cEvent.name} disabled={!canEdit} onChange={value => onPatchNode(node, { name: value })} />
+          <CommitField
+            label="Priority"
+            value={String(cEvent.priority || 1)}
+            disabled={!canEdit}
+            transform={positiveIntTransform(String(cEvent.priority || 1))}
+            onChange={value => onPatchNode(node, { priority: value })}
+          />
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
               Condition
@@ -240,7 +319,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
 
       {node.type === VISUAL_NODE_TYPES.SINK && bEvent && (
         <>
-          <Field label="Sink name" value={bEvent.name} onChange={canEdit ? value => onPatchNode(node, { name: value }) : null} />
+          <CommitField label="Sink name" value={bEvent.name} disabled={!canEdit} onChange={value => onPatchNode(node, { name: value })} />
           {!node.refId?.startsWith("route-exit:") && (
             <SelectField label="Terminal macro" value={sinkMacro} disabled={!canEdit} onChange={value => onPatchNode(node, { terminalMacro: value })}>
               <option value="COMPLETE">COMPLETE</option>

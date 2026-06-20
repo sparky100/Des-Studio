@@ -63,6 +63,7 @@ function DesNode({ data, selected }) {
       {hasError && (
         <div
           aria-hidden="true"
+          title={data.errorMessage || "This node has a validation issue — see the Validate tab for details."}
           style={{
             position: "absolute",
             top: -5,
@@ -78,6 +79,7 @@ function DesNode({ data, selected }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            cursor: "help",
           }}
         >!</div>
       )}
@@ -439,6 +441,7 @@ export function FlowDiagramReactFlow({
     const flowNodes = (graph.nodes || []).map(node => {
       const base = toFlowNode(node);
       const hasError = errorNodeIds ? errorNodeIds.has(node.id) : false;
+      const errorMessage = hasError ? (errorNodeIds.get?.(node.id) || []).join(" · ") : undefined;
       const dimmed = showSections && focusedSectionId != null && node.sectionId !== focusedSectionId;
       return {
         ...base,
@@ -447,6 +450,7 @@ export function FlowDiagramReactFlow({
         data: {
           ...base.data,
           hasError,
+          errorMessage,
           sectionColor: showSections ? base.data.sectionColor : undefined,
           sectionId: showSections ? base.data.sectionId : undefined,
         },

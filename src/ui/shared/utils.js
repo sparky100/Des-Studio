@@ -38,6 +38,18 @@ export function extractImportedModelPayload(payload) {
   return model;
 }
 
+export function disciplineBase(d) {
+  if (!d || d.toUpperCase() === "FIFO") return "FIFO";
+  const m = String(d).match(/^PRIORITY\((\w+)\)$/i);
+  if (m) return m[1].toLowerCase() === "priority" ? "PRIORITY" : "PRIORITY_ATTR";
+  return String(d).toUpperCase();
+}
+
+export function disciplineAttr(d) {
+  const m = String(d || "").match(/^PRIORITY\((\w+)\)$/i);
+  return m ? m[1] : "priority";
+}
+
 export function csvEscape(value) {
   if (value == null) return "";
   const text = String(value);
