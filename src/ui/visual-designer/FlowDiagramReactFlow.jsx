@@ -482,6 +482,8 @@ export function FlowDiagramReactFlow({
   const [focusedSectionId, setFocusedSectionId] = useState(null);
   const suppressViewportSyncRef = useRef(true);
   const nodeClickHandledRef = useRef(false);
+  const boxSelectingRef = useRef(false);
+  const boxSelectIdsRef = useRef([]);
   const selectedSet = useMemo(() => new Set(selectedNodeIds.length ? selectedNodeIds : (selectedNodeId ? [selectedNodeId] : [])), [selectedNodeId, selectedNodeIds]);
 
   // Clear section focus when sections overlay is toggled off
@@ -645,6 +647,13 @@ export function FlowDiagramReactFlow({
           onEdgeSelect?.(null);
         }}
         onEdgeClick={(_, edge) => onEdgeSelect?.(edge.id)}
+        onSelectionStart={() => {
+          boxSelectingRef.current = true;
+        }}
+        onSelectionEnd={() => {
+          boxSelectingRef.current = false;
+          onNodeSelectionChange?.(boxSelectIdsRef.current);
+        }}
         onSelectionChange={({ nodes: selectedNodes = [] }) => {
           // onNodeClick handles single-node selection; skip here to avoid overwriting it
           // with stale controlled `selected` props before React re-renders
@@ -652,12 +661,20 @@ export function FlowDiagramReactFlow({
             nodeClickHandledRef.current = false;
             return;
           }
-          // Box-selection: filter out section panel nodes, use ReactFlow's internal selected flag
-          onNodeSelectionChange?.(
-            selectedNodes
-              .filter(node => node.selected && node.type !== "sectionPanel")
-              .map(node => node.id)
-          );
+          // Box-selection: since nodes are fully controlled (selected prop comes from
+          // selectedSet), the node objects here are our own props echoed back — their
+          // `.selected` field is always stale/false. Membership in this array IS the
+          // signal that ReactFlow considers them selected, so don't re-check `.selected`.
+          const ids = selectedNodes.filter(node => node.type !== "sectionPanel").map(node => node.id);
+          if (boxSelectingRef.current) {
+            // Defer applying mid-drag updates: feeding them back into the controlled
+            // `nodes` prop while ReactFlow is still computing the drag-box intersection
+            // races with ReactFlow's own internal selection state and causes flicker.
+            // Commit only the final set once the drag ends (onSelectionEnd).
+            boxSelectIdsRef.current = ids;
+          } else {
+            onNodeSelectionChange?.(ids);
+          }
         }}
         onNodeDragStop={(_, node, movedNodes = []) => {
           const moved = movedNodes.length ? movedNodes : [node];
