@@ -3,7 +3,7 @@
 import { Tag, Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
-export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion, onExportSimPy }) {
+export function ModelDetailHeader({ model, canEdit, dirty, visualPending, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion, onExportSimPy }) {
   const { C, FONT } = useTheme();
   return (
     <div style={{
@@ -41,10 +41,13 @@ export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future,
           ⬇ SimPy
         </Btn>
       )}
-      {canEdit && dirty && (
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      {canEdit && (dirty || visualPending) && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ color: C.amber, fontFamily: FONT, fontSize: 11 }}>
+            ● {dirty ? "Unsaved changes" : "Unsaved layout changes"}
+          </span>
           <Btn small variant="primary" onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Btn>
-          <Btn small variant="ghost" onClick={onDiscard} disabled={saving}>Discard</Btn>
+          {dirty && <Btn small variant="ghost" onClick={onDiscard} disabled={saving}>Discard</Btn>}
         </div>
       )}
     </div>

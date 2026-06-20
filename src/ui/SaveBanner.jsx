@@ -2,6 +2,7 @@
 ;
 import { Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { Z } from "./shared/tokens.js";
 
 export function SaveBanner({ canEdit, dirty, visualPending, saving, discardConfirm, setDiscardConfirm, onSave, onDiscard }) {
   const { C, FONT } = useTheme();
@@ -9,8 +10,9 @@ export function SaveBanner({ canEdit, dirty, visualPending, saving, discardConfi
   if (visualPending && !dirty) {
     return (
       <div role="status" style={{
+        position: "sticky", top: 0, zIndex: Z.dropdown,
         display: "flex", alignItems: "center", gap: 10,
-        color: C.amber, fontFamily: FONT, fontSize: 11,
+        background: C.surface, color: C.amber, fontFamily: FONT, fontSize: 11,
         padding: "6px 0", marginBottom: 8,
       }}>
         <span style={{ opacity: 0.8 }}>● Unsaved layout changes</span>
@@ -21,7 +23,8 @@ export function SaveBanner({ canEdit, dirty, visualPending, saving, discardConfi
   if (!dirty) return null;
   return (
     <div role="status" style={{
-      background: C.amber + "18", border: `1px solid ${C.amber}66`, borderRadius: 6,
+      position: "sticky", top: 0, zIndex: Z.dropdown,
+      background: C.surface, border: `1px solid ${C.amber}66`, borderRadius: 6,
       padding: "10px 12px", marginBottom: 14, display: "flex",
       alignItems: "center", justifyContent: "space-between",
       gap: 12, flexWrap: "wrap", color: C.text, fontFamily: FONT, fontSize: 12,

@@ -1066,7 +1066,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       {!executeRunning && (
       <>
       <ModelDetailHeader
-        model={model} canEdit={canEdit} dirty={dirty} saving={saving}
+        model={model} canEdit={canEdit} dirty={dirty} visualPending={visualPending} saving={saving}
         past={past} future={future} currentVersion={currentVersion}
         onBack={handleBack} onUndo={undo} onRedo={redo} onSave={save} onDiscard={discard}
         onHelpOpen={overrides.onHelpOpen}
