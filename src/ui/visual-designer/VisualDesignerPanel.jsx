@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
-import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, updateProbabilisticBranchProbability, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
@@ -589,6 +589,10 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     applyModel(nextModel);
     setMessage({ state: "success", text: "Connection removed." });
   };
+  const editProbability = (edge, probability) => {
+    if (!canEdit) return;
+    applyModel(updateProbabilisticBranchProbability(model, edge, probability));
+  };
   kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit, selectedEdgeId, deleteEdge, clearSelection, copySelectedNodes, pasteFromClipboard, duplicateSelectedNodes };
   const resetLayout = () => {
     if (!canEdit) return;
@@ -1052,6 +1056,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               onNodeSelectionChange={syncSelection}
               onEdgeSelect={selectEdge}
               onDeleteEdge={canEdit ? deleteEdge : null}
+              onEditProbability={editProbability}
               onNodeMove={moveNode}
               onNodesMove={moveNodes}
               onViewportChange={changeViewport}

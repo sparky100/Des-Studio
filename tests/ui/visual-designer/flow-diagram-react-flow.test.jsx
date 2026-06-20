@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FlowDiagramReactFlow } from '../../../src/ui/visual-designer/FlowDiagramReactFlow.jsx';
 
@@ -83,5 +83,82 @@ describe('FlowDiagramReactFlow — node error badge', () => {
     const activityNode = screen.getByTestId('react-flow').querySelector('[data-node-id="activity:activity-1"]');
     expect(queueNode.querySelector('[title="Queue issue."]')).toBeTruthy();
     expect(activityNode.querySelector('[title="Queue issue."]')).toBeNull();
+  });
+});
+
+function makeProbabilisticGraph() {
+  return {
+    nodes: [
+      { id: 'activity:activity-1', type: 'activity', refId: 'activity-1', x: 0, y: 0, label: 'Triage' },
+      { id: 'queue:queue-2', type: 'queue', refId: 'queue-2', x: 100, y: 0, label: 'Queue 2' },
+    ],
+    edges: [
+      {
+        id: 'edge-1',
+        from: 'activity:activity-1',
+        to: 'queue:queue-2',
+        source: 'routing',
+        label: '70%',
+        bEventId: 'route-1',
+        branchIndex: 0,
+        probability: 0.7,
+      },
+    ],
+    sectionPanels: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+  };
+}
+
+describe('FlowDiagramReactFlow — inline probabilistic-branch % editor', () => {
+  it('shows the static % label, not an input, when the edge is unselected', () => {
+    render(<FlowDiagramReactFlow graph={makeProbabilisticGraph()} canEdit onEditProbability={vi.fn()} />);
+    expect(screen.getByText('70%')).toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+  });
+
+  it('shows an editable number input pre-filled with the percentage when the edge is selected', () => {
+    render(
+      <FlowDiagramReactFlow
+        graph={makeProbabilisticGraph()}
+        canEdit
+        selectedEdgeId="edge-1"
+        onEditProbability={vi.fn()}
+      />
+    );
+    const input = screen.getByRole('spinbutton');
+    expect(input).toHaveValue(70);
+  });
+
+  it('commits the new probability (as a 0–1 fraction) on blur', () => {
+    const onEditProbability = vi.fn();
+    render(
+      <FlowDiagramReactFlow
+        graph={makeProbabilisticGraph()}
+        canEdit
+        selectedEdgeId="edge-1"
+        onEditProbability={onEditProbability}
+      />
+    );
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '45' } });
+    fireEvent.blur(input);
+
+    expect(onEditProbability).toHaveBeenCalledTimes(1);
+    const [edgeArg, probabilityArg] = onEditProbability.mock.calls[0];
+    expect(edgeArg.id).toBe('edge-1');
+    expect(probabilityArg).toBeCloseTo(0.45);
+  });
+
+  it('does not show the editable input when canEdit is false, even if selected', () => {
+    render(
+      <FlowDiagramReactFlow
+        graph={makeProbabilisticGraph()}
+        canEdit={false}
+        selectedEdgeId="edge-1"
+        onEditProbability={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(screen.getByText('70%')).toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 // Tests for graph-operations fixes: cSchedules append, auto-link guard, deleteVisualNode overflow cleanup
 import { describe, test, expect } from 'vitest';
-import { connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes } from '../graph-operations.js';
+import { connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes, updateProbabilisticBranchProbability } from '../graph-operations.js';
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from '../graph.js';
 
 // Model with Triage activity already routing to Queue 2.
@@ -278,5 +278,93 @@ describe('duplicateVisualNodes', () => {
     expect(next.queues).toHaveLength(5);
     const ids = next.queues.map(q => q.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+// Model where the activity's completion b-event routes probabilistically
+// to two destination queues instead of a single fixed RELEASE target.
+function makeProbabilisticModel() {
+  const model = makeModel();
+  model.bEvents = model.bEvents.map(be =>
+    be.id === 'route-activity-1-queue-2'
+      ? {
+          ...be,
+          probabilisticRouting: [
+            { probability: 0.7, queueName: 'Queue 2' },
+            { probability: 0.3, queueName: 'Queue 3' },
+          ],
+        }
+      : be
+  );
+  return model;
+}
+
+describe('deriveGraphFromModel — probabilistic routing edges', () => {
+  test('each branch edge carries bEventId/branchIndex/probability and a % label', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+
+    const branchEdges = graph.edges.filter(e => e.bEventId === 'route-activity-1-queue-2');
+    expect(branchEdges).toHaveLength(2);
+
+    const toQueue2 = branchEdges.find(e => e.to === 'queue:queue-2');
+    expect(toQueue2.branchIndex).toBe(0);
+    expect(toQueue2.probability).toBe(0.7);
+    expect(toQueue2.label).toBe('70%');
+
+    const toQueue3 = branchEdges.find(e => e.to === 'queue:queue-3');
+    expect(toQueue3.branchIndex).toBe(1);
+    expect(toQueue3.probability).toBe(0.3);
+    expect(toQueue3.label).toBe('30%');
+  });
+
+  test('a branch routing to null queueName (exit) derives an edge to a synthetic sink', () => {
+    const model = makeProbabilisticModel();
+    model.bEvents = model.bEvents.map(be =>
+      be.id === 'route-activity-1-queue-2'
+        ? { ...be, probabilisticRouting: [{ probability: 1, queueName: null }] }
+        : be
+    );
+    const graph = deriveGraphFromModel(model);
+
+    const branchEdges = graph.edges.filter(e => e.bEventId === 'route-activity-1-queue-2');
+    expect(branchEdges).toHaveLength(1);
+    expect(branchEdges[0].source).toBe('terminal');
+    expect(branchEdges[0].label).toBe('100%');
+  });
+});
+
+describe('updateProbabilisticBranchProbability', () => {
+  test('updates only the targeted branch, leaving the other branch untouched', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = updateProbabilisticBranchProbability(model, edge, 0.55);
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+
+    expect(bEvent.probabilisticRouting[0].probability).toBe(0.55);
+    expect(bEvent.probabilisticRouting[1].probability).toBe(0.3);
+  });
+
+  test('clamps probability to [0, 1]', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const tooHigh = updateProbabilisticBranchProbability(model, edge, 1.5);
+    expect(tooHigh.bEvents.find(be => be.id === 'route-activity-1-queue-2').probabilisticRouting[0].probability).toBe(1);
+
+    const tooLow = updateProbabilisticBranchProbability(model, edge, -0.2);
+    expect(tooLow.bEvents.find(be => be.id === 'route-activity-1-queue-2').probabilisticRouting[0].probability).toBe(0);
+  });
+
+  test('returns the model unchanged when the edge has no bEventId/branchIndex (non-probabilistic edge)', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const conditionEdge = graph.edges.find(e => e.source === 'condition');
+
+    const next = updateProbabilisticBranchProbability(model, conditionEdge, 0.9);
+    expect(next).toBe(model);
   });
 });

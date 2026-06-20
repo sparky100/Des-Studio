@@ -1032,6 +1032,28 @@ export function deleteVisualEdge(model, graph, edgeId) {
   return updateGraphLayout(next, deriveGraphFromModel(next));
 }
 
+// Updates one probabilistic-routing branch's probability in place. The edge
+// carries bEventId/branchIndex (set by graph.js when deriving probabilistic
+// routing edges) so this can target the exact branch without re-parsing the
+// "NN%" label back into a number. Probability is clamped to [0, 1]; other
+// branches and queue targets are left untouched — the canvas does not enforce
+// the branches summing to 1, matching BEventEditor's own non-blocking total.
+export function updateProbabilisticBranchProbability(model, edge, probability) {
+  if (!edge || edge.bEventId == null || edge.branchIndex == null) return model;
+  const clamped = Math.max(0, Math.min(1, probability));
+  const next = {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => {
+      if (be.id !== edge.bEventId) return be;
+      const probabilisticRouting = (be.probabilisticRouting || []).map((branch, idx) =>
+        idx === edge.branchIndex ? { ...branch, probability: clamped } : branch
+      );
+      return { ...be, probabilisticRouting };
+    }),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
 // Clones one or more selected canvas nodes, offsetting their copies on the canvas.
 // Connections are never copied — duplicates land disconnected, same as a freshly
 // added node, since auto-replicating edges to (possibly non-duplicated) neighbours
