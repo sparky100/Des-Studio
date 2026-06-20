@@ -1230,5 +1230,15 @@ export function updateVisualNode(model, node, patch = {}) {
       ...(patch.terminalMacro !== undefined ? { effect: `${patch.terminalMacro}()` } : {}),
     }));
   }
+  if (patch.sectionId !== undefined) {
+    // Sections key membership by the underlying entity's id (queue/bEvent/cEvent),
+    // same id node.refId points at — route-exit sinks share their parent bEvent's id.
+    const memberRefId = node.refId?.startsWith("route-exit:") ? node.refId.slice("route-exit:".length) : node.refId;
+    next.sections = (next.sections || []).map(section => {
+      const memberIds = (section.memberIds || []).filter(id => id !== memberRefId);
+      if (section.id === patch.sectionId) memberIds.push(memberRefId);
+      return { ...section, memberIds };
+    });
+  }
   return updateGraphLayout(next, deriveGraphFromModel(next));
 }

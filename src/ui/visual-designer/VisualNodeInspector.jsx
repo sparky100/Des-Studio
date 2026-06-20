@@ -128,6 +128,11 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
   const activityServer = effectValue(cEvent?.effect, /ASSIGN\([^,)]+,\s*([^)]+)\)/i);
   const isDelayActivity = /DELAY\(/i.test(String(cEvent?.effect || ""));
 
+  const sections = model.sections || [];
+  // bEventRefId already strips the route-exit: prefix, and equals node.refId for
+  // queue/activity nodes too — i.e. the same id used as a section memberId.
+  const currentSectionId = sections.find(section => (section.memberIds || []).includes(bEventRefId))?.id || "";
+
   return (
     <div style={{ background: C.panel, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
@@ -327,6 +332,18 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
             </SelectField>
           )}
         </>
+      )}
+
+      {sections.length > 0 && (
+        <SelectField
+          label="Section"
+          value={currentSectionId}
+          disabled={!canEdit}
+          onChange={value => onPatchNode(node, { sectionId: value || null })}
+        >
+          <option value="">Unassigned</option>
+          {sections.map(section => <option key={section.id} value={section.id}>{section.name || "Section"}</option>)}
+        </SelectField>
       )}
 
       {!canEdit && <Btn small variant="ghost" disabled>Read-only</Btn>}
