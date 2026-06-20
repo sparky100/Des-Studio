@@ -367,6 +367,136 @@ describe('Visual Designer shell', () => {
     expect(onModelChange.mock.calls[0][0].queues).toHaveLength(0);
   });
 
+  it('duplicates selected nodes via the toolbar Duplicate button', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+    const queueOnlyModel = {
+      id: 'queue-only',
+      entityTypes: [{ id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] }],
+      stateVariables: [],
+      queues: [
+        { id: 'triage-q', name: 'Triage Queue', customerType: 'Patient', discipline: 'FIFO' },
+        { id: 'consult-q', name: 'Consultant Queue', customerType: 'Patient', discipline: 'FIFO' },
+      ],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    render(
+      <VisualDesignerPanel
+        model={queueOnlyModel}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock multi-select queues/i }));
+    await user.click(within(screen.getByLabelText('Selection actions')).getByRole('button', { name: /^duplicate$/i }));
+
+    expect(onModelChange).toHaveBeenCalledOnce();
+    expect(onModelChange.mock.calls[0][0].queues).toHaveLength(4);
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+  });
+
+  it('hides the Duplicate button (but not Copy) when the model is read-only', async () => {
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit={false}
+        onModelChange={vi.fn()}
+      />
+    );
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /mock multi-select queues/i }));
+
+    const toolbar = screen.getByLabelText('Selection actions');
+    expect(within(toolbar).queryByRole('button', { name: /^duplicate$/i })).not.toBeInTheDocument();
+    expect(within(toolbar).getByRole('button', { name: /^copy$/i })).toBeInTheDocument();
+  });
+
+  it('duplicates selected nodes with Ctrl+D', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+    const queueOnlyModel = {
+      id: 'queue-only',
+      entityTypes: [{ id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] }],
+      stateVariables: [],
+      queues: [
+        { id: 'triage-q', name: 'Triage Queue', customerType: 'Patient', discipline: 'FIFO' },
+        { id: 'consult-q', name: 'Consultant Queue', customerType: 'Patient', discipline: 'FIFO' },
+      ],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    render(
+      <VisualDesignerPanel
+        model={queueOnlyModel}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock multi-select queues/i }));
+    await user.keyboard('{Control>}d{/Control}');
+
+    expect(onModelChange).toHaveBeenCalledOnce();
+    expect(onModelChange.mock.calls[0][0].queues).toHaveLength(4);
+  });
+
+  it('copies and pastes selected nodes with Ctrl+C / Ctrl+V', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+    const queueOnlyModel = {
+      id: 'queue-only',
+      entityTypes: [{ id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] }],
+      stateVariables: [],
+      queues: [
+        { id: 'triage-q', name: 'Triage Queue', customerType: 'Patient', discipline: 'FIFO' },
+        { id: 'consult-q', name: 'Consultant Queue', customerType: 'Patient', discipline: 'FIFO' },
+      ],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    render(
+      <VisualDesignerPanel
+        model={queueOnlyModel}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock multi-select queues/i }));
+    await user.keyboard('{Control>}c{/Control}');
+    expect(onModelChange).not.toHaveBeenCalled();
+
+    await user.keyboard('{Control>}v{/Control}');
+
+    expect(onModelChange).toHaveBeenCalledOnce();
+    expect(onModelChange.mock.calls[0][0].queues).toHaveLength(4);
+  });
+
+  it('does not paste when the model is read-only', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit={false}
+        onModelChange={onModelChange}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock multi-select queues/i }));
+    await user.keyboard('{Control>}c{/Control}');
+
+    onModelChange.mockClear();
+    await user.keyboard('{Control>}v{/Control}');
+    expect(onModelChange).not.toHaveBeenCalled();
+  });
+
   it('uses visual connections to update canonical source routing', async () => {
     const user = userEvent.setup();
 

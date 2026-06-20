@@ -1032,6 +1032,98 @@ export function deleteVisualEdge(model, graph, edgeId) {
   return updateGraphLayout(next, deriveGraphFromModel(next));
 }
 
+// Clones one or more selected canvas nodes, offsetting their copies on the canvas.
+// Connections are never copied — duplicates land disconnected, same as a freshly
+// added node, since auto-replicating edges to (possibly non-duplicated) neighbours
+// would be ambiguous. Synthetic route-exit sink nodes are not real model records
+// and are skipped. Returns the updated model plus the new graph node ids so the
+// caller can select the copies.
+export function duplicateVisualNodes(model, nodes = [], offset = { x: 48, y: 48 }) {
+  const duplicable = nodes.filter(node => node?.refId && !node.refId.startsWith("route-exit:"));
+  if (duplicable.length === 0) return { model, newNodeIds: [] };
+
+  const bEvents = [...(model.bEvents || [])];
+  const cEvents = [...(model.cEvents || [])];
+  const queues = [...(model.queues || [])];
+  const allIds = new Set([...bEvents, ...cEvents, ...queues, ...(model.entityTypes || [])].map(item => item.id || item.name));
+  const existingBNames = new Set(bEvents.map(event => clean(event.name).toLowerCase()));
+  const existingCNames = new Set(cEvents.map(event => clean(event.name).toLowerCase()));
+  const existingQNames = new Set(queues.map(queue => clean(queue.name).toLowerCase()));
+  const nextId = prefix => {
+    const id = makeId(prefix, allIds);
+    allIds.add(id);
+    return id;
+  };
+
+  // { type, refId, x, y } for each copy — used after re-deriving the graph to
+  // find the new node and pin its position next to the original.
+  const newRefs = [];
+
+  for (const node of duplicable) {
+    if (node.type === VISUAL_NODE_TYPES.QUEUE) {
+      const original = queues.find(queue => queue.id === node.refId);
+      if (!original) continue;
+      const id = nextId("queue");
+      const name = uniqueName(`${original.name} copy`, existingQNames);
+      queues.push({ ...original, id, name });
+      newRefs.push({ type: node.type, refId: id, x: (node.x || 0) + offset.x, y: (node.y || 0) + offset.y });
+    }
+
+    if (node.type === VISUAL_NODE_TYPES.SOURCE) {
+      const original = bEvents.find(event => event.id === node.refId);
+      if (!original) continue;
+      const id = nextId("arrival");
+      const name = uniqueName(`${original.name} copy`, existingBNames);
+      const schedules = (original.schedules || []).map(schedule => ({
+        ...schedule,
+        eventId: schedule.eventId === original.id ? id : schedule.eventId,
+      }));
+      bEvents.push({ ...original, id, name, schedules });
+      newRefs.push({ type: node.type, refId: id, x: (node.x || 0) + offset.x, y: (node.y || 0) + offset.y });
+    }
+
+    if (node.type === VISUAL_NODE_TYPES.SINK) {
+      const original = bEvents.find(event => event.id === node.refId);
+      if (!original) continue;
+      const id = nextId("completion");
+      const name = uniqueName(`${original.name} copy`, existingBNames);
+      bEvents.push({ ...original, id, name, schedules: (original.schedules || []).map(schedule => ({ ...schedule })) });
+      newRefs.push({ type: node.type, refId: id, x: (node.x || 0) + offset.x, y: (node.y || 0) + offset.y });
+    }
+
+    if (node.type === VISUAL_NODE_TYPES.ACTIVITY) {
+      const original = cEvents.find(event => event.id === node.refId);
+      if (!original) continue;
+      const cId = nextId("activity");
+      const cName = uniqueName(`${original.name} copy`, existingCNames);
+      // Clone each referenced completion B-event too, so the copy's routing/loop
+      // config is independent rather than two activities sharing one completion.
+      const cSchedules = (original.cSchedules || []).map(schedule => {
+        const completion = schedule.eventId && bEvents.find(event => event.id === schedule.eventId);
+        if (!completion) return { ...schedule };
+        const completionId = nextId("service-complete");
+        bEvents.push({ ...completion, id: completionId, name: uniqueName(`${completion.name} copy`, existingBNames) });
+        return { ...schedule, eventId: completionId };
+      });
+      cEvents.push({ ...original, id: cId, name: cName, cSchedules });
+      newRefs.push({ type: node.type, refId: cId, x: (node.x || 0) + offset.x, y: (node.y || 0) + offset.y });
+    }
+  }
+
+  const next = { ...model, bEvents, cEvents, queues };
+  const derived = deriveGraphFromModel(next);
+  const positionPatches = [];
+  const newNodeIds = [];
+  for (const ref of newRefs) {
+    const derivedNode = derived.nodes.find(n => n.type === ref.type && n.refId === ref.refId);
+    if (!derivedNode) continue;
+    positionPatches.push({ id: derivedNode.id, x: ref.x, y: ref.y });
+    newNodeIds.push(derivedNode.id);
+  }
+
+  return { model: updateGraphLayout(next, derived, { nodes: positionPatches }), newNodeIds };
+}
+
 export function deleteVisualNode(model, node) {
   if (!node || !node.refId) return model;
   let next = { ...model };

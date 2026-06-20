@@ -1,6 +1,6 @@
 // Tests for graph-operations fixes: cSchedules append, auto-link guard, deleteVisualNode overflow cleanup
 import { describe, test, expect } from 'vitest';
-import { connectVisualNodes, addVisualNode, deleteVisualNode } from '../graph-operations.js';
+import { connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes } from '../graph-operations.js';
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from '../graph.js';
 
 // Model with Triage activity already routing to Queue 2.
@@ -193,5 +193,90 @@ describe('deleteVisualNode — overflow cleanup', () => {
 
     const overflowEdges = derivedGraph.edges.filter(e => e.source === 'overflow');
     expect(overflowEdges).toHaveLength(0);
+  });
+});
+
+describe('duplicateVisualNodes', () => {
+  test('duplicates a queue with a unique name and offset position', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const queueNode = graph.nodes.find(n => n.id === 'queue:queue-1');
+
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, [queueNode], { x: 48, y: 48 });
+
+    expect(newNodeIds).toHaveLength(1);
+    expect(next.queues).toHaveLength(4);
+    const copy = next.queues.find(q => q.id !== queueNode.refId && q.name === 'Queue 1 copy');
+    expect(copy).toBeDefined();
+
+    const derived = deriveGraphFromModel(next);
+    const copyNode = derived.nodes.find(n => n.id === newNodeIds[0]);
+    expect(copyNode.x).toBe((queueNode.x || 0) + 48);
+    expect(copyNode.y).toBe((queueNode.y || 0) + 48);
+  });
+
+  test('duplicating a source clones its bEvent with an independent schedule', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const sourceNode = graph.nodes.find(n => n.type === VISUAL_NODE_TYPES.SOURCE);
+
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, [sourceNode]);
+
+    expect(newNodeIds).toHaveLength(1);
+    expect(next.bEvents).toHaveLength(model.bEvents.length + 1);
+    const original = next.bEvents.find(e => e.id === sourceNode.refId);
+    const copy = next.bEvents.find(e => e.id !== sourceNode.refId && e.name === `${original.name} copy`);
+    expect(copy).toBeDefined();
+    // The copy's own schedule references the copy, not the original.
+    expect(copy.schedules[0].eventId).toBe(copy.id);
+    expect(original.schedules[0].eventId).toBe(original.id);
+  });
+
+  test('duplicating an activity also clones its referenced completion b-event independently', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const activityNode = graph.nodes.find(n => n.id === 'activity:activity-1');
+
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, [activityNode]);
+
+    expect(newNodeIds).toHaveLength(1);
+    const copyCEvent = next.cEvents.find(e => e.id !== 'activity-1');
+    expect(copyCEvent).toBeDefined();
+    expect(copyCEvent.cSchedules).toHaveLength(1);
+
+    const copyCompletionId = copyCEvent.cSchedules[0].eventId;
+    expect(copyCompletionId).not.toBe('route-activity-1-queue-2');
+    const copyCompletion = next.bEvents.find(e => e.id === copyCompletionId);
+    expect(copyCompletion).toBeDefined();
+    expect(copyCompletion.effect).toBe('RELEASE(Server, Queue 2)');
+
+    // Original activity's route is untouched — still points at the original completion event.
+    const originalCEvent = next.cEvents.find(e => e.id === 'activity-1');
+    expect(originalCEvent.cSchedules[0].eventId).toBe('route-activity-1-queue-2');
+  });
+
+  test('skips synthetic route-exit sink nodes', () => {
+    const model = makeModel();
+    const fakeRouteExitNode = { type: VISUAL_NODE_TYPES.SINK, refId: 'route-exit:arrival-1', x: 0, y: 0 };
+
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, [fakeRouteExitNode]);
+
+    expect(newNodeIds).toHaveLength(0);
+    expect(next).toBe(model);
+  });
+
+  test('duplicates multiple nodes in one batch without id collisions', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const queue1 = graph.nodes.find(n => n.id === 'queue:queue-1');
+    const queue2 = graph.nodes.find(n => n.id === 'queue:queue-2');
+
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, [queue1, queue2]);
+
+    expect(newNodeIds).toHaveLength(2);
+    expect(new Set(newNodeIds).size).toBe(2);
+    expect(next.queues).toHaveLength(5);
+    const ids = next.queues.map(q => q.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
