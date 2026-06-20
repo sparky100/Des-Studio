@@ -8,11 +8,12 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter})=>{
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter, onCreateBEvent})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
   const [activeSectionIds,setActiveSectionIds]=useState([]);
+  const [creatingBEvent,setCreatingBEvent]=useState(null); // {i,j,name}
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(events.map(e=>e.id)));
@@ -68,6 +69,21 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
     const n=[...events];
     n[i]={...n[i],cSchedules:n[i].cSchedules.filter((_,idx)=>idx!==j)};
     onChange(n);
+  };
+
+  // Inline "create a shell B-event" flow for a schedule row that needs one which doesn't exist yet
+  const startCreateBEvent=(i,j)=>{
+    const ev=events[i];
+    setCreatingBEvent({i,j,name:`${ev?.name||"Event"} — follow-on`});
+  };
+  const cancelCreateBEvent=()=>setCreatingBEvent(null);
+  const confirmCreateBEvent=()=>{
+    if(!creatingBEvent)return;
+    const {i,j,name}=creatingBEvent;
+    const id="b"+Date.now();
+    onCreateBEvent?.({id,name:(name||"").trim()||"New B-event",scheduledTime:"9999",effect:[],schedules:[],description:""});
+    updSched(i,j,{eventId:id});
+    setCreatingBEvent(null);
   };
 
   const lcFilter=filterText.toLowerCase();
@@ -303,16 +319,38 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                       {/* Row 1: B-event selector */}
                       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                         <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:60}}>B-event:</span>
-                        <select value={s.eventId||""} onChange={e=>updSched(i,j,{eventId:e.target.value})}
-                          style={{flex:1,background:C.bg,border:`1px solid ${C.bEvent}55`,borderRadius:4,
-                          color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}>
-                          <option value="">— select B-event to schedule —</option>
-                          {bEvents.map(b=>(
-                            <option key={b.id} value={b.id}>
-                              {displayEventName(b.name)||b.id}
-                            </option>
-                          ))}
-                        </select>
+                        {creatingBEvent&&creatingBEvent.i===i&&creatingBEvent.j===j ? (
+                          <>
+                            <input autoFocus value={creatingBEvent.name}
+                              onChange={e=>setCreatingBEvent(c=>({...c,name:e.target.value}))}
+                              onKeyDown={e=>{
+                                if(e.key==="Enter"){e.preventDefault();confirmCreateBEvent();}
+                                if(e.key==="Escape"){e.preventDefault();cancelCreateBEvent();}
+                              }}
+                              placeholder="New B-event name"
+                              aria-label="New B-event name"
+                              style={{flex:1,minWidth:140,background:C.bg,border:`1px solid ${C.bEvent}55`,borderRadius:4,
+                              color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+                            <Btn small variant="primary" onClick={confirmCreateBEvent}>Create &amp; use</Btn>
+                            <Btn small variant="ghost" onClick={cancelCreateBEvent}>Cancel</Btn>
+                          </>
+                        ) : (
+                          <select value={s.eventId||""} aria-label="B-event to schedule" onChange={e=>{
+                            const v=e.target.value;
+                            if(v==="__new__"){startCreateBEvent(i,j);return;}
+                            updSched(i,j,{eventId:v});
+                          }}
+                            style={{flex:1,background:C.bg,border:`1px solid ${C.bEvent}55`,borderRadius:4,
+                            color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}>
+                            <option value="">— select B-event to schedule —</option>
+                            {onCreateBEvent&&<option value="__new__">+ Create new B-event…</option>}
+                            {bEvents.map(b=>(
+                              <option key={b.id} value={b.id}>
+                                {displayEventName(b.name)||b.id}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                         <Btn small variant="danger" ariaLabel={`Remove C-event schedule ${j + 1}`} onClick={()=>remSched(i,j)}>✕</Btn>
                       </div>
 
