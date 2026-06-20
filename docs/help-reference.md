@@ -3,7 +3,7 @@
 **Purpose:** System context for Help Assistant LLM responses  
 **Audience:** LLM consuming as prompt context (machine-readable)  
 **Maintenance:** Updated at end of each sprint alongside core documents  
-**Last updated:** 2026-06-19
+**Last updated:** 2026-06-20
 
 ---
 
@@ -100,7 +100,7 @@ Performance targets. Defined in `goals[]` array.
 
 ## Macros
 
-All 19 effect macros. Syntax is exact — case-sensitive, parentheses required.
+All 20 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 ### Flow Control Macros
 
@@ -120,6 +120,12 @@ All 19 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | PREEMPT | `PREEMPT(ServerType)` | Interrupts in-service entity, replaces with higher-priority entity | Displaced entity re-queues with remaining service preserved | Using without priority queue discipline |
 | FAIL | `FAIL(ServerType)` | Places server into failed (unavailable) state; interrupts any in-progress service | Sets server to failed; in-service entity re-queues with remaining service time | Forgetting to schedule a paired REPAIR B-event |
 | REPAIR | `REPAIR(ServerType)` | Restores failed server to idle | Sets server to idle; triggers C-scan | Repairing non-failed server (no effect) |
+
+### Resource-Free Activity Macros
+
+| Macro | Syntax | Purpose | Side Effects | Common Mistakes |
+|-------|--------|---------|--------------|-----------------|
+| DELAY | `DELAY(QueueName)` | Removes the next entity from a queue and marks it serving — without claiming any server | Duration is set by the firing C-event's `cSchedules` entry, not by a server; pairs with a completion B-event for routing | Completion B-event has only an `ARRIVE` effect — `ARRIVE` always creates a new entity and never resolves the delayed one, leaving it stuck in "serving" forever (V47). Add `COMPLETE()`, `RELEASE()`, or routing to the completion B-event |
 
 ### Entity Transformation Macros
 
@@ -324,15 +330,35 @@ All 6 queue disciplines.
 | V8 | No ARRIVE source AND no COMPLETE/RENEGE sink | Add at least one arrival and one departure |
 | V9 | C-event condition references undefined queue | Create queue or correct name |
 | V10 | Attribute name starts with Resource or Queue | Rename attribute (reserved namespace) |
-| V17 | routing table and RELEASE target both specified | Use one or the other, not both |
-| V18 | Probabilistic routing probabilities don't sum to 1.0 | Adjust probabilities |
-| V19 | Server count < 1 | Set count ≥ 1 |
-| V20 | Queue capacity < 1 when specified | Set capacity ≥ 1 or leave blank |
+| V12 | Piecewise distribution has no periods, a non-numeric/non-zero start time, or a nested piecewise period | Add at least one period starting at time 0; don't nest piecewise inside piecewise |
+| V13 | Piecewise periods are not sorted by start time | Sort periods ascending by startTime |
+| V14 | Server shift schedule has non-numeric/non-zero-start times, isn't sorted ascending, or has a non-positive-integer capacity | Fix shift schedule times and capacities |
+| V17 | routing table and RELEASE target both specified, or a routing entry/defaultQueueName references an unknown queue | Use one or the other, not both; correct queue names |
+| V18 | Both routing and probabilisticRouting set, or RELEASE target + probabilisticRouting set, or probabilities don't sum to 1.0, or an entry references an unknown queue | Remove the conflicting field; adjust probabilities to sum to 1.0 (±0.001); correct queue names |
+| V19 | Server count is not an integer ≥ 1 | Set count ≥ 1 |
+| V20 | Queue capacity < 1 when specified, or overflowDestination references an unknown queue | Set capacity ≥ 1 or leave blank; correct overflow destination |
 | V21 | balkProbability outside [0, 1] | Correct probability value |
-| V22 | BATCH size < 2 or queue doesn't exist | Set size ≥ 2; create queue |
-| V24 | loopConfig.maxLoopCount < 1 | Set maxLoopCount ≥ 1 |
-| V26 | Container id empty or capacity ≤ 0 | Set valid id and capacity |
-| V27 | FILL/DRAIN references undeclared container | Create container or correct id |
+| V22 | BATCH size < 2, or BATCH references an unknown queue | Set size ≥ 2; create queue or correct name |
+| V23 | UNBATCH references an unknown queue | Create queue or correct name |
+| V24 | loopConfig.maxLoopCount < 1, or loopConfig.exitQueueName references an unknown queue | Set maxLoopCount ≥ 1; correct exit queue name |
+| V25 | RENEGE('TypeName') used instead of RENEGE(ctx) | Use exactly RENEGE(ctx) |
+| V26 | Container has an empty/duplicate id, capacity ≤ 0, or initialLevel < 0 or > capacity | Set a valid unique id, positive capacity, and initialLevel within [0, capacity] |
+| V27 | FILL/DRAIN references an undeclared container | Create container or correct id |
+| V28 | Model epoch is not a valid ISO 8601 datetime | Correct the epoch format |
+| V30 | B-event/C-event routes to exit (null queue) with no COMPLETE(), RENEGE(ctx), or RELEASE() effect | Add a terminal lifecycle effect so entities are counted as served |
+| V31 | Event routes to exit but doesn't explicitly end the lifecycle | Add COMPLETE(), RENEGE(ctx), or RELEASE() |
+| V32 | Event has multiple terminal lifecycle sinks | Choose one terminal action: COMPLETE() or RENEGE(ctx) |
+| V34 | Replication count is not a whole number ≥ 1 | Set replication count to an integer ≥ 1 |
+| V35 | Warm-up time ≥ run duration | Shorten warm-up time below run duration |
+| V36 | MTBF/MTTR set on a non-server entity type | Only server entity types may use MTBF/MTTR |
+| V37 | MTBF or MTTR is missing its distribution or parameters | Provide both a distribution and parameters for MTBF and for MTTR |
+| V39 | Event has both an ARRIVE effect and probabilisticRouting | Remove probabilisticRouting — ARRIVE routes via its own argument |
+| V41 | SET_ATTR targets an immutable attribute | Target a mutable attribute instead |
+| V45 | Queue is never used as a routing destination (disconnected fragment) | Wire the queue into routing, or remove it |
+| V46 | Queue overflow chain cycles back on itself | Break the cycle — overflow chains must terminate at a queue without a cycle |
+| V47 | DELAY references an unknown queue, or its completion B-event has only an ARRIVE effect (entity left stuck "serving" forever) | Correct the queue name; add COMPLETE(), RELEASE(), or routing to the completion B-event |
+
+Gaps in the numbering (e.g. no V7) are intentional — codes were retired or renumbered during development and are not reused.
 
 ### Warning-Level Rules (Run Proceeds)
 
@@ -341,11 +367,57 @@ All 6 queue disciplines.
 | V8 (one missing) | Only arrival OR only sink present | Model may not complete entity lifecycle |
 | V11 | Normal distribution with mean < 2×stddev | Frequent negative sample clamping to 0 |
 | V15 | Shift time after run duration | Shift change never fires |
-| V25 | RENEGE(TypeName) instead of RENEGE(ctx) | Macro silently fails; no reneging occurs |
-| V28 | Invalid epoch format | Real-world clock conversions disabled |
+| V16 | No simulation time limit or termination condition set | Model may run until the 5000-cycle limit if arrivals continue indefinitely |
 | V29 | cSchedules all have when with no fallback | Entities matching no condition receive no service |
-| W-CAP-01 | Multi-class resource contention | Priority inversion possible |
-| W-CAP-02 | Arrival rate exceeds capacity by >20% | Queue growth and long waits expected |
+| V33 | probabilisticRouting used with a single 100% null exit | Prefer explicit COMPLETE() without routing |
+| V38 | RELEASE() immediately followed by COMPLETE() | COMPLETE() will always be skipped |
+| V38b | COMPLETE() immediately followed by RELEASE() | RELEASE() re-queues the completed entity, causing an infinite loop |
+| V40 | SET_ATTR targets an attribute not declared on any entity class | Declare the attribute, or correct the name |
+| V42 | SPT discipline but entity class has no serviceTime/processingTime attribute | Discipline falls back to FIFO |
+| V43 | EDD discipline but entity class has no dueDate attribute | Discipline falls back to FIFO |
+| V44 | SET_ATTR has no preceding ARRIVE/ASSIGN/COSEIZE | Write will be skipped at runtime |
+| V47 | DELAY's cSchedule doesn't have "Pass entity context" enabled, or samples the delay from "Server attribute" | Falls back to a fixed delay of 1 |
+| W-CAP-01 | Two or more C-events SEIZE/ASSIGN the same server type | Results may be sensitive to C-event priority ordering |
+| W-CAP-02 | B-event schedule has an Exponential mean interval < 0.001 | simmodlr models discrete entities — consider SD Studio for continuous flow |
+
+---
+
+## Results Health Flags
+
+Deterministic, rule-based flags computed from simulation results — no LLM involved. They power the
+green/amber/red health indicator on the Results screen. Severity is `critical` or `warning`; flags
+are listed worst-first.
+
+### Post-Run Flags (computed once, after the run completes)
+
+| Code | Condition | Severity | Suggestion |
+|------|-----------|----------|------------|
+| H1 | Resource utilisation ≥85%/≥90%/≥95% | warning / critical / critical | Add capacity or reduce arrival rate; ≥90% means the queue cannot recover without more capacity |
+| H2 | A queue's late-run (last 20%) mean waiting count > 1.5× its early-run (first 20%) mean, and >2 | warning | Check upstream constraints — the queue is growing faster than it drains; the run may not be reaching steady state |
+| H3 | ≥15%/≥20% of arrivals still in system (waiting or serving) at end of run | warning / critical | Identify and relieve capacity constraints; results may be unreliable with a large unfinished backlog |
+| H4 | A capacity-limited queue blocked/overflowed ≥10% of arrivals (critical) or any amount (warning); or an unbounded queue peaked >50 waiting (warning) | warning / critical | Increase queue capacity or add an overflow route to handle peak demand |
+| H5 | Resource starved (idle despite queued work) >20% of the time | warning | Check routing rules or entity-to-server assignment — servers are idle when work is available |
+| H6 | Entities balked (declined to join a queue) — ≥10% of arrivals is critical, any amount is warning | warning / critical | Review the queue's balk probability/condition if this is unintended |
+| H7 | Less than 50% of arrivals completed (with ≥10 arrivals) | critical | Reduce arrival rate or add capacity — the system is severely overwhelmed |
+| H8 | Little's Law check shows >5% discrepancy between measured and theoretical wait | warning | Increase run duration — the run may be too short to reach steady state |
+| H9 | A resource was continuously starved for longer than 2× the mean service time | warning | Check upstream delivery to this resource — work isn't reaching it, suggesting a routing or blocking issue |
+| H10 | A resource sustained ≥90% utilisation for 15+ consecutive time units | warning | Add capacity or throttle arrivals — sustained high utilisation means the queue will not recover naturally |
+| H11 | A resource was idle for an extended period (zombie asset) while arrivals were active | warning | Check entity routing and B-event destinations — the resource may be unreachable or blocked by an upstream queue |
+
+### Live Flags (computed per-step, during execution)
+
+Live flags mirror the post-run flags above but fire in real time, without the post-run statistical
+context (no suggestion text is shown live).
+
+| Code | Mirrors | Condition |
+|------|---------|-----------|
+| L1 | H1 | Resource utilisation ≥85%/≥90%/≥95% |
+| L2 | H5 | Resource starved >20% of the time so far |
+| L3 | H4 | Queue has rejected (blocked/overflowed) arrivals at capacity so far |
+| L4 | H9 | Resource continuously starved beyond 2× mean service time |
+| L5 | H10 | Resource sustained ≥90% utilisation for 15+ consecutive time units |
+| L6 | H11 | Resource at 0% utilisation while arrivals are active |
+| L7 | H6 | Entities have balked at a queue so far |
 
 ---
 
