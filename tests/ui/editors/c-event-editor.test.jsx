@@ -390,3 +390,89 @@ describe('CEventEditor — inline B-event creation from a schedule row', () => {
     expect(screen.getByRole('combobox', { name: /B-event to schedule/i })).toBeInTheDocument();
   });
 });
+
+describe('CEventEditor — DELAY (no resource) schedule defaults', () => {
+  it('defaults a new schedule to a sampled distribution, not ServerAttr, for a Delay activity', () => {
+    const handleChange = vi.fn();
+    render(
+      <CEventEditor
+        events={[{ id: 'c1', name: 'Recover', priority: 1, condition: '', effect: ['DELAY(Recovery Queue)'], cSchedules: [], description: '' }]}
+        onChange={handleChange}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[{ id: 'q1', name: 'Recovery Queue', discipline: 'FIFO' }]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add Schedule/i }));
+
+    const newList = handleChange.mock.calls[0][0];
+    expect(newList[0].cSchedules).toHaveLength(1);
+    expect(newList[0].cSchedules[0].dist).toBe('Exponential');
+    expect(newList[0].cSchedules[0].dist).not.toBe('ServerAttr');
+  });
+
+  it('still defaults a new schedule to ServerAttr for a normal Service activity', () => {
+    const handleChange = vi.fn();
+    render(
+      <CEventEditor
+        events={[{ id: 'c1', name: 'Start Service', priority: 1, condition: '', effect: [], cSchedules: [], description: '' }]}
+        onChange={handleChange}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add Schedule/i }));
+
+    const newList = handleChange.mock.calls[0][0];
+    expect(newList[0].cSchedules[0].dist).toBe('ServerAttr');
+  });
+
+  it('shows an inline warning when an existing schedule on a Delay activity uses ServerAttr', () => {
+    render(
+      <CEventEditor
+        events={[{
+          id: 'c1', name: 'Recover', priority: 1, condition: '', effect: ['DELAY(Recovery Queue)'],
+          cSchedules: [{ id: 'cs1', eventId: '', dist: 'ServerAttr', distParams: { attr: 'serviceTime' }, useEntityCtx: true }],
+          description: '',
+        }]}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[{ id: 'q1', name: 'Recovery Queue', discipline: 'FIFO' }]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
+    expect(screen.getByText(/no server is claimed/i)).toBeInTheDocument();
+  });
+
+  it('does not show the ServerAttr warning once the schedule uses a sampled distribution', () => {
+    render(
+      <CEventEditor
+        events={[{
+          id: 'c1', name: 'Recover', priority: 1, condition: '', effect: ['DELAY(Recovery Queue)'],
+          cSchedules: [{ id: 'cs1', eventId: '', dist: 'Exponential', distParams: { mean: '1' }, useEntityCtx: true }],
+          description: '',
+        }]}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[{ id: 'q1', name: 'Recovery Queue', discipline: 'FIFO' }]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
+    expect(screen.queryByText(/no server is claimed/i)).not.toBeInTheDocument();
+  });
+});

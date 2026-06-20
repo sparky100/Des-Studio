@@ -731,6 +731,10 @@ export function validateModel(model) {
           warn('V47', `C-Event '${c.name || c.id}' uses DELAY but a cSchedule (targeting '${cs.eventId || '?'}') does not have "Pass entity context" (useEntityCtx) enabled — the completion B-event will not know which entity to route.`, 'cevents',
             { eventIds: [c.id] });
         }
+        if (cs.dist === 'ServerAttr') {
+          warn('V47', `C-Event '${c.name || c.id}' uses DELAY but its cSchedule (targeting '${cs.eventId || '?'}') samples the delay from "Server attribute" — no server is claimed by a DELAY activity, so this always falls back to a fixed delay of 1.`, 'cevents',
+            { eventIds: [c.id] });
+        }
       });
     }
   });

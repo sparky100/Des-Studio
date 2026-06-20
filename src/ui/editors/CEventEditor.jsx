@@ -56,8 +56,12 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
   // cSchedules helpers
   const addSched=(i)=>{
     const n=[...events];
-    n[i]={...n[i],cSchedules:[...(n[i].cSchedules||[]),
-      {id:"cs"+Date.now(),eventId:"",dist:"ServerAttr",distParams:{attr:"serviceTime"},useEntityCtx:true}]};
+    const effectArr=Array.isArray(n[i].effect)?n[i].effect.filter(Boolean):(n[i].effect?n[i].effect.split(';').map(s=>s.trim()).filter(Boolean):[]);
+    const isDelay=effectArr.some(e=>typeof e==='string'&&/^DELAY\(/i.test(e));
+    const sched=isDelay
+      ?{id:"cs"+Date.now(),eventId:"",dist:"Exponential",distParams:{mean:"1"},useEntityCtx:true}
+      :{id:"cs"+Date.now(),eventId:"",dist:"ServerAttr",distParams:{attr:"serviceTime"},useEntityCtx:true};
+    n[i]={...n[i],cSchedules:[...(n[i].cSchedules||[]),sched]};
     onChange(n);
   };
   const updSched=(i,j,patch)=>{
@@ -147,6 +151,8 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         const condSummary=typeof ev.condition==='string'&&ev.condition.trim()
           ?(ev.condition.length>30?ev.condition.slice(0,28)+"…":ev.condition)
           :"no condition";
+        const rowEffectArr=Array.isArray(ev.effect)?ev.effect.filter(Boolean):(ev.effect?ev.effect.split(';').map(s=>s.trim()).filter(Boolean):[]);
+        const rowIsDelay=rowEffectArr.some(e=>typeof e==='string'&&/^DELAY\(/i.test(e));
 
         return (
           <div key={ev.id}
@@ -220,10 +226,10 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
 
               {/* Activity type toggle + Effects */}
               {(()=>{
-                const effectArr=Array.isArray(ev.effect)?ev.effect.filter(Boolean):(ev.effect?ev.effect.split(';').map(s=>s.trim()).filter(Boolean):[]);
+                const effectArr=rowEffectArr;
                 // Match DELAY() with optional queue name so the mode flag persists before a queue is chosen
                 const delayMatch=effectArr.map(e=>typeof e==='string'?e.match(/^DELAY\(([^)]*)\)/i):null).find(Boolean);
-                const isDelay=!!delayMatch;
+                const isDelay=rowIsDelay;
                 const delayQueue=delayMatch?.[1]?.trim()||"";
 
                 const setDelayMode=(on)=>{
@@ -360,6 +366,11 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                         <DistPicker value={{dist:s.dist||"ServerAttr",distParams:s.distParams||{attr:"serviceTime"}}}
                           onChange={v=>updSched(i,j,{dist:v.dist,distParams:v.distParams})} compact/>
                       </div>
+                      {rowIsDelay&&s.dist==="ServerAttr"&&(
+                        <div style={{fontSize:10,color:C.amber,fontFamily:FONT,lineHeight:1.5}}>
+                          ⚠ This is a Delay activity — no server is claimed, so "Server attribute" has nothing to read and always falls back to a delay of 1. Pick a sampled distribution (Exponential, Fixed, …) instead.
+                        </div>
+                      )}
 
                       {/* Row 3: Entity context checkbox */}
                       <div style={{display:"flex",gap:8,alignItems:"center"}}>

@@ -929,6 +929,20 @@ describe("V47 — DELAY queue reference and useEntityCtx nudge", () => {
     const { warnings } = validateModel(model);
     expect(warnings.some(w => w.code === "V47")).toBe(true);
   });
+
+  it("warns when a DELAY C-event's cSchedule uses ServerAttr (no server is ever claimed)", () => {
+    const model = {
+      ...baseModel,
+      queues: [{ id: "q", name: "RecoveryQueue", discipline: "FIFO" }],
+      cEvents: [{
+        id: "c1", name: "Delay", condition: "true",
+        effect: "DELAY(RecoveryQueue)",
+        cSchedules: [{ eventId: "b1", dist: "ServerAttr", distParams: { attr: "serviceTime" }, useEntityCtx: true }],
+      }],
+    };
+    const { warnings } = validateModel(model);
+    expect(warnings.some(w => w.code === "V47")).toBe(true);
+  });
 });
 
 // ── S40.1 — EntityAttr skips distribution parameter validation ────────────────
