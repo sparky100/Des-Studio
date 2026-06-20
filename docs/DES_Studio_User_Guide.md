@@ -1,6 +1,6 @@
 # simmodlr — User Guide
 
-**Version:** 7.6.0  
+**Version:** 7.7.0  
 **Date:** 2026-06-20  
 **Sprint baseline:** Sprint 89  
 **Audience:** Simulation practitioners, operations analysts, engineering students
@@ -197,7 +197,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    | **Entity Types** | Add one entity type per distinct object class (e.g. "Customer", "Train"). Set attribute names, types (`number / string / boolean`), and default values. |
    | **Queues** | Add a queue for each waiting point. Set discipline (FIFO, LIFO, PRIORITY, SPT, EDD). Set capacity if finite. |
    | **B-Events** | Add arrival events (with a distribution) and service-completion events. Use the distribution picker to choose Exponential, Uniform, Triangular, Fixed, Erlang, Empirical, or other supported types. |
-   | **C-Events** | Define the conditions under which service starts: entity waiting AND server idle. Use the Predicate Builder — a point-and-click condition builder that prevents type mismatches. |
+   | **C-Events** | Define the conditions under which service starts: entity waiting AND server idle. Use the Predicate Builder — a point-and-click condition builder that prevents type mismatches. Each C-Event has an **Activity Type** toggle: **Service (claim resource)** seizes a server entity; **Delay (no resource)** just holds the entity for a sampled time with no server involved (e.g. a recovery period, a fixed processing wait). Picking **Delay** swaps the Effects picker for a single **Source queue** select and auto-writes `DELAY(QueueName)` — see §5.4 for how to configure what happens when the delay ends. |
    | **Schedules** | Create named timetables for time-varying arrival rates. Import rows from CSV or Excel and link timetables to B-Events. |
    | **Model Data** | Add counters you want to track (e.g. total cost, total reneges). Also set the time unit, real-world epoch, and any external data sources. |
 
@@ -470,6 +470,7 @@ Full API reference: `docs/architecture/results-api-design.md`.
 | V4 | A PRIORITY queue has no entity with a `priority` attribute | Add a `number`-type attribute called `priority` to the entity type using that queue |
 | V37 | A resource has `MTBF` set but not `MTTR` (or vice versa) | Set both `MTBF` and `MTTR`, or remove both |
 | V38 | A B-Event fires `RELEASE(Server)` immediately before `COMPLETE()` — the `COMPLETE` is silently skipped | Reorder: `COMPLETE()` should come before `RELEASE()` |
+| V47 | A Delay activity's follow-on schedule samples the delay from "Server attribute," or the completion B-Event's effect is a bare `ARRIVE(...)` with nothing else | See §5.4 — pick a sampled distribution (Exponential, Fixed, …) instead of "Server attribute," and resolve the delayed entity with `COMPLETE()`, a routing table, or `RELEASE()` instead of (or alongside) `ARRIVE` |
 
 Click any error in the Model Health panel to jump directly to the relevant editor tab.
 
@@ -509,6 +510,25 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 | "Supabase auth failed" on load | `.env.local` credentials missing or expired | Regenerate the anon key in Supabase Dashboard and update `.env.local` |
 | LLM Bundle is missing confidence intervals | The run used only one replication | Run with ≥ 2 replications — the CI section is omitted for single-replication runs because there is no between-replication variance to report |
 | LLM Bundle option is greyed out in Export… | No run has been completed in the current session | Complete at least one run, then the option becomes available |
+
+### 5.4 "What do I configure for a Delay (no resource) activity, and what happens when it ends?"
+
+**When this applies.** Your C-Event's Activity Type is set to **Delay (no resource)** — used for things like a recovery period, an unsupervised processing wait, or any hold that does not tie up a server entity.
+
+**Two settings to get right:**
+
+1. **"delay via:" on the Schedule Follow-on Event panel.** Pick a sampled distribution — **Exponential**, **Fixed**, **Uniform**, etc. Do **not** pick **Server attribute**: a Delay activity never claims a server, so there is nothing to read an attribute from, and the engine silently falls back to a delay of 1 every time (flagged by validation rule V47, with an amber warning shown directly under the schedule row in the editor).
+2. **The completion B-Event's Effect** — what happens to the entity once the delay ends. There are three valid choices, pick based on what actually happens next:
+
+   | If the entity… | Configure the B-Event with… |
+   |---|---|
+   | …leaves the system entirely (process ends here) | `COMPLETE()` — works correctly even though no server was claimed. |
+   | …continues to another queue, and no server is involved anywhere in this entity's journey | A **routing table** (Conditional or Probabilistic routing, set in the B-Event's Routing panel) and **no effect macro at all** — leave Effects empty. The engine treats a delay-held entity the same as one waiting in a queue, so routing alone moves it on. |
+   | …continues, and a server *was* genuinely seized earlier in this same entity's journey and is still held through the delay | `RELEASE(ServerType[, TargetQueue])` to free that server now. |
+
+   **Do not** use a bare `ARRIVE(...)` as the only effect on a Delay completion B-Event — `ARRIVE` always creates a brand-new entity and never resolves the one that was delayed, leaving it stuck forever (flagged by V47). `ARRIVE` is fine *combined with* one of the three options above (e.g. to also spawn a log/audit entity), just never alone.
+
+   **Do not** invent a `RELEASE()` for a chain where no server was ever seized — `RELEASE` has no awareness that this entity came from a Delay, so it either does nothing (entity stuck, same problem as bare `ARRIVE`) or, worse, can release an unrelated server's claim on a different entity. If no server is involved, use `COMPLETE()` or a routing table instead.
 
 ---
 
