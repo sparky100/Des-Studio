@@ -131,7 +131,10 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
           }
           return null;
         })();
-        const hasRouting=Array.isArray(ev.routing) && ev.routing.some(row=>String(row?.condition?.variable||row?.condition?.token||row?.condition?.left||"").trim()!=="");
+        // hasRouting/hasProb just check row presence (not whether a row is filled in yet) so that
+        // picking "Conditional routing" from the Mode select and seeding one empty row below keeps
+        // the dropdown showing "Conditional routing" instead of reverting to "none" on the next render.
+        const hasRouting=Array.isArray(ev.routing) && ev.routing.length>0;
         const hasProb=Array.isArray(ev.probabilisticRouting) && ev.probabilisticRouting.length>0;
         const routingMode=hasRouting?"conditional":hasProb?"probabilistic":"none";
         const routingEntityAttrs=entityTypes.filter(et=>et.role!=="server").flatMap(et=>(et.attrDefs||et.attrs||[]).map(a=>`Entity.${a.name||a}`)).filter(Boolean);
@@ -139,7 +142,9 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
           const n=[...events];
           const{routing:_r,defaultQueueName:_d,probabilisticRouting:_pr,...rest}=n[i];
           const cleanEff=effects.map(eff=>typeof eff==='string'?eff.replace(/^(RELEASE\s*\([^,)]+),\s*[^)]+\)/i,'$1)'):eff);
-          if(mode==="conditional") n[i]={...rest,routing:[],defaultQueueName:'',effect:cleanEff};
+          // Seed one empty row (mirroring the probabilistic branch below) — an empty routing[]
+          // array reads as hasRouting=false, which would immediately fall back to "none".
+          if(mode==="conditional") n[i]={...rest,routing:[{condition:{variable:'',operator:'==',value:''},queueName:''}],defaultQueueName:'',effect:cleanEff};
           else if(mode==="probabilistic") n[i]={...rest,probabilisticRouting:[{probability:1,queueName:''}],effect:cleanEff};
           else n[i]={...rest};
           onChange(n);

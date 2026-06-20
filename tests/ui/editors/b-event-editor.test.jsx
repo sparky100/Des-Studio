@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { BEventEditor } from '../../../src/ui/editors/index.jsx';
@@ -175,5 +176,35 @@ describe('BEventEditor — ARRIVE-on-scheduled-follow-on warning', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
     expect(screen.queryByText(/ARRIVE always creates a brand-new entity/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('BEventEditor — routing mode selector', () => {
+  it('keeps "Conditional routing" selected (and shows the condition row) after picking it from the Mode dropdown', () => {
+    const StatefulEditor = () => {
+      const [events, setEvents] = useState([
+        { id: 'b1', name: 'Recovery Complete', scheduledTime: '9999',
+          effect: ['RELEASE(Worker, Queue 2)'], schedules: [] },
+      ]);
+      return (
+        <BEventEditor
+          events={events}
+          onChange={setEvents}
+          entityTypes={[{ id: 'w', name: 'Worker', role: 'server', attrDefs: [] }]}
+          stateVariables={[]}
+          queues={[{ id: 'q2', name: 'Queue 2', discipline: 'FIFO' }]}
+          cEvents={[]}
+        />
+      );
+    };
+    render(<StatefulEditor />);
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    fireEvent.click(screen.getByText('Release Routing'));
+
+    const modeSelect = screen.getByDisplayValue('Single queue (no routing)');
+    fireEvent.change(modeSelect, { target: { value: 'conditional' } });
+
+    expect(screen.getByDisplayValue('Conditional routing')).toBeInTheDocument();
+    expect(screen.getByText('IF')).toBeInTheDocument();
   });
 });
