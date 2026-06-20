@@ -8,6 +8,10 @@ const SHORTCUTS = [
   { keys: ["Ctrl", "Z"],        description: "Undo last model edit" },
   { keys: ["Ctrl", "Shift", "Z"], description: "Redo last undone edit" },
   { keys: ["Ctrl", "S"],        description: "Save model" },
+  { keys: ["Ctrl", "C"],        description: "Copy selected nodes (Visual Designer canvas)" },
+  { keys: ["Ctrl", "V"],        description: "Paste copied nodes (Visual Designer canvas)" },
+  { keys: ["Ctrl", "D"],        description: "Duplicate selected nodes in place (Visual Designer canvas)" },
+  { keys: ["Delete"],           description: "Delete selected nodes or edge (Visual Designer canvas)" },
   { keys: ["?"],                description: "Show this keyboard shortcuts list" },
   { keys: ["Esc"],              description: "Close modal / cancel action" },
 ];

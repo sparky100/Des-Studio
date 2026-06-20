@@ -501,7 +501,7 @@ If a private model has no collaborators and isn't public yet, the Access tab sho
 
 **Access:** Design mode → **Visual** sub-tab. Also available from the New Model dialog via **Draw**.
 
-**Strengths:** Visual flow; node badges show advanced config (conditional, feed); bidirectional sync with Forms/Tabs. New blank models open with a starter flow pre-placed on the canvas — no unsaved changes until you make your first edit.
+**Strengths:** Visual flow; node badges show advanced config (conditional, feed); bidirectional sync with Forms/Tabs. New blank models open with a starter flow pre-placed on the canvas — no unsaved changes until you make your first edit. Multi-select nodes (Shift/Ctrl-click or box-drag) to bulk-move or bulk-delete; copy/paste (Ctrl+C/Ctrl+V) or duplicate in place (Ctrl+D). Selecting an edge for a probabilistic-routing branch shows an inline `%` input on the edge label — edit the split without leaving the canvas or opening the B-Events editor.
 
 ---
 

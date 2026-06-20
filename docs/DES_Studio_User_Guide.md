@@ -1,8 +1,8 @@
 # simmodlr — User Guide
 
-**Version:** 7.5.0  
-**Date:** 2026-06-17  
-**Sprint baseline:** Sprint 88  
+**Version:** 7.6.0  
+**Date:** 2026-06-20  
+**Sprint baseline:** Sprint 89  
 **Audience:** Simulation practitioners, operations analysts, engineering students
 
 ---
@@ -211,7 +211,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 - If you use a PRIORITY queue discipline, the entity type needs a `priority` attribute of type `number`.
 - B-Events set *when* things happen. C-Events set *what can happen given the current state*. If nothing is happening during a run, check your C-Event conditions.
 
-**Visual Designer.** Click **Draw** in the Design toolbar to open the canvas-based Visual Designer and build or rearrange the same model graphically. Use **Pan** mode to move around the diagram. Use **Select** mode, or Shift/Ctrl-click with a mouse, to select more than one node. Once nodes are selected, the toolbar above the canvas shows how many are selected and lets you clear the selection or delete the selected nodes together. Dragging a selected group moves the whole group and saves the updated layout with the model.
+**Visual Designer.** Click **Draw** in the Design toolbar to open the canvas-based Visual Designer and build or rearrange the same model graphically. Use **Pan** mode to move around the diagram. Use **Select** mode, or Shift/Ctrl-click with a mouse, to select more than one node. Once nodes are selected, the toolbar above the canvas shows how many are selected and lets you clear the selection or delete the selected nodes together. Dragging a selected group moves the whole group and saves the updated layout with the model. Press **Ctrl+D** to duplicate the current selection in place, or **Ctrl+C**/**Ctrl+V** to copy and paste elsewhere on the canvas — duplicates land disconnected, ready to be wired up. If a routing edge belongs to a probabilistic-routing branch (shown with a `%` label), click the edge to select it and an inline input appears so you can change the split without leaving the canvas.
 
 ### 4.3 Generate a model with AI
 
