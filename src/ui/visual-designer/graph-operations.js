@@ -1,4 +1,4 @@
-import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES } from "./graph.js";
+import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from "./graph.js";
 
 function clean(value = "") {
   return String(value || "").trim();
@@ -401,6 +401,53 @@ export function updateGraphLayout(model, derivedGraph, patch = {}) {
       viewport: patch.viewport || derivedGraph.viewport,
     }),
   };
+}
+
+export function alignNodes(nodes, mode) {
+  if (!nodes || nodes.length < 2) return [];
+  switch (mode) {
+    case "left": {
+      const minX = Math.min(...nodes.map(n => n.x));
+      return nodes.map(n => ({ id: n.id, x: minX, y: n.y }));
+    }
+    case "right": {
+      const maxRight = Math.max(...nodes.map(n => n.x + NODE_WIDTH));
+      return nodes.map(n => ({ id: n.id, x: maxRight - NODE_WIDTH, y: n.y }));
+    }
+    case "centerX": {
+      const avgCenter = nodes.reduce((sum, n) => sum + n.x + NODE_WIDTH / 2, 0) / nodes.length;
+      return nodes.map(n => ({ id: n.id, x: Math.round(avgCenter - NODE_WIDTH / 2), y: n.y }));
+    }
+    case "top": {
+      const minY = Math.min(...nodes.map(n => n.y));
+      return nodes.map(n => ({ id: n.id, x: n.x, y: minY }));
+    }
+    case "bottom": {
+      const maxBottom = Math.max(...nodes.map(n => n.y + NODE_HEIGHT));
+      return nodes.map(n => ({ id: n.id, x: n.x, y: maxBottom - NODE_HEIGHT }));
+    }
+    case "middleY": {
+      const avgMiddle = nodes.reduce((sum, n) => sum + n.y + NODE_HEIGHT / 2, 0) / nodes.length;
+      return nodes.map(n => ({ id: n.id, x: n.x, y: Math.round(avgMiddle - NODE_HEIGHT / 2) }));
+    }
+    default:
+      return [];
+  }
+}
+
+export function distributeNodes(nodes, axis) {
+  if (!nodes || nodes.length < 3) return [];
+  const isHorizontal = axis === "horizontal";
+  const size = isHorizontal ? NODE_WIDTH : NODE_HEIGHT;
+  const sorted = [...nodes].sort((a, b) => (isHorizontal ? a.x - b.x : a.y - b.y));
+  const firstCenter = (isHorizontal ? sorted[0].x : sorted[0].y) + size / 2;
+  const lastCenter = (isHorizontal ? sorted[sorted.length - 1].x : sorted[sorted.length - 1].y) + size / 2;
+  const step = (lastCenter - firstCenter) / (sorted.length - 1);
+  return sorted.map((node, i) => {
+    const center = firstCenter + step * i;
+    const pos = Math.round(center - size / 2);
+    return isHorizontal ? { id: node.id, x: pos, y: node.y } : { id: node.id, x: node.x, y: pos };
+  });
 }
 
 export function addVisualNode(model, type, position = null) {
@@ -961,6 +1008,40 @@ export function deleteVisualEdge(model, graph, edgeId) {
   const cEvents = model.cEvents || [];
   let next = { ...model };
 
+  // Activity → Queue/Sink, probabilistic-routing branch (F10.2): every branch of
+  // a probabilisticRouting table shares one cSchedule entry on the RELEASE/DELAY-
+  // completion bEvent, so the generic routing/terminal handling below (which
+  // drops the whole cSchedule entry) would erase every other branch along with
+  // the one the user clicked. Edges for these branches carry bEventId/branchIndex
+  // (set in graph.js), so splice out just that branch instead; only drop the
+  // cSchedule (and the bEvent, if unshared) once no branches remain.
+  if (edge.bEventId != null && edge.branchIndex != null && fromNode.type === VISUAL_NODE_TYPES.ACTIVITY) {
+    const bEvent = bEvents.find(be => be.id === edge.bEventId);
+    if (bEvent && Array.isArray(bEvent.probabilisticRouting)) {
+      const remaining = bEvent.probabilisticRouting.filter((_, i) => i !== edge.branchIndex);
+      next.bEvents = bEvents.map(be => (be.id !== bEvent.id ? be : { ...be, probabilisticRouting: remaining }));
+
+      if (remaining.length === 0) {
+        const cEvent = cEvents.find(ce => ce.id === fromNode.refId);
+        if (cEvent) {
+          const otherRefs = new Set(
+            cEvents.filter(ce => ce.id !== cEvent.id).flatMap(ce => (ce.cSchedules || []).map(s => s.eventId))
+          );
+          next.cEvents = cEvents.map(ce =>
+            ce.id !== cEvent.id ? ce : {
+              ...ce,
+              cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== bEvent.id),
+            }
+          );
+          if (!otherRefs.has(bEvent.id)) {
+            next.bEvents = next.bEvents.filter(be => be.id !== bEvent.id);
+          }
+        }
+      }
+    }
+    return updateGraphLayout(next, deriveGraphFromModel(next));
+  }
+
   // Source → Queue ("arrival"): remove queue target from ARRIVE effect
   if (edge.source === "arrival" && fromNode.type === VISUAL_NODE_TYPES.SOURCE) {
     const esc = escRe(toNode.label || "");
@@ -1050,6 +1131,46 @@ export function updateProbabilisticBranchProbability(model, edge, probability) {
       );
       return { ...be, probabilisticRouting };
     }),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+// Retargets one probabilistic-routing branch's destination queue; null means
+// "exit system" (terminal), matching BEventEditor's "__EXIT__" select sentinel
+// (callers map the sentinel to null before calling this). Other branches and
+// the branch's own probability are left untouched.
+export function updateProbabilisticBranchQueue(model, edge, queueName) {
+  if (!edge || edge.bEventId == null || edge.branchIndex == null) return model;
+  const next = {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => {
+      if (be.id !== edge.bEventId) return be;
+      const probabilisticRouting = (be.probabilisticRouting || []).map((branch, idx) =>
+        idx === edge.branchIndex ? { ...branch, queueName: queueName || null } : branch
+      );
+      return { ...be, probabilisticRouting };
+    }),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+// Appends a new branch (0% probability, exit/terminal target) to an existing
+// probabilisticRouting array. Does not rebalance other branches' probabilities —
+// matches BEventEditor's addProbRow, the shipped precedent for this mutation.
+// Takes bEventId directly rather than an edge, since there's no edge yet for a
+// branch that doesn't exist.
+export function addProbabilisticBranch(model, bEventId) {
+  const bEvents = model.bEvents || [];
+  const bEvent = bEvents.find(be => be.id === bEventId);
+  if (!bEvent || !Array.isArray(bEvent.probabilisticRouting)) return model;
+  const next = {
+    ...model,
+    bEvents: bEvents.map(be =>
+      be.id !== bEventId ? be : {
+        ...be,
+        probabilisticRouting: [...be.probabilisticRouting, { probability: 0, queueName: null }],
+      }
+    ),
   };
   return updateGraphLayout(next, deriveGraphFromModel(next));
 }

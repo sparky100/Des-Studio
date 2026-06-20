@@ -1,7 +1,7 @@
 // Tests for graph-operations fixes: cSchedules append, auto-link guard, deleteVisualNode overflow cleanup
 import { describe, test, expect } from 'vitest';
-import { connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes, updateProbabilisticBranchProbability } from '../graph-operations.js';
-import { deriveGraphFromModel, VISUAL_NODE_TYPES } from '../graph.js';
+import { connectVisualNodes, addVisualNode, deleteVisualNode, deleteVisualEdge, duplicateVisualNodes, updateProbabilisticBranchProbability, updateProbabilisticBranchQueue, addProbabilisticBranch, alignNodes, distributeNodes } from '../graph-operations.js';
+import { deriveGraphFromModel, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from '../graph.js';
 
 // Model with Triage activity already routing to Queue 2.
 // Queue 3 exists unconnected — tests will connect Triage to it.
@@ -334,6 +334,86 @@ describe('deriveGraphFromModel — probabilistic routing edges', () => {
   });
 });
 
+describe('deleteVisualEdge — probabilistic routing branch', () => {
+  test('deleting one branch removes only that branch, leaving the other branch and its cSchedule intact', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = deleteVisualEdge(model, graph, edge.id);
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+
+    expect(bEvent).toBeTruthy();
+    expect(bEvent.probabilisticRouting).toHaveLength(1);
+    expect(bEvent.probabilisticRouting[0].queueName).toBe('Queue 3');
+
+    const cEvent = next.cEvents.find(ce => ce.id === 'activity-1');
+    expect(cEvent.cSchedules.some(s => s.eventId === 'route-activity-1-queue-2')).toBe(true);
+
+    const nextGraph = deriveGraphFromModel(next);
+    const remainingBranchEdges = nextGraph.edges.filter(e => e.bEventId === 'route-activity-1-queue-2');
+    expect(remainingBranchEdges).toHaveLength(1);
+    expect(remainingBranchEdges[0].branchIndex).toBe(0);
+    expect(remainingBranchEdges[0].label).toBe('30%');
+  });
+
+  test('deleting the last remaining branch drops the cSchedule and the unshared bEvent', () => {
+    const model = makeProbabilisticModel();
+    model.bEvents = model.bEvents.map(be =>
+      be.id === 'route-activity-1-queue-2'
+        ? { ...be, probabilisticRouting: [{ probability: 1, queueName: 'Queue 2' }] }
+        : be
+    );
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = deleteVisualEdge(model, graph, edge.id);
+
+    expect(next.bEvents.find(be => be.id === 'route-activity-1-queue-2')).toBeUndefined();
+    const cEvent = next.cEvents.find(ce => ce.id === 'activity-1');
+    expect(cEvent.cSchedules.some(s => s.eventId === 'route-activity-1-queue-2')).toBe(false);
+  });
+
+  test('deleting a branch routed to a null-queueName exit removes only that branch', () => {
+    const model = makeProbabilisticModel();
+    model.bEvents = model.bEvents.map(be =>
+      be.id === 'route-activity-1-queue-2'
+        ? {
+            ...be,
+            probabilisticRouting: [
+              { probability: 0.4, queueName: null },
+              { probability: 0.6, queueName: 'Queue 2' },
+            ],
+          }
+        : be
+    );
+    const graph = deriveGraphFromModel(model);
+    const exitEdge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+    expect(exitEdge.source).toBe('terminal');
+
+    const next = deleteVisualEdge(model, graph, exitEdge.id);
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+
+    expect(bEvent.probabilisticRouting).toHaveLength(1);
+    expect(bEvent.probabilisticRouting[0].queueName).toBe('Queue 2');
+  });
+});
+
+describe('deleteVisualEdge — non-probabilistic routing (regression guard)', () => {
+  test('deleting a plain Activity→Queue routing edge still removes its cSchedule and bEvent', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.source === 'routing' && e.to === 'queue:queue-2');
+    expect(edge).toBeTruthy();
+    expect(edge.bEventId).toBeUndefined();
+
+    const next = deleteVisualEdge(model, graph, edge.id);
+    expect(next.bEvents.find(be => be.id === 'route-activity-1-queue-2')).toBeUndefined();
+    const cEvent = next.cEvents.find(ce => ce.id === 'activity-1');
+    expect(cEvent.cSchedules.some(s => s.eventId === 'route-activity-1-queue-2')).toBe(false);
+  });
+});
+
 describe('updateProbabilisticBranchProbability', () => {
   test('updates only the targeted branch, leaving the other branch untouched', () => {
     const model = makeProbabilisticModel();
@@ -366,5 +446,185 @@ describe('updateProbabilisticBranchProbability', () => {
 
     const next = updateProbabilisticBranchProbability(model, conditionEdge, 0.9);
     expect(next).toBe(model);
+  });
+});
+
+describe('updateProbabilisticBranchQueue', () => {
+  test('retargets one branch, leaving the other branch untouched', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = updateProbabilisticBranchQueue(model, edge, 'Queue 3');
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+
+    expect(bEvent.probabilisticRouting[0].queueName).toBe('Queue 3');
+    expect(bEvent.probabilisticRouting[0].probability).toBe(0.7);
+    expect(bEvent.probabilisticRouting[1].queueName).toBe('Queue 3');
+  });
+
+  test('retargeting to "" or null sets queueName to null (exit)', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = updateProbabilisticBranchQueue(model, edge, '');
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+    expect(bEvent.probabilisticRouting[0].queueName).toBeNull();
+  });
+
+  test('returns the model unchanged when the edge has no bEventId/branchIndex (non-probabilistic edge)', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const conditionEdge = graph.edges.find(e => e.source === 'condition');
+
+    const next = updateProbabilisticBranchQueue(model, conditionEdge, 'Queue 3');
+    expect(next).toBe(model);
+  });
+});
+
+describe('addProbabilisticBranch', () => {
+  test('appends a 0%/exit branch without touching existing branches', () => {
+    const model = makeProbabilisticModel();
+
+    const next = addProbabilisticBranch(model, 'route-activity-1-queue-2');
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+
+    expect(bEvent.probabilisticRouting).toHaveLength(3);
+    expect(bEvent.probabilisticRouting[0]).toEqual({ probability: 0.7, queueName: 'Queue 2' });
+    expect(bEvent.probabilisticRouting[1]).toEqual({ probability: 0.3, queueName: 'Queue 3' });
+    expect(bEvent.probabilisticRouting[2]).toEqual({ probability: 0, queueName: null });
+
+    const nextGraph = deriveGraphFromModel(next);
+    const branchEdges = nextGraph.edges.filter(e => e.bEventId === 'route-activity-1-queue-2');
+    expect(branchEdges).toHaveLength(3);
+  });
+
+  test('returns the model unchanged when the bEvent has no probabilisticRouting array', () => {
+    const model = makeModel();
+    const next = addProbabilisticBranch(model, 'route-activity-1-queue-2');
+    expect(next).toBe(model);
+  });
+
+  test('returns the model unchanged when bEventId does not exist', () => {
+    const model = makeProbabilisticModel();
+    const next = addProbabilisticBranch(model, 'does-not-exist');
+    expect(next).toBe(model);
+  });
+});
+
+describe('alignNodes', () => {
+  const nodes = [
+    { id: 'a', x: 0, y: 0 },
+    { id: 'b', x: 100, y: 50 },
+    { id: 'c', x: 200, y: 120 },
+  ];
+
+  test('returns empty array for fewer than 2 nodes', () => {
+    expect(alignNodes([nodes[0]], 'left')).toEqual([]);
+    expect(alignNodes([], 'left')).toEqual([]);
+  });
+
+  test('left aligns all nodes to the minimum x, leaving y untouched', () => {
+    const result = alignNodes(nodes, 'left');
+    expect(result).toEqual([
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 0, y: 50 },
+      { id: 'c', x: 0, y: 120 },
+    ]);
+  });
+
+  test('right aligns all nodes so their right edges match the rightmost node', () => {
+    const result = alignNodes(nodes, 'right');
+    const maxRight = 200 + NODE_WIDTH;
+    result.forEach(node => {
+      expect(node.x + NODE_WIDTH).toBe(maxRight);
+    });
+  });
+
+  test('centerX aligns all nodes to the same horizontal center', () => {
+    const result = alignNodes(nodes, 'centerX');
+    const centers = result.map(node => node.x + NODE_WIDTH / 2);
+    expect(new Set(centers).size).toBe(1);
+  });
+
+  test('top aligns all nodes to the minimum y, leaving x untouched', () => {
+    const result = alignNodes(nodes, 'top');
+    expect(result).toEqual([
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 100, y: 0 },
+      { id: 'c', x: 200, y: 0 },
+    ]);
+  });
+
+  test('bottom aligns all nodes so their bottom edges match the lowest node', () => {
+    const result = alignNodes(nodes, 'bottom');
+    const maxBottom = 120 + NODE_HEIGHT;
+    result.forEach(node => {
+      expect(node.y + NODE_HEIGHT).toBe(maxBottom);
+    });
+  });
+
+  test('middleY aligns all nodes to the same vertical middle', () => {
+    const result = alignNodes(nodes, 'middleY');
+    const middles = result.map(node => node.y + NODE_HEIGHT / 2);
+    expect(new Set(middles).size).toBe(1);
+  });
+
+  test('unknown mode returns empty array', () => {
+    expect(alignNodes(nodes, 'bogus')).toEqual([]);
+  });
+});
+
+describe('distributeNodes', () => {
+  test('returns empty array for fewer than 3 nodes', () => {
+    expect(distributeNodes([{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 100, y: 0 }], 'horizontal')).toEqual([]);
+  });
+
+  test('horizontal distribution keeps the leftmost and rightmost centers fixed and spaces the rest evenly', () => {
+    const nodes = [
+      { id: 'a', x: 0, y: 10 },
+      { id: 'b', x: 50, y: 20 },
+      { id: 'c', x: 300, y: 30 },
+    ];
+    const result = distributeNodes(nodes, 'horizontal');
+    const byId = Object.fromEntries(result.map(n => [n.id, n]));
+    expect(byId.a.x).toBe(0);
+    expect(byId.c.x).toBe(300);
+    const centerA = byId.a.x + NODE_WIDTH / 2;
+    const centerB = byId.b.x + NODE_WIDTH / 2;
+    const centerC = byId.c.x + NODE_WIDTH / 2;
+    expect(centerB - centerA).toBeCloseTo(centerC - centerB, 5);
+    expect(byId.a.y).toBe(10);
+    expect(byId.b.y).toBe(20);
+    expect(byId.c.y).toBe(30);
+  });
+
+  test('vertical distribution keeps the topmost and bottommost centers fixed and spaces the rest evenly', () => {
+    const nodes = [
+      { id: 'a', x: 10, y: 0 },
+      { id: 'b', x: 20, y: 40 },
+      { id: 'c', x: 30, y: 300 },
+    ];
+    const result = distributeNodes(nodes, 'vertical');
+    const byId = Object.fromEntries(result.map(n => [n.id, n]));
+    expect(byId.a.y).toBe(0);
+    expect(byId.c.y).toBe(300);
+    const centerA = byId.a.y + NODE_HEIGHT / 2;
+    const centerB = byId.b.y + NODE_HEIGHT / 2;
+    const centerC = byId.c.y + NODE_HEIGHT / 2;
+    expect(centerB - centerA).toBeCloseTo(centerC - centerB, 5);
+  });
+
+  test('sorts nodes by position before distributing, regardless of input order', () => {
+    const nodes = [
+      { id: 'c', x: 300, y: 0 },
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 150, y: 0 },
+    ];
+    const result = distributeNodes(nodes, 'horizontal');
+    const byId = Object.fromEntries(result.map(n => [n.id, n]));
+    expect(byId.a.x).toBe(0);
+    expect(byId.c.x).toBe(300);
   });
 });
