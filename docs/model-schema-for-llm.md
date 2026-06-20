@@ -1,11 +1,12 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 2.2.0
-**Date:** 2026-06-18
+**Version:** 2.2.1
+**Date:** 2026-06-20
 **Sprint baseline:** Sprint 88
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
+| v2.2.1 | 2026-06-20 | DELAY completion ARRIVE/ServerAttr clarification | Added TOP LLM MISTAKES #18 (`cSchedules[].dist: "ServerAttr"` on a `DELAY` C-event — no server exists to read from, silently falls back to a fixed delay of `1`) and #19 (a `DELAY` completion B-event whose **only** effect is `ARRIVE(...)` — never resolves the delayed entity, which is stuck in `"serving"` forever). Updated §6.2 Rules and the V47 validation table row (§10) to document both, including the legitimate exception: `ARRIVE` combined with `COMPLETE()`/`RELEASE()`/a routing table on the same B-event is fine (e.g. to spawn a derived/log entity while the delayed entity is separately resolved) — only a *bare* `ARRIVE` with nothing else is blocked. |
 | v2.2.0 | 2026-06-18 | Queue-scoped balking/reneging | Balking (`balkProbability`/`balkCondition`) moved from the ARRIVE B-event to the Queue (§3) — checked on every join (ARRIVE, RELEASE, routing, batch/split, preemption), not just arrival. Added queue-level `renegeDist`/`renegeDistParams` for zero-wiring automatic patience timeouts (§3, §4 reneging pattern). Added V46 (overflow-destination cycle detection) to §10; relocated V21 to Queue scope; CHK-011 now also checks queues. Removed the B-event "Optional: Balking" worked example, replaced with a pointer to §3. Legacy B-event-level balking is migrated onto the matching queue automatically at load time (non-destructive, idempotent). |
 | v2.1.0 | 2026-06-17 | Sprint 88 | Added MANDATORY GENERATION PROTOCOL (5-step checklist); §5 rows[] warning box; TOP LLM MISTAKE #16; closing Core Principle |
 | v1.0.0 | 2026-05-23 | Sprint 70 | Initial versioned snapshot — schema as delivered at Sprint 70 |
@@ -85,6 +86,8 @@ Read this before writing any model JSON.
 | 15 | Disconnected queue/activity fragment | Every declared queue must be reachable from an arrival source. A queue that is never named as a destination in any `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination` field is a fragment — it will never receive entities. Remove it, or add routing that targets it. Blocked by V45. |
 | 16 | rows[] placed directly on the B-event instead of inside `schedules[]` | Move rows into `"schedules": [{"eventId": "b_arrive", "rows": [...]}]`. A top-level `rows[]` with empty `schedules[]` is silently ignored — V8 fires because the engine finds no arrival source. |
 | 17 | Using `ASSIGN(QueueName, ServerType)` with an invented server type for a resource-free wait | If the activity does not claim any equipment/staff (a cooling period, mandatory hold, recovery time, paperwork delay), use `DELAY(QueueName)` instead — it holds the entity for the cSchedule duration without seizing a server. Never add `ASSIGN`/`RELEASE` alongside `DELAY` in the same C-event; `DELAY` is the entire effect. Blocked/flagged by V47. See §6.2. |
+| 18 | `cSchedules[].dist: "ServerAttr"` on a `DELAY` C-event | `DELAY` never claims a server, so there is no server entity for `ServerAttr` to read an attribute from — the engine silently falls back to a fixed delay of `1`. Use a sampled distribution (`Exponential`, `Fixed`, `Uniform`, …) on the `cSchedules` entry instead. Warning V47. See §6.2. |
+| 19 | A `DELAY` completion B-event whose **only** effect is `ARRIVE(...)` | `ARRIVE` always creates a brand-new entity — it never resolves the entity that was delayed, which is left stuck in `"serving"` status forever (a permanent leak). The completion B-event must include `COMPLETE()`, `RELEASE()`, or a routing table (`routing[]`/`probabilisticRouting[]`) to resolve the delayed entity. `ARRIVE` may still appear *alongside* one of those (e.g. to also spawn a separate derived/log entity) — only a *bare* `ARRIVE` with nothing else is the error. Blocked by V47. See §6.2. |
 
 ---
 
@@ -750,7 +753,9 @@ Rules:
 - `DELAY(QueueName)` is the **entire** effect — never pair it with `ASSIGN`, `RELEASE`, or any server macro in the same C-event.
 - Never invent a `ServerType` to model a resource-free wait. If nothing is actually seized, there is no server type to declare.
 - The C-event's `cSchedules` entry MUST set `"useEntityCtx": true` so the completion B-event knows which entity to route — same requirement as `ASSIGN`.
+- The `cSchedules` entry's `dist` must be a sampled distribution (`Exponential`, `Fixed`, `Uniform`, …) — **never `"ServerAttr"`**. `DELAY` claims no server, so there is no server attribute to read; `ServerAttr` silently falls back to a fixed delay of `1`. Warning V47.
 - The completion B-event may end the entity's journey with `COMPLETE()`, or with a routing table / `defaultQueueName` exit (`queueName: null`) — both work for `DELAY` chains.
+- **The completion B-event's effect must not be a bare `ARRIVE(...)` with nothing else.** `ARRIVE` always spawns a brand-new entity and never resolves the delayed entity, which is left stuck in `"serving"` status forever. Resolve the delayed entity with `COMPLETE()`, `RELEASE()`, or a routing table — `ARRIVE` is fine *in addition* to one of those (e.g. `["RELEASE(Clinician, Discharge Queue)", "ARRIVE(AuditRecord, Log Queue)"]` to also spawn a derived log entity), just never alone. Blocked by V47.
 - `DELAY(QueueName)` counts as a valid consumer of `QueueName` for CHK-013 — do not add a redundant `ASSIGN`/`BATCH` just to silence that check.
 - `QueueName` must reference a defined queue (V47, parity with the `BATCH`/`FILL`/`DRAIN` queue checks).
 
@@ -1014,7 +1019,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V37 | When either `mtbfDist` or `mttrDist` is set on a server entity type, **both** must be present with valid distribution parameters |
 | V45 | Every declared queue must appear as a routing destination (ARRIVE, RELEASE 2-arg, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination`). A queue not reachable by any of these is a disconnected fragment. Only enforced when at least one queue is explicitly named in routing (avoids false positives on single-arg `ARRIVE` models). |
 | V46 | `overflowDestination` must not form a cycle (A → B → A). Overflow chains are followed recursively at runtime, so a cycle would otherwise loop; it is instead caught at design time. |
-| V47 | `DELAY(QueueName)` must reference a defined queue. A C-event whose effect contains `DELAY` should also set `"useEntityCtx": true` on its `cSchedules` entry, or its completion B-event will not know which entity to route (warning). |
+| V47 | `DELAY(QueueName)` must reference a defined queue (blocking error). A C-event whose effect contains `DELAY` should also set `"useEntityCtx": true` on its `cSchedules` entry, or its completion B-event will not know which entity to route (warning). Its `cSchedules` entry's `dist` must not be `"ServerAttr"` — `DELAY` claims no server, so this always falls back to a fixed delay of `1` (warning). Its completion B-event's effect must not be a *bare* `ARRIVE(...)` with nothing else — `ARRIVE` never resolves the delayed entity, leaving it stuck in `"serving"` forever; `ARRIVE` combined with `COMPLETE()`/`RELEASE()`/a routing table is fine (blocking error). |
 
 ### Warnings (run proceeds, banner shown)
 

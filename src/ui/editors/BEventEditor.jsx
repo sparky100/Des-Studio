@@ -114,6 +114,13 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const hasRelease=effects.some(eff=>typeof eff==='string'&&/^RELEASE\s*\(/i.test(eff));
         const hasArriveEffect=effects.some(eff=>typeof eff==='string'&&/^ARRIVE\s*\(/i.test(eff));
         const isCScheduleTarget=cEvents.some(c=>(c.cSchedules||[]).some(s=>s.eventId===ev.id));
+        const hasCompletionEffect=effects.some(eff=>typeof eff==='string'&&(/^COMPLETE\s*\(\s*\)/i.test(eff)||/^RENEGE\s*\(\s*ctx\s*\)/i.test(eff)));
+        // ARRIVE alongside RELEASE()/COMPLETE()/routing is a legitimate multi-stage pattern
+        // (e.g. spawning a derived audit/log entity while the scheduled entity is separately
+        // resolved) — only warn when ARRIVE is the *only* thing the event does, since then the
+        // scheduled entity is never resolved and stays stuck in "serving" status forever.
+        const arriveLeavesContextEntityUnresolved=hasArriveEffect&&!hasRelease&&!hasCompletionEffect
+          &&!(Array.isArray(ev.routing)&&ev.routing.length>0)&&!(Array.isArray(ev.probabilisticRouting)&&ev.probabilisticRouting.length>0);
         const joinTargetQueueName=(()=>{
           for(const eff of effects){
             if(typeof eff!=='string')continue;
@@ -210,9 +217,9 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 />
                   );
                 })()}
-                {isCScheduleTarget&&hasArriveEffect&&(
+                {isCScheduleTarget&&arriveLeavesContextEntityUnresolved&&(
                   <div style={{fontSize:10,color:C.amber,fontFamily:FONT,lineHeight:1.5}}>
-                    ⚠ This event is scheduled as a follow-on (referenced by a C-event's schedule), but its effect is ARRIVE — ARRIVE always creates a brand-new entity and ignores the entity being completed, which is left stuck in "serving" status forever. Use COMPLETE(), RELEASE(), or the Routing panel below to route the existing entity instead.
+                    ⚠ This event is scheduled as a follow-on (referenced by a C-event's schedule), but ARRIVE is its only effect — ARRIVE always creates a brand-new entity and never resolves the entity being completed, which is left stuck in "serving" status forever. Add COMPLETE(), RELEASE(), or the Routing panel below to resolve it (ARRIVE is fine alongside one of those, e.g. to also spawn a derived entity).
                   </div>
                 )}
               </div>

@@ -976,6 +976,29 @@ describe("V47 — DELAY queue reference and useEntityCtx nudge", () => {
     const { errors } = validateModel(model);
     expect(errors.filter(e => e.code === "V47")).toHaveLength(0);
   });
+
+  it("passes when ARRIVE is combined with RELEASE() on the same B-event (legit derived-entity pattern)", () => {
+    const model = {
+      ...baseModel,
+      queues: [
+        { id: "q", name: "RecoveryQueue", discipline: "FIFO" },
+        { id: "q2", name: "Queue 2", discipline: "FIFO" },
+      ],
+      entityTypes: [{ id: "w", name: "Worker", role: "server", count: "1", attrDefs: [] }],
+      bEvents: [{
+        id: "b1", name: "Recovery Complete",
+        effect: ["RELEASE(Worker, Queue 2)", "ARRIVE(LogEntry, Queue 2)"],
+        schedules: [],
+      }],
+      cEvents: [{
+        id: "c1", name: "Delay", condition: "true",
+        effect: "DELAY(RecoveryQueue)",
+        cSchedules: [{ eventId: "b1", dist: "Fixed", distParams: { value: "5" }, useEntityCtx: true }],
+      }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V47")).toHaveLength(0);
+  });
 });
 
 // ── S40.1 — EntityAttr skips distribution parameter validation ────────────────
