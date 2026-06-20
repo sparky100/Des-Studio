@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
-import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, updateProbabilisticBranchProbability, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, updateProbabilisticBranchProbability, findNodeDependents, updateGraphLayout, validateVisualConnection, alignNodes, distributeNodes, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
@@ -458,6 +458,16 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     applyModel(next);
     syncSelection(newNodeIds);
     setMessage({ state: "success", text: `Duplicated ${newNodeIds.length} node${newNodeIds.length > 1 ? "s" : ""}.` });
+  }
+
+  function alignSelectedNodes(mode) {
+    if (!canEdit || selectedNodes.length < 2) return;
+    moveNodes(alignNodes(selectedNodes, mode));
+  }
+
+  function distributeSelectedNodes(axis) {
+    if (!canEdit || selectedNodes.length < 3) return;
+    moveNodes(distributeNodes(selectedNodes, axis));
   }
 
   // Ref holds latest closures so keydown/keyup listeners never go stale.
@@ -1017,6 +1027,38 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                   <Btn small variant="ghost" onClick={copySelectedNodes}>
                     Copy
                   </Btn>
+                  {canEdit && selectedNodeIds.length > 1 && (
+                    <>
+                      <Btn small variant="ghost" title="Align left edges" onClick={() => alignSelectedNodes("left")}>
+                        Align left
+                      </Btn>
+                      <Btn small variant="ghost" title="Align right edges" onClick={() => alignSelectedNodes("right")}>
+                        Align right
+                      </Btn>
+                      <Btn small variant="ghost" title="Align horizontal centers" onClick={() => alignSelectedNodes("centerX")}>
+                        Align center
+                      </Btn>
+                      <Btn small variant="ghost" title="Align top edges" onClick={() => alignSelectedNodes("top")}>
+                        Align top
+                      </Btn>
+                      <Btn small variant="ghost" title="Align bottom edges" onClick={() => alignSelectedNodes("bottom")}>
+                        Align bottom
+                      </Btn>
+                      <Btn small variant="ghost" title="Align vertical middles" onClick={() => alignSelectedNodes("middleY")}>
+                        Align middle
+                      </Btn>
+                    </>
+                  )}
+                  {canEdit && selectedNodeIds.length > 2 && (
+                    <>
+                      <Btn small variant="ghost" title="Distribute evenly along x-axis" onClick={() => distributeSelectedNodes("horizontal")}>
+                        Distribute H
+                      </Btn>
+                      <Btn small variant="ghost" title="Distribute evenly along y-axis" onClick={() => distributeSelectedNodes("vertical")}>
+                        Distribute V
+                      </Btn>
+                    </>
+                  )}
                   {canEdit && (
                     <Btn small variant="danger" onClick={deleteSelectedNodes}>
                       Delete

@@ -1,7 +1,7 @@
 // Tests for graph-operations fixes: cSchedules append, auto-link guard, deleteVisualNode overflow cleanup
 import { describe, test, expect } from 'vitest';
-import { connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes, updateProbabilisticBranchProbability } from '../graph-operations.js';
-import { deriveGraphFromModel, VISUAL_NODE_TYPES } from '../graph.js';
+import { connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes, updateProbabilisticBranchProbability, alignNodes, distributeNodes } from '../graph-operations.js';
+import { deriveGraphFromModel, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from '../graph.js';
 
 // Model with Triage activity already routing to Queue 2.
 // Queue 3 exists unconnected — tests will connect Triage to it.
@@ -366,5 +366,121 @@ describe('updateProbabilisticBranchProbability', () => {
 
     const next = updateProbabilisticBranchProbability(model, conditionEdge, 0.9);
     expect(next).toBe(model);
+  });
+});
+
+describe('alignNodes', () => {
+  const nodes = [
+    { id: 'a', x: 0, y: 0 },
+    { id: 'b', x: 100, y: 50 },
+    { id: 'c', x: 200, y: 120 },
+  ];
+
+  test('returns empty array for fewer than 2 nodes', () => {
+    expect(alignNodes([nodes[0]], 'left')).toEqual([]);
+    expect(alignNodes([], 'left')).toEqual([]);
+  });
+
+  test('left aligns all nodes to the minimum x, leaving y untouched', () => {
+    const result = alignNodes(nodes, 'left');
+    expect(result).toEqual([
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 0, y: 50 },
+      { id: 'c', x: 0, y: 120 },
+    ]);
+  });
+
+  test('right aligns all nodes so their right edges match the rightmost node', () => {
+    const result = alignNodes(nodes, 'right');
+    const maxRight = 200 + NODE_WIDTH;
+    result.forEach(node => {
+      expect(node.x + NODE_WIDTH).toBe(maxRight);
+    });
+  });
+
+  test('centerX aligns all nodes to the same horizontal center', () => {
+    const result = alignNodes(nodes, 'centerX');
+    const centers = result.map(node => node.x + NODE_WIDTH / 2);
+    expect(new Set(centers).size).toBe(1);
+  });
+
+  test('top aligns all nodes to the minimum y, leaving x untouched', () => {
+    const result = alignNodes(nodes, 'top');
+    expect(result).toEqual([
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 100, y: 0 },
+      { id: 'c', x: 200, y: 0 },
+    ]);
+  });
+
+  test('bottom aligns all nodes so their bottom edges match the lowest node', () => {
+    const result = alignNodes(nodes, 'bottom');
+    const maxBottom = 120 + NODE_HEIGHT;
+    result.forEach(node => {
+      expect(node.y + NODE_HEIGHT).toBe(maxBottom);
+    });
+  });
+
+  test('middleY aligns all nodes to the same vertical middle', () => {
+    const result = alignNodes(nodes, 'middleY');
+    const middles = result.map(node => node.y + NODE_HEIGHT / 2);
+    expect(new Set(middles).size).toBe(1);
+  });
+
+  test('unknown mode returns empty array', () => {
+    expect(alignNodes(nodes, 'bogus')).toEqual([]);
+  });
+});
+
+describe('distributeNodes', () => {
+  test('returns empty array for fewer than 3 nodes', () => {
+    expect(distributeNodes([{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 100, y: 0 }], 'horizontal')).toEqual([]);
+  });
+
+  test('horizontal distribution keeps the leftmost and rightmost centers fixed and spaces the rest evenly', () => {
+    const nodes = [
+      { id: 'a', x: 0, y: 10 },
+      { id: 'b', x: 50, y: 20 },
+      { id: 'c', x: 300, y: 30 },
+    ];
+    const result = distributeNodes(nodes, 'horizontal');
+    const byId = Object.fromEntries(result.map(n => [n.id, n]));
+    expect(byId.a.x).toBe(0);
+    expect(byId.c.x).toBe(300);
+    const centerA = byId.a.x + NODE_WIDTH / 2;
+    const centerB = byId.b.x + NODE_WIDTH / 2;
+    const centerC = byId.c.x + NODE_WIDTH / 2;
+    expect(centerB - centerA).toBeCloseTo(centerC - centerB, 5);
+    expect(byId.a.y).toBe(10);
+    expect(byId.b.y).toBe(20);
+    expect(byId.c.y).toBe(30);
+  });
+
+  test('vertical distribution keeps the topmost and bottommost centers fixed and spaces the rest evenly', () => {
+    const nodes = [
+      { id: 'a', x: 10, y: 0 },
+      { id: 'b', x: 20, y: 40 },
+      { id: 'c', x: 30, y: 300 },
+    ];
+    const result = distributeNodes(nodes, 'vertical');
+    const byId = Object.fromEntries(result.map(n => [n.id, n]));
+    expect(byId.a.y).toBe(0);
+    expect(byId.c.y).toBe(300);
+    const centerA = byId.a.y + NODE_HEIGHT / 2;
+    const centerB = byId.b.y + NODE_HEIGHT / 2;
+    const centerC = byId.c.y + NODE_HEIGHT / 2;
+    expect(centerB - centerA).toBeCloseTo(centerC - centerB, 5);
+  });
+
+  test('sorts nodes by position before distributing, regardless of input order', () => {
+    const nodes = [
+      { id: 'c', x: 300, y: 0 },
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 150, y: 0 },
+    ];
+    const result = distributeNodes(nodes, 'horizontal');
+    const byId = Object.fromEntries(result.map(n => [n.id, n]));
+    expect(byId.a.x).toBe(0);
+    expect(byId.c.x).toBe(300);
   });
 });

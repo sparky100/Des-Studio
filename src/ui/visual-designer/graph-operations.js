@@ -1,4 +1,4 @@
-import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES } from "./graph.js";
+import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from "./graph.js";
 
 function clean(value = "") {
   return String(value || "").trim();
@@ -401,6 +401,53 @@ export function updateGraphLayout(model, derivedGraph, patch = {}) {
       viewport: patch.viewport || derivedGraph.viewport,
     }),
   };
+}
+
+export function alignNodes(nodes, mode) {
+  if (!nodes || nodes.length < 2) return [];
+  switch (mode) {
+    case "left": {
+      const minX = Math.min(...nodes.map(n => n.x));
+      return nodes.map(n => ({ id: n.id, x: minX, y: n.y }));
+    }
+    case "right": {
+      const maxRight = Math.max(...nodes.map(n => n.x + NODE_WIDTH));
+      return nodes.map(n => ({ id: n.id, x: maxRight - NODE_WIDTH, y: n.y }));
+    }
+    case "centerX": {
+      const avgCenter = nodes.reduce((sum, n) => sum + n.x + NODE_WIDTH / 2, 0) / nodes.length;
+      return nodes.map(n => ({ id: n.id, x: Math.round(avgCenter - NODE_WIDTH / 2), y: n.y }));
+    }
+    case "top": {
+      const minY = Math.min(...nodes.map(n => n.y));
+      return nodes.map(n => ({ id: n.id, x: n.x, y: minY }));
+    }
+    case "bottom": {
+      const maxBottom = Math.max(...nodes.map(n => n.y + NODE_HEIGHT));
+      return nodes.map(n => ({ id: n.id, x: n.x, y: maxBottom - NODE_HEIGHT }));
+    }
+    case "middleY": {
+      const avgMiddle = nodes.reduce((sum, n) => sum + n.y + NODE_HEIGHT / 2, 0) / nodes.length;
+      return nodes.map(n => ({ id: n.id, x: n.x, y: Math.round(avgMiddle - NODE_HEIGHT / 2) }));
+    }
+    default:
+      return [];
+  }
+}
+
+export function distributeNodes(nodes, axis) {
+  if (!nodes || nodes.length < 3) return [];
+  const isHorizontal = axis === "horizontal";
+  const size = isHorizontal ? NODE_WIDTH : NODE_HEIGHT;
+  const sorted = [...nodes].sort((a, b) => (isHorizontal ? a.x - b.x : a.y - b.y));
+  const firstCenter = (isHorizontal ? sorted[0].x : sorted[0].y) + size / 2;
+  const lastCenter = (isHorizontal ? sorted[sorted.length - 1].x : sorted[sorted.length - 1].y) + size / 2;
+  const step = (lastCenter - firstCenter) / (sorted.length - 1);
+  return sorted.map((node, i) => {
+    const center = firstCenter + step * i;
+    const pos = Math.round(center - size / 2);
+    return isHorizontal ? { id: node.id, x: pos, y: node.y } : { id: node.id, x: node.x, y: pos };
+  });
 }
 
 export function addVisualNode(model, type, position = null) {
