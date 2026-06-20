@@ -113,7 +113,7 @@ export function runReplications(options = {}) {
     maxSimTime = null,
     terminationCondition = null,
     maxCycles = 5000,
-    maxCPasses = 500,
+    maxCPasses = 5000,
     collectTimeSeries,
     schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
     workerCount,

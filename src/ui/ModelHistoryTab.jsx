@@ -94,7 +94,7 @@ export function ModelHistoryTab({
         run.experiment_config.warmupPeriod ?? 0,
         run.experiment_config.maxSimTime   ?? 500,
         null,
-        5000, 500,
+        5000, 5000,
         false,
         undefined,
         { schedulesMap }

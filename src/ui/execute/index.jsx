@@ -478,7 +478,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       warmupPeriod,
       terminationMode === 'time' ? maxSimTime : null,
       terminationMode === 'condition' ? terminationCondition : null,
-      5000, 500,
+      5000, 5000,
       collectTimeSeries,
       undefined,
       { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) } }
@@ -914,7 +914,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       warmupPeriod,
       maxTimeForRun,
       stopConditionForRun,
-      5000, 500,
+      5000, 5000,
       effectiveCollectTimeSeries,
       undefined,
       { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) } }
@@ -2841,10 +2841,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       {phaseCTruncated && (
         <div style={{ background: C.amber + '18', border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, fontFamily: FONT }}>
-            This run hit the {model.maxCPasses || 500}-pass limit for conditional-event scans.
+            This run hit the {model.maxCPasses || 5000}-pass limit for conditional-event scans.
           </div>
           <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, marginTop: 4, opacity: 0.8 }}>
-            Some conditional-event logic may be cycling or staying true longer than intended.
+            A very large number of entities were processed in a single time step, or conditional-event logic is cycling.
           </div>
         </div>
       )}

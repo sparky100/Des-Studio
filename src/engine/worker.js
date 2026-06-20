@@ -16,7 +16,7 @@ export function runReplicationPayload(payload = {}, shared = null) {
     maxSimTime = null,
     terminationCondition = null,
     maxCycles = 5000,
-    maxCPasses = 500,
+    maxCPasses = 5000,
     collectTimeSeries,
     collectTrace,
     entityDetail,

@@ -377,7 +377,7 @@ export function resolveInlineSchedules(model, schedulesMap = {}) {
 // key is the raw model object so entries are GC'd when the model is released.
 const _runtimeModelCache = new WeakMap();
 
-export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500, collectTimeSeries = false, registry = nullRegistry, options = {}) {
+export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 5000, collectTimeSeries = false, registry = nullRegistry, options = {}) {
   const engineOptions = options || {};
   const schedulesMap = engineOptions.schedulesMap;
   // Resolve external schedule references before any processing.
