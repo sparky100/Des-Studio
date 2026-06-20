@@ -735,6 +735,19 @@ export function validateModel(model) {
           warn('V47', `C-Event '${c.name || c.id}' uses DELAY but its cSchedule (targeting '${cs.eventId || '?'}') samples the delay from "Server attribute" — no server is claimed by a DELAY activity, so this always falls back to a fixed delay of 1.`, 'cevents',
             { eventIds: [c.id] });
         }
+        const targetB = bEvents.find(b => b.id === cs.eventId);
+        const targetText = targetB ? effectText(targetB.effect) : '';
+        const targetResolvesContextEntity = hasCompleteEffect(targetText) || hasExactRenegeCtxEffect(targetText) || hasReleaseEffect(targetText)
+          || (Array.isArray(targetB?.routing) && targetB.routing.length > 0)
+          || (Array.isArray(targetB?.probabilisticRouting) && targetB.probabilisticRouting.length > 0);
+        // ARRIVE alongside RELEASE()/COMPLETE()/routing is a legitimate pattern (e.g. spawning
+        // a derived audit/log entity while the delayed entity is separately resolved) — only
+        // flag when ARRIVE is the *only* thing the B-event does, leaving the delayed entity
+        // permanently stuck in "serving" status with nothing to ever resolve it.
+        if (targetB && /ARRIVE\s*\(/i.test(targetText) && !targetResolvesContextEntity) {
+          err('V47', `C-Event '${c.name || c.id}' DELAY completion B-Event '${targetB.name || targetB.id}' only has an ARRIVE effect — ARRIVE always creates a brand-new entity and never resolves the entity that was delayed, which is left stuck in "serving" status forever. Add COMPLETE(), RELEASE(), or routing/probabilisticRouting to resolve the delayed entity (ARRIVE is fine alongside one of those, e.g. to also spawn a derived entity).`, 'cevents',
+            { eventIds: [c.id, targetB.id] });
+        }
       });
     }
   });

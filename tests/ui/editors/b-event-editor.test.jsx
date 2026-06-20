@@ -90,3 +90,90 @@ describe('BEventEditor — queue-aware effect options', () => {
     ]);
   });
 });
+
+describe('BEventEditor — ARRIVE-on-scheduled-follow-on warning', () => {
+  it('warns when a B-event referenced by a C-event cSchedule has an ARRIVE effect', () => {
+    const bEvents = [
+      { id: 'b1', name: 'Recovery Complete', scheduledTime: '9999', effect: 'ARRIVE(Customer, Queue 2)', schedules: [] },
+    ];
+    const cEvents = [
+      { id: 'c1', name: 'Delay', condition: 'true', effect: 'DELAY(RecoveryQueue)',
+        cSchedules: [{ eventId: 'b1', dist: 'Fixed', distParams: { value: '5' }, useEntityCtx: true }] },
+    ];
+    render(
+      <BEventEditor
+        events={bEvents}
+        onChange={vi.fn()}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[{ id: 'q2', name: 'Queue 2', discipline: 'FIFO' }]}
+        cEvents={cEvents}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    expect(screen.getByText(/ARRIVE always creates a brand-new entity/i)).toBeInTheDocument();
+  });
+
+  it('does not warn when the B-event uses COMPLETE() instead of ARRIVE', () => {
+    const bEvents = [
+      { id: 'b1', name: 'Recovery Complete', scheduledTime: '9999', effect: 'COMPLETE()', schedules: [] },
+    ];
+    const cEvents = [
+      { id: 'c1', name: 'Delay', condition: 'true', effect: 'DELAY(RecoveryQueue)',
+        cSchedules: [{ eventId: 'b1', dist: 'Fixed', distParams: { value: '5' }, useEntityCtx: true }] },
+    ];
+    render(
+      <BEventEditor
+        events={bEvents}
+        onChange={vi.fn()}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+        cEvents={cEvents}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    expect(screen.queryByText(/ARRIVE always creates a brand-new entity/i)).not.toBeInTheDocument();
+  });
+
+  it('does not warn for a plain ARRIVE B-event that is not referenced by any cSchedule', () => {
+    const bEvents = [
+      { id: 'b1', name: 'New Arrival', scheduledTime: '0', effect: 'ARRIVE(Customer, Queue 1)', schedules: [] },
+    ];
+    render(
+      <BEventEditor
+        events={bEvents}
+        onChange={vi.fn()}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[{ id: 'q1', name: 'Queue 1', discipline: 'FIFO' }]}
+        cEvents={[]}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    expect(screen.queryByText(/ARRIVE always creates a brand-new entity/i)).not.toBeInTheDocument();
+  });
+
+  it('does not warn when ARRIVE is combined with RELEASE() — legit derived-entity multi-stage pattern', () => {
+    const bEvents = [
+      { id: 'b1', name: 'Recovery Complete', scheduledTime: '9999',
+        effect: ['RELEASE(Worker, Queue 2)', 'ARRIVE(LogEntry, Queue 2)'], schedules: [] },
+    ];
+    const cEvents = [
+      { id: 'c1', name: 'Delay', condition: 'true', effect: 'DELAY(RecoveryQueue)',
+        cSchedules: [{ eventId: 'b1', dist: 'Fixed', distParams: { value: '5' }, useEntityCtx: true }] },
+    ];
+    render(
+      <BEventEditor
+        events={bEvents}
+        onChange={vi.fn()}
+        entityTypes={[{ id: 'w', name: 'Worker', role: 'server', attrDefs: [] }]}
+        stateVariables={[]}
+        queues={[{ id: 'q2', name: 'Queue 2', discipline: 'FIFO' }]}
+        cEvents={cEvents}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    expect(screen.queryByText(/ARRIVE always creates a brand-new entity/i)).not.toBeInTheDocument();
+  });
+});
