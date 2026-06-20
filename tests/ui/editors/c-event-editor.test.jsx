@@ -306,3 +306,87 @@ describe('CEventEditor — follow-on B-event labels', () => {
     expect(screen.queryByText(/template/i)).not.toBeInTheDocument();
   });
 });
+
+describe('CEventEditor — inline B-event creation from a schedule row', () => {
+  const eventWithSchedule = [
+    { id: 'c1', name: 'Start Service', priority: 1, condition: '', effect: '', cSchedules: [{ id: 'cs1', eventId: '', dist: 'Fixed', distParams: { value: '1' } }], description: '' },
+  ];
+
+  it('does not offer "Create new B-event" when onCreateBEvent is not provided', () => {
+    render(
+      <CEventEditor
+        events={eventWithSchedule}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    expect(screen.queryByRole('option', { name: /Create new B-event/i })).not.toBeInTheDocument();
+  });
+
+  it('creates a shell scheduled-follow-on B-event and wires it into the schedule row', () => {
+    const createdBEvents = [];
+    const StatefulEditor = () => {
+      const [events, setEvents] = useState(eventWithSchedule);
+      const [bEvents, setBEvents] = useState([]);
+      return (
+        <CEventEditor
+          events={events}
+          onChange={setEvents}
+          bEvents={bEvents}
+          entityTypes={[]}
+          stateVariables={[]}
+          queues={[]}
+          onCreateBEvent={b => { createdBEvents.push(b); setBEvents(prev => [...prev, b]); }}
+        />
+      );
+    };
+    render(<StatefulEditor />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
+    fireEvent.change(screen.getByRole('combobox', { name: /B-event to schedule/i }), { target: { value: '__new__' } });
+
+    const nameInput = screen.getByLabelText('New B-event name');
+    expect(nameInput).toHaveValue('Start Service — follow-on');
+    fireEvent.change(nameInput, { target: { value: 'Service Complete' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create & use/i }));
+
+    expect(createdBEvents).toHaveLength(1);
+    expect(createdBEvents[0]).toEqual(expect.objectContaining({
+      name: 'Service Complete',
+      scheduledTime: '9999',
+      effect: [],
+      schedules: [],
+    }));
+
+    // The schedule row should now reference the newly created B-event
+    expect(screen.getByRole('combobox', { name: /B-event to schedule/i })).toHaveValue(createdBEvents[0].id);
+    expect(screen.getByRole('option', { name: 'Service Complete' })).toBeInTheDocument();
+  });
+
+  it('cancels the inline creation flow and reverts to the selector', () => {
+    render(
+      <CEventEditor
+        events={eventWithSchedule}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+        onCreateBEvent={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    fireEvent.change(screen.getByRole('combobox', { name: /B-event to schedule/i }), { target: { value: '__new__' } });
+    expect(screen.getByLabelText('New B-event name')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
+    expect(screen.queryByLabelText('New B-event name')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /B-event to schedule/i })).toBeInTheDocument();
+  });
+});
