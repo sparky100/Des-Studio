@@ -1032,6 +1032,120 @@ export function deleteVisualEdge(model, graph, edgeId) {
   return updateGraphLayout(next, deriveGraphFromModel(next));
 }
 
+// Updates one probabilistic-routing branch's probability in place. The edge
+// carries bEventId/branchIndex (set by graph.js when deriving probabilistic
+// routing edges) so this can target the exact branch without re-parsing the
+// "NN%" label back into a number. Probability is clamped to [0, 1]; other
+// branches and queue targets are left untouched — the canvas does not enforce
+// the branches summing to 1, matching BEventEditor's own non-blocking total.
+export function updateProbabilisticBranchProbability(model, edge, probability) {
+  if (!edge || edge.bEventId == null || edge.branchIndex == null) return model;
+  const clamped = Math.max(0, Math.min(1, probability));
+  const next = {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => {
+      if (be.id !== edge.bEventId) return be;
+      const probabilisticRouting = (be.probabilisticRouting || []).map((branch, idx) =>
+        idx === edge.branchIndex ? { ...branch, probability: clamped } : branch
+      );
+      return { ...be, probabilisticRouting };
+    }),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+// Clones one or more selected canvas nodes, offsetting their copies on the canvas.
+// Connections are never copied — duplicates land disconnected, same as a freshly
+// added node, since auto-replicating edges to (possibly non-duplicated) neighbours
+// would be ambiguous. Synthetic route-exit sink nodes are not real model records
+// and are skipped. Returns the updated model plus the new graph node ids so the
+// caller can select the copies.
+export function duplicateVisualNodes(model, nodes = [], offset = { x: 48, y: 48 }) {
+  const duplicable = nodes.filter(node => node?.refId && !node.refId.startsWith("route-exit:"));
+  if (duplicable.length === 0) return { model, newNodeIds: [] };
+
+  const bEvents = [...(model.bEvents || [])];
+  const cEvents = [...(model.cEvents || [])];
+  const queues = [...(model.queues || [])];
+  const allIds = new Set([...bEvents, ...cEvents, ...queues, ...(model.entityTypes || [])].map(item => item.id || item.name));
+  const existingBNames = new Set(bEvents.map(event => clean(event.name).toLowerCase()));
+  const existingCNames = new Set(cEvents.map(event => clean(event.name).toLowerCase()));
+  const existingQNames = new Set(queues.map(queue => clean(queue.name).toLowerCase()));
+  const nextId = prefix => {
+    const id = makeId(prefix, allIds);
+    allIds.add(id);
+    return id;
+  };
+
+  // { type, refId, x, y } for each copy — used after re-deriving the graph to
+  // find the new node and pin its position next to the original.
+  const newRefs = [];
+
+  for (const node of duplicable) {
+    if (node.type === VISUAL_NODE_TYPES.QUEUE) {
+      const original = queues.find(queue => queue.id === node.refId);
+      if (!original) continue;
+      const id = nextId("queue");
+      const name = uniqueName(`${original.name} copy`, existingQNames);
+      queues.push({ ...original, id, name });
+      newRefs.push({ type: node.type, refId: id, x: (node.x || 0) + offset.x, y: (node.y || 0) + offset.y });
+    }
+
+    if (node.type === VISUAL_NODE_TYPES.SOURCE) {
+      const original = bEvents.find(event => event.id === node.refId);
+      if (!original) continue;
+      const id = nextId("arrival");
+      const name = uniqueName(`${original.name} copy`, existingBNames);
+      const schedules = (original.schedules || []).map(schedule => ({
+        ...schedule,
+        eventId: schedule.eventId === original.id ? id : schedule.eventId,
+      }));
+      bEvents.push({ ...original, id, name, schedules });
+      newRefs.push({ type: node.type, refId: id, x: (node.x || 0) + offset.x, y: (node.y || 0) + offset.y });
+    }
+
+    if (node.type === VISUAL_NODE_TYPES.SINK) {
+      const original = bEvents.find(event => event.id === node.refId);
+      if (!original) continue;
+      const id = nextId("completion");
+      const name = uniqueName(`${original.name} copy`, existingBNames);
+      bEvents.push({ ...original, id, name, schedules: (original.schedules || []).map(schedule => ({ ...schedule })) });
+      newRefs.push({ type: node.type, refId: id, x: (node.x || 0) + offset.x, y: (node.y || 0) + offset.y });
+    }
+
+    if (node.type === VISUAL_NODE_TYPES.ACTIVITY) {
+      const original = cEvents.find(event => event.id === node.refId);
+      if (!original) continue;
+      const cId = nextId("activity");
+      const cName = uniqueName(`${original.name} copy`, existingCNames);
+      // Clone each referenced completion B-event too, so the copy's routing/loop
+      // config is independent rather than two activities sharing one completion.
+      const cSchedules = (original.cSchedules || []).map(schedule => {
+        const completion = schedule.eventId && bEvents.find(event => event.id === schedule.eventId);
+        if (!completion) return { ...schedule };
+        const completionId = nextId("service-complete");
+        bEvents.push({ ...completion, id: completionId, name: uniqueName(`${completion.name} copy`, existingBNames) });
+        return { ...schedule, eventId: completionId };
+      });
+      cEvents.push({ ...original, id: cId, name: cName, cSchedules });
+      newRefs.push({ type: node.type, refId: cId, x: (node.x || 0) + offset.x, y: (node.y || 0) + offset.y });
+    }
+  }
+
+  const next = { ...model, bEvents, cEvents, queues };
+  const derived = deriveGraphFromModel(next);
+  const positionPatches = [];
+  const newNodeIds = [];
+  for (const ref of newRefs) {
+    const derivedNode = derived.nodes.find(n => n.type === ref.type && n.refId === ref.refId);
+    if (!derivedNode) continue;
+    positionPatches.push({ id: derivedNode.id, x: ref.x, y: ref.y });
+    newNodeIds.push(derivedNode.id);
+  }
+
+  return { model: updateGraphLayout(next, derived, { nodes: positionPatches }), newNodeIds };
+}
+
 export function deleteVisualNode(model, node) {
   if (!node || !node.refId) return model;
   let next = { ...model };
@@ -1229,6 +1343,16 @@ export function updateVisualNode(model, node, patch = {}) {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.terminalMacro !== undefined ? { effect: `${patch.terminalMacro}()` } : {}),
     }));
+  }
+  if (patch.sectionId !== undefined) {
+    // Sections key membership by the underlying entity's id (queue/bEvent/cEvent),
+    // same id node.refId points at — route-exit sinks share their parent bEvent's id.
+    const memberRefId = node.refId?.startsWith("route-exit:") ? node.refId.slice("route-exit:".length) : node.refId;
+    next.sections = (next.sections || []).map(section => {
+      const memberIds = (section.memberIds || []).filter(id => id !== memberRefId);
+      if (section.id === patch.sectionId) memberIds.push(memberRefId);
+      return { ...section, memberIds };
+    });
   }
   return updateGraphLayout(next, deriveGraphFromModel(next));
 }

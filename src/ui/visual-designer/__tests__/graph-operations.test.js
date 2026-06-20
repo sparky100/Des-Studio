@@ -1,6 +1,6 @@
 // Tests for graph-operations fixes: cSchedules append, auto-link guard, deleteVisualNode overflow cleanup
 import { describe, test, expect } from 'vitest';
-import { connectVisualNodes, addVisualNode, deleteVisualNode } from '../graph-operations.js';
+import { connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes, updateProbabilisticBranchProbability } from '../graph-operations.js';
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from '../graph.js';
 
 // Model with Triage activity already routing to Queue 2.
@@ -193,5 +193,178 @@ describe('deleteVisualNode — overflow cleanup', () => {
 
     const overflowEdges = derivedGraph.edges.filter(e => e.source === 'overflow');
     expect(overflowEdges).toHaveLength(0);
+  });
+});
+
+describe('duplicateVisualNodes', () => {
+  test('duplicates a queue with a unique name and offset position', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const queueNode = graph.nodes.find(n => n.id === 'queue:queue-1');
+
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, [queueNode], { x: 48, y: 48 });
+
+    expect(newNodeIds).toHaveLength(1);
+    expect(next.queues).toHaveLength(4);
+    const copy = next.queues.find(q => q.id !== queueNode.refId && q.name === 'Queue 1 copy');
+    expect(copy).toBeDefined();
+
+    const derived = deriveGraphFromModel(next);
+    const copyNode = derived.nodes.find(n => n.id === newNodeIds[0]);
+    expect(copyNode.x).toBe((queueNode.x || 0) + 48);
+    expect(copyNode.y).toBe((queueNode.y || 0) + 48);
+  });
+
+  test('duplicating a source clones its bEvent with an independent schedule', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const sourceNode = graph.nodes.find(n => n.type === VISUAL_NODE_TYPES.SOURCE);
+
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, [sourceNode]);
+
+    expect(newNodeIds).toHaveLength(1);
+    expect(next.bEvents).toHaveLength(model.bEvents.length + 1);
+    const original = next.bEvents.find(e => e.id === sourceNode.refId);
+    const copy = next.bEvents.find(e => e.id !== sourceNode.refId && e.name === `${original.name} copy`);
+    expect(copy).toBeDefined();
+    // The copy's own schedule references the copy, not the original.
+    expect(copy.schedules[0].eventId).toBe(copy.id);
+    expect(original.schedules[0].eventId).toBe(original.id);
+  });
+
+  test('duplicating an activity also clones its referenced completion b-event independently', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const activityNode = graph.nodes.find(n => n.id === 'activity:activity-1');
+
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, [activityNode]);
+
+    expect(newNodeIds).toHaveLength(1);
+    const copyCEvent = next.cEvents.find(e => e.id !== 'activity-1');
+    expect(copyCEvent).toBeDefined();
+    expect(copyCEvent.cSchedules).toHaveLength(1);
+
+    const copyCompletionId = copyCEvent.cSchedules[0].eventId;
+    expect(copyCompletionId).not.toBe('route-activity-1-queue-2');
+    const copyCompletion = next.bEvents.find(e => e.id === copyCompletionId);
+    expect(copyCompletion).toBeDefined();
+    expect(copyCompletion.effect).toBe('RELEASE(Server, Queue 2)');
+
+    // Original activity's route is untouched — still points at the original completion event.
+    const originalCEvent = next.cEvents.find(e => e.id === 'activity-1');
+    expect(originalCEvent.cSchedules[0].eventId).toBe('route-activity-1-queue-2');
+  });
+
+  test('skips synthetic route-exit sink nodes', () => {
+    const model = makeModel();
+    const fakeRouteExitNode = { type: VISUAL_NODE_TYPES.SINK, refId: 'route-exit:arrival-1', x: 0, y: 0 };
+
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, [fakeRouteExitNode]);
+
+    expect(newNodeIds).toHaveLength(0);
+    expect(next).toBe(model);
+  });
+
+  test('duplicates multiple nodes in one batch without id collisions', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const queue1 = graph.nodes.find(n => n.id === 'queue:queue-1');
+    const queue2 = graph.nodes.find(n => n.id === 'queue:queue-2');
+
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, [queue1, queue2]);
+
+    expect(newNodeIds).toHaveLength(2);
+    expect(new Set(newNodeIds).size).toBe(2);
+    expect(next.queues).toHaveLength(5);
+    const ids = next.queues.map(q => q.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+// Model where the activity's completion b-event routes probabilistically
+// to two destination queues instead of a single fixed RELEASE target.
+function makeProbabilisticModel() {
+  const model = makeModel();
+  model.bEvents = model.bEvents.map(be =>
+    be.id === 'route-activity-1-queue-2'
+      ? {
+          ...be,
+          probabilisticRouting: [
+            { probability: 0.7, queueName: 'Queue 2' },
+            { probability: 0.3, queueName: 'Queue 3' },
+          ],
+        }
+      : be
+  );
+  return model;
+}
+
+describe('deriveGraphFromModel — probabilistic routing edges', () => {
+  test('each branch edge carries bEventId/branchIndex/probability and a % label', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+
+    const branchEdges = graph.edges.filter(e => e.bEventId === 'route-activity-1-queue-2');
+    expect(branchEdges).toHaveLength(2);
+
+    const toQueue2 = branchEdges.find(e => e.to === 'queue:queue-2');
+    expect(toQueue2.branchIndex).toBe(0);
+    expect(toQueue2.probability).toBe(0.7);
+    expect(toQueue2.label).toBe('70%');
+
+    const toQueue3 = branchEdges.find(e => e.to === 'queue:queue-3');
+    expect(toQueue3.branchIndex).toBe(1);
+    expect(toQueue3.probability).toBe(0.3);
+    expect(toQueue3.label).toBe('30%');
+  });
+
+  test('a branch routing to null queueName (exit) derives an edge to a synthetic sink', () => {
+    const model = makeProbabilisticModel();
+    model.bEvents = model.bEvents.map(be =>
+      be.id === 'route-activity-1-queue-2'
+        ? { ...be, probabilisticRouting: [{ probability: 1, queueName: null }] }
+        : be
+    );
+    const graph = deriveGraphFromModel(model);
+
+    const branchEdges = graph.edges.filter(e => e.bEventId === 'route-activity-1-queue-2');
+    expect(branchEdges).toHaveLength(1);
+    expect(branchEdges[0].source).toBe('terminal');
+    expect(branchEdges[0].label).toBe('100%');
+  });
+});
+
+describe('updateProbabilisticBranchProbability', () => {
+  test('updates only the targeted branch, leaving the other branch untouched', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = updateProbabilisticBranchProbability(model, edge, 0.55);
+    const bEvent = next.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+
+    expect(bEvent.probabilisticRouting[0].probability).toBe(0.55);
+    expect(bEvent.probabilisticRouting[1].probability).toBe(0.3);
+  });
+
+  test('clamps probability to [0, 1]', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const tooHigh = updateProbabilisticBranchProbability(model, edge, 1.5);
+    expect(tooHigh.bEvents.find(be => be.id === 'route-activity-1-queue-2').probabilisticRouting[0].probability).toBe(1);
+
+    const tooLow = updateProbabilisticBranchProbability(model, edge, -0.2);
+    expect(tooLow.bEvents.find(be => be.id === 'route-activity-1-queue-2').probabilisticRouting[0].probability).toBe(0);
+  });
+
+  test('returns the model unchanged when the edge has no bEventId/branchIndex (non-probabilistic edge)', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const conditionEdge = graph.edges.find(e => e.source === 'condition');
+
+    const next = updateProbabilisticBranchProbability(model, conditionEdge, 0.9);
+    expect(next).toBe(model);
   });
 });

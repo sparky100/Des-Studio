@@ -305,13 +305,15 @@ export function deriveGraphFromModel(model = {}) {
           } else if (Array.isArray(bEvent.probabilisticRouting) && bEvent.probabilisticRouting.length > 0) {
             bEvent.probabilisticRouting.forEach((branch, branchIdx) => {
               const probLabel = `${Math.round((branch.probability ?? 0) * 100)}%`;
+              // bEventId/branchIndex/probability let the canvas edit this branch's
+              // probability in place without re-parsing it back out of the label.
               if (!branch.queueName) {
                 // null queueName = exit system → synthetic Sink
                 const sinkId = getExitSinkId();
-                edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: probLabel });
+                edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: probLabel, bEventId: bEvent.id, branchIndex: branchIdx, probability: branch.probability ?? 0 });
               } else {
                 const nextQueueId = queueNodeByName.get(norm(branch.queueName));
-                if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: probLabel });
+                if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: probLabel, bEventId: bEvent.id, branchIndex: branchIdx, probability: branch.probability ?? 0 });
               }
             });
 
@@ -364,10 +366,10 @@ export function deriveGraphFromModel(model = {}) {
             const probLabel = `${Math.round((branch.probability ?? 0) * 100)}%`;
             if (!branch.queueName) {
               const sinkId = getExitSinkId();
-              edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-dp-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: probLabel });
+              edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-dp-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: probLabel, bEventId: bEvent.id, branchIndex: branchIdx, probability: branch.probability ?? 0 });
             } else {
               const nextQueueId = queueNodeByName.get(norm(branch.queueName));
-              if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-dp-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: probLabel });
+              if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-dp-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: probLabel, bEventId: bEvent.id, branchIndex: branchIdx, probability: branch.probability ?? 0 });
             }
           });
         } else {

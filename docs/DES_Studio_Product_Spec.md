@@ -1,8 +1,8 @@
 # simmodlr — Product Specification
 
-**Version:** 7.5.0  
-**Date:** 2026-06-17  
-**Sprint baseline:** Sprint 88  
+**Version:** 7.6.0  
+**Date:** 2026-06-20  
+**Sprint baseline:** Sprint 89  
 **Status:** Living document — reviewed and updated at end of each sprint  
 **Note:** package.json version is 0.9.0-Beta; version alignment with spec version number pending.
 
@@ -90,7 +90,7 @@ High-value features that are complete but whose absence would degrade the platfo
 
 | # | Feature | Description |
 |---|---------|-------------|
-| S1 | **Visual Designer** | @xyflow/react drag-and-drop canvas (**Draw** button). Writes to the same `model_json` as the Define editors. Supports mouse and touch-friendly multi-select, group move, and bulk delete for larger diagrams. |
+| S1 | **Visual Designer** | @xyflow/react drag-and-drop canvas (**Draw** button). Writes to the same `model_json` as the Define editors. Supports mouse and touch-friendly multi-select, group move, and bulk delete for larger diagrams; node duplication and clipboard copy/paste (Ctrl+D / Ctrl+C / Ctrl+V); and inline editing of probabilistic-routing branch probabilities directly on the edge label, without leaving the canvas. |
 | S2 | **AI Generator** | Natural-language model authoring. Four-phase conversation (clarify / confirm / build / refine). Produces complete `model_json`. |
 | S3 | **Execute canvas** | Topology-derived live flow canvas. Entity token animation, queue depth badges, server utilisation overlays. |
 | S4 | **Parametric sweep** | 1D and 2D sweeps with Goal Feasibility line. Two-scenario comparison uses paired-t confidence intervals with Bonferroni correction. Note: tukeyHSD() and oneWayANOVA() are implemented in the engine but not yet wired to the UI. |

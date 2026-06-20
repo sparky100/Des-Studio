@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
-import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, updateProbabilisticBranchProbability, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
@@ -298,14 +298,21 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   [graph, storedViewport]);
   const visualIssues = useMemo(() => validateVisualGraph(graph), [graph]);
   const modelValidation = useMemo(() => validateModel(model || {}), [model]);
-  // Derived set of canvas node IDs that have active validation issues — never stored in model_json
+  // Derived map of canvas node ID -> validation messages — never stored in model_json.
+  // A Map (not just a Set) so the canvas badge can show the message on hover instead of
+  // forcing the user to switch to the Validate tab to learn why a node is flagged.
   const errorNodeIds = useMemo(() => {
-    const ids = new Set();
-    visualIssues.forEach(issue => { if (issue.nodeId) ids.add(issue.nodeId); });
+    const messagesByNode = new Map();
+    const addMessage = (nodeId, message) => {
+      if (!nodeId || !message) return;
+      const existing = messagesByNode.get(nodeId) || [];
+      if (!existing.includes(message)) messagesByNode.set(nodeId, [...existing, message]);
+    };
+    visualIssues.forEach(issue => addMessage(issue.nodeId, issue.message));
     [...modelValidation.errors, ...modelValidation.warnings].forEach(item => {
-      findNodesForError(item, graph).forEach(id => ids.add(id));
+      findNodesForError(item, graph).forEach(id => addMessage(id, item.message));
     });
-    return ids;
+    return messagesByNode;
   }, [visualIssues, modelValidation, graph]);
 
   const isStarterBlank = !(model?.queues || []).length &&
@@ -418,6 +425,39 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     }
   }
 
+  // Clipboard holds a snapshot of copied nodes (not live refs) so later edits to the
+  // originals don't change what gets pasted; pasteOffsetRef grows with each repeated
+  // paste so copies don't stack exactly on top of each other or the previous paste.
+  const clipboardRef = useRef([]);
+  const pasteOffsetRef = useRef(0);
+
+  function copySelectedNodes() {
+    if (selectedNodes.length === 0) return;
+    clipboardRef.current = selectedNodes.map(node => ({ type: node.type, refId: node.refId, x: node.x, y: node.y }));
+    pasteOffsetRef.current = 0;
+    setMessage({ state: "success", text: `Copied ${selectedNodes.length} node${selectedNodes.length > 1 ? "s" : ""}.` });
+  }
+
+  function pasteFromClipboard() {
+    if (!canEdit || clipboardRef.current.length === 0) return;
+    pasteOffsetRef.current += 1;
+    const offset = { x: 48 * pasteOffsetRef.current, y: 48 * pasteOffsetRef.current };
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, clipboardRef.current, offset);
+    if (newNodeIds.length === 0) return;
+    applyModel(next);
+    syncSelection(newNodeIds);
+    setMessage({ state: "success", text: `Pasted ${newNodeIds.length} node${newNodeIds.length > 1 ? "s" : ""}.` });
+  }
+
+  function duplicateSelectedNodes() {
+    if (!canEdit || selectedNodes.length === 0) return;
+    const { model: next, newNodeIds } = duplicateVisualNodes(model, selectedNodes);
+    if (newNodeIds.length === 0) return;
+    applyModel(next);
+    syncSelection(newNodeIds);
+    setMessage({ state: "success", text: `Duplicated ${newNodeIds.length} node${newNodeIds.length > 1 ? "s" : ""}.` });
+  }
+
   // Ref holds latest closures so keydown/keyup listeners never go stale.
   const kbRef = useRef(null);
 
@@ -438,6 +478,20 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
       }
       if (e.key === "Escape") {
         kbRef.current.clearSelection();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        kbRef.current.copySelectedNodes();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        kbRef.current.pasteFromClipboard();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        kbRef.current.duplicateSelectedNodes();
         return;
       }
       const delta = ARROW_DELTA[e.key];
@@ -535,7 +589,11 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     applyModel(nextModel);
     setMessage({ state: "success", text: "Connection removed." });
   };
-  kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit, selectedEdgeId, deleteEdge, clearSelection };
+  const editProbability = (edge, probability) => {
+    if (!canEdit) return;
+    applyModel(updateProbabilisticBranchProbability(model, edge, probability));
+  };
+  kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit, selectedEdgeId, deleteEdge, clearSelection, copySelectedNodes, pasteFromClipboard, duplicateSelectedNodes };
   const resetLayout = () => {
     if (!canEdit) return;
     applyModel({ ...model, graph: model.graph ? { ...model.graph, nodes: [] } : undefined });
@@ -950,6 +1008,14 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                     {selectedNodeIds.length} selected
                   </span>
                   {canEdit && (
+                    <Btn small variant="ghost" onClick={duplicateSelectedNodes}>
+                      Duplicate
+                    </Btn>
+                  )}
+                  <Btn small variant="ghost" onClick={copySelectedNodes}>
+                    Copy
+                  </Btn>
+                  {canEdit && (
                     <Btn small variant="danger" onClick={deleteSelectedNodes}>
                       Delete
                     </Btn>
@@ -990,6 +1056,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               onNodeSelectionChange={syncSelection}
               onEdgeSelect={selectEdge}
               onDeleteEdge={canEdit ? deleteEdge : null}
+              onEditProbability={editProbability}
               onNodeMove={moveNode}
               onNodesMove={moveNodes}
               onViewportChange={changeViewport}
