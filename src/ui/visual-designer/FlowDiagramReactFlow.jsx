@@ -199,6 +199,7 @@ function DesEdge({
             title="Edit this branch's probability (%)"
             style={{
               position: "absolute",
+              pointerEvents: "all",
               transform: `translate(-50%,-50%) translate(${labelX}px,${labelY + yOffset}px)`,
               display: "inline-flex",
               alignItems: "center",
@@ -272,6 +273,7 @@ function DesEdge({
             onClick={e => { e.stopPropagation(); data.onDelete(id); }}
             style={{
               position: "absolute",
+              pointerEvents: "all",
               transform: `translate(-50%,-50%) translate(${btnX}px,${btnY}px)`,
               background: C.red,
               border: "none",

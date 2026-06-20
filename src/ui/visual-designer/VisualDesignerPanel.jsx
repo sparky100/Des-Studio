@@ -366,7 +366,9 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
 
   const syncSelection = ids => {
     const next = [...new Set(ids || [])];
-    setSelectedNodeIds(next);
+    setSelectedNodeIds(prev =>
+      prev.length === next.length && next.every(id => prev.includes(id)) ? prev : next
+    );
     setSelectedNodeId(current => next.includes(current) ? current : (next[0] || null));
   };
 
