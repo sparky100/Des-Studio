@@ -113,6 +113,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const updEffects=(newEffects)=>{const n=[...events];n[i]={...n[i],effect:newEffects};onChange(n);};
         const hasRelease=effects.some(eff=>typeof eff==='string'&&/^RELEASE\s*\(/i.test(eff));
         const hasArriveEffect=effects.some(eff=>typeof eff==='string'&&/^ARRIVE\s*\(/i.test(eff));
+        const isCScheduleTarget=cEvents.some(c=>(c.cSchedules||[]).some(s=>s.eventId===ev.id));
         const joinTargetQueueName=(()=>{
           for(const eff of effects){
             if(typeof eff!=='string')continue;
@@ -209,6 +210,11 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 />
                   );
                 })()}
+                {isCScheduleTarget&&hasArriveEffect&&(
+                  <div style={{fontSize:10,color:C.amber,fontFamily:FONT,lineHeight:1.5}}>
+                    ⚠ This event is scheduled as a follow-on (referenced by a C-event's schedule), but its effect is ARRIVE — ARRIVE always creates a brand-new entity and ignores the entity being completed, which is left stuck in "serving" status forever. Use COMPLETE(), RELEASE(), or the Routing panel below to route the existing entity instead.
+                  </div>
+                )}
               </div>
 
               {/* Routing — shown for RELEASE effects and for scheduled follow-on B-events (DELAY completion) */}

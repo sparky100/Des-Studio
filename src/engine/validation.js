@@ -735,6 +735,11 @@ export function validateModel(model) {
           warn('V47', `C-Event '${c.name || c.id}' uses DELAY but its cSchedule (targeting '${cs.eventId || '?'}') samples the delay from "Server attribute" — no server is claimed by a DELAY activity, so this always falls back to a fixed delay of 1.`, 'cevents',
             { eventIds: [c.id] });
         }
+        const targetB = bEvents.find(b => b.id === cs.eventId);
+        if (targetB && /ARRIVE\s*\(/i.test(effectText(targetB.effect))) {
+          err('V47', `C-Event '${c.name || c.id}' DELAY completion B-Event '${targetB.name || targetB.id}' has an ARRIVE effect — ARRIVE always creates a brand-new entity and ignores the entity that was delayed, which is left stuck in "serving" status forever. Use COMPLETE(), RELEASE(), or the Routing panel (probabilisticRouting) to route the existing entity instead.`, 'cevents',
+            { eventIds: [c.id, targetB.id] });
+        }
       });
     }
   });

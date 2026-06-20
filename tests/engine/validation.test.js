@@ -943,6 +943,39 @@ describe("V47 — DELAY queue reference and useEntityCtx nudge", () => {
     const { warnings } = validateModel(model);
     expect(warnings.some(w => w.code === "V47")).toBe(true);
   });
+
+  it("errors when a DELAY C-event's cSchedule targets a B-event with an ARRIVE effect", () => {
+    const model = {
+      ...baseModel,
+      queues: [
+        { id: "q", name: "RecoveryQueue", discipline: "FIFO" },
+        { id: "q2", name: "Queue 2", discipline: "FIFO" },
+      ],
+      bEvents: [{ id: "b1", name: "Recovery Complete", effect: "ARRIVE(Customer, Queue 2)", schedules: [] }],
+      cEvents: [{
+        id: "c1", name: "Delay", condition: "true",
+        effect: "DELAY(RecoveryQueue)",
+        cSchedules: [{ eventId: "b1", dist: "Fixed", distParams: { value: "5" }, useEntityCtx: true }],
+      }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V47")).toBe(true);
+  });
+
+  it("passes when a DELAY C-event's cSchedule targets a B-event with COMPLETE()", () => {
+    const model = {
+      ...baseModel,
+      queues: [{ id: "q", name: "RecoveryQueue", discipline: "FIFO" }],
+      bEvents: [{ id: "b1", name: "Recovery Complete", effect: "COMPLETE()", schedules: [] }],
+      cEvents: [{
+        id: "c1", name: "Delay", condition: "true",
+        effect: "DELAY(RecoveryQueue)",
+        cSchedules: [{ eventId: "b1", dist: "Fixed", distParams: { value: "5" }, useEntityCtx: true }],
+      }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V47")).toHaveLength(0);
+  });
 });
 
 // ── S40.1 — EntityAttr skips distribution parameter validation ────────────────
