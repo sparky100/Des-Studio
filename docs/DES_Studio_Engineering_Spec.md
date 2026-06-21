@@ -538,6 +538,12 @@ The Visual Designer is an authoring surface over the canonical `model_json`; it 
 
 The only persisted data produced by selection or movement is `model_json.graph.nodes[]` layout metadata. Selection state is UI-only and must never be written to `model_json`, Supabase, or run records.
 
+**Shared macro parsing (`src/model/macroParser.js`):** `clean`/`effectText`/`macroCalls` were extracted out of `graph.js` into this module so other features can parse a B-Event/C-Event `effect` string into structured `{macro, args}` calls without duplicating the regex. `graph.js` imports `clean`/`macroCalls` from here; it is otherwise unchanged.
+
+**Plain-language effect summary (`src/model/effectSummary.js`):** `summarizeBEventEffect(bEvent)` turns a B-Event's macro calls into a short phrase (RELEASE + routing, COMPLETE, RENEGE), falling back to the raw macro call for anything it doesn't have a phrase for — it never hides a macro, only adds a friendlier label on top. Used by `CEventEditor.jsx` to preview, inline, what a scheduled follow-on B-Event actually does.
+
+**Bidirectional B-Event/C-Event navigation:** `ModelDetail.jsx` holds `focusCEventId`/`setFocusCEventId` alongside the pre-existing `focusBEventId`/`focusScheduleId`. `CEventEditor` gained a `focusCEventId`/`onFocusHandled` prop pair and a `cardRefs`-based scroll-into-view effect, mirroring the mechanism `BEventEditor` already used for `focusBEventId`. `ModelDetail` wires `onGoToBEvent` into the `cevents` tab (sets `focusBEventId` + switches tab) and `onGoToCEvent` into the `bevents` tab (sets `focusCEventId` + switches tab) — the same shape as the existing `onGoToSchedule` wiring. `BEventEditor` derives the scheduling C-Event(s) for a given event via `cEvents.filter(c => (c.cSchedules||[]).some(s => s.eventId === ev.id))` and renders them as "Scheduled by" links. This is presentation/navigation only; no `model_json` field or schema changed.
+
 ### 3.3 src/db/ — database layer
 
 The `src/db/` layer consists of four modules. Direct Supabase client calls from UI components are forbidden.

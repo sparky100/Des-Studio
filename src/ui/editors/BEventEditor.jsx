@@ -5,7 +5,7 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],sections=[],containerTypes=[],dataSources=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule,errorFilter=null,onClearErrorFilter})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],sections=[],containerTypes=[],dataSources=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule,onGoToCEvent,errorFilter=null,onClearErrorFilter})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -113,7 +113,8 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const updEffects=(newEffects)=>{const n=[...events];n[i]={...n[i],effect:newEffects};onChange(n);};
         const hasRelease=effects.some(eff=>typeof eff==='string'&&/^RELEASE\s*\(/i.test(eff));
         const hasArriveEffect=effects.some(eff=>typeof eff==='string'&&/^ARRIVE\s*\(/i.test(eff));
-        const isCScheduleTarget=cEvents.some(c=>(c.cSchedules||[]).some(s=>s.eventId===ev.id));
+        const schedulingCEvents=cEvents.filter(c=>(c.cSchedules||[]).some(s=>s.eventId===ev.id));
+        const isCScheduleTarget=schedulingCEvents.length>0;
         const hasCompletionEffect=effects.some(eff=>typeof eff==='string'&&(/^COMPLETE\s*\(\s*\)/i.test(eff)||/^RENEGE\s*\(\s*ctx\s*\)/i.test(eff)));
         // ARRIVE alongside RELEASE()/COMPLETE()/routing is a legitimate multi-stage pattern
         // (e.g. spawning a derived audit/log entity while the scheduled entity is separately
@@ -225,6 +226,20 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 {isCScheduleTarget&&arriveLeavesContextEntityUnresolved&&(
                   <div style={{fontSize:10,color:C.amber,fontFamily:FONT,lineHeight:1.5}}>
                     ⚠ This event is scheduled as a follow-on (referenced by a C-event's schedule), but ARRIVE is its only effect — ARRIVE always creates a brand-new entity and never resolves the entity being completed, which is left stuck in "serving" status forever. Add COMPLETE(), RELEASE(), or the Routing panel below to resolve it (ARRIVE is fine alongside one of those, e.g. to also spawn a derived entity).
+                  </div>
+                )}
+                {isCScheduleTarget&&(
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Scheduled by:</span>
+                    {schedulingCEvents.map(c=>(
+                      <button key={c.id} onClick={()=>onGoToCEvent?.(c.id)}
+                        title={onGoToCEvent?"Go to C-event":""}
+                        style={{background:`${C.cEvent}18`,border:`1px solid ${C.cEvent}44`,borderRadius:4,padding:"3px 8px",
+                          color:C.cEvent,fontFamily:FONT,fontSize:11,fontWeight:600,cursor:onGoToCEvent?"pointer":"default",
+                          textDecoration:onGoToCEvent?"underline dotted":"none"}}>
+                        {c.name||c.id}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>

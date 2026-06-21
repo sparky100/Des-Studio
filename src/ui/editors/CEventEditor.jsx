@@ -1,19 +1,31 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { ConditionBuilder, buildConditionStr } from "./ConditionBuilder.jsx";
 import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 import { EffectPicker, assignOptions, displayEventName, SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { summarizeBEventEffect } from "../../model/effectSummary.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter, onCreateBEvent})=>{
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter, onCreateBEvent, focusCEventId=null, onFocusHandled, onGoToBEvent})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
   const [activeSectionIds,setActiveSectionIds]=useState([]);
   const [creatingBEvent,setCreatingBEvent]=useState(null); // {i,j,name}
+  const cardRefs=useRef({});
+
+  useEffect(()=>{
+    if(!focusCEventId)return;
+    setExpandedIds(prev=>new Set([...prev,focusCEventId]));
+    setFilterText("");
+    setTimeout(()=>{
+      cardRefs.current[focusCEventId]?.scrollIntoView({behavior:"smooth",block:"start"});
+      onFocusHandled?.();
+    },80);
+  },[focusCEventId]);
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(events.map(e=>e.id)));
@@ -155,7 +167,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         const rowIsDelay=rowEffectArr.some(e=>typeof e==='string'&&/^DELAY\(/i.test(e));
 
         return (
-          <div key={ev.id}
+          <div key={ev.id} ref={el=>cardRefs.current[ev.id]=el}
             style={{background:C.bg,
               border:`1px solid ${dragOverIdx===i?C.cEvent:C.cEvent+'33'}`,
               borderLeft:`3px solid ${C.cEvent}`,borderRadius:6,padding:12,
@@ -409,11 +421,18 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                       </div>
 
                       {/* Preview of what will be scheduled */}
-                      {s.eventId&&(
+                      {s.eventId&&(()=>{
+                        const linkedBEvent=bEvents.find(b=>b.id===s.eventId);
+                        return (
                         <div style={{background:C.panel,borderRadius:4,padding:"6px 10px",
                           fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.7}}>
-                          Will schedule: <strong style={{color:C.bEvent}}>
-                            {displayEventName(bEvents.find(b=>b.id===s.eventId)?.name)||s.eventId}
+                          Will schedule:{" "}
+                          <strong
+                            onClick={onGoToBEvent?()=>onGoToBEvent(s.eventId):undefined}
+                            title={onGoToBEvent?"Go to B-event":""}
+                            style={{color:C.bEvent,cursor:onGoToBEvent?"pointer":"default",
+                              textDecoration:onGoToBEvent?"underline dotted":"none"}}>
+                            {displayEventName(linkedBEvent?.name)||s.eventId}
                           </strong> at <strong style={{color:C.amber}}>
                             clock + {s.dist==="ServerAttr"
                               ? `server.${s.distParams?.attr||"serviceTime"}`
@@ -422,8 +441,14 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                               : `sample(${s.dist||"Fixed"})`}
                           </strong>
                           {s.useEntityCtx&&<span style={{color:C.purple}}> · carrying cust+server IDs</span>}
+                          {linkedBEvent&&(
+                            <div style={{marginTop:3,color:C.muted,fontStyle:"italic"}}>
+                              {summarizeBEventEffect(linkedBEvent)}
+                            </div>
+                          )}
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   );
                 })}

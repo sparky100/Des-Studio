@@ -72,6 +72,8 @@ State-triggered events. Fire when condition becomes true. Defined in `cEvents[]`
 
 **Starvation anti-pattern:** When two C-events share a resource and one has a lower priority number (higher urgency), the other may never fire if the first queue is always populated. Symptom: entities accumulate in mid-journey queues; `served=0` or very low for some replications. Diagnosis: check whether any terminal C-event (discharge, exit) has a higher priority number than an entry C-event on the same resource. Fix: set the terminal C-event priority to 0 (highest) so completions are not deferred indefinitely.
 
+**Cross-referencing C-Events and B-Events:** Each `cSchedules[]` entry in the C-Events editor shows a plain-language summary of what its linked B-event actually does (e.g. "Releases Nurse · routes 80% → Discharge Queue, 20% → Transfer Queue", "Entity exits simulation", or — for macros without a friendly phrase yet — the raw macro call as a fallback, so nothing is ever hidden). Clicking the B-event's name jumps straight to it in the B-Events tab. Conversely, if a B-event is referenced by any C-event's `cSchedules`, the B-Events editor shows a "Scheduled by" link back to that C-event. This is presentation only — it does not change the underlying `bEvents[]`/`cEvents[]` data.
+
 ### State Variables
 
 Model-level numeric counters. Defined in `stateVariables[]` array.
