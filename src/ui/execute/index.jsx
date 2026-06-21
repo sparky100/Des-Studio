@@ -184,7 +184,7 @@ async function doCloudSave(saveFn, {
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true }) => {
   const { C, FONT } = useTheme();
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
@@ -334,6 +334,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   useEffect(() => {
     logRef.current = log;
   }, [log]);
+  // Close the Run Setup panel once a save the user triggered from it completes,
+  // instead of leaving it open after the SaveBanner's "Save Changes" succeeds.
+  useEffect(() => {
+    if (savedSignal > 0) setShowRunSetup(false);
+  }, [savedSignal]);
   useEffect(() => {
     const stored = model?.experimentDefaults?.resultDetailLevel;
     if (stored === "full" || stored === "minimal" || stored === "compact") {
