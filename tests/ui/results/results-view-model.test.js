@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  binSeriesPoints,
   buildChartSections,
   buildQueueDepthSeries,
   buildResultsViewModel,
@@ -131,6 +132,13 @@ describe("results view model", () => {
     expect(series[0].hasData).toBe(false);
   });
 
+  test("buildWipSeries leaves chartPoints equal to points for small runs (no binning needed)", () => {
+    const series = buildWipSeries({
+      timeSeries: [{ t: 0, wip: 3 }, { t: 5, wip: 7 }, { t: 10, wip: 4 }],
+    });
+    expect(series[0].chartPoints).toEqual(series[0].points);
+  });
+
   test("buildThroughputSeries reads the completed field from timeSeries entries", () => {
     const series = buildThroughputSeries({
       timeSeries: [{ t: 0, completed: 0 }, { t: 5, completed: 4 }, { t: 10, completed: 2 }],
@@ -140,6 +148,65 @@ describe("results view model", () => {
     expect(series[0].id).toBe("throughput");
     expect(series[0].points).toEqual([{ t: 0, value: 0 }, { t: 5, value: 4 }, { t: 10, value: 2 }]);
     expect(series[0].hasData).toBe(true);
+  });
+
+  test("buildThroughputSeries leaves chartPoints equal to points for small runs (no binning needed)", () => {
+    const series = buildThroughputSeries({
+      timeSeries: [{ t: 0, completed: 0 }, { t: 5, completed: 4 }, { t: 10, completed: 2 }],
+    });
+    expect(series[0].chartPoints).toEqual(series[0].points);
+  });
+
+  test("binSeriesPoints passes points through unchanged when under the bucket count", () => {
+    const points = [{ t: 0, value: 1 }, { t: 5, value: 2 }];
+    expect(binSeriesPoints(points)).toEqual(points);
+  });
+
+  test("binSeriesPoints averages a large series into a reduced number of buckets", () => {
+    const points = Array.from({ length: 200 }, (_, i) => ({ t: i, value: i % 2 === 0 ? 10 : 0 }));
+    const binned = binSeriesPoints(points, { aggregate: "avg" });
+
+    expect(binned.length).toBeLessThan(points.length);
+    expect(binned.length).toBeLessThanOrEqual(60);
+    // averaging alternating 10/0 values should land close to 5 overall
+    const overallAvg = binned.reduce((sum, p) => sum + p.value, 0) / binned.length;
+    expect(overallAvg).toBeCloseTo(5, 0);
+  });
+
+  test("binSeriesPoints sums a large series instead of averaging when aggregate is 'sum'", () => {
+    const points = Array.from({ length: 200 }, (_, i) => ({ t: i, value: 1 }));
+    const binnedAvg = binSeriesPoints(points, { aggregate: "avg" });
+    const binnedSum = binSeriesPoints(points, { aggregate: "sum" });
+
+    const totalRaw = points.reduce((sum, p) => sum + p.value, 0);
+    const totalSum = binnedSum.reduce((sum, p) => sum + p.value, 0);
+    const totalAvg = binnedAvg.reduce((sum, p) => sum + p.value, 0);
+
+    expect(totalSum).toBeCloseTo(totalRaw, 5);
+    expect(totalSum).toBeGreaterThan(totalAvg);
+  });
+
+  test("binSeriesPoints collapses to a single point when all timestamps are identical", () => {
+    const points = Array.from({ length: 100 }, () => ({ t: 5, value: 2 }));
+    expect(binSeriesPoints(points)).toEqual(points);
+  });
+
+  test("buildWipSeries reduces chartPoints below raw point count for large runs", () => {
+    const timeSeries = Array.from({ length: 500 }, (_, i) => ({ t: i, wip: i % 10 }));
+    const series = buildWipSeries({ timeSeries });
+
+    expect(series[0].points).toHaveLength(500);
+    expect(series[0].chartPoints.length).toBeLessThan(500);
+    expect(series[0].chartPoints.length).toBeLessThanOrEqual(60);
+  });
+
+  test("buildThroughputSeries reduces chartPoints below raw point count for large runs", () => {
+    const timeSeries = Array.from({ length: 500 }, (_, i) => ({ t: i, completed: 1 }));
+    const series = buildThroughputSeries({ timeSeries });
+
+    expect(series[0].points).toHaveLength(500);
+    expect(series[0].chartPoints.length).toBeLessThan(500);
+    expect(series[0].chartPoints.length).toBeLessThanOrEqual(60);
   });
 
   test("buildSystemSojournDistribution wraps results.sojournDist in the WaitHistogram shape", () => {
