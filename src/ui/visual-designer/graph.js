@@ -240,12 +240,23 @@ export function deriveGraphFromModel(model = {}) {
     const uniqueQueueRefs = [...new Set(queueRefs.map(clean).filter(Boolean))];
 
     const hasWhen = (event.cSchedules || []).some(cs => cs.when);
+    const serverNames = [...new Set(
+      effectCalls
+        .filter(call => call.macro === "ASSIGN" || call.macro === "COSEIZE")
+        .flatMap(call => call.args.slice(1))
+        .map(clean)
+        .filter(Boolean)
+    )];
     nodes.push({
       id,
       type: VISUAL_NODE_TYPES.ACTIVITY,
       refId: event.id || null,
       label: event.name || "Activity",
-      sublabel: isDelay ? `Delay · Priority ${event.priority || 1}` : `Priority ${event.priority || 1}`,
+      sublabel: isDelay
+        ? `Delay · Priority ${event.priority || 1}`
+        : serverNames.length
+          ? `${serverNames.join(", ")} · Priority ${event.priority || 1}`
+          : `Priority ${event.priority || 1}`,
       badges: hasWhen ? ["when"] : [],
     });
 
