@@ -394,7 +394,12 @@ export function deriveGraphFromModel(model = {}) {
 
   const dedupedNodes = [...new Map(nodes.map(node => [node.id, node])).values()]
     .map(node => {
-      const sec = node.refId ? sectionByElemId.get(node.refId) : null;
+      // Direct-exit sinks carry a `route-exit:<bEventId>` refId (see getExitSinkId
+      // above) — strip that prefix so they resolve against the same memberId the
+      // section actually stores (the raw bEvent id), matching VisualNodeInspector's
+      // currentSectionId lookup.
+      const elemId = node.refId?.startsWith("route-exit:") ? node.refId.slice("route-exit:".length) : node.refId;
+      const sec = elemId ? sectionByElemId.get(elemId) : null;
       return sec ? { ...node, sectionId: sec.sectionId, sectionColor: sec.sectionColor } : node;
     });
   const dedupedEdges = [...new Map(edges.map(edge => [edge.id, edge])).values()];
