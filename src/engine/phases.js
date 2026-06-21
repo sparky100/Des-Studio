@@ -143,8 +143,16 @@ function applyShiftChange(ev, ctx) {
 // Returns { msgs, felEntries }
 // lastCustId / lastSrvId are returned via the context refs object
 export function applyEffect(effect, ctx) {
-  if (!effect || !effect.trim()) return { msgs: [], felEntries: [] };
   const { entities, state, model, clock, felRef, helpers } = ctx;
+  if (!effect || !effect.trim()) {
+    // No macros ran, so carry the scheduled context straight through — callers
+    // (e.g. fireBEvent's routing block) rely on ctx._lastCustId/_lastSrvId to
+    // resolve the entity even when there's no effect, such as a DELAY-completion
+    // B-event that resolves the entity purely via a routing table.
+    ctx._lastCustId = felRef?._contextCustId ?? null;
+    ctx._lastSrvId  = felRef?._contextSrvId  ?? null;
+    return { msgs: [], felEntries: [] };
+  }
   const msgs       = [];
   const felEntries = [];
   let lastCustId   = felRef?._contextCustId ?? null;
