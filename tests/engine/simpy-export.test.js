@@ -161,6 +161,52 @@ const coseizeModel = {
   experimentDefaults: {},
 };
 
+const delayModel = {
+  name: "DelayThenServe",
+  bEvents: [
+    {
+      id: "b1", name: "Arrive",
+      effect: "ARRIVE(Runner, FinishLine)",
+      schedules: [{ dist: "Exponential", distParams: { mean: 2 } }],
+    },
+    {
+      id: "b2", name: "RecoveryComplete",
+      effect: [],
+      probabilisticRouting: [
+        { queueName: "VoucherQueue", probability: 0.9 },
+        { queueName: null, probability: 0.1 },
+      ],
+    },
+    {
+      id: "b3", name: "VoucherDone",
+      effect: "COMPLETE()",
+    },
+  ],
+  cEvents: [
+    {
+      id: "c1", name: "Recover",
+      effect: "DELAY(FinishLine)",
+      cSchedules: [{ eventId: "b2", dist: "Triangular", distParams: { min: 0, mode: 2, max: 5 } }],
+    },
+    {
+      id: "c2", name: "IssueVoucher",
+      effect: "ASSIGN(VoucherQueue, Volunteer)",
+      cSchedules: [{ eventId: "b3", dist: "Fixed", distParams: { value: 1 } }],
+    },
+  ],
+  entityTypes: [
+    { id: "e1", name: "Runner", role: "customer", attrDefs: [] },
+    { id: "e2", name: "Volunteer", role: "server", count: 2 },
+  ],
+  queues: [
+    { id: "q1", name: "FinishLine" },
+    { id: "q2", name: "VoucherQueue" },
+  ],
+  containerTypes: [],
+  stateVariables: [],
+  experimentDefaults: { maxSimTime: 100, warmupPeriod: 0, replications: 1 },
+};
+
 const emptyModel = {
   name: "",
   bEvents: [],
@@ -483,6 +529,56 @@ describe("exportToSimPy", () => {
     it("does not include RENEGE stub in category 1 script", () => {
       const result = exportToSimPy(minimalModel);
       expect(result.script).not.toContain("# TODO (RENEGE):");
+    });
+  });
+
+  describe("DELAY (no-resource) processes", () => {
+    it("generates a monitor function for a DELAY c-event", () => {
+      const result = exportToSimPy(delayModel);
+      expect(result.script).toContain("def Recover_monitor(");
+    });
+
+    it("generates a delay function that does not request a resource", () => {
+      const result = exportToSimPy(delayModel);
+      const start = result.script.indexOf("def Recover_delay(");
+      expect(start).toBeGreaterThan(-1);
+      const end = result.script.indexOf("\ndef ", start + 1);
+      const body = result.script.slice(start, end === -1 ? undefined : end);
+      expect(body).not.toContain(".request()");
+      expect(body).not.toContain("simpy.Resource");
+    });
+
+    it("uses the triangular delay distribution", () => {
+      const result = exportToSimPy(delayModel);
+      expect(result.script).toContain("_triangular(0, 2, 5)");
+    });
+
+    it("does not increment wait_time_acc or svc_time_acc for the delay stage", () => {
+      const result = exportToSimPy(delayModel);
+      const start = result.script.indexOf("def Recover_delay(");
+      const end = result.script.indexOf("\ndef ", start + 1);
+      const body = result.script.slice(start, end === -1 ? undefined : end);
+      expect(body).not.toContain("wait_time_acc");
+      expect(body).not.toContain("svc_time_acc");
+      expect(body).toContain("entity.sojourn_time = env.now - entity.arrival_time");
+    });
+
+    it("routes onward via the completion B-event's probabilistic routing table", () => {
+      const result = exportToSimPy(delayModel);
+      const start = result.script.indexOf("def Recover_delay(");
+      const body = result.script.slice(start);
+      expect(body).toContain("VoucherQueue_store.put(entity)");
+    });
+
+    it("starts the delay monitor process in run_replication", () => {
+      const result = exportToSimPy(delayModel);
+      expect(result.script).toContain("env.process(Recover_monitor(env, FinishLine_store");
+    });
+
+    it("classifies a DELAY-only model as category 1 (fully runnable)", () => {
+      const result = exportToSimPy(delayModel);
+      expect(result.category).toBe(1);
+      expect(result.todoMacros).toHaveLength(0);
     });
   });
 
