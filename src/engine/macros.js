@@ -180,7 +180,7 @@ function retireIdleExcessServers(ctx, serverTypeName) {
   return retired;
 }
 
-function buildStageRecord(cust, srv, clock) {
+export function buildStageRecord(cust, srv, clock) {
   const waitStartedAt = cust.lastStageStart ?? cust.arrivalTime;
   const serviceStartedAt = cust.serviceStart ?? null;
   const wait = serviceStartedAt != null

@@ -473,10 +473,17 @@ class Stats:
       );
       const entityClass = cls ? toPascal(cls.name) : 'Entity';
 
-      // Get inter-arrival distribution from first schedule
-      const sched = (b.schedules || []).find(s => s.dist || s.distribution);
-      const iaDist = sched?.dist || 'Exponential';
-      const iaParams = sched?.distParams || { mean: 1 };
+      // Get inter-arrival distribution from first schedule. A schedule entry with
+      // top-level rows[]/times[] but no explicit `dist` is implicitly "Schedule"
+      // — mirrors phases.js's own normalization for planned absolute-time arrivals,
+      // which the SimPy export previously missed (falling back to Exponential(mean=1)
+      // and silently dropping the real planned arrivals).
+      const sched = (b.schedules || []).find(s => s.dist || s.distribution || s.rows || s.times);
+      const schedHasPlan = !!(sched && (sched.rows || sched.times));
+      const iaDist = sched?.dist || (schedHasPlan ? 'Schedule' : 'Exponential');
+      const iaParams = schedHasPlan
+        ? { ...(sched.rows ? { rows: sched.rows } : { times: sched.times }), ...(sched.distParams || {}) }
+        : (sched?.distParams || { mean: 1 });
       const iaLabel = distLabel(iaDist, iaParams);
 
       // Check for balking — balking is configured on the queue itself (F11.2);
@@ -489,7 +496,7 @@ class Stats:
       fnBody += `    """B-event "${b.name}": ARRIVE(${customerTypeName}, ${queueName})"""\n`;
       fnBody += `    _counter = 0\n`;
 
-      if (isScheduleDist(sched)) {
+      if (isScheduleDist({ dist: iaDist })) {
         // Planned absolute-time arrivals — fire once at each scheduled time
         const rows = (iaParams?.rows || iaParams?.times?.map?.((t, i) => ({ time: t })) || []);
         const entries = rows.map(r => {
@@ -511,7 +518,7 @@ class Stats:
         fnBody += `            except AttributeError: pass\n`;
         fnBody += `        entity.queue_join_time = env.now\n`;
         fnBody += `        yield ${storeId}.put(entity)\n`;
-      } else if (isPiecewiseDist(sched)) {
+      } else if (isPiecewiseDist({ dist: iaDist })) {
         // Time-varying arrivals — generate a helper function and reference it
         const helperFn = `_piecewise_${fnName}`;
         const periods = iaParams?.periods || [];

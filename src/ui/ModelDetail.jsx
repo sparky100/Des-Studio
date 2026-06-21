@@ -459,6 +459,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [latestWarmupDetection,setLatestWarmupDetection]=useState(null);
   const [latestLog,setLatestLog]=useState([]);
   const [namedSchedules,setNamedSchedules]=useState([]);
+  const [namedSchedulesLoading,setNamedSchedulesLoading]=useState(false);
   const [errorFilter,setErrorFilter]=useState(null); // null | { tab, affectedEventIds, affectedQueueIds, affectedEntityTypeIds }
   const [focusBEventId,setFocusBEventId]=useState(null);
   const [focusScheduleId,setFocusScheduleId]=useState(null);
@@ -709,7 +710,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
 
   useEffect(()=>{
     if(!modelId)return;
-    fetchModelSchedules(modelId).then(setNamedSchedules).catch(()=>{});
+    setNamedSchedulesLoading(true);
+    fetchModelSchedules(modelId).then(setNamedSchedules).catch(()=>{}).finally(()=>setNamedSchedulesLoading(false));
   },[modelId]);
 
   useEffect(()=>{
@@ -1865,6 +1867,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           model={model}
           tier={resolvedTier}
           schedulesMap={aiSchedulesMap}
+          schedulesLoading={namedSchedulesLoading}
           experimentConfig={model.experimentDefaults||{}}
           onSave={overrides.userId
             ? (result,config)=>saveSimulationRun(modelId,overrides.userId,result,config)
