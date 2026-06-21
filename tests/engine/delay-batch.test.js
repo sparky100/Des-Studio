@@ -70,3 +70,53 @@ describe('DELAY macro — batch processing', () => {
     expect(inVoucher).toHaveLength(5);
   });
 });
+
+describe('DELAY macro — time accounting (delay time belongs to sojourn, not service/wait)', () => {
+  it('excludes delay duration from avgSvc when COMPLETE() fires directly on the delay', () => {
+    const model = delayModel(20);
+    model.cEvents[0].cSchedules[0].distParams = { value: '3' };
+    const result = buildEngine(model, 42, 0, 10, null, 5000, 5000, false).runAll();
+    expect(result.summary.served).toBe(20);
+    // No real server is ever claimed — the only "stage" each entity has is the
+    // delay itself, tagged serverType:"delay", which must not be counted as service.
+    expect(result.summary.avgSvc).toBe(0);
+    // The delay duration must still show up in sojourn/time-in-system.
+    expect(result.summary.avgSojourn).toBeCloseTo(3, 1);
+  });
+
+  it('keeps delay duration out of both avgWait and avgSvc when routed onward to real service', () => {
+    const model = {
+      entityTypes: [
+        { id: 'Runner', name: 'Runner', role: 'customer', count: 0 },
+        { id: 'Clerk', name: 'Clerk', role: 'server', count: '1' },
+      ],
+      bEvents: [
+        { id: 'b_arrive', name: 'Arrive', scheduledTime: '0', effect: 'ARRIVE(Runner, Finish Line)',
+          schedules: [] },
+        { id: 'b_done', name: 'Recovery Complete', scheduledTime: '9999', effect: [], schedules: [],
+          probabilisticRouting: [{ probability: 1, queueName: 'Voucher Queue' }] },
+        { id: 'b_complete', name: 'Complete', scheduledTime: '9999', effect: 'COMPLETE()', schedules: [] },
+      ],
+      cEvents: [
+        { id: 'c_delay', name: 'Recover', priority: 1, effect: 'DELAY(Finish Line)',
+          condition: { variable: 'queue(Finish Line).length', operator: '>', value: 0 },
+          cSchedules: [{ dist: 'Fixed', distParams: { value: '2' }, eventId: 'b_done', useEntityCtx: true }] },
+        { id: 'c_assign', name: 'Assign Clerk', priority: 2, effect: 'ASSIGN(Voucher Queue, Clerk)',
+          condition: 'queue(Voucher Queue).length > 0 AND idle(Clerk).count > 0',
+          cSchedules: [{ dist: 'Fixed', distParams: { value: '3' }, eventId: 'b_complete', useEntityCtx: true }] },
+      ],
+      queues: [
+        { id: 'q_finish', name: 'Finish Line', discipline: 'FIFO', customerType: 'Runner' },
+        { id: 'q_voucher', name: 'Voucher Queue', discipline: 'FIFO', customerType: 'Runner' },
+      ],
+    };
+    const result = buildEngine(model, 42, 0, 10, null, 500, 500, false).runAll();
+    expect(result.summary.served).toBe(1);
+    // Total time in system: 2 (delay) + 3 (real service) = 5.
+    expect(result.summary.avgSojourn).toBeCloseTo(5, 1);
+    // Real service time only — the delay must not inflate this.
+    expect(result.summary.avgSvc).toBeCloseTo(3, 1);
+    // The delay's duration must not be misattributed as queue wait either.
+    expect(result.summary.avgWait).toBeCloseTo(0, 1);
+  });
+});

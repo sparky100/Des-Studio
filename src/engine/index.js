@@ -1233,9 +1233,14 @@ const cycleLog = [];
   function entityServiceAfterWarmup(entity) {
     if (!entity?.stages?.length) {
       if (entity?.serviceStart == null || entity?.completionTime == null) return null;
+      if (entity?._isDelay) return null;
       return truncateInterval(entity.serviceStart, entity.completionTime);
     }
-    return entity.stages.reduce((sum, stage) => sum + truncateInterval(stage.serviceStartedAt, stage.serviceEndedAt), 0);
+    // "delay" stages hold no server, so their duration isn't service time —
+    // it's accounted for separately (sojourn-only), not folded into avgSvc.
+    return entity.stages
+      .filter(stage => stage.serverType !== "delay")
+      .reduce((sum, stage) => sum + truncateInterval(stage.serviceStartedAt, stage.serviceEndedAt), 0);
   }
 
   function entitySojournAfterWarmup(entity) {

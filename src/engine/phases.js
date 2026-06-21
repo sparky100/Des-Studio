@@ -8,7 +8,7 @@
 // EXTENDING: To add pre/post-phase hooks (e.g. for statistics collection),
 // add hook functions to the options object passed to runPhases().
 
-import { MACROS, applyScalar }              from "./macros.js";
+import { MACROS, applyScalar, buildStageRecord } from "./macros.js";
 import { evalCondition, evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
 import { clearWaitingState, attemptQueueJoin, preemptCustomer, releaseServerClaim } from "./entities.js";
@@ -258,6 +258,17 @@ export function fireBEvent(ev, ctx) {
   // ── Route helper: apply a resolved queueName to the customer.
   // null / "" means "exit system" — complete the customer immediately.
   const applyRoute = (cust, queueName, note) => {
+    // A DELAY completion routed purely via the routing table (no COMPLETE()/RELEASE()
+    // macro ran) would otherwise never get a stage record at the delay boundary, leaving
+    // lastStageStart stale and folding the delay duration into whatever wait/service comes
+    // next. Close out the delay as its own "delay"-tagged stage before routing onward.
+    if (cust._isDelay) {
+      if (!cust.stages) cust.stages = [];
+      cust.stages.push(buildStageRecord(cust, null, clock));
+      cust.lastStageStart = clock;
+      delete cust.serviceStart;
+      delete cust._isDelay;
+    }
     if (!queueName) {
       const evTail = completeEntity(cust, ev, clock, ctx.state);
       cust.outcome = {
