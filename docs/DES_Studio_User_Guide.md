@@ -530,6 +530,12 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 
    **Do not** invent a `RELEASE()` for a chain where no server was ever seized — `RELEASE` has no awareness that this entity came from a Delay, so it either does nothing (entity stuck, same problem as bare `ARRIVE`) or, worse, can release an unrelated server's claim on a different entity. If no server is involved, use `COMPLETE()` or a routing table instead.
 
+### 5.5 Finding what a scheduled B-Event actually does
+
+Each row in a C-Event's **Schedule Follow-on Event** panel shows a one-line, plain-language summary of the linked B-Event's effect right under the schedule preview — e.g. "Releases Nurse · routes 80% → Discharge Queue, 20% → Transfer Queue" or "Entity exits simulation." Macros without a friendly phrase yet (FILL, PREEMPT, FAIL, …) fall back to showing the raw macro call instead of being hidden. Click the bolded B-Event name to jump straight to it in the **B-Events** tab.
+
+The link works the other way too: open a B-Event in the **B-Events** editor, and if any C-Event schedules it as a follow-on, a **"Scheduled by"** link appears — click it to jump back to that C-Event.
+
 ---
 
 ## 6. Glossary

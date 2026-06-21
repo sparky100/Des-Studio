@@ -1001,17 +1001,29 @@ export function validateModel(model) {
     const reachableNames = new Set();
     const ARRIVE_QUEUE_G  = /ARRIVE\s*\([^,)]+,\s*([^)]+)\)/gi;
     const RELEASE_QUEUE_G = /RELEASE\s*\([^,)]+,\s*([^)]+)\)/gi;
+    // MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue) and SPLIT(EntityType, N, TargetQueue)
+    // both route into a queue named in their final argument — same as ARRIVE/RELEASE.
+    const MATCH_QUEUE_G = /MATCH\s*\([^,)]+,\s*[^,)]+,\s*[^,)]+,\s*[^,)]+,\s*([^)]+)\)/gi;
+    const SPLIT_QUEUE_G = /SPLIT\s*\([^,)]+,\s*\d+\s*,\s*([^)]+)\)/gi;
 
-    bEvents.forEach(b => {
-      const text = effectText(b.effect);
+    const collectFromEffect = (text) => {
       for (const m of text.matchAll(ARRIVE_QUEUE_G))  reachableNames.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(RELEASE_QUEUE_G)) reachableNames.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(MATCH_QUEUE_G))   reachableNames.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(SPLIT_QUEUE_G))   reachableNames.add(m[1].trim().toLowerCase());
+    };
+
+    bEvents.forEach(b => {
+      collectFromEffect(effectText(b.effect));
       if (b.defaultQueueName)
         reachableNames.add(b.defaultQueueName.toLowerCase());
       (b.routing || []).forEach(r => r.queueName && reachableNames.add(r.queueName.toLowerCase()));
       (b.probabilisticRouting || []).forEach(r => r.queueName && reachableNames.add(r.queueName.toLowerCase()));
       if (b.loopConfig?.exitQueueName)
         reachableNames.add(b.loopConfig.exitQueueName.toLowerCase());
+    });
+    cEvents.forEach(c => {
+      collectFromEffect(effectText(c.effect));
     });
     queues.forEach(q => {
       if (q.overflowDestination) reachableNames.add(q.overflowDestination.toLowerCase());

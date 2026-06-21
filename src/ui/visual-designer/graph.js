@@ -4,6 +4,7 @@
 // model.graph data is used only for layout metadata such as node positions.
 
 import dagre from "@dagrejs/dagre";
+import { clean, macroCalls } from "../../model/macroParser.js";
 
 const NODE_WIDTH = 142;
 const NODE_HEIGHT = 68;
@@ -19,37 +20,8 @@ export const VISUAL_NODE_TYPES = {
   SINK: "sink",
 };
 
-function clean(value = "") {
-  return String(value || "").trim();
-}
-
 function norm(value = "") {
   return clean(value).toLowerCase();
-}
-
-function effectText(effect) {
-  if (Array.isArray(effect)) return effect.map(effectText).filter(Boolean).join(";");
-  if (effect && typeof effect === "object") {
-    if (typeof effect.effect === "string") return effect.effect;
-    const macro = clean(effect.macro || effect.type || effect.name).toUpperCase();
-    if (!macro) return "";
-    const args = Array.isArray(effect.args)
-      ? effect.args
-      : [
-          effect.entityType || effect.customerType || effect.queue || effect.resourceType || effect.serverType,
-          effect.serverType || effect.resourceType,
-        ].filter(Boolean);
-    return `${macro}(${args.join(", ")})`;
-  }
-  return clean(effect);
-}
-
-function macroCalls(effect) {
-  const text = effectText(effect);
-  return [...text.matchAll(/\b([A-Z_]+)\s*\(([^)]*)\)/gi)].map(match => ({
-    macro: match[1].trim().toUpperCase(),
-    args: match[2].split(",").map(arg => arg.trim()).filter(Boolean),
-  }));
 }
 
 function queueRefsFromCondition(condition) {

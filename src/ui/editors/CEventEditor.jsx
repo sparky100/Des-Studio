@@ -1,19 +1,31 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { ConditionBuilder, buildConditionStr } from "./ConditionBuilder.jsx";
 import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 import { EffectPicker, assignOptions, displayEventName, SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { summarizeBEventEffect } from "../../model/effectSummary.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter, onCreateBEvent})=>{
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter, onCreateBEvent, focusCEventId=null, onFocusHandled, onGoToBEvent})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
   const [activeSectionIds,setActiveSectionIds]=useState([]);
   const [creatingBEvent,setCreatingBEvent]=useState(null); // {i,j,name}
+  const cardRefs=useRef({});
+
+  useEffect(()=>{
+    if(!focusCEventId)return;
+    setExpandedIds(prev=>new Set([...prev,focusCEventId]));
+    setFilterText("");
+    setTimeout(()=>{
+      cardRefs.current[focusCEventId]?.scrollIntoView({behavior:"smooth",block:"start"});
+      onFocusHandled?.();
+    },80);
+  },[focusCEventId]);
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(events.map(e=>e.id)));
@@ -125,13 +137,9 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         </div>
       )}
       <InfoBox color={C.cEvent}>
-        <strong style={{color:C.cEvent}}>Conditions:</strong>{" "}
-        <code>queue(Type).length</code> · <code>idle(Type).count</code> · <code>busy(Type).count</code> ·{" "}
-        <code>attr(Type,attrName)</code> · <code>served</code> · <code>reneged</code><br/>
-        <strong style={{color:C.cEvent}}>Service-start effects</strong> match a queued entity to an idle resource.{" "}
-        <strong>Scalar effects</strong> also supported: <code>VAR++</code> · <code>VAR--</code> · <code>VAR += N</code> · <code>VAR = value</code><br/>
-        <strong style={{color:C.green}}>B-event scheduling</strong> is defined below in the <em>Schedules</em> section —
-        select the B-event, distribution, and whether to carry the matched entity context (customer + server IDs).
+        A C-event fires the moment its condition becomes true — e.g. "a customer is waiting and a server is free." That's how an{" "}
+        <strong style={{color:C.cEvent}}>activity starts</strong>: the waiting entity is automatically matched to the idle resource.{" "}
+        To know when that activity <strong style={{color:C.green}}>finishes</strong>, schedule a completion event below — pick the B-event and how long the activity takes.
       </InfoBox>
       {events.length===0&&(
         <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:"40px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
@@ -155,7 +163,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         const rowIsDelay=rowEffectArr.some(e=>typeof e==='string'&&/^DELAY\(/i.test(e));
 
         return (
-          <div key={ev.id}
+          <div key={ev.id} ref={el=>cardRefs.current[ev.id]=el}
             style={{background:C.bg,
               border:`1px solid ${dragOverIdx===i?C.cEvent:C.cEvent+'33'}`,
               borderLeft:`3px solid ${C.cEvent}`,borderRadius:6,padding:12,
@@ -409,11 +417,18 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                       </div>
 
                       {/* Preview of what will be scheduled */}
-                      {s.eventId&&(
+                      {s.eventId&&(()=>{
+                        const linkedBEvent=bEvents.find(b=>b.id===s.eventId);
+                        return (
                         <div style={{background:C.panel,borderRadius:4,padding:"6px 10px",
                           fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.7}}>
-                          Will schedule: <strong style={{color:C.bEvent}}>
-                            {displayEventName(bEvents.find(b=>b.id===s.eventId)?.name)||s.eventId}
+                          Will schedule:{" "}
+                          <strong
+                            onClick={onGoToBEvent?()=>onGoToBEvent(s.eventId):undefined}
+                            title={onGoToBEvent?"Go to B-event":""}
+                            style={{color:C.bEvent,cursor:onGoToBEvent?"pointer":"default",
+                              textDecoration:onGoToBEvent?"underline dotted":"none"}}>
+                            {displayEventName(linkedBEvent?.name)||s.eventId}
                           </strong> at <strong style={{color:C.amber}}>
                             clock + {s.dist==="ServerAttr"
                               ? `server.${s.distParams?.attr||"serviceTime"}`
@@ -422,8 +437,14 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                               : `sample(${s.dist||"Fixed"})`}
                           </strong>
                           {s.useEntityCtx&&<span style={{color:C.purple}}> · carrying cust+server IDs</span>}
+                          {linkedBEvent&&(
+                            <div style={{marginTop:3,color:C.muted,fontStyle:"italic"}}>
+                              {summarizeBEventEffect(linkedBEvent)}
+                            </div>
+                          )}
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   );
                 })}
