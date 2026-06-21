@@ -554,6 +554,7 @@ class Stats:
     const t = effectText(c.effect);
     return /ASSIGN\s*\(/i.test(t) || /COSEIZE\s*\(/i.test(t);
   });
+  const delayCEvents = cEvents.filter(c => /DELAY\s*\(/i.test(effectText(c.effect)));
   // Maps c.name → list of routing-target _store variable names, so run_replication()
   // can pass them as explicit parameters to monitor/serve functions.
   const cEventRoutingStores = new Map();
@@ -647,6 +648,58 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       svcParts.push(svcBody);
     }
     parts.push(svcParts.join('\n') + '\n');
+  }
+
+  // ── Delay processes (no resource claimed) ───────────────────────────────────
+  // DELAY pulls every waiting entity out of its queue and lets each proceed in
+  // parallel after a sampled delay — there is no server to seize, so this must
+  // not share the ASSIGN/COSEIZE resource-request codepath above. Per engine
+  // semantics (src/engine/macros.js, src/engine/phases.js), the delay duration
+  // counts toward sojourn time but must NOT be added to wait_time_acc/svc_time_acc.
+  if (delayCEvents.length > 0) {
+    const dlyParts = ['# ── Delay processes (no resource claimed) ───────────────────────────────────'];
+    for (const c of delayCEvents) {
+      const effT = effectText(c.effect);
+      const delayCall = findMacroCall(effT, 'DELAY');
+      if (!delayCall) continue;
+
+      const queueName = delayCall.rawArgs.trim();
+      const storeId = safeId(queueName) + '_store';
+
+      const { dist: delayDist, distParams: delayParams, placeholder } = getServiceDist(c);
+      const delayExpr = distToExpr(delayDist, delayParams);
+      const delayLabel = distLabel(delayDist, delayParams);
+      const delayNote = distUnsupportedNote(delayDist);
+
+      const completionBEvent = findCompletionBEvent(c, bEvents);
+
+      const monFn = safeId(c.name || 'delay') + '_monitor';
+      const dlyFn = safeId(c.name || 'delay') + '_delay';
+
+      const completionCode = routingCode(completionBEvent, queues);
+      const routingStoreVarNames = [...new Set((completionCode.match(/\b\w+_store\b/g) || []))]
+        .filter(v => v !== storeId);
+      cEventRoutingStores.set(c.name, routingStoreVarNames);
+      const rStoreComma = routingStoreVarNames.length > 0 ? ', ' + routingStoreVarNames.join(', ') : '';
+
+      let monBody = `def ${monFn}(env, ${storeId}${rStoreComma}, stats):\n`;
+      monBody += `    """C-event "${c.name}": DELAY(${queueName}) — no resource claimed; every waiting entity proceeds in parallel."""\n`;
+      monBody += `    while True:\n`;
+      monBody += `        entity = yield ${storeId}.get()\n`;
+      monBody += `        env.process(${dlyFn}(env, entity${rStoreComma}, stats))\n`;
+
+      const delayNoteLine = delayNote ? `    ${delayNote}\n` : '';
+      let dlyBody = `def ${dlyFn}(env, entity${rStoreComma}, stats):\n`;
+      dlyBody += delayNoteLine;
+      dlyBody += `    yield env.timeout(${delayExpr})  # delay: ${delayLabel}${placeholder ? '  # TODO: set delay distribution' : ''}\n`;
+      dlyBody += `    # DELAY: no resource claimed — duration counts toward sojourn only, not wait/service stats\n`;
+      dlyBody += `    entity.sojourn_time = env.now - entity.arrival_time\n`;
+      dlyBody += completionCode;
+
+      dlyParts.push(monBody);
+      dlyParts.push(dlyBody);
+    }
+    parts.push(dlyParts.join('\n') + '\n');
   }
 
   // ── Container helpers ──────────────────────────────────────────────────────
@@ -821,6 +874,22 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const routingStoreVarNames = cEventRoutingStores.get(c.name) || [];
       const rStoreComma = routingStoreVarNames.length > 0 ? ', ' + routingStoreVarNames.join(', ') : '';
       runLines.push(`    env.process(${monFn}(env, ${storeId}, ${resArgs}${rStoreComma}, stats))`);
+    }
+    runLines.push(``);
+  }
+
+  if (delayCEvents.length > 0) {
+    runLines.push(`    # Start delay monitor processes (no resource claimed)`);
+    for (const c of delayCEvents) {
+      const effT = effectText(c.effect);
+      const delayCall = findMacroCall(effT, 'DELAY');
+      if (!delayCall) continue;
+      const queueName = delayCall.rawArgs.trim();
+      const storeId = safeId(queueName) + '_store';
+      const monFn = safeId(c.name || 'delay') + '_monitor';
+      const routingStoreVarNames = cEventRoutingStores.get(c.name) || [];
+      const rStoreComma = routingStoreVarNames.length > 0 ? ', ' + routingStoreVarNames.join(', ') : '';
+      runLines.push(`    env.process(${monFn}(env, ${storeId}${rStoreComma}, stats))`);
     }
     runLines.push(``);
   }
