@@ -61,6 +61,20 @@ describe("ModelDetail Access tab — shareable link", () => {
     );
   });
 
+  test("falls back to a manual copy when the Clipboard API is unavailable, so the click still gives feedback", () => {
+    // Simulate a context (e.g. non-HTTPS) where navigator.clipboard doesn't exist —
+    // previously this silently did nothing, with no success or error toast.
+    Object.assign(navigator, { clipboard: undefined });
+    const execCommandSpy = vi.fn(() => true);
+    document.execCommand = execCommandSpy;
+
+    renderAccessTab();
+
+    fireEvent.click(screen.getByRole("button", { name: /copy link/i }));
+
+    expect(execCommandSpy).toHaveBeenCalledWith("copy");
+  });
+
   test("warns that a private model with no collaborators has nothing for the link to open", () => {
     renderAccessTab({ ...baseModel, visibility: "private", access: {} });
 
@@ -77,5 +91,29 @@ describe("ModelDetail Access tab — shareable link", () => {
     renderAccessTab({ ...baseModel, visibility: "private", access: { "user-2": "viewer" } });
 
     expect(screen.queryByText(/won't open it for anyone else yet/i)).not.toBeInTheDocument();
+  });
+
+  test("switches the Public/Private button highlight immediately on click, without waiting on a refresh", () => {
+    let resolveSetVisibility;
+    const onSetVisibility = vi.fn(
+      () => new Promise(resolve => { resolveSetVisibility = resolve; })
+    );
+    renderAccessTab(baseModel, { onSetVisibility });
+
+    const publicBtn = screen.getByRole("button", { name: /🌐 Public/i });
+    const privateBtn = screen.getByRole("button", { name: /🔒 Private/i });
+
+    const privateBgBefore = getComputedStyle(privateBtn).backgroundColor;
+    const publicBgBefore = getComputedStyle(publicBtn).backgroundColor;
+
+    fireEvent.click(publicBtn);
+
+    // The highlight should flip right away, before the onSetVisibility promise (and the
+    // onRefresh round-trip it chains into) has resolved.
+    expect(getComputedStyle(publicBtn).backgroundColor).not.toBe(publicBgBefore);
+    expect(getComputedStyle(privateBtn).backgroundColor).not.toBe(privateBgBefore);
+    expect(onSetVisibility).toHaveBeenCalledWith("m1", "public");
+
+    resolveSetVisibility();
   });
 });
