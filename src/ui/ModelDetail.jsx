@@ -1630,11 +1630,31 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             <section aria-label="Sharing settings" style={{display:"flex",flexDirection:"column",gap:10}}>
               <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS,borderBottom:`1px solid ${C.border}`,paddingBottom:4}}>Sharing</div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"private").then(onRefresh);}} small>🔒 Private</Btn>
-                <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"public").then(onRefresh);}} small>🌐 Public</Btn>
+                <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{setModel(m=>({...m,visibility:"private"}));if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"private").then(onRefresh);}} small>🔒 Private</Btn>
+                <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{setModel(m=>({...m,visibility:"public"}));if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"public").then(onRefresh);}} small>🌐 Public</Btn>
                 <Btn variant="ghost" small onClick={()=>{
                   const url=`${window.location.origin}${window.location.pathname}#model/${modelId}`;
-                  navigator.clipboard?.writeText(url).then(()=>toast.success("Link copied")).catch(()=>toast.error("Could not copy link"));
+                  const onCopied=()=>toast.success("Link copied — share it with anyone who has access");
+                  const onCopyFailed=()=>toast.error("Could not copy link");
+                  if(navigator.clipboard?.writeText){
+                    navigator.clipboard.writeText(url).then(onCopied).catch(onCopyFailed);
+                  }else{
+                    // Clipboard API unavailable (e.g. non-HTTPS context) — fall back to a
+                    // legacy textarea-select-and-copy so the action still gives feedback.
+                    try{
+                      const ta=document.createElement("textarea");
+                      ta.value=url;
+                      ta.style.position="fixed";
+                      ta.style.opacity="0";
+                      document.body.appendChild(ta);
+                      ta.select();
+                      document.execCommand("copy");
+                      document.body.removeChild(ta);
+                      onCopied();
+                    }catch{
+                      onCopyFailed();
+                    }
+                  }
                 }}>🔗 Copy link</Btn>
               </div>
               {model.visibility==="private"&&!Object.values(model.access||{}).some(r=>r==="viewer"||r==="editor")&&(
