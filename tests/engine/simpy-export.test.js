@@ -324,6 +324,46 @@ describe("exportToSimPy", () => {
       const result = exportToSimPy(minimalModel);
       expect(result.script).toContain("WaitQueue_store.put(entity)");
     });
+
+    it("treats a schedule with rows[] but no explicit dist as a planned-arrival Schedule", () => {
+      // Mirrors phases.js's own implicit-Schedule normalization: a schedule entry
+      // with top-level rows[]/times[] but no `dist` key is a planned arrival list,
+      // not a fallback to Exponential(mean=1).
+      const model = {
+        ...minimalModel,
+        bEvents: [
+          {
+            id: "b1", name: "Arrivals",
+            effect: "ARRIVE(Customer, WaitQueue)",
+            schedules: [{ rows: [{ time: 1.5 }, { time: 4 }, { time: 9.25 }] }],
+          },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.script).toContain("_schedule = [");
+      expect(result.script).toContain("(1.5, {})");
+      expect(result.script).toContain("(4, {})");
+      expect(result.script).toContain("(9.25, {})");
+      expect(result.script).not.toContain("_exp(1)");
+    });
+
+    it("treats a schedule with times[] but no explicit dist as a planned-arrival Schedule", () => {
+      const model = {
+        ...minimalModel,
+        bEvents: [
+          {
+            id: "b1", name: "Arrivals",
+            effect: "ARRIVE(Customer, WaitQueue)",
+            schedules: [{ times: [2, 6, 8] }],
+          },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.script).toContain("_schedule = [");
+      expect(result.script).toContain("(2, {})");
+      expect(result.script).toContain("(6, {})");
+      expect(result.script).toContain("(8, {})");
+    });
   });
 
   describe("service processes", () => {
