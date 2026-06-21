@@ -1746,7 +1746,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                       statItems={lineSeriesStats(series, "entities", color)}
                       dataPreview={<SeriesDataPreview series={series} />}
                     >
-                      <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="entities" />
+                      <MiniLineChart title="" ariaTitle={series.label} points={series.chartPoints || series.points} color={color} yLabel="entities" />
                     </ChartCard>
                   );
                 })}
@@ -1761,7 +1761,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                       statItems={lineSeriesStats(series, "completions", color)}
                       dataPreview={<SeriesDataPreview series={series} />}
                     >
-                      <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="completions" />
+                      <MiniLineChart title="" ariaTitle={series.label} points={series.chartPoints || series.points} color={color} yLabel="completions" />
                     </ChartCard>
                   );
                 })}
