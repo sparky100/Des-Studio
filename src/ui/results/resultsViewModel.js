@@ -235,6 +235,36 @@ export function buildWaitByArrival(results = {}) {
   return { points, hasData: points.length >= 2 };
 }
 
+const CHART_BUCKET_COUNT = 60;
+
+// Bin { t, value } points into evenly-spaced time buckets, for smoothing
+// dense/jagged raw time series in charts. Unlike binArrivalPoints, this is
+// chart-display-only: callers keep the raw points around separately (e.g. as
+// series.points) for stats/CSV/data-preview, and only feed this binned output
+// to the chart itself. Returns the input unchanged if it's already small.
+export function binSeriesPoints(points, { aggregate = "avg" } = {}) {
+  if (!Array.isArray(points) || points.length <= CHART_BUCKET_COUNT) return points;
+  const sorted = [...points].sort((a, b) => a.t - b.t);
+  const minT = sorted[0].t;
+  const maxT = sorted[sorted.length - 1].t;
+  if (maxT <= minT) return sorted;
+  const bucketWidth = (maxT - minT) / CHART_BUCKET_COUNT;
+  const sums = new Array(CHART_BUCKET_COUNT).fill(0);
+  const counts = new Array(CHART_BUCKET_COUNT).fill(0);
+  for (const p of sorted) {
+    const idx = Math.min(CHART_BUCKET_COUNT - 1, Math.floor((p.t - minT) / bucketWidth));
+    sums[idx] += p.value;
+    counts[idx]++;
+  }
+  const out = [];
+  for (let i = 0; i < CHART_BUCKET_COUNT; i++) {
+    if (counts[i] === 0) continue;
+    const t = minT + (i + 0.5) * bucketWidth;
+    out.push({ t, value: aggregate === "sum" ? sums[i] : sums[i] / counts[i] });
+  }
+  return out;
+}
+
 export function buildWipSeries(results = {}) {
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
   const points = timeSeries
@@ -244,6 +274,7 @@ export function buildWipSeries(results = {}) {
     id: "wip",
     label: "Entities in system",
     points,
+    chartPoints: binSeriesPoints(points, { aggregate: "avg" }),
     hasData: points.length >= 2,
     sourceLabel: "Count of entities in the model (excluding servers, completed, and reneged entities) at each sampled time point",
   }];
@@ -258,6 +289,7 @@ export function buildThroughputSeries(results = {}) {
     id: "throughput",
     label: "Completions per interval",
     points,
+    chartPoints: binSeriesPoints(points, { aggregate: "sum" }),
     hasData: points.length >= 2,
     sourceLabel: "Entities that completed (excluding reneges) since the previous sampled time point",
   }];
