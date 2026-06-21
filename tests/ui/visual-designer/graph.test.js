@@ -60,6 +60,24 @@ describe("deriveGraphFromModel", () => {
     ]));
   });
 
+  it("shows the claimed server type on an activity node's sublabel", () => {
+    const graph = deriveGraphFromModel(minimalModel);
+    const activity = graph.nodes.find(node => node.id === "activity:start-service");
+    expect(activity.sublabel).toBe("Server · Priority 1");
+  });
+
+  it("falls back to priority-only sublabel for a DELAY activity (no server claimed)", () => {
+    const model = {
+      ...minimalModel,
+      cEvents: [
+        { ...minimalModel.cEvents[0], effect: "DELAY(Waiting)" },
+      ],
+    };
+    const graph = deriveGraphFromModel(model);
+    const activity = graph.nodes.find(node => node.id === "activity:start-service");
+    expect(activity.sublabel).toBe("Delay · Priority 1");
+  });
+
   it("derives visual edges from ARRIVE, ASSIGN, RELEASE, and COMPLETE logic", () => {
     const graph = deriveGraphFromModel(twoStageModel);
     const edgePairs = graph.edges.map(edge => `${edge.from}->${edge.to}`);

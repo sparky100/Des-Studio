@@ -112,6 +112,19 @@ describe('ExecutePanel', () => {
     }));
   });
 
+  it('closes the Run Setup panel once a save (triggered from the SaveBanner) completes', () => {
+    const { rerender } = render(
+      <ExecutePanel model={validModel} modelId="model-1" userId="user-1" savedSignal={0} />
+    );
+
+    openSetup();
+    expect(screen.getByLabelText(/run duration/i)).toBeInTheDocument();
+
+    rerender(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" savedSignal={1} />);
+
+    expect(screen.queryByLabelText(/run duration/i)).not.toBeInTheDocument();
+  });
+
   it('keeps the Results entry hidden until a run completes', () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 

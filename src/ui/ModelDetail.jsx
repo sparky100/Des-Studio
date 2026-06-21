@@ -442,6 +442,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [saving,setSaving]=useState(false);
   const [saveError,setSaveError]=useState(null);
   const [discardConfirm,setDiscardConfirm]=useState(false);
+  const [saveSeq,setSaveSeq]=useState(0);
   const [discardKey,setDiscardKey]=useState(0);
   const [past,setPast]=useState([]);    // undo stack — model snapshots, capped at 20
   const [future,setFuture]=useState([]); // redo stack
@@ -666,6 +667,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       await overrides.onSave?.(model);
       setDirty(false);
       setVisualPending(false);
+      setSaveSeq(s => s + 1);
       toast.success("Model saved");
       await onRefresh?.();
     }catch(error){
@@ -1430,6 +1432,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               currentVersion={currentVersion}
               currentVersionId={currentVersionId}
               onRunSaved={handleRunSaved}
+              savedSignal={saveSeq}
               onResultsReady={setLatestResults}
               onRunComplete={({ results, replicationResults, warmupDetection, log }) => {
                 // Clear the stale selected run ID immediately so the dropdown
