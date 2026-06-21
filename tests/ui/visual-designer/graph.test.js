@@ -117,6 +117,31 @@ describe("deriveGraphFromModel", () => {
       .toContain("activity:start-triage->sink:exit-triage-complete");
   });
 
+  it("resolves section membership for a direct-exit sink via its underlying bEvent id, not its route-exit: prefixed refId", () => {
+    const graph = deriveGraphFromModel({
+      ...twoStageModel,
+      sections: [
+        { id: "sec-1", name: "Triage", color: "#ff0000", memberIds: ["triage-complete"] },
+      ],
+      bEvents: twoStageModel.bEvents.map(event =>
+        event.id === "triage-complete"
+          ? {
+              ...event,
+              effect: "RELEASE(Triage Nurse)",
+              probabilisticRouting: [
+                { probability: 0.25, queueName: null },
+                { probability: 0.75, queueName: "Consultant Queue" },
+              ],
+            }
+          : event
+      ),
+    });
+
+    const exitSink = graph.nodes.find(n => n.id === "sink:exit-triage-complete");
+    expect(exitSink.sectionId).toBe("sec-1");
+    expect(exitSink.sectionColor).toBe("#ff0000");
+  });
+
   it("preserves persisted layout metadata while deriving topology from the model", () => {
     const graph = deriveGraphFromModel({
       ...twoStageModel,
