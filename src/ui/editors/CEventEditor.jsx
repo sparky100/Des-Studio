@@ -137,14 +137,9 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         </div>
       )}
       <InfoBox color={C.cEvent}>
-        A C-event fires the moment its condition becomes true — e.g. "a customer is waiting and a server is free."{" "}
-        <strong style={{color:C.cEvent}}>Build conditions from:</strong>{" "}
-        <code>queue(Type).length</code> · <code>idle(Type).count</code> · <code>busy(Type).count</code> ·{" "}
-        <code>attr(Type,attrName)</code> · <code>served</code> · <code>reneged</code><br/>
-        <strong style={{color:C.cEvent}}>Service-start effects</strong> automatically match the waiting entity to the idle resource — no extra setup needed.{" "}
-        Need to update a counter instead? Use a <strong>scalar effect</strong>: <code>VAR++</code> · <code>VAR--</code> · <code>VAR += N</code> · <code>VAR = value</code><br/>
-        Want this event to trigger something later, like a completion or a release? <strong style={{color:C.green}}>Schedule it</strong> below —
-        pick the B-event, how long to wait, and whether to carry along the matched customer + server IDs.
+        A C-event fires the moment its condition becomes true — e.g. "a customer is waiting and a server is free." That's how an{" "}
+        <strong style={{color:C.cEvent}}>activity starts</strong>: the waiting entity is automatically matched to the idle resource.{" "}
+        To know when that activity <strong style={{color:C.green}}>finishes</strong>, schedule a completion event below — pick the B-event and how long the activity takes.
       </InfoBox>
       {events.length===0&&(
         <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:"40px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
