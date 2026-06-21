@@ -1236,12 +1236,19 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         onError: () => resolve(null),
       });
     });
-  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, onResultsReady]);
+  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, onResultsReady, activeSchedulesMap]);
 
   // Verification-only run: same as runWithPatch but does NOT update main results state,
   // so the baseline aggregateStats stays intact for before/after comparison.
   const runForVerification = useCallback((patchedModel) => {
     return new Promise((resolve) => {
+      if (schedulesLoading) {
+        // Timetable for this model is still loading — bail rather than silently
+        // run with an empty schedulesMap (which would zero out arrivals for any
+        // bEvent backed by an externalized ADR-016 schedule).
+        resolve(null);
+        return;
+      }
       const completedPayloads = [];
       runReplications({
         model: patchedModel,
@@ -1288,7 +1295,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         onError: () => resolve(null),
       });
     });
-  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
+  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, activeSchedulesMap, schedulesLoading]);
 
   useEffect(() => { onExposeRunApi?.(runForVerification); }, [runForVerification, onExposeRunApi]);
 

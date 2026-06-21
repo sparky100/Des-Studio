@@ -120,6 +120,7 @@ export function AdaptiveBatchPanel({
   model,
   tier,
   schedulesMap = {},
+  schedulesLoading = false,
   experimentConfig = {},
   onSave,
   onSaveInsights,
@@ -193,6 +194,10 @@ export function AdaptiveBatchPanel({
   function handleProceed() {
     if (hasHardErrors) {
       setError("Fix the blocking issues before running Explore.");
+      return;
+    }
+    if (schedulesLoading) {
+      setError("Still loading this model's timetable — try again in a moment.");
       return;
     }
     const controller = new AbortController();
@@ -398,6 +403,10 @@ export function AdaptiveBatchPanel({
 
   async function runComparison(idx, optionText) {
     if (!onApplyModel) return;
+    if (schedulesLoading) {
+      setComparisonStates(prev => ({ ...prev, [idx]: { status: 'error', error: "Still loading this model's timetable — try again in a moment." } }));
+      return;
+    }
     setComparisonStates(prev => ({ ...prev, [idx]: { status: 'generating' } }));
     try {
       const applyPrompt = buildApplyOpportunityPrompt(optionText, model, batchResult || null);
@@ -886,8 +895,9 @@ export function AdaptiveBatchPanel({
             <>
               <Btn small variant="ghost" onClick={onClose}>Cancel</Btn>
               {!hasHardErrors && (
-                <Btn small variant="primary" onClick={handleProceed}>
-                  {hasWarnings ? "Proceed anyway" : "Proceed"}
+                <Btn small variant="primary" onClick={handleProceed} disabled={schedulesLoading}
+                  title={schedulesLoading ? "Waiting for the model's timetable to load…" : undefined}>
+                  {schedulesLoading ? "Loading timetable…" : hasWarnings ? "Proceed anyway" : "Proceed"}
                 </Btn>
               )}
             </>
