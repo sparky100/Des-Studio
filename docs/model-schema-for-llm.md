@@ -1,11 +1,12 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 2.2.2
-**Date:** 2026-06-20
+**Version:** 2.2.3
+**Date:** 2026-06-22
 **Sprint baseline:** Sprint 88
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
+| v2.2.3 | 2026-06-22 | overflowDestination id/name clarification | **Fixed a bug in §13's Complete Reference Model itself:** the "ED Wait Queue" overflow example used `"overflowDestination": "q_ed_overflow"` (the target queue's `id`) instead of `"ED Overflow Queue"` (its `name`) — LLMs copying this example verbatim would reproduce a V20 validation error. Corrected the example and added TOP LLM MISTAKES #20 (`overflowDestination` set to a queue's `id` instead of its `name`) — it is a name-style reference like `ARRIVE`/`RELEASE`/`ASSIGN` macro arguments, not an id-style one. Strengthened the §16 naming-rules cross-reference line to call out the id-vs-name contrast explicitly. |
 | v2.2.2 | 2026-06-20 | DELAY completion resolution options (COMPLETE/routing/RELEASE) | Rewrote §6.2 Rules' "completion B-event" bullet into three explicit, mutually-exclusive options: (1) `COMPLETE()` — safe with no server, engine checks `_isDelay`; (2) a routing table (`routing[]`/`probabilisticRouting[]`) with no effect macro at all — the correct choice for "delay then continue to another queue, no server involved," since the engine's routing logic explicitly accepts a delay-held entity the same as a waiting one; (3) `RELEASE(ServerType[, TargetQueue])` — only valid when a server was genuinely seized earlier in the same entity's journey and held through the delay; `RELEASE` has no `_isDelay` awareness and will either no-op or act on an unrelated customer's claim if invented for a chain where nothing was ever seized. |
 | v2.2.1 | 2026-06-20 | DELAY completion ARRIVE/ServerAttr clarification | Added TOP LLM MISTAKES #18 (`cSchedules[].dist: "ServerAttr"` on a `DELAY` C-event — no server exists to read from, silently falls back to a fixed delay of `1`) and #19 (a `DELAY` completion B-event whose **only** effect is `ARRIVE(...)` — never resolves the delayed entity, which is stuck in `"serving"` forever). Updated §6.2 Rules and the V47 validation table row (§10) to document both, including the legitimate exception: `ARRIVE` combined with `COMPLETE()`/`RELEASE()`/a routing table on the same B-event is fine (e.g. to spawn a derived/log entity while the delayed entity is separately resolved) — only a *bare* `ARRIVE` with nothing else is blocked. |
 | v2.2.0 | 2026-06-18 | Queue-scoped balking/reneging | Balking (`balkProbability`/`balkCondition`) moved from the ARRIVE B-event to the Queue (§3) — checked on every join (ARRIVE, RELEASE, routing, batch/split, preemption), not just arrival. Added queue-level `renegeDist`/`renegeDistParams` for zero-wiring automatic patience timeouts (§3, §4 reneging pattern). Added V46 (overflow-destination cycle detection) to §10; relocated V21 to Queue scope; CHK-011 now also checks queues. Removed the B-event "Optional: Balking" worked example, replaced with a pointer to §3. Legacy B-event-level balking is migrated onto the matching queue automatically at load time (non-destructive, idempotent). |
@@ -89,6 +90,7 @@ Read this before writing any model JSON.
 | 17 | Using `ASSIGN(QueueName, ServerType)` with an invented server type for a resource-free wait | If the activity does not claim any equipment/staff (a cooling period, mandatory hold, recovery time, paperwork delay), use `DELAY(QueueName)` instead — it holds the entity for the cSchedule duration without seizing a server. Never add `ASSIGN`/`RELEASE` alongside `DELAY` in the same C-event; `DELAY` is the entire effect. Blocked/flagged by V47. See §6.2. |
 | 18 | `cSchedules[].dist: "ServerAttr"` on a `DELAY` C-event | `DELAY` never claims a server, so there is no server entity for `ServerAttr` to read an attribute from — the engine silently falls back to a fixed delay of `1`. Use a sampled distribution (`Exponential`, `Fixed`, `Uniform`, …) on the `cSchedules` entry instead. Warning V47. See §6.2. |
 | 19 | A `DELAY` completion B-event whose **only** effect is `ARRIVE(...)` | `ARRIVE` always creates a brand-new entity — it never resolves the entity that was delayed, which is left stuck in `"serving"` status forever (a permanent leak). The completion B-event must include `COMPLETE()`, `RELEASE()`, or a routing table (`routing[]`/`probabilisticRouting[]`) to resolve the delayed entity. `ARRIVE` may still appear *alongside* one of those (e.g. to also spawn a separate derived/log entity) — only a *bare* `ARRIVE` with nothing else is the error. Blocked by V47. See §6.2. |
+| 20 | `overflowDestination` set to a queue's `id` instead of its `name` | Unlike most id-style cross-references, `overflowDestination` is a name-style reference — same family as `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, and routing `queueName`. Set it to the target queue's exact `name` string. Setting it to the queue's `id` (e.g. `"q_unofficial"` instead of `"Unofficial Crossing Queue"`) never matches a defined queue name and is blocked by V20. See §16 for the full id-vs-name reference list. |
 
 ---
 
@@ -1064,7 +1066,7 @@ All generated model JSON MUST pass every blocking rule below.
   - State variables: `sv_` prefix (e.g. `sv_shift_active`)
   - Containers: `ct_` prefix (e.g. `ct_tank`)
 - `name` fields are the human-readable labels shown in the UI. They are also used as references in macro arguments — **they must match exactly including case**.
-- Queue `name` is referenced in: `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `ASSIGN(QueueName, Server)`, condition predicates `queue(QueueName)`, `overflowDestination`, `defaultQueueName`, routing `queueName`.
+- Queue `name` is referenced in: `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `ASSIGN(QueueName, Server)`, condition predicates `queue(QueueName)`, `overflowDestination`, `defaultQueueName`, routing `queueName`. **`overflowDestination` takes the queue's `name`, not its `id`** — easy to get backwards since most other cross-queue fields are id-based (see TOP LLM MISTAKES #20).
 - Entity type `name` is referenced in: `ARRIVE(EntityType, ...)`, `ASSIGN(QueueName, ServerType)`, `RELEASE(ServerType, ...)`, condition predicates `idle(ServerType)`, `busy(ServerType)`, queue `customerType`.
 
 ---
@@ -1459,7 +1461,7 @@ The model represents a 3-stage urgent care pathway: **NHS 24 triage → Minor In
   "queues": [
     { "id": "q_nhs24",   "name": "NHS 24 Queue",  "customerType": "Patient", "capacity": "", "discipline": "FIFO" },
     { "id": "q_miu",     "name": "MIU Queue",      "customerType": "Patient", "capacity": "", "discipline": "PRIORITY" },
-    { "id": "q_ed_wait", "name": "ED Wait Queue",  "customerType": "Patient", "capacity": "50", "discipline": "PRIORITY", "overflowDestination": "q_ed_overflow" },
+    { "id": "q_ed_wait", "name": "ED Wait Queue",  "customerType": "Patient", "capacity": "50", "discipline": "PRIORITY", "overflowDestination": "ED Overflow Queue" },
     { "id": "q_ed_overflow", "name": "ED Overflow Queue", "customerType": "Patient", "capacity": "", "discipline": "FIFO" },
     { "id": "q_discharge", "name": "Discharge Queue", "customerType": "Patient", "capacity": "", "discipline": "FIFO" }
   ],
