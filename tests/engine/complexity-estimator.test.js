@@ -261,6 +261,63 @@ describe("estimateRunComplexity", () => {
     ]);
   });
 
+  it("returns estimated B-event firings so high-volume runs get a scaled cycle cap", () => {
+    const model = {
+      entityTypes: [
+        { id: "customer", name: "Customer", role: "customer", count: 0 },
+        { id: "server_a", name: "Server A", role: "server", count: 10 },
+        { id: "server_b", name: "Server B", role: "server", count: 10 },
+        { id: "server_c", name: "Server C", role: "server", count: 10 },
+      ],
+      queues: [
+        { name: "Entry Queue" },
+        { name: "Middle Queue" },
+        { name: "Exit Queue" },
+      ],
+      bEvents: [{
+        id: "arrival",
+        name: "Arrival",
+        scheduledTime: "0",
+        effect: "ARRIVE(Customer, Entry Queue)",
+        schedules: [{
+          eventId: "arrival",
+          dist: "Exponential",
+          distParams: { mean: "0.005" },
+        }],
+      }],
+      cEvents: [
+        {
+          id: "stage_a",
+          name: "Stage A",
+          effect: "ASSIGN(Entry Queue, Server A)",
+          cSchedules: [{ eventId: "done_a", dist: "Fixed", distParams: { value: "1" } }],
+        },
+        {
+          id: "stage_b",
+          name: "Stage B",
+          effect: "ASSIGN(Middle Queue, Server B)",
+          cSchedules: [{ eventId: "done_b", dist: "Fixed", distParams: { value: "1" } }],
+        },
+        {
+          id: "stage_c",
+          name: "Stage C",
+          effect: "ASSIGN(Exit Queue, Server C)",
+          cSchedules: [{ eventId: "done_c", dist: "Fixed", distParams: { value: "1" } }],
+        },
+      ],
+    };
+
+    const estimate = estimateRunComplexity(model, {
+      terminationMode: "time",
+      maxSimTime: 90,
+      replications: 1,
+    });
+
+    expect(estimate.estimatedBEventFirings).toBe(72004);
+    expect(estimate.estimatedCEventScans).toBe(216012);
+    expect(estimateMaxCycles(estimate)).toBe(144008);
+  });
+
   it("surfaces uncertainty for condition-based runs", () => {
     const estimate = estimateRunComplexity(getTemplate("data-center"), {
       terminationMode: "condition",

@@ -323,6 +323,7 @@ export function estimateRunComplexity(model, options = {}) {
     bEventCount: (model?.bEvents || []).length,
     cEventCount: (model?.cEvents || []).length,
     estimatedStageTransitions,
+    estimatedBEventFirings,
     estimatedCEventScans,
     replications,
     totalEstimatedEntities,
