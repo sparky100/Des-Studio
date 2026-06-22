@@ -268,6 +268,35 @@ export function repairServers(failedServers, clock) {
   return count;
 }
 
+/**
+ * Removes terminal (done/reneged) customer entities from the live entity
+ * pool, and drops any FEL entries that exist only to act on a removed
+ * entity (auto-renege timers, cSchedule completions requiring entity
+ * context). Servers are never removed — they're long-lived resources, not
+ * flow entities. Shared by the one-time warmup prune and the periodic
+ * in-run prune so the FEL carve-out rule never drifts between the two.
+ */
+export function pruneTerminalEntities(entities, fel) {
+  const kept = [];
+  const removed = [];
+  for (const e of entities) {
+    if (e.role === "server" || (e.status !== "done" && e.status !== "reneged")) {
+      kept.push(e);
+    } else {
+      removed.push(e);
+    }
+  }
+  if (removed.length === 0) return { entities, fel, removed };
+
+  const activeIds = new Set(kept.map(e => e.id));
+  const keptFel = fel.filter(ev => {
+    if (ev._contextCustId == null) return true;
+    if (!ev._isRenege && !ev._requiresCtxEntity) return true;
+    return activeIds.has(ev._contextCustId);
+  });
+  return { entities: kept, fel: keptFel, removed };
+}
+
 export function findQueueConfig(model, token) {
   const key = norm(token);
   return (model?.queues || []).find(queue => norm(queue.name) === key || norm(queue.customerType) === key) || null;
