@@ -251,6 +251,12 @@ export function repairServers(failedServers, clock) {
   for (const srv of failedServers) {
     const failedAt = srv._failedAt;
     const downtime  = failedAt != null ? +(clock - failedAt).toFixed(4) : 0;
+    // Flush any pre-failure starvation interval [_starvationStart, failedAt) that the
+    // FAILURE handler never closed out, so idle time before a breakdown isn't lost.
+    if (srv._starvationStart != null) {
+      const flushUpTo = Number.isFinite(failedAt) ? failedAt : clock;
+      srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, flushUpTo - srv._starvationStart);
+    }
     srv.status       = "idle";
     srv._starvationStart = clock;
     srv._failedAt    = undefined;

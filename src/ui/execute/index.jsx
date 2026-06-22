@@ -23,7 +23,7 @@ import { evaluateLiveHealth } from "../results/healthFlags.js";
 import { CustomerToken, VisualView } from "./VisualView.jsx";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
-import { estimateRunComplexity, estimateMaxCycles } from "../../engine/complexity-estimator.js";
+import { estimateRunComplexity, estimateMaxCycles, computeEstimateAccuracy } from "../../engine/complexity-estimator.js";
 import { getRunAdmission } from "../../engine/run-admission.js";
 import { enumerateSweepableParams, applySweepValues, generate2DSweepValues } from "../../engine/sweep-params.js";
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
@@ -197,6 +197,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [saveStatus, setSaveStatus] = useState(null);
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
   const [cycleLimitReached, setCycleLimitReached] = useState(false);
+  const [lastRunEstimateAccuracy, setLastRunEstimateAccuracy] = useState(null);
   const [results, setResults] = useState(null);
   const [liveWaitDist, setLiveWaitDist] = useState(null);
   const [liveTimeSeries, setLiveTimeSeries] = useState(null);
@@ -224,7 +225,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [executeSection, setExecuteSection] = useState("run");
   const [hideRunReadiness, setHideRunReadiness] = useState(false);
   const [showRunSetup, setShowRunSetup] = useState(false);
-  const [showEstimate, setShowEstimate] = useState(false);
+  const [showEstimate, setShowEstimate] = useState(null);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
   const [runHistoryStatus, setRunHistoryStatus] = useState("idle");
   const [runHistoryError, setRunHistoryError] = useState("");
@@ -475,6 +476,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const traceAutoDisabled = traceWouldAutoDisable && !forceTraceCollection;
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
+  const estimateHasActionableContent = runAdmission.warnings.length > 0 || runAdmission.confirmations.length > 0;
+  const effectiveShowEstimate = showEstimate != null ? showEstimate : estimateHasActionableContent;
   const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : saveDetailLevel === "minimal" ? "minimal" : "compact";
   const readinessTagColor = hasAdmissionErrors ? C.red : C.green;
   const readinessTagBg = hasAdmissionErrors ? C.errorBg : `${C.green}18`;
@@ -665,6 +668,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       };
       // aggregateStats assigned after object is created to avoid self-reference
       fullResult.aggregateStats = summarizeReplicationResults([fullResult], CI_METRICS);
+      setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, fullResult.runtimeMetrics));
       setResults(fullResult);
       onResultsReady?.(fullResult);
       onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
@@ -689,6 +693,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           effectiveCollectTimeSeries: collectTimeSeries,
           resultDetailLevel: effectiveResultDetailLevel,
           riskLevel: runAdmission.complexityEstimate.riskLevel,
+          complexityEstimate: runAdmission.complexityEstimate,
           includeModelSnapshot: true,
         };
         if (userId) {
@@ -859,6 +864,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             };
 
             setBatchStatus("complete");
+            setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, batchResult.runtimeMetrics));
             setResults(batchResult);
             onResultsReady?.(batchResult);
             onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log: logRef.current });
@@ -884,6 +890,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               effectiveCollectTimeSeries: effectiveCollectTimeSeries,
               resultDetailLevel: effectiveResultDetailLevel,
               riskLevel: runAdmission.complexityEstimate.riskLevel,
+              complexityEstimate: runAdmission.complexityEstimate,
               includeModelSnapshot: true,
             };
             if (userId) {
@@ -1007,6 +1014,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     logRef.current = result.log;
     setLog(result.log);
     onRunComplete?.({ results: result, replicationResults: [], warmupDetection: null, log: result.log });
+    setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, result.runtimeMetrics));
     setMode("done");
     setSingleRunStatus(singleRunCancelRef.current ? "cancelled" : "complete");
     setSingleRunProgress(engine.getProgress({ done: true, cancelled: singleRunCancelRef.current }));
@@ -1038,6 +1046,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       effectiveCollectTimeSeries: effectiveCollectTimeSeries,
       resultDetailLevel: effectiveResultDetailLevel,
       riskLevel: runAdmission.complexityEstimate.riskLevel,
+      complexityEstimate: runAdmission.complexityEstimate,
       includeModelSnapshot: true,
     };
     if (userId) {
@@ -2804,11 +2813,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WORKLOAD ESTIMATE</div>
               <button
-                onClick={() => setShowEstimate(v => !v)}
+                onClick={() => setShowEstimate(!effectiveShowEstimate)}
                 style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 8px", cursor: "pointer" }}
-              >{showEstimate ? "Hide" : "Show"}</button>
+              >{effectiveShowEstimate ? "Hide" : "Show"}</button>
             </div>
-            {showEstimate && <div>
+            {effectiveShowEstimate && <div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {[
                 { label: "Planned arrivals", value: formatEstimate(complexityEstimate.plannedArrivals) },
@@ -2836,6 +2845,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
               Confidence: {complexityEstimate.confidence}. This estimate uses arrival and service means, so real runs may be smaller or larger.
             </div>
+            {lastRunEstimateAccuracy && (
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                Last run: {lastRunEstimateAccuracy.scansRatio != null ? `${lastRunEstimateAccuracy.scansRatio}×` : "n/a"} scans, {lastRunEstimateAccuracy.entitiesRatio != null ? `${lastRunEstimateAccuracy.entitiesRatio}×` : "n/a"} entities vs. estimate.
+              </div>
+            )}
             {complexityEstimate.unknowns.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {complexityEstimate.unknowns.slice(0, 2).map((item, index) => (

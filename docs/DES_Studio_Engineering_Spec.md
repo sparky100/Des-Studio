@@ -121,7 +121,7 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 | `adapters/mockAdapter.js` | Mock adapter for testing |
 | `simpy-export.js` | Pure-function SimPy Python export (Sprint 80). No React, no DOM, no Supabase. Generates `RUN_MODE`-aware scripts with enriched `Stats` class (Sprint 85). See §3.7 for API and design. |
 | `simpy-runner-worker.js` | Pyodide Web Worker entry point (Sprint 85). Loads CPython-in-WASM from CDN, installs SimPy via `micropip`, captures JSONL stdout, streams `{type:"rep"}` / `{type:"summary"}` messages back via `postMessage`. Module worker (`type:"module"`). |
-| `ui/results/healthFlags.js` | `evaluateResultsHealth()` — deterministic post-run flag evaluation across 11 codes (H1–H11); `evaluateLiveHealth()` — lightweight per-step live flag evaluation for 8 codes (L1–L6) |
+| `ui/results/healthFlags.js` | `evaluateResultsHealth()` — deterministic post-run flag evaluation across 13 codes (H1–H13); `evaluateLiveHealth()` — lightweight per-step live flag evaluation for 7 codes (L1–L7) |
 
 ### 1.4 Three-Phase execution loop
 
@@ -502,6 +502,8 @@ Server starvation (idle time while work is queued) is tracked via `_starvationSt
 
 The `getSummary()` loop aggregates per-type: `starvationTimeSum`, `maxContStarvDur`, `starvationTime` (average per server), `starvationPct` (fraction of total server-time).
 
+**Bug fix — pre-failure starvation flush in `repairServers()`:** the FAILURE event handler (`index.js`, `FAILURE` case) sets a server's `status = "failed"` and `_failedAt = clock` but never touches `_starvationStart` — so a server that fails while idle still has `_starvationStart` pointing at whenever it last went idle, *before* the failure. `repairServers()` originally overwrote `_starvationStart = clock` (the repair time) unconditionally, silently discarding the `[oldStarvationStart, failedAt)` interval from `_starvationTime`/`starvationPct`/`maxStarvationDuration`. Fixed by flushing that interval into `_starvationTime` before resetting `_starvationStart`, mirroring the flush `claimServerForEntity()` already does on the idle→busy transition. This is purely a starvation-*data* fix — it does not change H9 (continuous starvation) or H12 (failure/downtime) flag logic, which are independently computed and were already correct; only the underlying `starvationTime` input to H9 was undercounted for servers that had failed at least once while idle.
+
 #### 3.1.3 Utilisation streak tracking (Sprint 88)
 
 A lightweight `_utilStreaks` object tracks per-resource utilisation patterns across timeSeries snapshots (zero overhead when `collectTimeSeries` is disabled):
@@ -803,11 +805,46 @@ The Phase C loop has a hard limit of `MAX_C_PASSES = 500` iterations per clock t
 
 Models consistently triggering this guard should be reviewed: the most common cause is a circular C-Event dependency or a condition that becomes true immediately after its effects fire.
 
+### 4.4a Cycle limit guard
+
+Distinct from §4.4's tick-local `MAX_C_PASSES`, the engine also enforces a **total cycle count** safety valve across the whole run, to bound runaway/pathological models without truncating large-but-legitimate ones.
+
+- `estimateMaxCycles(complexityEstimate, options)` (`src/engine/complexity-estimator.js`) derives the cap from the model's own complexity estimate rather than a flat constant: `Math.ceil(estimatedBEventFirings * safetyFactor)`, clamped to `[floor, ceiling]` (defaults: `safetyFactor = 2`, `floor = 5000`, `ceiling = 5_000_000`). `estimatedBEventFirings` is a direct proxy for cycle count (one cycle ≈ one distinct event time); the 2x safety factor absorbs estimation error from using distribution means rather than sampled trajectories.
+- `buildEngine(...)` and `runReplications({ maxCycles, ... })` accept this derived value instead of a hardcoded `5000`, so Auto Run, Batch Run, Studies, and Optimise all size the cap to the model being run.
+- `step()` itself checks `_cycleCount >= maxCycles` and returns `done: true` with `cycleLimitReached: true` the moment the cap is hit — this is checked in the same code path used by both Auto Run (`doStep()`) and Batch Run (`runAll()`), so the two can no longer diverge by one running past the cap while the other stops.
+- The flag is threaded through `compactReplicationPayload()` (`replication-runner.js`), `buildPersistedResultsJson()` (`results-persistence.js`), and surfaced as health flag **H13** (`src/ui/results/healthFlags.js`) plus an inline Execute-panel banner — see §4.5 Run Admission for the related pre-flight tier checks that, in the common case, prevent a model from ever reaching this cap in the first place.
+
 ### 4.5 Additional subsystems
 
 #### Run Admission (`src/engine/run-admission.js`)
 
-Tier-based run limits enforced before any run starts. `getRunAdmission(model, options)` returns an admission decision based on the user's plan tier (Free/Standard/Pro), model complexity, and estimated event count. Prevents oversized runs from reaching the engine.
+Tier-based run limits enforced before any run starts. `getRunAdmission(model, options)` returns an admission decision based on the user's plan tier (Free/Standard/Pro), model complexity (via `estimateRunComplexity()`, `src/engine/complexity-estimator.js`), and estimated event count. Prevents oversized runs from reaching the engine.
+
+Tiers (`RUN_ADMISSION_TIERS`): **Free** (10 reps / 50,000 scans / 2,000 planned rows / 10,000 sim-time units), **Standard** (30 / 250,000 / 10,000 / 50,000), **Pro** (500 / 1,000,000 / 50,000 / 200,000). DB-level overrides (`tierPolicies`) can adjust any field per tier without a code change.
+
+`getRunAdmission()` returns `{ hardErrors, warnings, confirmations, effectiveSettings: { allowRun, collectTimeSeries, collectTrace }, tier, tierPolicy, validation, modelCheckIssues, complexityEstimate }`. Decision codes:
+
+| Code | Meaning |
+|---|---|
+| RA1 | Run duration missing/invalid (time-based termination) — hard error |
+| RA2 | Run duration exceeds tier's `maxSimTime` — hard error |
+| RA3 | Replication count exceeds tier's `maxReplications` — hard error |
+| RA4 / RA5+RA6 | Planned schedule rows over / near (≥80%) tier's `maxPlannedRows` — hard error / warning+confirmation |
+| RA7 / RA8+RA9 | Estimated C-event scans over / near (≥80%) tier's `maxScans` — hard error / warning+confirmation |
+| RA10+RA11 | Stop-on-condition termination — warning+confirmation (run size is inherently less predictable) |
+| RA12 | Bottleneck queue flagged by the complexity estimator — warning |
+| RA13+RA14 | Chart/time-series collection will be auto-disabled — warning+confirmation |
+| RA15+RA16 | Live event trace will be auto-disabled — warning+confirmation |
+
+**Auto-disable gates**, both independent of the tier-driven `riskLevel` (which is dominated by scan count) and instead keyed to the actual cost driver for each feature:
+- `collectTimeSeries` is disabled when `estimatedSnapLiteCost = expectedEntities * estimatedBEventFirings / cEventCount` exceeds `100,000,000` — this tracks `snapLite`'s O(entities) per-B-event-cycle cost, which a high-scan/low-entity model can avoid even at "large" risk.
+- `collectTrace` is disabled when `estimatedCEventScans > TRACE_SCAN_THRESHOLD (150,000)` — each C-event scan can push a trace entry, so this reuses the same metric as RA7/RA8.
+
+Either auto-disable can be overridden by the caller (e.g. "force trace on for debugging") via `options.collectTrace`/`options.collectTimeSeries`; the override is then reflected in `effectiveSettings` instead of being silently re-applied.
+
+**UI surfacing**: the Execute panel's "Workload Estimate" panel (`src/ui/execute/index.jsx`) renders `complexityEstimate`'s raw numbers (planned arrivals, expected entities, stage moves, C-event scans, confidence) plus `runAdmission.warnings`/`.confirmations`. The panel auto-expands (`effectiveShowEstimate = showEstimate ?? (warnings.length > 0 || confirmations.length > 0)`) whenever there's something actionable, while still respecting a later manual collapse — the `warnings`/`confirmations` block itself (the trigger/impact signal) is always rendered regardless of the panel's collapsed state.
+
+**Estimator calibration telemetry**: `computeEstimateAccuracy(complexityEstimate, runtimeMetrics)` (`src/engine/complexity-estimator.js`) compares the pre-run estimate (`estimatedCEventScans`, `expectedEntities`) against the real post-run counters from `engine.getRuntimeMetrics()` (`c_event_scans`, `entities_created`), producing `scansRatio`/`entitiesRatio` (actual ÷ estimated; `null` when the estimate was zero). It is computed at all three run-completion paths in `index.jsx` (single-run/Auto Run, Batch Run, verify-mode single run) and persisted as `resultsJson.estimateAccuracy` via `buildPersistedResultsJson()` (`results-persistence.js`) whenever `config.complexityEstimate` and `result.runtimeMetrics` are both present. The Workload Estimate panel shows the latest ratio ("Last run: …× scans, …× entities vs. estimate") so estimator drift is visible without digging into a saved run's JSON. This is the first step toward eventually recalibrating `estimateRunComplexity()`'s constants against real run data instead of static assumptions (see `docs/analysis/des-run-complexity-estimator.md`, which flagged this as anticipated future work before this telemetry existed).
 
 #### Simulation Assistant Optimise / Adaptive Batch (`src/engine/adaptive-batch.js`)
 
@@ -1008,7 +1045,7 @@ Full records in `docs/decisions/`. Key decisions affecting day-to-day developmen
 | ADR-011 | Conditional routing schema — routing table with predicate nodes | Routing logic expressed as data, not code. Safe evaluator handles routing decisions. |
 | ADR-015 | Explicit version milestones — user-initiated snapshots, not auto-versioning | `model_versions` table. Structural change detection flags when a version is stale. |
 | ADR-016 | Schedule data separation — timetable rows extracted to `model_schedules` | `model_json` holds `scheduleRef` UUIDs. `resolveInlineSchedules()` merges before engine call. |
-| ADR-017 | Health flag architecture and live warning system | Deterministic post-run evaluation (11 codes: H1–H11) + lightweight per-step live evaluation (8 codes: L1–L6). Both use engine summary data already available — no new engine state required for post-run. Live evaluation piggybacks on existing timeSeries snapshots with zero overhead when disabled. Accepted Sprint 88. |
+| ADR-017 | Health flag architecture and live warning system | Deterministic post-run evaluation (11 codes: H1–H11) + lightweight per-step live evaluation (8 codes: L1–L6). Both use engine summary data already available — no new engine state required for post-run. Live evaluation piggybacks on existing timeSeries snapshots with zero overhead when disabled. Accepted Sprint 88. Since extended to 13 post-run codes (H1–H13, adding resource-failure and cycle-limit flags) and 7 live codes (L1–L7); see §1.3 and §4.4a. |
 
 ---
 

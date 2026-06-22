@@ -351,3 +351,22 @@ export function estimateMaxCycles(complexityEstimate, options = {}) {
   const estimated = Number(complexityEstimate?.estimatedBEventFirings) || 0;
   return Math.min(ceiling, Math.max(floor, Math.ceil(estimated * safetyFactor)));
 }
+
+// Compares the pre-run complexity estimate against a completed run's real
+// runtimeMetrics, so estimator accuracy can be tracked over time and used to
+// recalibrate estimateRunComplexity() instead of relying on static guesses.
+export function computeEstimateAccuracy(complexityEstimate, runtimeMetrics) {
+  if (!complexityEstimate || !runtimeMetrics) return null;
+  const scansEstimated = Number(complexityEstimate.estimatedCEventScans) || 0;
+  const scansActual = Number(runtimeMetrics.c_event_scans) || 0;
+  const entitiesEstimated = Number(complexityEstimate.expectedEntities) || 0;
+  const entitiesActual = Number(runtimeMetrics.entities_created) || 0;
+  return {
+    scansEstimated,
+    scansActual,
+    scansRatio: scansEstimated > 0 ? +(scansActual / scansEstimated).toFixed(4) : null,
+    entitiesEstimated,
+    entitiesActual,
+    entitiesRatio: entitiesEstimated > 0 ? +(entitiesActual / entitiesEstimated).toFixed(4) : null,
+  };
+}
