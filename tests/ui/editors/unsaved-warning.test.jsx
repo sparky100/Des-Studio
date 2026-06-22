@@ -146,6 +146,39 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
     expect(onBack).toHaveBeenCalledOnce();
   });
 
+  it('Back button still shows confirm dialog while a save is in flight (fire-and-forget save must not clear dirty early)', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const onBack = vi.fn();
+    const overrides = makeOverrides();
+    let resolveSave;
+    overrides.onSave = vi.fn(() => new Promise(resolve => { resolveSave = resolve; }));
+
+    render(
+      <ModelDetail
+        modelId="m1"
+        modelData={mockModel}
+        onBack={onBack}
+        onRefresh={vi.fn()}
+        overrides={overrides}
+      />
+    );
+
+    const inputs = screen.getAllByRole('textbox');
+    fireEvent.change(inputs[0], { target: { value: 'New Name' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+
+    // Save is in flight (promise not yet resolved) — the model must still be
+    // treated as dirty, so navigating away still warns the user.
+    fireEvent.click(screen.getByRole('button', { name: /Back/i }));
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('unsaved changes'));
+    expect(onBack).not.toHaveBeenCalled();
+
+    resolveSave();
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^Save$/ })).not.toBeInTheDocument()
+    );
+  });
+
   it('keeps changes dirty and shows an error when saving fails', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const onBack = vi.fn();

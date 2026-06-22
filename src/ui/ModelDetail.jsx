@@ -664,14 +664,15 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const save=()=>{
     setSaving(true);
     setSaveError(null);
-    setDirty(false);
-    setVisualPending(false);
-    setSaveSeq(s => s + 1);
-    toast.success("Model saved");
     overrides.onSave?.(model)
-      .then(saved => onRefresh?.())
+      .then(saved => {
+        setDirty(false);
+        setVisualPending(false);
+        setSaveSeq(s => s + 1);
+        toast.success("Model saved");
+        onRefresh?.();
+      })
       .catch(error => {
-        setDirty(true);
         const msg = error?.message || "Save failed";
         setSaveError(msg);
         toast.error(msg);
