@@ -79,16 +79,52 @@ describe("collectTimeSeries = true", () => {
     }
   });
 
-  test("byType entries contain waiting/idle/busy/total counts", () => {
+  test("byType entries contain waiting/idle/busy/failed/total counts", () => {
     const result = buildEngine(makeModel(), 42, 0, 5, null, 5000, 500, true).runAll();
     for (const entry of result.timeSeries) {
       for (const type of Object.values(entry.byType)) {
         expect(typeof type.waiting).toBe("number");
         expect(typeof type.idle).toBe("number");
         expect(typeof type.busy).toBe("number");
+        expect(typeof type.failed).toBe("number");
         expect(typeof type.total).toBe("number");
       }
     }
+  });
+
+  test("byType.failed reflects server downtime window then clears after repair", () => {
+    // mtbf=8, mttr=3 (fixed): Machine fails at t=8, repairs at t=11.
+    const model = {
+      entityTypes: [
+        { id: "et-p", name: "Part", role: "customer", attrDefs: [] },
+        { id: "et-m", name: "Machine", role: "server", count: "1", attrDefs: [],
+          mtbfDist: "fixed", mtbfDistParams: { value: "8" },
+          mttrDist: "fixed", mttrDistParams: { value: "3" },
+        },
+      ],
+      queues: [{ id: "q1", name: "Input Queue", customerType: "Part", discipline: "FIFO" }],
+      bEvents: [
+        { id: "arrival", name: "Part Arrives", scheduledTime: "0",
+          effect: "ARRIVE(Part, Input Queue)",
+          schedules: [{ eventId: "arrival", dist: "fixed", distParams: { value: "1" } }] },
+        { id: "complete", name: "Service Complete", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+      ],
+      cEvents: [{
+        id: "assign", name: "Start Processing", priority: 1,
+        condition: "queue(Input Queue).length > 0 AND idle(Machine).count > 0",
+        effect: "ASSIGN(Input Queue, Machine)",
+        cSchedules: [{ eventId: "complete", dist: "fixed", distParams: { value: "4" }, useEntityCtx: true }],
+      }],
+      stateVariables: [],
+    };
+    const result = buildEngine(model, 42, 0, 15, null, 5000, 5000, true).runAll();
+
+    const duringDowntime = result.timeSeries.filter(e => e.t > 8 && e.t < 11);
+    const afterRepair = result.timeSeries.filter(e => e.t >= 11);
+    expect(duringDowntime.length).toBeGreaterThan(0);
+    expect(afterRepair.length).toBeGreaterThan(0);
+    expect(duringDowntime.every(e => e.byType["Machine"].failed > 0)).toBe(true);
+    expect(afterRepair.every(e => e.byType["Machine"].failed === 0)).toBe(true);
   });
 
   test("same seed + collectTimeSeries=true produces identical series", () => {

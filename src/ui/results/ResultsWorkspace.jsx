@@ -268,6 +268,14 @@ function lineSeriesStats(series, yLabel, color, formatValue = v => formatNumber(
   ];
 }
 
+// True when a points series has at least one value that differs from the first —
+// used to suppress charts (e.g. resource capacity) that would otherwise just show a flat line.
+function seriesHasVariation(points) {
+  if (!Array.isArray(points) || points.length < 2) return false;
+  const first = points[0].value;
+  return points.some(p => p.value !== first);
+}
+
 function CiBadge({ ci, C, FONT }) {
   if (!ci?.halfWidth || !ci?.mean || !Number.isFinite(ci.mean) || ci.mean === 0) return null;
   const relHw = (ci.halfWidth / Math.abs(ci.mean)) * 100;
@@ -1843,7 +1851,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                             dataPreview={<SeriesDataPreview series={series} />}
                           >
                             <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="% busy" formatY={fmtPct} />
-                            {series.hasShiftSchedule && Array.isArray(series.capacitySeries) && series.capacitySeries.length >= 2 && (
+                            {seriesHasVariation(series.capacitySeries) && (
                               <MiniLineChart title="Resources available over time" ariaTitle={`${series.label} capacity`} points={series.capacitySeries} color={C.muted} yLabel="servers" />
                             )}
                           </ChartCard>
