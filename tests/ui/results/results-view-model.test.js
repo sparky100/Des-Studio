@@ -86,6 +86,20 @@ describe("results view model", () => {
     ]);
   });
 
+  test("buildServerUtilizationSeries.capacitySeries subtracts failed servers from total", () => {
+    const series = buildServerUtilizationSeries({
+      timeSeries: [
+        { t: 0, byType: { Clerk: { total: 2, failed: 0 } } },
+        { t: 5, byType: { Clerk: { total: 2, failed: 1 } } },
+      ],
+    }, model);
+
+    expect(series[0].capacitySeries).toEqual([
+      { t: 0, value: 2 },
+      { t: 5, value: 1 },
+    ]);
+  });
+
   test("buildWaitDistributions sorts values and drops unchartable distributions", () => {
     const distributions = buildWaitDistributions({
       waitDist: {

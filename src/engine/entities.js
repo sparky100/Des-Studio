@@ -460,6 +460,9 @@ export function makeHelpers(entities, model = null) {
     busyOf: (type) =>
       sortResourceEntities(entities.filter(e => match(e.type, type) && (e.status === "busy" || e.status === "serving") && !e._suspended)),
 
+    failedOf: (type) =>
+      sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "failed")),
+
     selectIdleOf: (type) =>
       sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "idle" && !e._suspended))[0],
 

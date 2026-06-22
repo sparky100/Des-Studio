@@ -568,6 +568,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         waiting: h.waitingOf(t).length,
         idle:    h.idleOf(t).length,
         busy:    h.busyOf(t).length,
+        failed:  h.failedOf(t).length,
         total:   entities.filter(e => e.type === t).length,
       };
     });
@@ -635,11 +636,12 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     for (const e of entities) {
       const t = e.type;
       if (t) {
-        if (!byType[t]) byType[t] = { waiting: 0, idle: 0, busy: 0, total: 0 };
+        if (!byType[t]) byType[t] = { waiting: 0, idle: 0, busy: 0, failed: 0, total: 0 };
         byType[t].total++;
         if (e.status === "waiting") byType[t].waiting++;
         else if (e.status === "idle") byType[t].idle++;
         else if (e.status === "busy" || e.status === "serving") byType[t].busy++;
+        else if (e.status === "failed") byType[t].failed++;
       }
       if (e.role !== "server" && (e.queue || e.lastQueue)) {
         const qName = e.queue || e.lastQueue;

@@ -323,6 +323,26 @@ describe("ResultsWorkspace", () => {
     expect(container.querySelector("#results-section-systemTrends")).not.toBeInTheDocument();
   });
 
+  test("hides 'Resources available over time' chart when capacity is constant", () => {
+    render(<ResultsWorkspace results={results} model={model} />);
+
+    expect(screen.queryByText(/Resources available over time/i)).not.toBeInTheDocument();
+  });
+
+  test("shows 'Resources available over time' chart when a server failure dips capacity", () => {
+    const failureResults = {
+      ...results,
+      timeSeries: [
+        { t: 0, byQueue: { "Queue A": { waiting: 1 } }, byType: { Customer: { waiting: 1 }, Clerk: { busy: 0, total: 2, failed: 0 } } },
+        { t: 5, byQueue: { "Queue A": { waiting: 3 } }, byType: { Customer: { waiting: 3 }, Clerk: { busy: 1, total: 2, failed: 1 } } },
+      ],
+    };
+
+    render(<ResultsWorkspace results={failureResults} model={model} />);
+
+    expect(screen.getByText(/Resources available over time/i)).toBeInTheDocument();
+  });
+
   test("hides Balked/Blocked columns when no perQueue data is present", () => {
     const sectionModel = {
       ...model,

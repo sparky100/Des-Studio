@@ -11,10 +11,10 @@ function buildResult() {
   return {
     summary: { avgWait: 3, served: 4 },
     timeSeries: [
-      { t: 0, byQueue: {}, byType: {}, wip: 1, completed: 0 },
-      { t: 1, byQueue: {}, byType: {}, wip: 2, completed: 1 },
-      { t: 2, byQueue: {}, byType: {}, wip: 1, completed: 2 },
-      { t: 3, byQueue: {}, byType: {}, wip: 0, completed: 1 },
+      { t: 0, byQueue: {}, byType: { Machine: { total: 2, failed: 0 } }, wip: 1, completed: 0 },
+      { t: 1, byQueue: {}, byType: { Machine: { total: 2, failed: 1 } }, wip: 2, completed: 1 },
+      { t: 2, byQueue: {}, byType: { Machine: { total: 2, failed: 1 } }, wip: 1, completed: 2 },
+      { t: 3, byQueue: {}, byType: { Machine: { total: 2, failed: 0 } }, wip: 0, completed: 1 },
     ],
     sojournDist: { n: 4, mean: 5, p50: 5, p90: 6, p95: 6, p99: 6, values: [4, 5, 5, 6] },
   };
@@ -26,6 +26,7 @@ describe("system-level trend fields survive persistence round-trip", () => {
 
     expect(payload.timeSeries.map(pt => pt.wip)).toEqual([1, 2, 1, 0]);
     expect(payload.timeSeries.map(pt => pt.completed)).toEqual([0, 1, 2, 1]);
+    expect(payload.timeSeries.map(pt => pt.byType.Machine.failed)).toEqual([0, 1, 1, 0]);
     expect(payload.sojournDist.values).toEqual([4, 5, 5, 6]);
     expect(payload.sojournDist.n).toBe(4);
   });
