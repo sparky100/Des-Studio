@@ -45,13 +45,49 @@ describe('Engine Termination (Sprint 3.2)', () => {
         { id: 'b1', name: 'Infinite', scheduledTime: '0', effect: '', schedules: [{ eventId: 'b1', dist: 'Fixed', distParams: { value: 1 } }] },
       ]
     };
-    
+
     const maxCycles = 100;
     const engine = buildEngine(model, 0, 0, null, null, maxCycles);
     const result = engine.runAll();
-    
+
     expect(result.log.some(e => e.phase === 'END' && e.message.includes('Cycle limit reached'))).toBe(true);
     expect(result.log.filter(e => e.phase === 'END').every(e => typeof e.seq === 'number')).toBe(true);
+    expect(result.cycleLimitReached).toBe(true);
+    expect(result.warnings.some(w => w.includes('Cycle limit reached'))).toBe(true);
+  });
+
+  test('cycleLimitReached/warnings still surface when collectTrace is disabled (Batch Run setting)', () => {
+    const model = {
+      bEvents: [
+        { id: 'b1', name: 'Infinite', scheduledTime: '0', effect: '', schedules: [{ eventId: 'b1', dist: 'Fixed', distParams: { value: 1 } }] },
+      ]
+    };
+
+    const maxCycles = 100;
+    const engine = buildEngine(model, 0, 0, null, null, maxCycles, 5000, false, undefined, { collectTrace: false });
+    const result = engine.runAll();
+
+    expect(result.cycleLimitReached).toBe(true);
+    expect(result.warnings.some(w => w.includes('Cycle limit reached'))).toBe(true);
+    expect(result.log).toEqual([]);
+  });
+
+  test('step() itself returns done:true at the cycle cap (not just runAll())', () => {
+    const model = {
+      bEvents: [
+        { id: 'b1', name: 'Infinite', scheduledTime: '0', effect: '', schedules: [{ eventId: 'b1', dist: 'Fixed', distParams: { value: 1 } }] },
+      ]
+    };
+
+    const maxCycles = 5;
+    const engine = buildEngine(model, 0, 0, null, null, maxCycles);
+    let lastStep = null;
+    for (let i = 0; i < maxCycles + 5 && !lastStep?.done; i++) {
+      lastStep = engine.step();
+    }
+
+    expect(lastStep.done).toBe(true);
+    expect(lastStep.cycleLimitReached).toBe(true);
   });
 
   test('warmupPeriod and maxSimTime work together', () => {

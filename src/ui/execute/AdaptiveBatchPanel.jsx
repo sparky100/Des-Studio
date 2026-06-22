@@ -10,6 +10,7 @@ import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../
 import { makeBatchResult, CI_METRICS, formatRunTimestamp, makeTimeSeriesAccumulator } from "./executeHelpers.js";
 import { summarizeReplicationResults, compareScenarios } from "../../engine/statistics.js";
 import { RUN_ADMISSION_TIERS, getRunAdmission } from "../../engine/run-admission.js";
+import { estimateMaxCycles } from "../../engine/complexity-estimator.js";
 import { RADIUS, Z, SPACE, SHADOW } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -250,6 +251,7 @@ export function AdaptiveBatchPanel({
         maxSimTime,
         schedulesMap,
         collectTimeSeries: effectiveCollectCharts,
+        maxCycles: estimateMaxCycles(admission.complexityEstimate),
         onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
         signal,
         onProgress: ({ completed, relativeHalfWidth }) => {
@@ -456,6 +458,7 @@ export function AdaptiveBatchPanel({
           maxSimTime,
           schedulesMap,
           collectTimeSeries: false,
+          maxCycles: estimateMaxCycles(admission.complexityEstimate),
           onComplete: resolve,
           onError: reject,
         });

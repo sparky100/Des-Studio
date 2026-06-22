@@ -132,6 +132,31 @@ describe("evaluateResultsHealth — H12 (chart data auto-disabled)", () => {
   });
 });
 
+describe("evaluateResultsHealth — H13 (cycle limit reached)", () => {
+  test("flag present and critical when the run hit its cycle limit", () => {
+    const model = makeModel([]);
+    const results = { summary: { total: 100 }, cycleLimitReached: true };
+    const flags = evaluateResultsHealth(results, model);
+    const h13 = flags.find(f => f.code === "H13");
+    expect(h13).toBeDefined();
+    expect(h13.severity).toBe("critical");
+  });
+
+  test("no flag when the run completed within its cycle cap", () => {
+    const model = makeModel([]);
+    const results = { summary: { total: 100 }, cycleLimitReached: false };
+    const flags = evaluateResultsHealth(results, model);
+    expect(flags.some(f => f.code === "H13")).toBe(false);
+  });
+
+  test("no flag when the field is absent (normal runs untouched)", () => {
+    const model = makeModel([]);
+    const results = { summary: { total: 100 } };
+    const flags = evaluateResultsHealth(results, model);
+    expect(flags.some(f => f.code === "H13")).toBe(false);
+  });
+});
+
 describe("evaluateLiveHealth — L3 (capacity blocking)", () => {
   test("no flag when blockingCount is 0", () => {
     const model = makeModel([{ name: "Main Queue", capacity: 5 }]);

@@ -398,6 +398,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let _warmupComplete = false;
   let _terminationConditionMet = false;
   let _phaseCTruncated = false;
+  let _cycleLimitReached = false;
   let _excludedCount = 0;
   let _statsResetTime = 0;
   let _purgePhase = false;
@@ -1097,6 +1098,16 @@ const cycleLog = [];
       _lastWipSnapTime = clock;
     }
 
+    if (_cycleCount >= maxCycles) {
+      _cycleLimitReached = true;
+      const cycleLimitMsg = `Cycle limit reached (${maxCycles}) — simulation halted before reaching its intended duration or termination condition`;
+      warnings.push(cycleLimitMsg);
+      if (collectTrace) {
+        log.push(_trace("WARNING", { warning: { code: "CYCLE_LIMIT_REACHED", message: cycleLimitMsg }, message: cycleLimitMsg }));
+      }
+      return { done: true, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated, cycleLimitReached: true };
+    }
+
     return { done: false, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated };
   }
 
@@ -1141,6 +1152,7 @@ const cycleLog = [];
       summary:         engineSummary,
       runtimeMetrics:  getRuntimeMetrics(engineSummary.served),
       phaseCTruncated: _phaseCTruncated,
+      cycleLimitReached: _cycleLimitReached,
       warnings:        warnings.slice(),
       ...(entityDetail
         ? { entitySummary: entities.map(e => ({ ...e, attrs: { ...e.attrs } })) }

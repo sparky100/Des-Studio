@@ -63,6 +63,7 @@ export function compactReplicationPayload(payload) {
       summary: result.summary,
       runtimeMetrics: result.runtimeMetrics,
       phaseCTruncated: result.phaseCTruncated || result.summary?.phaseCTruncated || false,
+      cycleLimitReached: result.cycleLimitReached || result.summary?.cycleLimitReached || false,
       warnings: result.warnings || result.summary?.warnings || [],
       entitySummary: result.entitySummary,
       entitySummaryCompact: result.entitySummaryCompact,
