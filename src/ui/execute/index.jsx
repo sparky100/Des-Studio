@@ -290,6 +290,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const runStartPerfRef = useRef(null);
   const [animationEnabled, setAnimationEnabled] = useState(true);
   const [collectTimeSeries, setCollectTimeSeries] = useState(true);
+  const [forceTraceCollection, setForceTraceCollection] = useState(false);
   const [chartChoiceDialog, setChartChoiceDialog] = useState(null); // { messages } | null
   const chartChoiceResolveRef = useRef(null);
   const askChartDataChoice = useCallback((messages) => {
@@ -465,6 +466,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     validation,
     complexityEstimate,
   }), [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, plan, isAdmin, tierPolicies, validation, complexityEstimate]);
+  // Auto Run and single-run drive the engine directly (buildEngine) rather than via
+  // runReplications, which already defaults collectTrace to false for batches — so this
+  // is the only place those two paths get the size-gated trace setting, with an explicit
+  // debug override since trace powers the live event-log/trace-viewer feature.
+  const traceWouldAutoDisable = runAdmission.effectiveSettings.collectTrace === false;
+  const effectiveCollectTrace = forceTraceCollection ? true : runAdmission.effectiveSettings.collectTrace;
+  const traceAutoDisabled = traceWouldAutoDisable && !forceTraceCollection;
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
   const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : saveDetailLevel === "minimal" ? "minimal" : "compact";
@@ -501,10 +509,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       estimateMaxCycles(runAdmission.complexityEstimate), 5000,
       collectTimeSeries,
       undefined,
-      { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) } }
+      { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) }, collectTrace: effectiveCollectTrace }
     );
     setCurrentSnap(engineRef.current.getSnap());
     const initLog = [{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }];
+    if (traceAutoDisabled) {
+      initLog.push({ phase: "NOTE", time: 0, message: "Event trace disabled automatically for this large run." });
+    }
     logRef.current = initLog;
     setLog(initLog);
     setMode("idle");
@@ -534,7 +545,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSweepResults(null);
     setSweepStatus("idle");
     setSweepProgress(null);
-  }, [model, effectiveModel, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, activeSchedulesMap, purgePeriodEnabled, onRunComplete, runAdmission]);
+  }, [model, effectiveModel, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, activeSchedulesMap, purgePeriodEnabled, onRunComplete, runAdmission, effectiveCollectTrace, traceAutoDisabled]);
 
   const stopAuto = useCallback(() => {
     if (autoRef.current) {
@@ -934,6 +945,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (chartDataAutoDisabled) {
       runInitLog.push({ phase: "NOTE", time: 0, message: "Chart data disabled automatically for this large run." });
     }
+    if (traceAutoDisabled) {
+      runInitLog.push({ phase: "NOTE", time: 0, message: "Event trace disabled automatically for this large run." });
+    }
     logRef.current = runInitLog;
     setLog(runInitLog);
     setMode("running");
@@ -948,7 +962,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       estimateMaxCycles(runAdmission.complexityEstimate), 5000,
       effectiveCollectTimeSeries,
       undefined,
-      { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) } }
+      { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) }, collectTrace: effectiveCollectTrace }
     );
     setSingleRunProgress(engine.getProgress());
 
@@ -1045,7 +1059,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Local history record completed." }]);
       onRunSaved?.(null);
     }
-  }, [model, effectiveModel, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory, storeRunNarrative]);
+  }, [model, effectiveModel, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory, storeRunNarrative, effectiveCollectTrace, traceAutoDisabled]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -1658,6 +1672,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             persistExperimentDefaults={persistExperimentDefaults}
             animationEnabled={animationEnabled} setAnimationEnabled={setAnimationEnabled}
             collectTimeSeries={collectTimeSeries} setCollectTimeSeries={setCollectTimeSeries}
+            forceTraceCollection={forceTraceCollection} setForceTraceCollection={setForceTraceCollection}
+            traceAutoDisabled={traceWouldAutoDisable}
             purgePeriodEnabled={purgePeriodEnabled} setPurgePeriodEnabled={setPurgePeriodEnabled}
             saveDetailLevel={saveDetailLevel} setSaveDetailLevel={setSaveDetailLevel}
             speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}

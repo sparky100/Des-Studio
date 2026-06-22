@@ -117,6 +117,7 @@ export function getRunAdmission(model, options = {}) {
   const maxSimTime = Number(options.maxSimTime);
   const terminationMode = options.terminationMode === "condition" ? "condition" : "time";
   const requestedCollectTimeSeries = options.collectTimeSeries !== false;
+  const requestedCollectTrace = options.collectTrace !== false;
   const plannedScheduleRows = Number.isFinite(complexityEstimate.plannedScheduleRows)
     ? complexityEstimate.plannedScheduleRows
     : 0;
@@ -215,6 +216,25 @@ export function getRunAdmission(model, options = {}) {
     ));
   }
 
+  // Gate the per-cycle event trace on estimated C-event scans — each scan can push a
+  // trace entry, so this is the same metric already used for RA7/RA8 above. Observed
+  // cost on a real ~180k-cycle run: ~500k trace entries, ~480MB and 20+ minutes just to
+  // build the array. Batch Run already defaults collectTrace to false (replication-runner.js);
+  // this gate covers Auto Run / single-run, which otherwise inherit the engine's collectTrace
+  // default of true regardless of model size.
+  const TRACE_SCAN_THRESHOLD = 150_000;
+  const effectiveCollectTrace = requestedCollectTrace && estimatedCEventScans <= TRACE_SCAN_THRESHOLD;
+  if (requestedCollectTrace && !effectiveCollectTrace) {
+    warnings.push(makeDecisionIssue(
+      "RA15",
+      "Live event trace will be turned off automatically for this run to avoid excessive memory use and slowdown."
+    ));
+    confirmations.push(makeDecisionIssue(
+      "RA16",
+      "Event trace will be turned off automatically because this run looks large. You can force it on for debugging."
+    ));
+  }
+
   return {
     hardErrors,
     warnings,
@@ -222,6 +242,7 @@ export function getRunAdmission(model, options = {}) {
     effectiveSettings: {
       allowRun: hardErrors.length === 0,
       collectTimeSeries: effectiveCollectTimeSeries,
+      collectTrace: effectiveCollectTrace,
     },
     tier,
     tierPolicy,

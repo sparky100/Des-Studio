@@ -24,6 +24,8 @@ export function ExperimentControls({
   persistExperimentDefaults,
   animationEnabled, setAnimationEnabled,
   collectTimeSeries, setCollectTimeSeries,
+  forceTraceCollection, setForceTraceCollection,
+  traceAutoDisabled,
   purgePeriodEnabled, setPurgePeriodEnabled,
   saveDetailLevel, setSaveDetailLevel,
   speedMultiplier, setSpeedMultiplier,
@@ -284,6 +286,18 @@ export function ExperimentControls({
                 />
                 Keep chart data during the run
               </label>
+              {traceAutoDisabled && (
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: forceTraceCollection ? C.accent : C.label, fontFamily: FONT }}
+                  title="Event trace was disabled automatically because this run is large — forcing it on for debugging may slow the run and use more memory.">
+                  <input
+                    type="checkbox"
+                    checked={!!forceTraceCollection}
+                    onChange={e => setForceTraceCollection?.(e.target.checked)}
+                    style={{ accentColor: C.accent }}
+                  />
+                  Force event trace (debug, slower)
+                </label>
+              )}
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: purgePeriodEnabled ? C.server : C.label, fontFamily: FONT }}
                 title="Block new arrivals after max sim time and let in-flight entities complete before ending the run">
                 <input

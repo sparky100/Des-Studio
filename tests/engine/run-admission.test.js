@@ -167,4 +167,42 @@ describe("getRunAdmission", () => {
     expect(enabled.effectiveSettings.collectTimeSeries).toBe(true);
     expect(disabled.effectiveSettings.collectTimeSeries).toBe(false);
   });
+
+  it("keeps the event trace on for small/medium runs", () => {
+    const result = getAdmission({
+      complexityEstimate: cleanComplexity({ estimatedCEventScans: 1000 }),
+    });
+
+    expect(result.effectiveSettings.collectTrace).toBe(true);
+    expect(result.warnings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "RA15" }),
+    ]));
+  });
+
+  it("auto-disables the event trace for runs with a large estimated scan count", () => {
+    const result = getAdmission({
+      complexityEstimate: cleanComplexity({ estimatedCEventScans: 200000 }),
+    });
+
+    expect(result.hardErrors).toEqual([]);
+    expect(result.effectiveSettings.collectTrace).toBe(false);
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "RA15" }),
+    ]));
+    expect(result.confirmations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "RA16" }),
+    ]));
+  });
+
+  it("respects an explicit request to skip the event trace regardless of size", () => {
+    const result = getAdmission({
+      collectTrace: false,
+      complexityEstimate: cleanComplexity({ estimatedCEventScans: 1000 }),
+    });
+
+    expect(result.effectiveSettings.collectTrace).toBe(false);
+    expect(result.warnings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "RA15" }),
+    ]));
+  });
 });
