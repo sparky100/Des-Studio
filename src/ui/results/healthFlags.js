@@ -166,6 +166,12 @@ export function evaluateResultsHealth(results = {}, model = {}) {
     }
   }
 
+  // H12 — Chart/time-series data was not collected for this run (auto-disabled, large run)
+  if (results?._requested_collect_time_series === true && results?._effective_collect_time_series === false) {
+    flags.push({ code: "H12", severity: "warning",
+      message: "Chart/time-series data was not collected for this run — collection was skipped because the run was estimated to be large. Numeric summaries (waits, utilisation, cost) are unaffected; only the time-series charts are unavailable." });
+  }
+
   // H8 — Little's Law discrepancy (run may be too short)
   const d = summary.waitDiscrepancy;
   if (Number.isFinite(d) && d > 5) {

@@ -17,6 +17,7 @@ import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/pro
 import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
+import { ChartDataChoiceDialog } from "./ChartDataChoiceDialog.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
 import { evaluateLiveHealth } from "../results/healthFlags.js";
 import { CustomerToken, VisualView } from "./VisualView.jsx";
@@ -288,6 +289,19 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const runStartPerfRef = useRef(null);
   const [animationEnabled, setAnimationEnabled] = useState(true);
   const [collectTimeSeries, setCollectTimeSeries] = useState(true);
+  const [chartChoiceDialog, setChartChoiceDialog] = useState(null); // { messages } | null
+  const chartChoiceResolveRef = useRef(null);
+  const askChartDataChoice = useCallback((messages) => {
+    return new Promise(resolve => {
+      chartChoiceResolveRef.current = resolve;
+      setChartChoiceDialog({ messages });
+    });
+  }, []);
+  const resolveChartDataChoice = useCallback((choice) => {
+    chartChoiceResolveRef.current?.(choice);
+    chartChoiceResolveRef.current = null;
+    setChartChoiceDialog(null);
+  }, []);
   const [saveDetailLevel, setSaveDetailLevel] = useState(() => experimentDefaults.resultDetailLevel || "compact");
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
@@ -722,9 +736,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     }
     setModelCheckerIssues(runAdmission.modelCheckIssues);
     if (runAdmission.modelCheckIssues.length > 0) setModelCheckerOpen(true);
+    let forceChartCollection = false;
     if (runAdmission.confirmations.length > 0) {
-      const confirmed = window.confirm(runAdmission.confirmations.map(item => item.message).join("\n\n"));
-      if (!confirmed) return;
+      const choice = await askChartDataChoice(runAdmission.confirmations);
+      if (choice === "cancel") return;
+      forceChartCollection = choice === "force";
     }
 
     setHideRunReadiness(true);
@@ -736,7 +752,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setLoadedRunSnapshot(null);
     const maxTimeForRun = terminationMode === 'time' ? maxSimTime : null;
     const stopConditionForRun = terminationMode === 'condition' ? terminationCondition : null;
-    const effectiveCollectTimeSeries = runAdmission.effectiveSettings.collectTimeSeries;
+    const effectiveCollectTimeSeries = forceChartCollection ? true : runAdmission.effectiveSettings.collectTimeSeries;
     const chartDataAutoDisabled = collectTimeSeries && !effectiveCollectTimeSeries;
 
     // ── Live data prefetch (calibrated_batch / lookahead) ─────────────────
@@ -820,6 +836,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               ...makeBatchResult(ordered, stats, maxTimeForRun, warmupPeriod, tsAccumulator?.getResult()),
               runtimeMetrics: makeBatchRuntimeMetrics(ordered, replications, wallClockMs),
               aggregateStats: stats,
+              ...(chartDataAutoDisabled ? { _requested_collect_time_series: true, _effective_collect_time_series: false } : {}),
             };
 
             setBatchStatus("complete");
@@ -957,6 +974,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         wall_clock_ms: wallClockMs,
         replications: 1,
       },
+      ...(chartDataAutoDisabled ? { _requested_collect_time_series: true, _effective_collect_time_series: false } : {}),
     };
 
     setCurrentSnap(result.snap);
@@ -3414,6 +3432,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           </div>
         </div>
       )}
+
+      <ChartDataChoiceDialog
+        isOpen={!!chartChoiceDialog}
+        messages={chartChoiceDialog?.messages}
+        onCancel={() => resolveChartDataChoice("cancel")}
+        onProceedWithoutCharts={() => resolveChartDataChoice("without")}
+        onProceedWithCharts={() => resolveChartDataChoice("force")}
+      />
     </div>
   );
 };
