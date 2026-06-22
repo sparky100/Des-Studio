@@ -76,6 +76,7 @@ export async function runAdaptiveBatch(options = {}) {
     maxSimTime = 500,
     schedulesMap = {},
     targetRelativeCI = 5,
+    maxCycles,
     // Convergence only needs one scalar KPI per replication; time-series
     // collection roughly doubles per-rep cost, so it is opt-in for batches.
     collectTimeSeries = false,
@@ -131,6 +132,7 @@ export async function runAdaptiveBatch(options = {}) {
       collectTimeSeries,
       onTimeSeriesSample,
       pool,
+      ...(maxCycles != null ? { maxCycles } : {}),
       onReplicationComplete: (payload, prog) => {
         const kpiVal = getPathValue(payload?.result, kpiPath);
         if (typeof kpiVal === 'number' && Number.isFinite(kpiVal)) {

@@ -122,6 +122,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     resultsJson.phaseCTruncated = true;
     resultsJson.summary = { ...resultsJson.summary, phaseCTruncated: true };
   }
+  if (result.cycleLimitReached || summary.cycleLimitReached) {
+    resultsJson.cycleLimitReached = true;
+    resultsJson.summary = { ...resultsJson.summary, cycleLimitReached: true };
+  }
   if (Array.isArray(result.warnings) && result.warnings.length) {
     resultsJson.warnings = result.warnings;
   }

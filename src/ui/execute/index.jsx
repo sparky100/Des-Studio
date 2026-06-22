@@ -23,7 +23,7 @@ import { evaluateLiveHealth } from "../results/healthFlags.js";
 import { CustomerToken, VisualView } from "./VisualView.jsx";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
-import { estimateRunComplexity } from "../../engine/complexity-estimator.js";
+import { estimateRunComplexity, estimateMaxCycles } from "../../engine/complexity-estimator.js";
 import { getRunAdmission } from "../../engine/run-admission.js";
 import { enumerateSweepableParams, applySweepValues, generate2DSweepValues } from "../../engine/sweep-params.js";
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
@@ -196,6 +196,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const isRunning = autoRunning || mode === "running" || mode === "stepping";
   const [saveStatus, setSaveStatus] = useState(null);
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
+  const [cycleLimitReached, setCycleLimitReached] = useState(false);
   const [results, setResults] = useState(null);
   const [liveWaitDist, setLiveWaitDist] = useState(null);
   const [liveTimeSeries, setLiveTimeSeries] = useState(null);
@@ -497,7 +498,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       warmupPeriod,
       terminationMode === 'time' ? maxSimTime : null,
       terminationMode === 'condition' ? terminationCondition : null,
-      5000, 5000,
+      estimateMaxCycles(runAdmission.complexityEstimate), 5000,
       collectTimeSeries,
       undefined,
       { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) } }
@@ -511,6 +512,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     startAutoAfterInitRef.current = false;
     setSaveStatus(null);
     setPhaseCTruncated(false);
+    setCycleLimitReached(false);
     setResults(null);
     setLatestRunId(null);
     setLiveWaitDist(null);
@@ -532,7 +534,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSweepResults(null);
     setSweepStatus("idle");
     setSweepProgress(null);
-  }, [model, effectiveModel, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, activeSchedulesMap, purgePeriodEnabled, onRunComplete]);
+  }, [model, effectiveModel, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, activeSchedulesMap, purgePeriodEnabled, onRunComplete, runAdmission]);
 
   const stopAuto = useCallback(() => {
     if (autoRef.current) {
@@ -600,6 +602,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     logRef.current = nextLog;
     setLog(nextLog);
     if (r.phaseCTruncated) setPhaseCTruncated(true);
+    if (r.cycleLimitReached) setCycleLimitReached(true);
 
     if (!r.done && engineRef.current) {
       const now = Date.now();
@@ -628,6 +631,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       const finalSummary = {
         ...summary,
         phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
+        cycleLimitReached: r.cycleLimitReached || summary.cycleLimitReached,
         total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
         served: r.snap?.served || 0,
         reneged: r.snap?.reneged || 0,
@@ -636,6 +640,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         snap: r.snap,
         summary: finalSummary,
         phaseCTruncated: finalSummary.phaseCTruncated,
+        cycleLimitReached: finalSummary.cycleLimitReached,
         timeSeries:    engineRef.current.getTimeSeries?.(),
         waitDist:      engineRef.current.getWaitDist?.(),
         waitByArrival:   engineRef.current.getWaitByArrival?.(),
@@ -784,6 +789,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setLog(batchInitLog);
       setSaveStatus(null);
       setPhaseCTruncated(false);
+      setCycleLimitReached(false);
       setBatchStatus("running");
       setBatchProgress({ completed: 0, total: replications, running: 0, pending: replications, cancelled: false, workerCount: 0 });
       setReplicationResults([]);
@@ -798,6 +804,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         warmupPeriod,
         maxSimTime: maxTimeForRun,
         terminationCondition: stopConditionForRun,
+        maxCycles: estimateMaxCycles(runAdmission.complexityEstimate),
         collectTimeSeries: effectiveCollectTimeSeries,
         schedulesMap: activeSchedulesMap,
         onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
@@ -823,6 +830,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             return next;
           });
           if (payload.result?.phaseCTruncated || payload.result?.summary?.phaseCTruncated) setPhaseCTruncated(true);
+          if (payload.result?.cycleLimitReached || payload.result?.summary?.cycleLimitReached) setCycleLimitReached(true);
         },
         onComplete: async payloads => {
           try {
@@ -915,6 +923,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     onResultsReady?.(null);
     setSaveStatus(null);
     setPhaseCTruncated(false);
+    setCycleLimitReached(false);
     setBatchStatus("idle");
     setBatchProgress(null);
     setReplicationResults([]);
@@ -936,7 +945,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       warmupPeriod,
       maxTimeForRun,
       stopConditionForRun,
-      5000, 5000,
+      estimateMaxCycles(runAdmission.complexityEstimate), 5000,
       effectiveCollectTimeSeries,
       undefined,
       { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) } }
@@ -949,6 +958,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         if (singleRunCancelRef.current) break;
         const stepResult = engine.step({ captureSnap: false });
         if (stepResult.phaseCTruncated) setPhaseCTruncated(true);
+        if (stepResult.cycleLimitReached) setCycleLimitReached(true);
         if (stepResult.done) {
           completed = true;
           break;
@@ -987,6 +997,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSingleRunStatus(singleRunCancelRef.current ? "cancelled" : "complete");
     setSingleRunProgress(engine.getProgress({ done: true, cancelled: singleRunCancelRef.current }));
     if (result.phaseCTruncated || result.summary?.phaseCTruncated) setPhaseCTruncated(true);
+    if (result.cycleLimitReached || result.summary?.cycleLimitReached) setCycleLimitReached(true);
 
     if (singleRunCancelRef.current) {
       setSaveStatus({ state: 'error', message: 'Run cancelled. Partial results were not saved.' });
@@ -1229,6 +1240,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         warmupPeriod,
         maxSimTime: terminationMode === 'time' ? maxSimTime : null,
         terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+        maxCycles: estimateMaxCycles(runAdmission.complexityEstimate),
         collectTimeSeries: false,
         schedulesMap: activeSchedulesMap,
         onReplicationComplete: payload => {
@@ -1246,6 +1258,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             timeSeries:    first.timeSeries    || valid[0]?.timeSeries,
             snap:          first.snap,
             phaseCTruncated: first.phaseCTruncated || false,
+            cycleLimitReached: first.cycleLimitReached || false,
           };
           setResults(verifyResult);
           onResultsReady?.(verifyResult);
@@ -1254,7 +1267,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         onError: () => resolve(null),
       });
     });
-  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, onResultsReady, activeSchedulesMap]);
+  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, onResultsReady, activeSchedulesMap, runAdmission]);
 
   // Verification-only run: same as runWithPatch but does NOT update main results state,
   // so the baseline aggregateStats stays intact for before/after comparison.
@@ -1275,6 +1288,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         warmupPeriod,
         maxSimTime: terminationMode === 'time' ? maxSimTime : null,
         terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+        maxCycles: estimateMaxCycles(runAdmission.complexityEstimate),
         collectTimeSeries: false,
         schedulesMap: activeSchedulesMap,
         onReplicationComplete: payload => {
@@ -1313,7 +1327,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         onError: () => resolve(null),
       });
     });
-  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, activeSchedulesMap, schedulesLoading]);
+  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, activeSchedulesMap, schedulesLoading, runAdmission]);
 
   useEffect(() => { onExposeRunApi?.(runForVerification); }, [runForVerification, onExposeRunApi]);
 
@@ -2875,6 +2889,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           </div>
           <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, marginTop: 4, opacity: 0.8 }}>
             A very large number of entities were processed in a single time step, or conditional-event logic is cycling.
+          </div>
+        </div>
+      )}
+
+      {cycleLimitReached && (
+        <div style={{ background: C.danger + '18', border: `1px solid ${C.danger}44`, borderRadius: 6, padding: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.danger, fontFamily: FONT }}>
+            This run hit its internal cycle limit and stopped before reaching its intended duration or termination condition.
+          </div>
+          <div style={{ fontSize: 11, color: C.danger, fontFamily: FONT, marginTop: 4, opacity: 0.8 }}>
+            Results reflect a partial run. Re-run to retry — the engine sizes its cycle limit to the model automatically, so this should be rare.
           </div>
         </div>
       )}

@@ -403,6 +403,9 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
   });
 }
 
+  const phaseCTruncated = replicationPayloads.some(p => p?.result?.phaseCTruncated || p?.result?.summary?.phaseCTruncated);
+  const cycleLimitReached = replicationPayloads.some(p => p?.result?.cycleLimitReached || p?.result?.summary?.cycleLimitReached);
+
   return {
     snap: { clock: finalTime },
     timeSeries: precomputedTimeSeries !== undefined ? precomputedTimeSeries : averageBatchTimeSeries(replicationPayloads),
@@ -410,6 +413,8 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
     sojournDist,
     waitByArrival,
     perQueue,
+    phaseCTruncated,
+    cycleLimitReached,
     runtimeMetrics: {
       replications: replicationPayloads.length,
     },
@@ -417,6 +422,8 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       total,
       served,
       reneged,
+      phaseCTruncated,
+      cycleLimitReached,
       servedRatio: served > 0 && total > 0 ? +(served / total).toFixed(4) : null,
       numReplications: replicationPayloads.length,
       avgWait: aggregateStats["summary.avgWait"]?.mean ?? null,
@@ -470,8 +477,8 @@ export function buildResultsExportPayload({
     const { log, ...rest } = r;
     if (!metricsOnly) return rest;
     // Metrics-only: keep just summary KPIs; drop time series, distributions, entity details, and snapshot.
-    const { summary, phaseCTruncated, runtimeMetrics } = rest;
-    return { summary, phaseCTruncated, runtimeMetrics };
+    const { summary, phaseCTruncated, cycleLimitReached, runtimeMetrics } = rest;
+    return { summary, phaseCTruncated, cycleLimitReached, runtimeMetrics };
   }
 
   return {

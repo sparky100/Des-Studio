@@ -172,6 +172,13 @@ export function evaluateResultsHealth(results = {}, model = {}) {
       message: "Chart/time-series data was not collected for this run — collection was skipped because the run was estimated to be large. Numeric summaries (waits, utilisation, cost) are unaffected; only the time-series charts are unavailable." });
   }
 
+  // H13 — Cycle limit reached (run halted before its intended duration/condition)
+  if (results?.cycleLimitReached === true) {
+    flags.push({ code: "H13", severity: "critical",
+      message: "This run hit the simulation's internal cycle limit and stopped before reaching its intended duration or termination condition — results reflect a partial run, not the full simulated period.",
+      suggestion: "Re-run — the engine now sizes its cycle limit to the model automatically, so this should be rare. If it recurs, the model may have a runaway condition (e.g. a C-event chain that never stabilises)." });
+  }
+
   // H8 — Little's Law discrepancy (run may be too short)
   const d = summary.waitDiscrepancy;
   if (Number.isFinite(d) && d > 5) {

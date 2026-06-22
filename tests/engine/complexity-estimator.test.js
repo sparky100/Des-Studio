@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countPlannedScheduleRows, estimateRunComplexity } from "../../src/engine/complexity-estimator.js";
+import { countPlannedScheduleRows, estimateRunComplexity, estimateMaxCycles } from "../../src/engine/complexity-estimator.js";
 import { TEMPLATES } from "../../src/engine/templates.js";
 
 function getTemplate(id) {
@@ -270,5 +270,30 @@ describe("estimateRunComplexity", () => {
     expect(estimate.confidence).toBe("low");
     expect(estimate.unknowns.join(" ")).toMatch(/condition/i);
     expect(estimate.replications).toBe(3);
+  });
+});
+
+describe("estimateMaxCycles", () => {
+  it("applies the floor for small/trivial models", () => {
+    expect(estimateMaxCycles({ estimatedBEventFirings: 10 })).toBe(5000);
+    expect(estimateMaxCycles(null)).toBe(5000);
+    expect(estimateMaxCycles({})).toBe(5000);
+  });
+
+  it("scales with a 2x safety factor for a large model resembling the refugee-intake shape", () => {
+    // ~90,000 estimated B-event firings, similar order of magnitude to the
+    // 90-day refugee-intake crisis model that originally motivated this fix.
+    const estimate = estimateMaxCycles({ estimatedBEventFirings: 90000 });
+    expect(estimate).toBe(180000);
+  });
+
+  it("respects a custom floor/safetyFactor", () => {
+    expect(estimateMaxCycles({ estimatedBEventFirings: 1000 }, { floor: 200, safetyFactor: 3 })).toBe(3000);
+    expect(estimateMaxCycles({ estimatedBEventFirings: 10 }, { floor: 200, safetyFactor: 3 })).toBe(200);
+  });
+
+  it("clamps to the ceiling for pathologically large estimates", () => {
+    expect(estimateMaxCycles({ estimatedBEventFirings: 10_000_000 })).toBe(5_000_000);
+    expect(estimateMaxCycles({ estimatedBEventFirings: 1_000_000 }, { ceiling: 1_000_000 })).toBe(1_000_000);
   });
 });

@@ -338,3 +338,15 @@ export function estimateRunComplexity(model, options = {}) {
     unknowns: Array.from(new Set(unknowns)),
   };
 }
+
+// Derives a per-replication cycle cap from the complexity estimate instead of
+// using a flat default — estimatedBEventFirings is a direct proxy for cycle
+// count (one cycle ≈ one distinct event time), so this scales the engine's
+// safety valve to the model instead of truncating large-but-legitimate runs.
+export function estimateMaxCycles(complexityEstimate, options = {}) {
+  const floor = options.floor ?? 5000;
+  const safetyFactor = options.safetyFactor ?? 2;
+  const ceiling = options.ceiling ?? 5_000_000;
+  const estimated = Number(complexityEstimate?.estimatedBEventFirings) || 0;
+  return Math.min(ceiling, Math.max(floor, Math.ceil(estimated * safetyFactor)));
+}
