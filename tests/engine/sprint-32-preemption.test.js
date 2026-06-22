@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import { buildEngine } from '../../src/engine/index.js';
+import { makeBatchResult } from '../../src/ui/execute/executeHelpers.js';
 
 function makeHospitalModel() {
   return {
@@ -164,5 +165,49 @@ describe('G04 — Resource Breakdowns / Failures', () => {
     const repairLog = result.log.filter(e => e.message?.includes('REPAIR'));
     expect(repairLog.length).toBeGreaterThan(0);
     expect(repairLog[0].message).toContain('restored');
+  });
+
+  test('perResource reports failureCount/totalDowntime/availability for fixed MTBF/MTTR', () => {
+    // mtbf=8, mttr=3 (fixed) over maxSimTime=20: failures at 8 & 16, repairs at 11 & 19.
+    const model = makeFactoryModel();
+    const engine = buildEngine(model, 42, 0, 20);
+    const result = engine.runAll();
+
+    const machine = result.summary.perResource.Machine;
+    expect(machine.failureCount).toBe(2);
+    expect(machine.totalDowntime).toBeCloseTo(6, 4);
+    expect(machine.availability).toBeCloseTo(1 - 6 / 20, 4);
+    expect(machine.meanDowntimePerFailure).toBeCloseTo(3, 4);
+  });
+
+  test('Failures before warmup completes are excluded from perResource stats', () => {
+    // First failure/repair cycle (8 -> 11) finishes before warmupPeriod=12, so it's
+    // wiped by the warmup reset. Two more full cycles (16->19, 24->27) land after
+    // warmup and within maxSimTime=28, so only those should be counted.
+    const model = makeFactoryModel();
+    const engine = buildEngine(model, 42, 12, 28);
+    const result = engine.runAll();
+
+    const machine = result.summary.perResource.Machine;
+    expect(machine.failureCount).toBe(2);
+    expect(machine.totalDowntime).toBeCloseTo(6, 4);
+    expect(machine.availability).toBeCloseTo(1 - 6 / 16, 4);
+  });
+
+  test('makeBatchResult averages failureCount/totalDowntime/availability across replications (mean, not sum)', () => {
+    const model = makeFactoryModel();
+    const result1 = buildEngine(model, 1, 0, 20).runAll();   // 2 failures, 6 downtime (fixed dist, seed-independent)
+    const result2 = buildEngine(model, 2, 0, 16).runAll();   // 1 failure (at t=8, repaired at t=11), 3 downtime
+
+    const machine1 = result1.summary.perResource.Machine;
+    const machine2 = result2.summary.perResource.Machine;
+    expect(machine1.failureCount).toBe(2);
+    expect(machine2.failureCount).toBe(1);
+
+    const batch = makeBatchResult([{ result: result1 }, { result: result2 }], {}, 20, 0);
+    const batchMachine = batch.summary.perResource.Machine;
+    expect(batchMachine.failureCount).toBeCloseTo((machine1.failureCount + machine2.failureCount) / 2, 4);
+    expect(batchMachine.totalDowntime).toBeCloseTo((machine1.totalDowntime + machine2.totalDowntime) / 2, 4);
+    expect(batchMachine.availability).toBeCloseTo((machine1.availability + machine2.availability) / 2, 4);
   });
 });

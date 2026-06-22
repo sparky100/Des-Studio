@@ -72,6 +72,26 @@ export function evaluateResultsHealth(results = {}, model = {}) {
     }
   }
 
+  // H12 — Low resource availability due to failures
+  for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
+    const failureCount = Number(stats?.failureCount);
+    const availability = Number(stats?.availability);
+    if (!Number.isFinite(failureCount) || failureCount <= 0) continue;
+    if (!Number.isFinite(availability)) continue;
+    const sampleCaveat = failureCount <= 2
+      ? ` (only ${failureCount} failure${failureCount !== 1 ? "s" : ""} observed — treat as a small sample, not a stable rate)`
+      : "";
+    if (availability < 0.8) {
+      flags.push({ code: "H12", severity: "critical", resource: typeName,
+        message: `${typeName} available only ${Math.round(availability * 100)}% of the run — ${failureCount} failure${failureCount !== 1 ? "s" : ""} caused significant downtime${sampleCaveat}.`,
+        suggestion: `Review MTBF/MTTR settings for ${typeName}, or add redundant capacity — frequent/long failures are likely degrading throughput and inflating queues.` });
+    } else if (availability < 0.9) {
+      flags.push({ code: "H12", severity: "warning", resource: typeName,
+        message: `${typeName} available ${Math.round(availability * 100)}% of the run — ${failureCount} failure${failureCount !== 1 ? "s" : ""} recorded${sampleCaveat}.`,
+        suggestion: `Downtime from failures may be contributing to utilisation/queue pressure on ${typeName} — check if this matches expected reliability targets.` });
+    }
+  }
+
   // H2 — Growing queue (last 20% of run mean > 1.5× first 20%) — requires timeSeries
   if (timeSeries.length >= 10) {
     const splitAt = Math.max(1, Math.floor(timeSeries.length * 0.2));

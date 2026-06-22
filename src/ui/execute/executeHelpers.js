@@ -221,8 +221,11 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
   for (const s of summaries) {
     if (!s.perResource) continue;
     for (const [type, stats] of Object.entries(s.perResource)) {
-      if (!perResourceAcc[type]) perResourceAcc[type] = { utilSum: 0, count: 0, total: stats.total };
-      perResourceAcc[type].utilSum += stats.utilisation ?? 0;
+      if (!perResourceAcc[type]) perResourceAcc[type] = { utilSum: 0, availSum: 0, failureSum: 0, downtimeSum: 0, count: 0, total: stats.total };
+      perResourceAcc[type].utilSum     += stats.utilisation   ?? 0;
+      perResourceAcc[type].availSum    += stats.availability  ?? 1;
+      perResourceAcc[type].failureSum  += stats.failureCount  ?? 0;
+      perResourceAcc[type].downtimeSum += stats.totalDowntime ?? 0;
       perResourceAcc[type].count++;
     }
   }
@@ -230,7 +233,13 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
     ? Object.fromEntries(
         Object.entries(perResourceAcc).map(([type, acc]) => [
           type,
-          { total: acc.total, utilisation: acc.count ? +(acc.utilSum / acc.count).toFixed(4) : 0 },
+          {
+            total: acc.total,
+            utilisation:  acc.count ? +(acc.utilSum / acc.count).toFixed(4) : 0,
+            availability: acc.count ? +(acc.availSum / acc.count).toFixed(4) : 1,
+            failureCount: acc.count ? +(acc.failureSum / acc.count).toFixed(2) : 0,
+            totalDowntime: acc.count ? +(acc.downtimeSum / acc.count).toFixed(4) : 0,
+          },
         ])
       )
     : undefined;
