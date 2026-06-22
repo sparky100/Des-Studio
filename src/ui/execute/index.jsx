@@ -698,16 +698,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         };
         if (userId) {
           setSaveStatus({ state: 'saving', message: 'Saving results…' });
-          const runId = await doCloudSave(
+          doCloudSave(
             () => saveSimulationRun(modelId, userId, fullResult, { ...config, runRecord }),
             { setSaveStatus, setLog, prepareDurationMs, snapClock: r.snap.clock },
-          );
-          if (runId) {
-            setLatestRunId(runId);
-            storeRunNarrative(runId, effectiveModel, fullResult);
-            void refreshRunHistory();
-            onRunSaved?.(runId);
-          }
+          ).then(runId => {
+            if (runId) {
+              setLatestRunId(runId);
+              storeRunNarrative(runId, effectiveModel, fullResult);
+              void refreshRunHistory();
+              onRunSaved?.(runId);
+            }
+          });
         } else {
           saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
           void refreshRunHistory();
@@ -895,16 +896,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             };
             if (userId) {
               setSaveStatus({ state: 'saving', message: 'Saving results…' });
-              const runId = await doCloudSave(
+              doCloudSave(
                 () => saveSimulationRun(modelId, userId, batchResult, { ...batchConfig, runRecord: batchRunRecord }),
                 { setSaveStatus, setLog, prepareDurationMs, snapClock: batchResult.snap.clock },
-              );
-              if (runId) {
-                setLatestRunId(runId);
-                storeRunNarrative(runId, effectiveModel, batchResult);
-                void refreshRunHistory();
-                onRunSaved?.(runId);
-              }
+              ).then(runId => {
+                if (runId) {
+                  setLatestRunId(runId);
+                  storeRunNarrative(runId, effectiveModel, batchResult);
+                  void refreshRunHistory();
+                  onRunSaved?.(runId);
+                }
+              });
             } else {
               saveLocalRun(modelId, batchResult, { ...batchConfig, runRecord: batchRunRecord, resultDetailLevel: "full" });
               void refreshRunHistory();
@@ -1051,16 +1053,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     };
     if (userId) {
       setSaveStatus({ state: 'saving', message: 'Saving results…' });
-      const runId = await doCloudSave(
+      doCloudSave(
         () => saveSimulationRun(modelId, userId, result, { ...config, runRecord: singleRunRecord }),
         { setSaveStatus, setLog, prepareDurationMs, snapClock: result.snap.clock },
-      );
-      if (runId) {
-        setLatestRunId(runId);
-        storeRunNarrative(runId, effectiveModel, result);
-        void refreshRunHistory();
-        onRunSaved?.(runId);
-      }
+      ).then(runId => {
+        if (runId) {
+          setLatestRunId(runId);
+          storeRunNarrative(runId, effectiveModel, result);
+          void refreshRunHistory();
+          onRunSaved?.(runId);
+        }
+      });
     } else {
       saveLocalRun(modelId, result, { ...config, runRecord: singleRunRecord, resultDetailLevel: "full" });
       void refreshRunHistory();

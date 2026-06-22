@@ -1,4 +1,4 @@
-import { buildHistogramFD, summarizeEntitySummary } from "../engine/statistics.js";
+import { buildHistogramFD } from "../engine/statistics.js";
 import { computeEstimateAccuracy } from "../engine/complexity-estimator.js";
 
 const LARGE_RUN_RISK_LEVELS = new Set(["large", "too_large"]);
@@ -116,6 +116,13 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     clock: result?.snap?.clock ?? result?.clock ?? null,
   };
 
+  // Always strip the live-entity snap — it's an execution artefact (entity pool clone)
+  // that can be 1+ MB for models with thousands of entities. It's never read from
+  // saved results; the Execute canvas reads snap from the engine directly.
+  delete resultsJson.snap;
+  // Always strip the entity pool — another execution artefact.
+  delete resultsJson.entities;
+
   if (!resultsJson.summary) {
     resultsJson.summary = summary;
   }
@@ -206,7 +213,6 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       trimmedFields.push("trace");
     }
     if (Array.isArray(resultsJson.entitySummary) && resultsJson.entitySummary.length > 0) {
-      resultsJson.entitySummaryCompact = summarizeEntitySummary(resultsJson.entitySummary);
       delete resultsJson.entitySummary;
       trimmedFields.push("entitySummary");
     }
@@ -250,7 +256,6 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       trimmedFields.push("trace");
     }
     if (Array.isArray(resultsJson.entitySummary) && resultsJson.entitySummary.length > 0) {
-      resultsJson.entitySummaryCompact = summarizeEntitySummary(resultsJson.entitySummary);
       delete resultsJson.entitySummary;
       trimmedFields.push("entitySummary");
     }
@@ -291,7 +296,6 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
   if (detailLevel !== "minimal" && JSON.stringify(resultsJson).length > PAYLOAD_SAFE_BYTES) {
     delete resultsJson.trace;
     if (Array.isArray(resultsJson.entitySummary) && resultsJson.entitySummary.length > 0) {
-      resultsJson.entitySummaryCompact = summarizeEntitySummary(resultsJson.entitySummary);
       delete resultsJson.entitySummary;
     }
     if (Array.isArray(resultsJson.timeSeries) && resultsJson.timeSeries.length > 0) {
@@ -326,5 +330,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     resultsJson._auto_trim_reason = "payload_size_guard";
   }
 
-  return withResultsPayloadSize(resultsJson);
+  const sized = withResultsPayloadSize(resultsJson);
+  if (typeof console !== "undefined" && console.debug) {
+    const kb = (sized._results_payload_size_bytes / 1024).toFixed(1);
+    console.debug(`[results-persistence] ${sized._result_detail_level} save: ${kb} KB` + (sized._trimmed_fields?.length ? ` (trimmed: ${sized._trimmed_fields.join(", ")})` : ""));
+  }
+  return sized;
 }

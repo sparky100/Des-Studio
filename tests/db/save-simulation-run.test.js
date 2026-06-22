@@ -57,17 +57,14 @@ describe("saveSimulationRun payload metadata", () => {
     const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
     expect(insertPayload.results_json).toEqual(expect.objectContaining({
       _result_detail_level: "minimal",
-      // timeSeries is now kept as a 50-pt skeleton; waitDist has histogram bins
       _trimmed_fields: expect.arrayContaining(["log", "entitySummary", "waitDist.values→histogram"]),
       logSummary: expect.objectContaining({ entries: 1, finalMessage: "Run finished" }),
-      entitySummaryCompact: expect.objectContaining({ totalEntities: 1 }),
       waitDist: expect.objectContaining({ Main: expect.objectContaining({ n: 2, mean: 3, p99: 4 }) }),
     }));
     expect(insertPayload.results_json.log).toBeUndefined();
     expect(insertPayload.results_json.entitySummary).toBeUndefined();
-    // timeSeries is now retained as a 50-pt sample (not deleted in minimal)
+    expect(insertPayload.results_json.entitySummaryCompact).toBeUndefined();
     expect(insertPayload.results_json.timeSeries).toBeDefined();
-    // raw values array is replaced by pre-computed histogram bins in minimal saves
     expect(insertPayload.results_json.waitDist.Main.values).toBeUndefined();
     expect(insertPayload.results_json.waitDist.Main.histogram).toBeDefined();
   });
@@ -250,12 +247,12 @@ describe("saveSimulationRun payload metadata", () => {
       summary: expect.objectContaining({ served: 2500, avgSvc: 4 }),
       runtimeMetrics: expect.objectContaining({ events_processed: 9000 }),
       logSummary: expect.objectContaining({ entries: 50, finalMessage: "message 49" }),
-      entitySummaryCompact: expect.objectContaining({ totalEntities: 500 }),
       _time_series_sampling: expect.objectContaining({ originalPoints: 500 }),
       waitDist: expect.objectContaining({ Main: expect.objectContaining({ n: 10 }) }),
     }));
     expect(insertPayload.results_json.log).toBeUndefined();
     expect(insertPayload.results_json.entitySummary).toBeUndefined();
+    expect(insertPayload.results_json.entitySummaryCompact).toBeUndefined();
     expect(insertPayload.results_json.trace).toBeUndefined();
     expect(insertPayload.results_json.timeSeries).toHaveLength(200);
   });

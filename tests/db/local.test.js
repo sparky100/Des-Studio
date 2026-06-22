@@ -75,10 +75,10 @@ describe("local DB run history", () => {
       _result_risk_level: "large",
       _trimmed_fields: expect.arrayContaining(["log", "entitySummary", "timeSeries", "trace"]),
       logSummary: expect.objectContaining({ entries: 25 }),
-      entitySummaryCompact: expect.objectContaining({ totalEntities: 300 }),
     }));
     expect(run.results_json.log).toBeUndefined();
     expect(run.results_json.entitySummary).toBeUndefined();
+    expect(run.results_json.entitySummaryCompact).toBeUndefined();
     expect(run.results_json.trace).toBeUndefined();
     expect(run.results_json.timeSeries).toHaveLength(200);
   });

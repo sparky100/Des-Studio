@@ -527,7 +527,6 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
               Main: expect.objectContaining({ n: 2, mean: 3, p99: 4 }),
             }),
             logSummary: expect.objectContaining({ entries: 1, finalMessage: 'Run finished' }),
-            entitySummaryCompact: expect.objectContaining({ totalEntities: 1 }),
           }),
         })
       );
@@ -566,7 +565,6 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
             _result_risk_level: 'large',
             _trimmed_fields: expect.arrayContaining(['log', 'entitySummary', 'timeSeries', 'trace']),
             logSummary: expect.objectContaining({ entries: 40 }),
-            entitySummaryCompact: expect.objectContaining({ totalEntities: 400 }),
             timeSeries: expect.any(Array),
             waitDist: expect.objectContaining({ Main: expect.objectContaining({ n: 2 }) }),
           }),

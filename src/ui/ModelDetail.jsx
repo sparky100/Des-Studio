@@ -661,24 +661,22 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     return()=>document.removeEventListener('keydown',onKey);
   },[]);
 
-  const save=async()=>{
+  const save=()=>{
     setSaving(true);
     setSaveError(null);
-    try{
-      await overrides.onSave?.(model);
-      setDirty(false);
-      setVisualPending(false);
-      setSaveSeq(s => s + 1);
-      toast.success("Model saved");
-      await onRefresh?.();
-    }catch(error){
-      setDirty(true);
-      const msg = error?.message || "Save failed";
-      setSaveError(msg);
-      toast.error(msg);
-    }finally{
-      setSaving(false);
-    }
+    setDirty(false);
+    setVisualPending(false);
+    setSaveSeq(s => s + 1);
+    toast.success("Model saved");
+    overrides.onSave?.(model)
+      .then(saved => onRefresh?.())
+      .catch(error => {
+        setDirty(true);
+        const msg = error?.message || "Save failed";
+        setSaveError(msg);
+        toast.error(msg);
+      })
+      .finally(() => setSaving(false));
   };
   _ur.current={undo,redo,save};
 
