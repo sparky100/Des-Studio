@@ -107,6 +107,31 @@ describe("evaluateResultsHealth — H6 (balking)", () => {
   });
 });
 
+describe("evaluateResultsHealth — H12 (chart data auto-disabled)", () => {
+  test("flag present when collection was requested but skipped", () => {
+    const model = makeModel([]);
+    const results = { summary: { total: 100 }, _requested_collect_time_series: true, _effective_collect_time_series: false };
+    const flags = evaluateResultsHealth(results, model);
+    const h12 = flags.find(f => f.code === "H12");
+    expect(h12).toBeDefined();
+    expect(h12.severity).toBe("warning");
+  });
+
+  test("no flag when collection was requested and succeeded", () => {
+    const model = makeModel([]);
+    const results = { summary: { total: 100 }, _requested_collect_time_series: true, _effective_collect_time_series: true };
+    const flags = evaluateResultsHealth(results, model);
+    expect(flags.some(f => f.code === "H12")).toBe(false);
+  });
+
+  test("no flag when fields are absent (normal runs untouched)", () => {
+    const model = makeModel([]);
+    const results = { summary: { total: 100 } };
+    const flags = evaluateResultsHealth(results, model);
+    expect(flags.some(f => f.code === "H12")).toBe(false);
+  });
+});
+
 describe("evaluateLiveHealth — L3 (capacity blocking)", () => {
   test("no flag when blockingCount is 0", () => {
     const model = makeModel([{ name: "Main Queue", capacity: 5 }]);

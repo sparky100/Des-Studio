@@ -16,6 +16,7 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 import { ModelDiffPreview } from "../editors/ModelDiffPreview.jsx";
 import { SummaryCardGrid } from "../results/ResultsWorkspace.jsx";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
+import { ChartDataChoiceDialog } from "./ChartDataChoiceDialog.jsx";
 
 const RISK_LABELS = { small: "Low", medium: "Medium", large: "High", too_large: "Very high" };
 
@@ -147,10 +148,24 @@ export function AdaptiveBatchPanel({
   const [exploreTab, setExploreTab] = useState("analysis"); // "analysis" | "options"
   const [comparisonStates, setComparisonStates] = useState({}); // { [idx]: { status, patchedModel, comparison, explanation, error } }
   const [collectCharts, setCollectCharts] = useState(true);
+  const [chartChoiceDialog, setChartChoiceDialog] = useState(null); // { messages } | null
   const applyAbortRef = useRef(null);
   const abortRef = useRef(null);
   const baseSeedRef = useRef(experimentConfig.seed ?? (Date.now() % 1_000_000));
   const checkpointResolveRef = useRef(null);
+  const chartChoiceResolveRef = useRef(null);
+
+  function askChartDataChoice(messages) {
+    return new Promise(resolve => {
+      chartChoiceResolveRef.current = resolve;
+      setChartChoiceDialog({ messages });
+    });
+  }
+  function resolveChartDataChoice(choice) {
+    chartChoiceResolveRef.current?.(choice);
+    chartChoiceResolveRef.current = null;
+    setChartChoiceDialog(null);
+  }
 
   const tierPolicy = RUN_ADMISSION_TIERS[tier] || RUN_ADMISSION_TIERS.free;
   const tierMax = tierPolicy.maxReplications;
@@ -164,8 +179,8 @@ export function AdaptiveBatchPanel({
     maxSimTime,
     warmupPeriod,
     terminationMode: "time",
-    collectTimeSeries: false,
-  }), [model, tier, tierMax, maxSimTime, warmupPeriod]);
+    collectTimeSeries: collectCharts,
+  }), [model, tier, tierMax, maxSimTime, warmupPeriod, collectCharts]);
 
   // Complexity label uses single-rep estimate — the multi-rep multiplier (500) inflates
   // the scan count and makes all non-trivial models appear "Very high"
@@ -191,7 +206,7 @@ export function AdaptiveBatchPanel({
     };
   }, []);
 
-  function handleProceed() {
+  async function handleProceed() {
     if (hasHardErrors) {
       setError("Fix the blocking issues before running Explore.");
       return;
@@ -200,10 +215,16 @@ export function AdaptiveBatchPanel({
       setError("Still loading this model's timetable — try again in a moment.");
       return;
     }
+    let forceCollectCharts;
+    if (admission.confirmations.length > 0) {
+      const choice = await askChartDataChoice(admission.confirmations);
+      if (choice === "cancel") return;
+      forceCollectCharts = choice === "force";
+    }
     const controller = new AbortController();
     abortRef.current = controller;
     setPhase("running");
-    runPipeline(controller.signal);
+    runPipeline(controller.signal, { forceCollectCharts });
   }
 
   function handleCheckpointContinue() {
@@ -216,9 +237,11 @@ export function AdaptiveBatchPanel({
     checkpointResolveRef.current?.(false);
   }
 
-  async function runPipeline(signal) {
+  async function runPipeline(signal, { forceCollectCharts } = {}) {
+    const effectiveCollectCharts = forceCollectCharts ?? collectCharts;
+    const chartsAutoDisabled = collectCharts && !effectiveCollectCharts;
     try {
-      const tsAccumulator = collectCharts ? makeTimeSeriesAccumulator(150, maxSimTime) : null;
+      const tsAccumulator = effectiveCollectCharts ? makeTimeSeriesAccumulator(150, maxSimTime) : null;
       const adaptiveResult = await runAdaptiveBatch({
         model,
         tier,
@@ -226,7 +249,7 @@ export function AdaptiveBatchPanel({
         warmupPeriod,
         maxSimTime,
         schedulesMap,
-        collectTimeSeries: collectCharts,
+        collectTimeSeries: effectiveCollectCharts,
         onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
         signal,
         onProgress: ({ completed, relativeHalfWidth }) => {
@@ -244,13 +267,17 @@ export function AdaptiveBatchPanel({
             checkpointResolveRef.current = resolve;
           }),
       });
-      setBatchResult(adaptiveResult);
+      setBatchResult({
+        ...adaptiveResult,
+        ...(chartsAutoDisabled ? { _requested_collect_time_series: true, _effective_collect_time_series: false } : {}),
+      });
       setTotalReps(adaptiveResult.finalReps);
 
       const aggregateStats = summarizeReplicationResults(adaptiveResult.results, CI_METRICS);
       const combinedResult = {
         ...makeBatchResult(adaptiveResult.results, aggregateStats, maxSimTime, warmupPeriod, tsAccumulator?.getResult()),
         aggregateStats,
+        ...(chartsAutoDisabled ? { _requested_collect_time_series: true, _effective_collect_time_series: false } : {}),
       };
       setCombinedBatchResult(combinedResult);
       setReplicationResults(adaptiveResult.results);
@@ -704,6 +731,18 @@ export function AdaptiveBatchPanel({
                   </span>
                 </div>
               )}
+              {batchResult?._requested_collect_time_series && !batchResult?._effective_collect_time_series && (
+                <div style={{
+                  padding: `${SPACE.sm}px ${SPACE.md}px`,
+                  background: C.panel,
+                  borderRadius: RADIUS.md,
+                  border: `1px solid ${C.amber}`,
+                }}>
+                  <span style={{ fontFamily: FONT, fontSize: 11, color: C.amber }}>
+                    Chart/time-series data was not collected for this run — collection was skipped because the run was estimated to be large. Numeric results above are unaffected.
+                  </span>
+                </div>
+              )}
               {combinedBatchResult && (
                 <SummaryCardGrid results={combinedBatchResult} replicationResults={replicationResults} />
               )}
@@ -928,6 +967,14 @@ export function AdaptiveBatchPanel({
         </div>
 
       </div>
+
+      <ChartDataChoiceDialog
+        isOpen={!!chartChoiceDialog}
+        messages={chartChoiceDialog?.messages}
+        onCancel={() => resolveChartDataChoice("cancel")}
+        onProceedWithoutCharts={() => resolveChartDataChoice("without")}
+        onProceedWithCharts={() => resolveChartDataChoice("force")}
+      />
     </div>
   );
 }
