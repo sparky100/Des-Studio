@@ -608,6 +608,12 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                     ? "Shift pattern enabled"
                     : `${st.count} resource${st.count !== 1 ? "s" : ""}. Average % of capacity in use.`}
                 </div>
+                {r.failureCount > 0 && (
+                  <div style={{ fontSize: 11, color: r.availability < 0.9 ? C.red : C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                    {Math.round((r.availability ?? 1) * 100)}% available · {r.failureCount} failure{r.failureCount !== 1 ? "s" : ""}
+                    {r.totalDowntime ? ` · ${formatMetricValue(r.totalDowntime)} downtime` : ""}
+                  </div>
+                )}
               </div>
               );
             })}

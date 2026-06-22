@@ -249,11 +249,14 @@ export function preemptCustomer(cust, srv, clock, ctx) {
 export function repairServers(failedServers, clock) {
   let count = 0;
   for (const srv of failedServers) {
-    const failedAt   = srv._failedAt;
+    const failedAt = srv._failedAt;
+    const downtime  = failedAt != null ? +(clock - failedAt).toFixed(4) : 0;
     srv.status       = "idle";
     srv._starvationStart = clock;
     srv._failedAt    = undefined;
-    srv._downtime    = failedAt != null ? +(clock - failedAt).toFixed(4) : 0;
+    srv._downtime    = downtime;
+    srv._totalDowntime = (srv._totalDowntime || 0) + downtime;
+    srv._failureCount  = (srv._failureCount  || 0) + 1;
     count++;
   }
   return count;

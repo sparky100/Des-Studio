@@ -836,6 +836,8 @@ const cycleLog = [];
         state.__completedSinceSample = 0;
         for (const srv of entities.filter(e => e.role === 'server')) {
           srv._busyTime = 0;
+          srv._totalDowntime = 0;
+          srv._failureCount  = 0;
           if (srv.status === 'busy') srv._busyStart = clock;
           else delete srv._busyStart;
         }
@@ -1457,7 +1459,7 @@ const cycleLog = [];
 
     const perResource = {};
     for (const srv of servers) {
-      if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyTimeSum: 0, starvationTimeSum: 0, maxContStarvDur: 0 };
+      if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyTimeSum: 0, starvationTimeSum: 0, maxContStarvDur: 0, downtimeSum: 0, failureCount: 0 };
       perResource[srv.type].total++;
       const busyTime = (srv._busyTime || 0) + (
         srv.status === "busy" && srv._busyStart != null
@@ -1465,6 +1467,8 @@ const cycleLog = [];
           : 0
       );
       perResource[srv.type].busyTimeSum += busyTime;
+      perResource[srv.type].downtimeSum  += srv._totalDowntime || 0;
+      perResource[srv.type].failureCount += srv._failureCount  || 0;
       // Flush active starvation timer if running
       if (srv._starvationStart != null && srv.status === "idle") {
         const starvTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
@@ -1485,9 +1489,13 @@ const cycleLog = [];
       r.starvationTime = denominator > 0 ? +(r.starvationTimeSum / r.total).toFixed(4) : 0;
       r.starvationPct = denominator > 0 ? +(r.starvationTimeSum / denominator).toFixed(4) : 0;
       r.maxStarvationDuration = r.maxContStarvDur > 0 ? +r.maxContStarvDur.toFixed(4) : null;
+      r.totalDowntime = +r.downtimeSum.toFixed(4);
+      r.availability  = denominator > 0 ? +(1 - r.downtimeSum / denominator).toFixed(4) : 1;
+      r.meanDowntimePerFailure = r.failureCount > 0 ? +(r.downtimeSum / r.failureCount).toFixed(4) : null;
       delete r.busyTimeSum;
       delete r.starvationTimeSum;
       delete r.maxContStarvDur;
+      delete r.downtimeSum;
     }
 
     // Flush and add utilisation streak data
