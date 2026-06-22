@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'vitest';
 import { buildEngine } from '../../src/engine/index.js';
 import { makeBatchResult } from '../../src/ui/execute/executeHelpers.js';
+import { repairServers } from '../../src/engine/entities.js';
 
 function makeHospitalModel() {
   return {
@@ -209,5 +210,33 @@ describe('G04 — Resource Breakdowns / Failures', () => {
     expect(batchMachine.failureCount).toBeCloseTo((machine1.failureCount + machine2.failureCount) / 2, 4);
     expect(batchMachine.totalDowntime).toBeCloseTo((machine1.totalDowntime + machine2.totalDowntime) / 2, 4);
     expect(batchMachine.availability).toBeCloseTo((machine1.availability + machine2.availability) / 2, 4);
+  });
+
+  test('repairServers flushes the pre-failure starvation interval instead of discarding it', () => {
+    // Server was idle (starvation running) from t=2, failed at t=6, repaired at t=9.
+    // The [2, 6) idle interval must be flushed into _starvationTime on repair, not lost.
+    const srv = { id: 's1', type: 'Machine', status: 'failed', _starvationStart: 2, _failedAt: 6, _starvationTime: 0 };
+    const count = repairServers([srv], 9);
+
+    expect(count).toBe(1);
+    expect(srv._starvationTime).toBeCloseTo(4, 4);
+    expect(srv.status).toBe('idle');
+    expect(srv._starvationStart).toBe(9);
+    expect(srv._totalDowntime).toBeCloseTo(3, 4);
+    expect(srv._failureCount).toBe(1);
+  });
+
+  test('repairServers accumulates the flushed interval onto existing _starvationTime', () => {
+    const srv = { id: 's2', type: 'Machine', status: 'failed', _starvationStart: 10, _failedAt: 12, _starvationTime: 5 };
+    repairServers([srv], 15);
+
+    expect(srv._starvationTime).toBeCloseTo(7, 4);
+  });
+
+  test('repairServers adds nothing extra when there is no open starvation interval', () => {
+    const srv = { id: 's3', type: 'Machine', status: 'failed', _starvationStart: null, _failedAt: 4, _starvationTime: 0 };
+    repairServers([srv], 7);
+
+    expect(srv._starvationTime).toBe(0);
   });
 });

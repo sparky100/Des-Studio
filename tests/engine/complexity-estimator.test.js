@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countPlannedScheduleRows, estimateRunComplexity, estimateMaxCycles } from "../../src/engine/complexity-estimator.js";
+import { countPlannedScheduleRows, estimateRunComplexity, estimateMaxCycles, computeEstimateAccuracy } from "../../src/engine/complexity-estimator.js";
 import { TEMPLATES } from "../../src/engine/templates.js";
 
 function getTemplate(id) {
@@ -352,5 +352,40 @@ describe("estimateMaxCycles", () => {
   it("clamps to the ceiling for pathologically large estimates", () => {
     expect(estimateMaxCycles({ estimatedBEventFirings: 10_000_000 })).toBe(5_000_000);
     expect(estimateMaxCycles({ estimatedBEventFirings: 1_000_000 }, { ceiling: 1_000_000 })).toBe(1_000_000);
+  });
+});
+
+describe("computeEstimateAccuracy", () => {
+  it("returns null when either input is missing", () => {
+    expect(computeEstimateAccuracy(null, { c_event_scans: 10 })).toBeNull();
+    expect(computeEstimateAccuracy({ estimatedCEventScans: 10 }, null)).toBeNull();
+  });
+
+  it("computes scans/entities ratios from estimate vs. real runtimeMetrics", () => {
+    const accuracy = computeEstimateAccuracy(
+      { estimatedCEventScans: 1000, expectedEntities: 100 },
+      { c_event_scans: 1200, entities_created: 90 },
+    );
+
+    expect(accuracy).toEqual({
+      scansEstimated: 1000,
+      scansActual: 1200,
+      scansRatio: 1.2,
+      entitiesEstimated: 100,
+      entitiesActual: 90,
+      entitiesRatio: 0.9,
+    });
+  });
+
+  it("returns null ratios when the corresponding estimate is zero (avoids divide-by-zero)", () => {
+    const accuracy = computeEstimateAccuracy(
+      { estimatedCEventScans: 0, expectedEntities: 0 },
+      { c_event_scans: 50, entities_created: 5 },
+    );
+
+    expect(accuracy.scansRatio).toBeNull();
+    expect(accuracy.entitiesRatio).toBeNull();
+    expect(accuracy.scansActual).toBe(50);
+    expect(accuracy.entitiesActual).toBe(5);
   });
 });

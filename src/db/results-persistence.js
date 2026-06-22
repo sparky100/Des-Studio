@@ -1,4 +1,5 @@
 import { buildHistogramFD, summarizeEntitySummary } from "../engine/statistics.js";
+import { computeEstimateAccuracy } from "../engine/complexity-estimator.js";
 
 const LARGE_RUN_RISK_LEVELS = new Set(["large", "too_large"]);
 const COMPACT_TIME_SERIES_MAX_POINTS = 200;
@@ -182,6 +183,9 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
   }
   if (result.runtimeMetrics) {
     resultsJson.runtimeMetrics = result.runtimeMetrics;
+  }
+  if (config.complexityEstimate && result.runtimeMetrics) {
+    resultsJson.estimateAccuracy = computeEstimateAccuracy(config.complexityEstimate, result.runtimeMetrics);
   }
   const trimmedFields = [];
   resultsJson._result_detail_level = detailLevel;
