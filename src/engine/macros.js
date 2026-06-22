@@ -835,6 +835,10 @@ export const MACROS = [
 
       let failedCount = 0;
       for (const srv of servers) {
+        if (srv.status === "idle" && srv._starvationStart != null) {
+          srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
+          delete srv._starvationStart;
+        }
         if (srv.status === "busy" || srv.status === "serving") {
           const custId = srv.currentCustId;
           const cust = entities.find(e => e.id === custId);

@@ -710,8 +710,9 @@ The engine must validate the complete model before `buildEngine()` proceeds. Any
 | V33 | A B-event with a single 100% probabilistic null exit and `COMPLETE()` — valid but unusual pattern. | Warning only | `B-Event 'X' routes 100% to exit — no entity ever joins a queue from this event.` |
 | V34 | `experimentDefaults.replications` must be a positive integer. | Blocking | `Replication count must be a positive integer.` |
 | V35 | `experimentDefaults.warmupPeriod` must be less than `experimentDefaults.maxSimTime`. | Blocking | `Warm-up period (X) must be shorter than run duration (Y).` |
-| V36 | Server failure distribution fields (`mtbfDist`, `mttrDist`, `mtbfDistParams`, `mttrDistParams`) are only valid on entity types with `role: "server"`. | Blocking | `Entity type 'X' is not a server — failure settings are not applicable.` |
+| V36 | Server failure distribution fields (`mtbfDist`, `mttrDist`, `mtbfDistParams`, `mttrDistParams`) are only valid on entity types with `role: "server"`. `failureScope` must be `"unit"` or `"pool"` if set. | Blocking | `Entity type 'X' is not a server — failure settings are not applicable.` |
 | V37 | When either `mtbfDist` or `mttrDist` is set, both must be present and point to valid distributions. | Blocking | `Server 'X': both MTBF and MTTR distributions must be set together.` |
+| W-FAIL-01 | Server with `failureScope: "pool"` and `count > 1`. | Warning | `Server 'X' uses pool failure scope — a single failure will take the entire pool offline.` |
 
 > **Note:** V7 is intentionally skipped (reserved for future activity-edge validation).
 

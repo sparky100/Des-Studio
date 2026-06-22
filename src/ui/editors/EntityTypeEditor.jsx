@@ -220,24 +220,34 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
                   color={C.red}>
                   <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:FONT,fontSize:11,color:et.mtbfDist?C.red:C.muted}}>
                     <input type="checkbox" checked={!!et.mtbfDist} style={{accentColor:C.red}}
-                      onChange={e=>{const n=[...types];n[i]=e.target.checked?{...n[i],mtbfDist:"Exponential",mtbfDistParams:{mean:"60"},mttrDist:"Exponential",mttrDistParams:{mean:"10"}}:{...n[i],mtbfDist:undefined,mtbfDistParams:undefined,mttrDist:undefined,mttrDistParams:undefined};onChange(n);}}/>
+                      onChange={e=>{const n=[...types];n[i]=e.target.checked?{...n[i],failureScope:"unit",mtbfDist:"Exponential",mtbfDistParams:{mean:"120"},mttrDist:"Exponential",mttrDistParams:{mean:"20"}}:{...n[i],failureScope:undefined,mtbfDist:undefined,mtbfDistParams:undefined,mttrDist:undefined,mttrDistParams:undefined};onChange(n);}}/>
                     Model server failures
                   </label>
                   {et.mtbfDist&&(<>
                     <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>MTBF dist:</span>
                       <DistPicker compact allowPiecewise={false}
-                        value={{dist:et.mtbfDist||"Exponential",distParams:et.mtbfDistParams||{mean:"60"}}}
+                        value={{dist:et.mtbfDist||"Exponential",distParams:et.mtbfDistParams||{mean:"120"}}}
                         onChange={v=>{const n=[...types];n[i]={...n[i],mtbfDist:v.dist,mtbfDistParams:v.distParams};onChange(n);}}/>
                     </div>
                     <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>MTTR dist:</span>
                       <DistPicker compact allowPiecewise={false}
-                        value={{dist:et.mttrDist||"Exponential",distParams:et.mttrDistParams||{mean:"10"}}}
+                        value={{dist:et.mttrDist||"Exponential",distParams:et.mttrDistParams||{mean:"20"}}}
                         onChange={v=>{const n=[...types];n[i]={...n[i],mttrDist:v.dist,mttrDistParams:v.distParams};onChange(n);}}/>
                     </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>Failure scope:</span>
+                      <select value={et.failureScope||"unit"} onChange={e=>{const n=[...types];n[i]={...n[i],failureScope:e.target.value};onChange(n);}}
+                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,padding:"3px 6px",outline:"none"}}>
+                        <option value="unit">Each unit — servers fail independently</option>
+                        <option value="pool">Whole pool — one outage affects all servers</option>
+                      </select>
+                    </div>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
-                      The engine automatically schedules FAIL and REPAIR events for servers of this type.
+                      {(et.failureScope||"unit")==="unit"
+                        ? "Each server fails and recovers independently. A failure takes one unit offline; the rest keep working."
+                        : "One failure takes the entire pool offline. All servers are repaired together."}
                     </span>
                   </>)}
                 </SectionPanel>

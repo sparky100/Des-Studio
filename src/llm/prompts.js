@@ -82,6 +82,7 @@ function extractResources(model = {}, summary = {}) {
         mtbfParams: server.mtbfDistParams || {},
         mttrDist: server.mttrDist || null,
         mttrParams: server.mttrDistParams || {},
+        failureScope: server.failureScope || "unit",
       };
     }
     if (Array.isArray(server.shiftSchedule) && server.shiftSchedule.length > 0) {
@@ -828,7 +829,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "When a bEvent shows inlineRows:true, the rows are legacy inline data — advise moving to the Schedules tab.",
     "You MUST follow the 6-step chain-of-thought framework: binding constraint → cause → specific change → predicted effect → goal impact → ranking.",
     "Never give vague advice like 'consider increasing capacity' — always name the exact parameter and specific value.",
-    "When the model has a failure/repair model on a resource, factor availability into capacity calculations.",
+    "When the model has a failure/repair model on a resource, factor availability into capacity calculations. If failureScope is 'unit', only one server is affected per failure event; if 'pool', all servers of that type fail together.",
     "When a loop guard is present, consider whether the loop count limit is causing premature exits.",
     "When state variables are present, they may represent conditions that affect routing or service rates.",
     "A cEvent with activityType:'delay' uses the DELAY macro — the entity is held for a sampled duration but NO server is claimed.",
@@ -841,7 +842,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
       attrDefs: (e.attrDefs || []).filter(a => a.name).map(a => ({ name: a.name, dist: a.dist })),
     };
     if (e.role === "server") {
-      if (e.mtbfDist) entry.failureModel = { mtbfDist: e.mtbfDist, mtbfParams: e.mtbfDistParams, mttrDist: e.mttrDist, mttrParams: e.mttrDistParams };
+      if (e.mtbfDist) entry.failureModel = { mtbfDist: e.mtbfDist, mtbfParams: e.mtbfDistParams, mttrDist: e.mttrDist, mttrParams: e.mttrDistParams, failureScope: e.failureScope || "unit" };
       if (Array.isArray(e.shiftSchedule) && e.shiftSchedule.length > 0) entry.shiftSchedule = `${e.shiftSchedule.length} period(s)`;
     }
     return entry;
@@ -1631,7 +1632,7 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
         ...(a.defaultValue != null && a.defaultValue !== '' ? { defaultValue: a.defaultValue } : {}),
       }));
       if (attrs.length) entry.attributes = attrs;
-      if (et.mtbfDist) entry.failureModel = { mtbfDist: et.mtbfDist, mttrDist: et.mttrDist };
+      if (et.mtbfDist) entry.failureModel = { mtbfDist: et.mtbfDist, mttrDist: et.mttrDist, failureScope: et.failureScope || "unit" };
       return entry;
     });
 

@@ -791,10 +791,11 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                   const shiftLastCap = hasShifts ? parseInt(et.shiftSchedule[et.shiftSchedule.length - 1]?.capacity, 10) || 1 : null;
                   const shiftSummary = hasShifts ? (shiftFirstCap === shiftLastCap ? shiftFirstCap : `${shiftFirstCap}-${shiftLastCap}`) : null;
                   const isShiftExpanded = expandedShiftIds.has(et.id);
+                  const hasFailure = et.role === "server" && !!et.mtbfDist;
                   const gridCols = et.role === "server" && hasShifts
-                    ? "minmax(0, 1fr) 66px minmax(0, 1fr) 20px 14px"
+                    ? `minmax(0, 1fr) 66px minmax(0, 1fr) 20px ${hasFailure ? "28px " : ""}14px`
                     : et.role === "server"
-                      ? "minmax(0, 1fr) 66px 44px 14px"
+                      ? `minmax(0, 1fr) 66px 44px ${hasFailure ? "28px " : ""}14px`
                       : "minmax(0, 1fr) 66px 14px";
                   return (
                   <div key={et.id || i}>
@@ -854,6 +855,12 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                           style={{ background: "none", border: "none", color: isShiftExpanded ? C.server : C.muted, cursor: "pointer", fontSize: 11, padding: "0 2px", lineHeight: 1 }}>
                           {isShiftExpanded ? "▾" : "▸"}
                         </button>
+                      )}
+                      {hasFailure && (
+                        <span title={`Failure: MTBF=${et.mtbfDist}, MTTR=${et.mttrDist}, scope=${et.failureScope||"unit"}`}
+                          style={{ fontSize: 7, color: C.red, fontFamily: FONT, background: `${C.red}15`, borderRadius: 3, padding: "1px 3px", whiteSpace: "nowrap", textAlign: "center" }}>
+                          fail
+                        </span>
                       )}
                       {canEdit && (
                         <button type="button" onClick={() => {

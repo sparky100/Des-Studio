@@ -12,7 +12,7 @@
 | **Queue** | Where entities wait. Disciplines include first-in/first-out, last-in, priority, shortest job first, earliest due date, or any attribute you choose. |
 | **B-Event** | A scheduled, time-triggered event. Arrivals and completions are B-Events. |
 | **C-Event** | A conditional event that fires whenever its condition becomes true — typically "a server is idle AND the queue is non-empty." |
-| **Resource** | A server or piece of equipment that entities seize during processing. |
+| **Resource** | A server or piece of equipment that entities seize during processing. Can be configured with optional failure/repair cycles (MTBF/MTTR) — each unit fails independently by default. |
 
 ---
 
@@ -38,7 +38,7 @@ Regardless of whether you use the Visual Designer, type a description for the AI
 
 **Queues** — where entities wait. Choose a discipline: FIFO, LIFO, priority-based, shortest job first, earliest due date, or any attribute you define. Optionally set a capacity limit, overflow destination, or balking probability.
 
-**Activities** — where processing happens. Each activity has a resource (a server or machine with a defined capacity), a service time distribution, and the condition that must hold before service can start — *"server is IDLE AND queue length ≥ 1"* — built without writing code using the Predicate Builder.
+**Activities** — where processing happens. Each activity has a resource (a server or machine with a defined capacity), a service time distribution, and the condition that must hold before service can start — *"server is IDLE AND queue length ≥ 1"* — built without writing code using the Predicate Builder. Servers can optionally model breakdowns: set **MTBF** (mean time between failures) and **MTTR** (mean time to repair) on the entity type. By default, each unit fails independently — the rest of the pool keeps working.
 
 **Sources and Sinks** — where entities enter and leave. A Source has an arrival distribution (or a Schedule); a Sink records throughput and time-in-system.
 

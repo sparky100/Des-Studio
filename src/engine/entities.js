@@ -405,6 +405,7 @@ export function createServerEntities(entityTypes, sampleAttrsFn) {
         arrivalTime: 0,
         stages:      [],
         _starvationStart: 0,
+        _instanceIndex: i,
       });
     }
   }

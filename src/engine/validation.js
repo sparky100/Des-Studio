@@ -356,6 +356,21 @@ export function validateModel(model) {
     } else {
       checkDist(mttrDist, mttrParams, `Server '${et.name || '?'}' MTTR`, 'entities');
     }
+
+    if (hasField(et.failureScope) && et.failureScope !== 'unit' && et.failureScope !== 'pool') {
+      err('V36',
+        `Server '${et.name || '?'}' failureScope must be "unit" or "pool" (got "${et.failureScope}").`,
+        'entities',
+        { entityTypeIds: [et.id] });
+    }
+
+    const poolSize = parseInt(et.count, 10) || 1;
+    if (et.failureScope === 'pool' && poolSize > 1) {
+      warn('W-FAIL-01',
+        `Server '${et.name || '?'}' uses "pool" failure scope with ${poolSize} servers — a single failure will take the entire pool offline. Consider "unit" for per-server failures.`,
+        'entities',
+        { entityTypeIds: [et.id] });
+    }
   });
 
   // ── V6: B-Event schedule references must point to existing event IDs ────────

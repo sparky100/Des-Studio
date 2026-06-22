@@ -270,6 +270,7 @@ function applyActivityPattern(model, patternId, anchorNode) {
           mtbfDistParams: type.mtbfDistParams || { mean: "120" },
           mttrDist: type.mttrDist || "Exponential",
           mttrDistParams: type.mttrDistParams || { mean: "20" },
+          failureScope: type.failureScope || "unit",
         }),
       },
       appliedToSelection: true,
@@ -646,6 +647,7 @@ export function addVisualPattern(model, patternId, options = {}) {
         mtbfDistParams: type.mtbfDistParams || { mean: "120" },
         mttrDist: type.mttrDist || "Exponential",
         mttrDistParams: type.mttrDistParams || { mean: "20" },
+        failureScope: type.failureScope || "unit",
       }),
     };
   } else if (patternId === "cost-tracking") {

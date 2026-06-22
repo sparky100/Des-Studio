@@ -1083,7 +1083,7 @@ function ResourcesTab({ snap, model }) {
                   <Tag label={`${liveData.busyCount} busy`}   color={C.busy} />
                   <Tag label={`${liveData.idleCount} idle`}   color={C.idle} />
                   {liveData.failedCount > 0 &&
-                    <Tag label={`${liveData.failedCount} failed`} color={C.red} />}
+                    <Tag label={`${liveData.failedCount} of ${liveData.capacity} failed`} color={C.red} />}
                   {liveData.suspendedCount > 0 &&
                     <Tag label={`${liveData.suspendedCount} susp`} color={C.muted} />}
                   <span style={{ fontSize: 10, fontFamily: FONT, color: utilColor, fontWeight: 700 }}>

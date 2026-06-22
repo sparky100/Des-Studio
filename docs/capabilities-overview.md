@@ -73,7 +73,7 @@ Where a statistical distribution models a variable arrival pattern, a **Schedule
 
 Resources have configurable capacity. Capacity can follow a **shift schedule** — a time-varying plan that adds or removes server instances at specified clock times, making it straightforward to model day/night shifts or staffing changes.
 
-Servers can be configured with **failure distributions** (MTBF, MTTR) to simulate equipment breakdowns and repair cycles.
+Servers can be configured with **failure distributions** (MTBF, MTTR, failureScope) to simulate equipment breakdowns and repair cycles. Per-unit failures (default) are independent; pool scope models shared-infrastructure outages.
 
 ---
 

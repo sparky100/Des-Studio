@@ -311,30 +311,53 @@ function makeFailureEvents(model, rng, streamRegistry) {
     if (!mtbfDist || !mtbfParams) continue;
 
     const serverName = entityType.name;
-    const ctx = { streamName: `mtbf:${serverName}`, streamRegistry };
-    let t = sample(mtbfDist, mtbfParams, rng, null, ctx);
-    const maxTime = 100000;
-    let count = 0;
-    while (t < maxTime && count < 1000) {
-      events.push({
-        id: `fail:${serverName}:${t.toFixed(4)}`,
-        type: "FAILURE",
-        name: `Failure: ${serverName}`,
-        serverTypeName: serverName,
-        scheduledTime: t,
-        mttrDist,
-        mttrParams,
-      });
-      const repairTime = t + sample(mttrDist, mttrParams, rng, null, { streamName: `mttr:${serverName}`, streamRegistry });
-      events.push({
-        id: `repair:${serverName}:${repairTime.toFixed(4)}`,
-        type: "REPAIR",
-        name: `Repair: ${serverName}`,
-        serverTypeName: serverName,
-        scheduledTime: repairTime,
-      });
-      t += sample(mtbfDist, mtbfParams, rng, null, { streamName: `mtbf:${serverName}`, streamRegistry });
-      count++;
+    const scope = entityType.failureScope || "unit";
+    const instanceCount = Math.max(1, parseInt(entityType.count, 10) || 1);
+
+    if (scope === "pool") {
+      const ctx = { streamName: `mtbf:${serverName}`, streamRegistry };
+      let t = sample(mtbfDist, mtbfParams, rng, null, ctx);
+      const maxTime = 100000;
+      let count = 0;
+      while (t < maxTime && count < 1000) {
+        events.push({
+          id: `fail:${serverName}:${t.toFixed(4)}`,
+          type: "FAILURE",
+          name: `Failure: ${serverName}`,
+          serverTypeName: serverName,
+          scheduledTime: t,
+          mttrDist,
+          mttrParams,
+          failureScope: "pool",
+        });
+        const repairTime = t + sample(mttrDist, mttrParams, rng, null, { streamName: `mttr:${serverName}`, streamRegistry });
+        events.push({
+          id: `repair:${serverName}:${repairTime.toFixed(4)}`,
+          type: "REPAIR",
+          name: `Repair: ${serverName}`,
+          serverTypeName: serverName,
+          scheduledTime: repairTime,
+          failureScope: "pool",
+        });
+        t += sample(mtbfDist, mtbfParams, rng, null, { streamName: `mtbf:${serverName}`, streamRegistry });
+        count++;
+      }
+    } else {
+      for (let idx = 0; idx < instanceCount; idx++) {
+        const instanceName = `${serverName}:${idx + 1}`;
+        const t = sample(mtbfDist, mtbfParams, rng, null, { streamName: `mtbf:${instanceName}`, streamRegistry });
+        events.push({
+          id: `fail:${instanceName}:${t.toFixed(4)}`,
+          type: "FAILURE",
+          name: `Failure: ${serverName} #${idx + 1}`,
+          serverTypeName: serverName,
+          serverIndex: idx,
+          scheduledTime: t,
+          mttrDist,
+          mttrParams,
+          failureScope: "unit",
+        });
+      }
     }
   }
   return events;
@@ -838,8 +861,11 @@ const cycleLog = [];
           srv._busyTime = 0;
           srv._totalDowntime = 0;
           srv._failureCount  = 0;
+          srv._starvationTime = 0;
           if (srv.status === 'busy') srv._busyStart = clock;
           else delete srv._busyStart;
+          if (srv.status === 'failed') srv._failedAt = clock;
+          if (srv._starvationStart != null) srv._starvationStart = clock;
         }
         for (const sv of runtimeModel.stateVariables || []) {
           if (sv.resetOnWarmup) {
@@ -868,23 +894,76 @@ const cycleLog = [];
       if (ev.type === 'FAILURE') {
         const sType = ev.serverTypeName;
         const key = sType.trim().toLowerCase();
-        const servers = entities.filter(e =>
-          e.role === "server" && e.type.trim().toLowerCase() === key && (e.status === "busy" || e.status === "serving" || e.status === "idle")
-        );
-        let failedCount = 0;
-        for (const srv of servers) {
-          if (srv.status === "busy" || srv.status === "serving") {
-            const cust = entities.find(e => e.id === srv.currentCustId);
-            if (cust) preemptCustomer(cust, srv, clock, makeCtx());
+
+        if (ev.failureScope === "unit" && ev.serverIndex != null) {
+          const srv = entities.find(e =>
+            e.role === "server" && e.type.trim().toLowerCase() === key && e._instanceIndex === ev.serverIndex
+            && (e.status === "busy" || e.status === "serving" || e.status === "idle")
+          );
+          if (srv) {
+            if (srv.status === "idle" && srv._starvationStart != null) {
+              srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
+              delete srv._starvationStart;
+            }
+            if (srv.status === "busy" || srv.status === "serving") {
+              const cust = entities.find(e => e.id === srv.currentCustId);
+              if (cust) {
+                fel = fel.filter(entry =>
+                  !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
+                );
+                preemptCustomer(cust, srv, clock, makeCtx());
+              }
+            }
+            srv.status = "failed";
+            srv._failedAt = clock;
+            const repairTime = clock + sample(ev.mttrDist, ev.mttrParams, rng, null,
+              { streamName: `mttr:${sType}:${ev.serverIndex + 1}`, streamRegistry });
+            fel.push({
+              id: `repair:${sType}:${ev.serverIndex}:${repairTime.toFixed(4)}`,
+              type: "REPAIR",
+              name: `Repair: ${sType} #${ev.serverIndex + 1}`,
+              serverTypeName: sType,
+              serverIndex: ev.serverIndex,
+              scheduledTime: repairTime,
+            });
+            if (collectTrace) {
+              const msg = `FAILURE: ${sType} #${ev.serverIndex + 1} failed at t=${clock.toFixed(3)}`;
+              cycleLog.push({ phase: "B", time: clock, message: msg });
+              log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: [srv.id] } }));
+            }
+          } else if (collectTrace) {
+            const msg = `FAILURE: ${sType} #${ev.serverIndex + 1} skipped — server not found`;
+            cycleLog.push({ phase: "B", time: clock, message: msg });
+            log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg] } }));
           }
-          srv.status = "failed";
-          srv._failedAt = clock;
-          failedCount++;
-        }
-        if (collectTrace) {
-          const msg = `FAILURE: ${failedCount} ${sType} server(s) failed at t=${clock.toFixed(3)}`;
-          cycleLog.push({ phase: "B", time: clock, message: msg });
-          log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: servers.map(s => s.id) } }));
+        } else {
+          const servers = entities.filter(e =>
+            e.role === "server" && e.type.trim().toLowerCase() === key && (e.status === "busy" || e.status === "serving" || e.status === "idle")
+          );
+          let failedCount = 0;
+          for (const srv of servers) {
+            if (srv.status === "idle" && srv._starvationStart != null) {
+              srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
+              delete srv._starvationStart;
+            }
+            if (srv.status === "busy" || srv.status === "serving") {
+              const cust = entities.find(e => e.id === srv.currentCustId);
+              if (cust) {
+                fel = fel.filter(entry =>
+                  !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
+                );
+                preemptCustomer(cust, srv, clock, makeCtx());
+              }
+            }
+            srv.status = "failed";
+            srv._failedAt = clock;
+            failedCount++;
+          }
+          if (collectTrace) {
+            const msg = `FAILURE: ${failedCount} ${sType} server(s) failed at t=${clock.toFixed(3)}`;
+            cycleLog.push({ phase: "B", time: clock, message: msg });
+            log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: servers.map(s => s.id) } }));
+          }
         }
         continue;
       }
@@ -892,14 +971,53 @@ const cycleLog = [];
       if (ev.type === 'REPAIR') {
         const sType = ev.serverTypeName;
         const key = sType.trim().toLowerCase();
-        const failedServers = entities.filter(e =>
-          e.role === "server" && e.type.trim().toLowerCase() === key && e.status === "failed"
-        );
-        const repairedCount = repairServers(failedServers, clock);
-        if (collectTrace) {
-          const msg = `REPAIR: ${repairedCount} ${sType} server(s) restored at t=${clock.toFixed(3)}`;
-          cycleLog.push({ phase: "B", time: clock, message: msg });
-          log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: failedServers.map(s => s.id) } }));
+
+        if (ev.serverIndex != null) {
+          const srv = entities.find(e =>
+            e.role === "server" && e.type.trim().toLowerCase() === key && e._instanceIndex === ev.serverIndex && e.status === "failed"
+          );
+          if (srv) {
+            repairServers([srv], clock);
+            const et = (runtimeModel.entityTypes || []).find(et => et.role === "server" && String(et.name || "").trim().toLowerCase() === key);
+            if (et && (et.mtbfDist || et.failureDist) && (et.mtbfDistParams || et.failureDistParams)) {
+              const nextFailTime = clock + sample(
+                et.mtbfDist || et.failureDist,
+                et.mtbfDistParams || et.failureDistParams,
+                rng, null,
+                { streamName: `mtbf:${sType}:${ev.serverIndex + 1}`, streamRegistry }
+              );
+              fel.push({
+                id: `fail:${sType}:${ev.serverIndex}:${nextFailTime.toFixed(4)}`,
+                type: "FAILURE",
+                name: `Failure: ${sType} #${ev.serverIndex + 1}`,
+                serverTypeName: sType,
+                serverIndex: ev.serverIndex,
+                scheduledTime: nextFailTime,
+                mttrDist: et.mttrDist || et.repairDist,
+                mttrParams: et.mttrDistParams || et.repairDistParams,
+                failureScope: "unit",
+              });
+            }
+            if (collectTrace) {
+              const msg = `REPAIR: ${sType} #${ev.serverIndex + 1} restored at t=${clock.toFixed(3)}`;
+              cycleLog.push({ phase: "B", time: clock, message: msg });
+              log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: [srv.id] } }));
+            }
+          } else if (collectTrace) {
+            const msg = `REPAIR: ${sType} #${ev.serverIndex + 1} skipped — server not failed or not found`;
+            cycleLog.push({ phase: "B", time: clock, message: msg });
+            log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg] } }));
+          }
+        } else {
+          const failedServers = entities.filter(e =>
+            e.role === "server" && e.type.trim().toLowerCase() === key && e.status === "failed"
+          );
+          const repairedCount = repairServers(failedServers, clock);
+          if (collectTrace) {
+            const msg = `REPAIR: ${repairedCount} ${sType} server(s) restored at t=${clock.toFixed(3)}`;
+            cycleLog.push({ phase: "B", time: clock, message: msg });
+            log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: failedServers.map(s => s.id) } }));
+          }
         }
         continue;
       }

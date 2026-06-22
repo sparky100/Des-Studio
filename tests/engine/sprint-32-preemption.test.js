@@ -45,6 +45,7 @@ function makeFactoryModel() {
       { id: 'Machine', name: 'Machine', role: 'server', count: '1', attrDefs: [],
         mtbfDist: 'fixed', mtbfDistParams: { value: '8' },
         mttrDist: 'fixed', mttrDistParams: { value: '3' },
+        failureScope: 'pool',
       },
     ],
     queues: [{ id: 'q1', name: 'Input Queue', customerType: 'Part', discipline: 'FIFO' }],

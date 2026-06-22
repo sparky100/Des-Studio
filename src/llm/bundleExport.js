@@ -80,14 +80,17 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (entityTypes.length) {
     lines.push('### Entity Types');
     lines.push('');
-    lines.push('| Name | Role | Count | Attributes |');
-    lines.push('|------|------|-------|-----------|');
+    lines.push('| Name | Role | Count | Attributes | Failures |');
+    lines.push('|------|------|-------|-----------|----------|');
     for (const et of entityTypes) {
       const attrs = (et.attrDefs || [])
         .map(a => `${a.name} (${a.valueType}${a.defaultValue != null && a.defaultValue !== '' ? `=${a.defaultValue}` : ''})`)
         .join(', ') || '—';
       const count = et.role === 'server' ? (et.count ?? 1) : '—';
-      lines.push(`| ${et.name || '?'} | ${et.role || 'customer'} | ${count} | ${attrs} |`);
+      const failure = et.mtbfDist
+        ? `MTBF=${et.mtbfDist}(${Object.values(et.mtbfDistParams||{}).join(',')}) MTTR=${et.mttrDist}(${Object.values(et.mttrDistParams||{}).join(',')}) scope=${et.failureScope||'unit'}`
+        : '—';
+      lines.push(`| ${et.name || '?'} | ${et.role || 'customer'} | ${count} | ${attrs} | ${failure} |`);
     }
     lines.push('');
   }

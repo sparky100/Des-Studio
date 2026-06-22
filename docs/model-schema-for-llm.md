@@ -216,10 +216,12 @@ Servers can have random failures (the engine auto-generates FAIL/REPAIR events):
 "mtbfDist": "Exponential",
 "mtbfDistParams": { "mean": "360" },
 "mttrDist": "Triangular",
-"mttrDistParams": { "min": "20", "mode": "45", "max": "90" }
+"mttrDistParams": { "min": "20", "mode": "45", "max": "90" },
+"failureScope": "unit"
 ```
 
 - All four fields (`mtbfDist`, `mtbfDistParams`, `mttrDist`, `mttrDistParams`) must be set together — partial specification is not valid.
+- `failureScope` (optional, default `"unit"`): `"unit"` means each server instance fails and recovers independently. `"pool"` means one outage affects all servers of this type simultaneously. Use `"unit"` unless modelling shared-infrastructure failures.
 - `mtbfDist` / `mttrDist`: any distribution name from §4. `Exponential` and `Triangular` are most common.
 - Mean time between failures (`mtbfDist`) should be much larger than mean time to repair (`mttrDist`).
 - No additional B-events or C-events are needed — the engine handles failure scheduling automatically.

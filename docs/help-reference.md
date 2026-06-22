@@ -120,7 +120,7 @@ All 20 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | Macro | Syntax | Purpose | Side Effects | Common Mistakes |
 |-------|--------|---------|--------------|-----------------|
 | PREEMPT | `PREEMPT(ServerType)` | Interrupts in-service entity, replaces with higher-priority entity | Displaced entity re-queues with remaining service preserved | Using without priority queue discipline |
-| FAIL | `FAIL(ServerType)` | Places server into failed (unavailable) state; interrupts any in-progress service | Sets server to failed; in-service entity re-queues with remaining service time | Forgetting to schedule a paired REPAIR B-event |
+| FAIL | `FAIL(ServerType)` | Places server into failed (unavailable) state; interrupts any in-progress service | Sets server to failed; in-progress entity re-queues with remaining service time | For pool scope, all servers fail at once; prefer unit scope for realistic modelling |
 | REPAIR | `REPAIR(ServerType)` | Restores failed server to idle | Sets server to idle; triggers C-scan | Repairing non-failed server (no effect) |
 
 ### Resource-Free Activity Macros
@@ -155,6 +155,26 @@ All 20 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | DRAIN | `DRAIN(containerId, expr)` | Removes quantity from container | Updates container level, clamped to zero | No-op if level < amount (does not go negative) |
 
 **Safe expression evaluator:** All expr fields support numeric literals, +, -, *, /, parentheses, Entity.attrName, stateVarName, clock, and functions min(a,b), max(a,b), abs(a), round(a), floor(a), ceil(a). No eval() or new Function() used.
+
+### Server Failure Model (MTBF/MTTR)
+
+Server entity types can be configured with random failures using `mtbfDist` and `mttrDist` on the entity type definition. The engine automatically schedules failure and repair events.
+
+**Fields:**
+
+| Field | Description | Values |
+|-------|-------------|--------|
+| `mtbfDist` | Mean Time Between Failures distribution | Any distribution type (e.g. `Exponential`) |
+| `mtbfDistParams` | MTBF distribution parameters | Distribution-specific (e.g. `{mean: "120"}`) |
+| `mttrDist` | Mean Time To Repair distribution | Any distribution type |
+| `mttrDistParams` | MTTR distribution parameters | Distribution-specific |
+| `failureScope` | How failures apply across the pool | `"unit"` (default) — each server fails independently; `"pool"` — one outage affects all servers |
+
+**Best practices:**
+- Use `"unit"` scope for realistic individual server unreliability
+- Use `"pool"` scope only for shared-infrastructure failures (power outage, network failure)
+- MTBF should be much larger than MTTR (typical ratios: 10:1 or higher)
+- The engine handles warm-up correctly — failures before warm-up don't inflate post-warmup downtime statistics
 
 ---
 
@@ -487,7 +507,7 @@ context (no suggestion text is shown live).
 **Causes:**
 - FEL empty (no re-scheduling rules)
 - C-event condition never satisfied
-- All servers failed with no REPAIR scheduled
+- All servers failed with no REPAIR scheduled (check failureScope — "pool" takes everything offline; "unit" affects one at a time)
 
 **Fix:** Check schedules[] on B-events; verify C-event conditions; schedule repairs.
 

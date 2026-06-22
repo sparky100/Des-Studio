@@ -307,6 +307,27 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                   </div>
                 );
               })()}
+              {(() => {
+                const selServer = servers.find(s => s.name === activityServer);
+                if (!selServer?.mtbfDist) return null;
+                const scope = selServer.failureScope || "unit";
+                return (
+                  <div style={{ background: `${C.red}10`, border: `1px solid ${C.red}33`, borderRadius: 6, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: C.red, fontFamily: FONT }}>Failure Model</span>
+                      <span style={{ fontSize: 9, color: C.red, fontFamily: FONT, background: `${C.red}22`, borderRadius: 3, padding: "1px 5px" }}>
+                        {scope === "unit" ? "per unit" : "pool"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
+                      MTBF: {selServer.mtbfDist}({Object.values(selServer.mtbfDistParams || {}).join(", ")}) · MTTR: {selServer.mttrDist}({Object.values(selServer.mttrDistParams || {}).join(", ")})
+                    </div>
+                    <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+                      Manage failure settings in the Forms/Tabs Entity Types editor.
+                    </div>
+                  </div>
+                );
+              })()}
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
                   Service time
