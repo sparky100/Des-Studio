@@ -11,7 +11,7 @@
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods, createStreamRegistry } from "./distributions.js";
 import { buildWaitDistEntry, finalizeWeightedStats, summarizeEntitySummary } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
-import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities } from "./entities.js";
+import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById } from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
@@ -478,7 +478,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const makeTraceEntry = (phase, extra = {}) => _trace(phase, extra);
   const noteQueueDepth = (queueName) => {
     if (!queueName) return;
-    const depth = entities.filter(entity => entity.role !== "server" && entity.status === "waiting" && entity.queue === queueName).length;
+    // Servers never join queues via markEntityWaiting, so the index bucket
+    // for a queue name is already customer/batch-only — no role filter needed.
+    const depth = indexBucket(queueIndex, queueName).length;
     const currentMax = _runtimeMetrics.maxQueueLengthByQueue[queueName] || 0;
     if (depth > currentMax) {
       _runtimeMetrics.maxQueueLengthByQueue[queueName] = depth;
@@ -524,6 +526,17 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   for (const e of entities) e.id = nextId();
   _runtimeMetrics.entitiesCreated += entities.length;
 
+  // ── Queue index ───────────────────────────────────────────────────────────
+  // Incrementally-maintained waiting-queue membership index (see entities.js
+  // for chokepoint details). Pruning never invalidates it — pruneStaleEntities
+  // only ever removes done/reneged entities, which are by definition never in
+  // a waiting bucket — so no rebuild is needed after a prune sweep.
+  const queueIndex = createQueueIndex();
+  // `entities` at this point (post createServerEntities, pre-arrivals) contains
+  // only servers, so this seeds the server roster used by idleOf/busyOf/etc.
+  queueIndex.servers.push(...entities);
+  for (const srv of entities) indexTrackEntity(queueIndex, srv);
+
   // ── Terminal-entity accumulator ──────────────────────────────────────────
   // Post-warmup done/reneged entities are swept out of `entities` (see
   // pruneStaleEntities below) so hot-path scans stay bounded by live
@@ -541,8 +554,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const { entities: kept, fel: keptFel, removed } = pruneTerminalEntities(entities, fel);
     entities = kept;
     fel = keptFel;
-    if (removed.length && intoAccumulator) {
-      for (const e of removed) _completed.push(e);
+    for (const e of removed) {
+      indexUntrackEntity(queueIndex, e);
+      if (intoAccumulator) _completed.push(e);
     }
     return removed;
   };
@@ -555,7 +569,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     }
   }
 
-  const helpers = () => makeHelpers(entities, runtimeModel);
+  const helpers = () => makeHelpers(entities, runtimeModel, queueIndex);
   const createServerEntity = (serverTypeName, arrivalTime = clock) => {
     const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
     const entityType = (runtimeModel.entityTypes || []).find(et => et.role === "server" && match(et.name, serverTypeName));
@@ -606,7 +620,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   // ── Snapshot ──────────────────────────────────────────────────────────────
   function snap(clock) {
-    const h = makeHelpers(entities, runtimeModel);
+    const h = makeHelpers(entities, runtimeModel, queueIndex);
     const statsEntities = allEntitiesForStats();
     const types = [...new Set(statsEntities.map(e => e.type))];
     const byType = {};
@@ -777,7 +791,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     model: runtimeModel,
     clock,
     felRef,
-    helpers: makeHelpers(entities, runtimeModel),
+    helpers: makeHelpers(entities, runtimeModel, queueIndex),
+    index: queueIndex,
     nextId,
     rng,
     streamRegistry,
@@ -794,7 +809,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   function checkTermination() {
     if (!terminationCondition) return null;
-    const h = makeHelpers(entities, runtimeModel);
+    const h = makeHelpers(entities, runtimeModel, queueIndex);
     if (!compiledTerminationCondition(usePredicateState(h))) return null;
     _terminationConditionMet = true;
     const msg      = "Termination condition met — simulation complete";
@@ -924,7 +939,7 @@ const cycleLog = [];
               delete srv._starvationStart;
             }
             if (srv.status === "busy" || srv.status === "serving") {
-              const cust = entities.find(e => e.id === srv.currentCustId);
+              const cust = findEntityById(queueIndex, entities, srv.currentCustId);
               if (cust) {
                 fel = fel.filter(entry =>
                   !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
@@ -965,7 +980,7 @@ const cycleLog = [];
               delete srv._starvationStart;
             }
             if (srv.status === "busy" || srv.status === "serving") {
-              const cust = entities.find(e => e.id === srv.currentCustId);
+              const cust = findEntityById(queueIndex, entities, srv.currentCustId);
               if (cust) {
                 fel = fel.filter(entry =>
                   !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
@@ -1069,7 +1084,7 @@ const cycleLog = [];
     let cFired = true, cPass = 0;
     while (cFired && cPass < maxCPasses) {
       cFired = false; cPass++;
-      const h = makeHelpers(entities, runtimeModel);
+      const h = makeHelpers(entities, runtimeModel, queueIndex);
       const predicateCtx = usePredicateState(h);
       const queueWaitingCache = enableFilteredPhaseC ? new Map() : null;
       for (let idx = 0; idx < sortedCEvents.length; idx++) {
@@ -1325,7 +1340,7 @@ const cycleLog = [];
 
     // Initial termination check
     if (terminationCondition) {
-      const h = makeHelpers(entities, runtimeModel);
+      const h = makeHelpers(entities, runtimeModel, queueIndex);
       if (compiledTerminationCondition(usePredicateState(h))) {
         _terminationConditionMet = true;
         log.push(makeTraceEntry("END", { message: "Termination condition met at start" }));

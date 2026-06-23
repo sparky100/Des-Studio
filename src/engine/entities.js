@@ -111,28 +111,178 @@ export function sortWaitingEntities(waiting, discipline = "FIFO") {
   return [...waiting].sort(queueDisciplineComparator(discipline));
 }
 
+// ── Queue index — O(1)-amortised waiting-queue membership ───────────────────
+//
+// `waitingByQueue` mirrors the set of entities with status==="waiting", keyed
+// by normalized queue name. It exists so hot-path queue-membership checks
+// (balk/capacity depth, ASSIGN/DELAY/BATCH candidate lists, queue(Name).length
+// predicates) don't have to filter the entire live `entities` array — which,
+// for a congested model, can be dominated by a single deep queue's backlog.
+//
+// Maintained at exactly two chokepoints: markEntityWaiting (add) and
+// clearWaitingState (remove) — verified (by exhaustive grep across
+// src/engine/*.js) to be the sole production sites that respectively set and
+// clear "waiting" status, with entity.queue always still intact at the
+// clearWaitingState call site. The one exception is BATCH's macro-level
+// `entities.splice()` removal of already-waiting children, which bypasses
+// clearWaitingState entirely — that call site removes from the index
+// explicitly (see macros.js).
+// `servers` is a small, stable roster of all server entities — kept separate
+// from `waitingByQueue` because idleOf/busyOf/failedOf (called on every
+// Phase-C condition check and ASSIGN) only ever need to scan servers, but
+// without this they scan the full `entities` array including the entire
+// customer backlog. Servers are added/removed only via SHIFT_CHANGE
+// (phases.js) and capacity reconciliation (macros.js) — both call
+// indexAddServer/indexRemoveServer explicitly since they splice `entities`
+// directly. Status transitions (idle/busy/failed) happen in place on the
+// same object reference, so no add/remove bookkeeping is needed for those.
+export function createQueueIndex() {
+  return { waitingByQueue: new Map(), servers: [], fifoSortedByQueue: new Map(), byId: new Map() };
+}
+
+// O(1) replacement for the dozens of `entities.find(e => e.id === id)` call
+// sites used to resolve "the customer"/"the server" referenced by a firing
+// event — those scans are the dominant remaining cost on a congested model
+// once queue-membership and sort costs are already indexed. Maintained at
+// every entities.push/splice site (see indexTrackEntity/indexUntrackEntity).
+export function findEntityById(index, entities, id) {
+  if (id == null) return null;
+  return index ? (index.byId.get(id) ?? null) : (entities.find(e => e.id === id) ?? null);
+}
+
+// Registers an entity in the byId index. Call at every site that adds an
+// entity to the live `entities` array. Safe to call with a falsy index (no-op).
+export function indexTrackEntity(index, entity) {
+  if (!index || !entity) return;
+  index.byId.set(entity.id, entity);
+}
+
+// Unregisters an entity from the byId index. Call at every site that removes
+// an entity from the live `entities` array — including BATCH's children
+// splice, since a batched child is no longer live until UNBATCH re-tracks it
+// (under the same id, but as a new cloned object) via attemptQueueJoin.
+export function indexUntrackEntity(index, entity) {
+  if (!index || !entity) return;
+  if (index.byId.get(entity.id) === entity) index.byId.delete(entity.id);
+}
+
+// Plain FIFO (the default/unrecognized-discipline case) sorts purely by
+// arrivalTime. As long as every entity has been appended to a queue bucket
+// in non-decreasing arrivalTime order, the bucket is already in FIFO order —
+// ties keep insertion order, which is exactly what a stable sort over an
+// already-sorted array produces anyway. `indexAdd` tracks per-bucket
+// "known sorted" state so reads can skip the O(M log M) sort (the dominant
+// cost on a deep, congested queue — re-paid on essentially every Phase-C
+// condition check and ASSIGN/BATCH/MATCH candidate lookup). An out-of-order
+// append (e.g. a preempted entity re-joining with its original, older
+// arrivalTime) marks the bucket dirty; `readSortedBucket` then pays one
+// real sort on the *next* read to restore the invariant (sorting in place,
+// so the cost is amortised across however many reads happen before the
+// next out-of-order append) rather than falling back to sorting forever.
+function isPlainFifo(discipline) {
+  const d = norm(discipline);
+  return !d || d === "fifo";
+}
+
+// Returns the live per-queue bucket, resorted in place first if a prior
+// out-of-order join left it dirty. Callers must treat the returned array as
+// read-only (it's the live bucket, not a copy) — copy before mutating/
+// returning to outside code that might splice/shift it.
+function readSortedBucket(index, queueName, discipline) {
+  const key = norm(queueName);
+  const bucket = index.waitingByQueue.get(key) || [];
+  if (isPlainFifo(discipline) && index.fifoSortedByQueue.get(key) === false) {
+    bucket.sort(queueDisciplineComparator(discipline));
+    index.fifoSortedByQueue.set(key, true);
+  }
+  return bucket;
+}
+
+export function indexAddServer(index, server) {
+  if (!index || !server) return;
+  index.servers.push(server);
+}
+
+export function indexRemoveServer(index, server) {
+  if (!index || !server) return;
+  const i = index.servers.indexOf(server);
+  if (i !== -1) index.servers.splice(i, 1);
+}
+
+export function indexAdd(index, queueName, entity) {
+  if (!index || !queueName) return;
+  const key = norm(queueName);
+  let bucket = index.waitingByQueue.get(key);
+  if (!bucket) {
+    bucket = [];
+    index.waitingByQueue.set(key, bucket);
+    index.fifoSortedByQueue.set(key, true);
+  } else if (bucket.length && (entity.arrivalTime || 0) < (bucket[bucket.length - 1].arrivalTime || 0)) {
+    index.fifoSortedByQueue.set(key, false);
+  }
+  bucket.push(entity);
+}
+
+export function indexRemove(index, queueName, entity) {
+  if (!index || !queueName) return;
+  const bucket = index.waitingByQueue.get(norm(queueName));
+  if (!bucket) return;
+  const i = bucket.indexOf(entity);
+  if (i !== -1) bucket.splice(i, 1);
+}
+
+export function indexBucket(index, queueName) {
+  if (!index) return null;
+  return index.waitingByQueue.get(norm(queueName)) || [];
+}
+
+// Rebuilds the index from scratch in one O(live) pass. Only needed after
+// bulk entity-array replacement that doesn't go through the chokepoints
+// (there is currently no such site for waiting entities — prune only ever
+// removes done/reneged entities, which are never in the index — but this is
+// kept as a safety net for callers that construct/replace `entities` directly,
+// e.g. tests).
+export function rebuildQueueIndex(index, entities) {
+  index.waitingByQueue.clear();
+  index.fifoSortedByQueue.clear();
+  for (const e of entities) {
+    if (e.status === "waiting" && e.queue) indexAdd(index, e.queue, e);
+  }
+}
+
 /**
  * Single authoritative queue-discipline selector (M4).
  * Returns the first entity from `entities` waiting in the named queue or type,
  * sorted by discipline. Set `isQueueName=true` to match entity.queue; false for entity.type.
  */
-export function selectWaiting(token, discipline, entities, filterFn = null, isQueueName = false) {
-  return listWaiting(token, discipline, entities, filterFn, isQueueName)[0] ?? null;
+export function selectWaiting(token, discipline, entities, filterFn = null, isQueueName = false, index = null) {
+  return listWaiting(token, discipline, entities, filterFn, isQueueName, true, index)[0] ?? null;
 }
 
 /**
  * Sorted-list variant of selectWaiting. `includeBatches=false` excludes batch entities.
+ * When `isQueueName` is true and `index` is supplied, reads the small per-queue
+ * bucket instead of filtering the entire `entities` array — same resulting set
+ * and sort order, just without the O(N) scan.
  */
-export function listWaiting(token, discipline, entities, filterFn = null, isQueueName = false, includeBatches = true) {
+export function listWaiting(token, discipline, entities, filterFn = null, isQueueName = false, includeBatches = true, index = null) {
   const key = norm(token);
-  let pool = entities.filter(e => {
-    if (e.status !== "waiting") return false;
-    if (!includeBatches && e.role === "batch") return false;
-    return isQueueName
-      ? (e.queue && norm(e.queue) === key)
-      : (norm(e.type) === key);
-  });
+  const useIndex = isQueueName && index;
+  let pool;
+  if (useIndex) {
+    pool = readSortedBucket(index, token, discipline);
+    if (!includeBatches) pool = pool.filter(e => e.role !== "batch");
+  } else {
+    pool = entities.filter(e => {
+      if (e.status !== "waiting") return false;
+      if (!includeBatches && e.role === "batch") return false;
+      return isQueueName
+        ? (e.queue && norm(e.queue) === key)
+        : (norm(e.type) === key);
+    });
+  }
   if (filterFn) pool = pool.filter(filterFn);
+  if (useIndex && isPlainFifo(discipline)) return [...pool];
   return sortWaitingEntities(pool, discipline);
 }
 
@@ -163,31 +313,42 @@ function waitingSnapshot(entity, clock, queueName) {
   };
 }
 
-export function markEntityWaiting(entity, clock, queueName = entity.queue ?? entity.lastQueue ?? null) {
+export function markEntityWaiting(entity, clock, queueName = entity.queue ?? entity.lastQueue ?? null, index = null) {
   if (!entity) return false;
   if (entity.status === "done" || entity.status === "reneged") return false;
+  // An entity can be re-routed into a new queue while already "waiting" in
+  // another (e.g. RELEASE's provisional join immediately followed by
+  // conditional/probabilistic routing's re-join) — no clearWaitingState runs
+  // between the two, so the stale bucket entry must be dropped here.
+  if (index && entity.status === "waiting" && entity.queue) {
+    indexRemove(index, entity.queue, entity);
+  }
   entity.status = "waiting";
   entity.queue = queueName;
   entity.waitingSince = clock;
   entity.waitingFor = waitingSnapshot(entity, clock, queueName);
+  indexAdd(index, queueName, entity);
   return true;
 }
 
-export function clearWaitingState(entity) {
+export function clearWaitingState(entity, index = null) {
   if (!entity) return false;
+  if (index && entity.status === "waiting" && entity.queue) {
+    indexRemove(index, entity.queue, entity);
+  }
   delete entity.waitingFor;
   delete entity.waitingSince;
   return true;
 }
 
-export function claimServerForEntity(customer, server, clock) {
+export function claimServerForEntity(customer, server, clock, index = null) {
   if (!customer || !server) return false;
   if (customer.status !== "waiting" || server.status !== "idle") return false;
 
   const queueName = customer.queue ?? customer.lastQueue ?? null;
   const claim = claimSnapshot(customer, server, clock, queueName);
 
-  clearWaitingState(customer);
+  clearWaitingState(customer, index);
   customer.status = "serving";
   customer.serviceStart = clock;
   customer.serverId = server.id;
@@ -241,7 +402,7 @@ export function preemptCustomer(cust, srv, clock, ctx) {
   const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
   cust._remainingService  = remainingService;
   releaseServerClaim(cust, srv, clock);
-  clearWaitingState(cust);
+  clearWaitingState(cust, ctx?.index);
   attemptQueueJoin(cust, cust.lastQueue || cust.queue, clock, ctx, { skipBalk: true });
   return remainingService;
 }
@@ -334,10 +495,14 @@ export function attemptQueueJoin(entity, queueName, clock, ctx, opts = {}) {
   }
   visited.add(qKey);
 
+  const queueDepth = () => ctx.index
+    ? indexBucket(ctx.index, queueName).length
+    : entities.filter(e => e.status === "waiting" && norm(e.queue) === norm(queueName)).length;
+
   if (!opts.skipBalk) {
     const balkCondition = qDef?.balkCondition ?? opts.legacyBalkCondition ?? null;
     if (balkCondition) {
-      const qLen = entities.filter(e => e.status === "waiting" && norm(e.queue) === norm(queueName)).length;
+      const qLen = queueDepth();
       const balkState = { ...ctx.state, queues: { [queueName]: { length: qLen } } };
       if (evaluatePredicate(balkCondition, balkState)) {
         return rerouteOrExit("balkCount", "balked", entity, qDef, queueName, clock, ctx, visited);
@@ -352,16 +517,18 @@ export function attemptQueueJoin(entity, queueName, clock, ctx, opts = {}) {
   if (!opts.skipCapacity) {
     const cap = qDef?.capacity != null ? parseInt(qDef.capacity, 10) : null;
     if (cap !== null && Number.isFinite(cap) && cap > 0) {
-      const currentDepth = entities.filter(e => e.status === "waiting" && norm(e.queue) === norm(queueName)).length;
+      const currentDepth = queueDepth();
       if (currentDepth >= cap) {
         return rerouteOrExit("blockingCount", `blocked (capacity ${cap})`, entity, qDef, queueName, clock, ctx, visited);
       }
     }
   }
 
-  markEntityWaiting(entity, clock, queueName);
-  if (!entities.includes(entity)) {
+  markEntityWaiting(entity, clock, queueName, ctx.index);
+  const alreadyLive = ctx.index ? ctx.index.byId.get(entity.id) === entity : entities.includes(entity);
+  if (!alreadyLive) {
     entities.push(entity);
+    indexTrackEntity(ctx.index, entity);
     ctx.noteEntityCreated?.(entity);
   } else {
     ctx.noteQueueDepth?.(queueName);
@@ -386,6 +553,7 @@ function discardFailedJoin(entity, ctx, msg) {
   const { entities } = ctx;
   const idx = entities.indexOf(entity);
   if (idx !== -1) entities.splice(idx, 1);
+  indexUntrackEntity(ctx.index, entity);
   ctx.msgs?.push(msg);
 }
 
@@ -450,8 +618,12 @@ export function createServerEntities(entityTypes, sampleAttrsFn) {
 /**
  * Status filter helpers — all case-insensitive on type name.
  */
-export function makeHelpers(entities, model = null) {
+export function makeHelpers(entities, model = null, index = null) {
   const match = (a, b) => norm(a) === norm(b);
+
+  // The small, stable server roster when an index is available, falling back
+  // to scanning the full (potentially huge) entities array otherwise.
+  const serverPool = () => index ? index.servers : entities.filter(e => e.role === "server");
 
   function filterWaiting(predicate, discipline = "FIFO", filterFn = null) {
     let waiting = entities.filter(entity => entity.status === "waiting" && predicate(entity));
@@ -467,6 +639,19 @@ export function makeHelpers(entities, model = null) {
     };
   }
 
+  // Reads the small per-queue index bucket when available instead of
+  // filtering the entire (potentially huge) `entities` array — this is the
+  // dominant cost for congested models, since waitingInQueue backs both
+  // queue(Name).length predicate evaluation and ASSIGN/DELAY/BATCH/MATCH/
+  // COSEIZE candidate lookups.
+  function waitingInQueue(queueName, discipline = "FIFO", filterFn = null, includeBatches = true) {
+    let pool = index ? readSortedBucket(index, queueName, discipline) : entities.filter(makeQueueFilter(queueName, includeBatches));
+    if (index && !includeBatches) pool = pool.filter(e => e.role !== "batch");
+    if (filterFn) pool = pool.filter(filterFn);
+    if (index && isPlainFifo(discipline)) return [...pool];
+    return sortWaitingEntities(pool, discipline);
+  }
+
   return {
     entities,
     model,
@@ -475,35 +660,34 @@ export function makeHelpers(entities, model = null) {
     waitingOf: (type, discipline = "FIFO", filterFn = null) =>
       filterWaiting(entity => match(entity.type, type), discipline, filterFn),
 
-    waitingInQueue: (queueName, discipline = "FIFO", filterFn = null, includeBatches = true) =>
-      filterWaiting(makeQueueFilter(queueName, includeBatches), discipline, filterFn),
+    waitingInQueue,
 
     selectWaitingOf: (type, discipline = "FIFO", filterFn = null) =>
       filterWaiting(entity => match(entity.type, type), discipline, filterFn)[0],
 
     selectWaitingInQueue: (queueName, discipline = "FIFO", filterFn = null, includeBatches = true) =>
-      filterWaiting(makeQueueFilter(queueName, includeBatches), discipline, filterFn)[0],
+      waitingInQueue(queueName, discipline, filterFn, includeBatches)[0],
 
     idleOf: (type) =>
-      sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "idle" && !e._suspended)),
+      sortResourceEntities(serverPool().filter(e => match(e.type, type) && e.status === "idle" && !e._suspended)),
 
     busyOf: (type) =>
-      sortResourceEntities(entities.filter(e => match(e.type, type) && (e.status === "busy" || e.status === "serving") && !e._suspended)),
+      sortResourceEntities(serverPool().filter(e => match(e.type, type) && (e.status === "busy" || e.status === "serving") && !e._suspended)),
 
     failedOf: (type) =>
-      sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "failed")),
+      sortResourceEntities(serverPool().filter(e => match(e.type, type) && e.status === "failed")),
 
     selectIdleOf: (type) =>
-      sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "idle" && !e._suspended))[0],
+      sortResourceEntities(serverPool().filter(e => match(e.type, type) && e.status === "idle" && !e._suspended))[0],
 
     findById: (id) =>
-      entities.find(e => e.id === id),
+      findEntityById(index, entities, id),
 
     allCustomers: () =>
       entities.filter(e => e.role !== "server"),
 
     allServers: () =>
-      entities.filter(e => e.role === "server"),
+      serverPool(),
   };
 }
 

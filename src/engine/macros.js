@@ -11,7 +11,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById } from "./entities.js";
 
 // ── Private helpers shared across multiple macros ────────────────────────────
 
@@ -45,7 +45,7 @@ function updateContainerMinMax(state, cName, newLevel) {
 
 function resolveContextEntity(ctx) {
   const custId = ctx.getLastCustId();
-  return custId != null ? ctx.entities.find(e => e.id === custId) : null;
+  return custId != null ? findEntityById(ctx.index, ctx.entities, custId) : null;
 }
 
 // ── Safe scalar expression evaluator (replaces new Function in applyScalar) ──
@@ -173,6 +173,8 @@ function retireIdleExcessServers(ctx, serverTypeName) {
       entity.currentCustId == null
     ) {
       ctx.entities.splice(i, 1);
+      indexRemoveServer(ctx.index, entity);
+      indexUntrackEntity(ctx.index, entity);
       excess--;
       retired++;
     }
@@ -272,7 +274,8 @@ export const MACROS = [
         legacyBalkProbability: felRef?.balkProbability,
       });
       if (joined) {
-        msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${queueName}, depth: ${helpers.waitingOf(typeName).length}]`);
+        const depth = ctx.index ? indexBucket(ctx.index, queueName).length : helpers.waitingOf(typeName).length;
+        msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${queueName}, depth: ${depth}]`);
       }
     },
   },
@@ -297,7 +300,7 @@ export const MACROS = [
         ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
 
-      const candidates = listWaiting(queueToken, discipline, entities, filterFn, !!matchedQ);
+      const candidates = listWaiting(queueToken, discipline, entities, filterFn, !!matchedQ, true, ctx.index);
       const allIdleServers = helpers.idleOf(sType) || [];
 
       const arbitration = {
@@ -319,7 +322,7 @@ export const MACROS = [
 
       if (cust && srv) {
         const queuedAt = cust.queue;
-        if (!claimServerForEntity(cust, srv, clock)) {
+        if (!claimServerForEntity(cust, srv, clock, ctx.index)) {
           msgs.push(`ASSIGN(${cType},${sType}): claim failed`);
           return;
         }
@@ -368,13 +371,13 @@ export const MACROS = [
       // DELAY has no server capacity — all waiting entities start simultaneously.
       // Process every entity in the queue in one Phase C invocation so N entities
       // need 1 pass rather than N passes.
-      const waiting = listWaiting(token, discipline, entities, filterFn, !!matchedQ);
+      const waiting = listWaiting(token, discipline, entities, filterFn, !!matchedQ, true, ctx.index);
 
       if (waiting.length > 0) {
         const delayedIds = [];
         for (const cust of waiting) {
           const queuedAt = cust.queue;
-          clearWaitingState(cust);
+          clearWaitingState(cust, ctx.index);
           cust.status       = "serving";
           cust.serviceStart = clock;
           cust.lastQueue    = queuedAt ?? cust.lastQueue;
@@ -402,8 +405,8 @@ export const MACROS = [
       const { entities, state, clock, felRef, getLastCustId, getLastSrvId, msgs } = ctx;
       const custId = felRef?._contextCustId ?? getLastCustId();
       const srvId  = felRef?._contextSrvId  ?? getLastSrvId();
-      const cust   = entities.find(e => e.id === custId);
-      const srv    = entities.find(e => e.id === srvId);
+      const cust   = findEntityById(ctx.index, entities, custId);
+      const srv    = findEntityById(ctx.index, entities, srvId);
 
       if (!cust) {
         msgs.push(`COMPLETE skipped — context customer #${custId ?? "?"} not found`);
@@ -427,7 +430,7 @@ export const MACROS = [
       if (cust.status === "serving" || cust.role === "batch") {
         if (!cust.stages) cust.stages = [];
         cust.stages.push(buildStageRecord(cust, srv, clock));
-        clearWaitingState(cust);
+        clearWaitingState(cust, ctx.index);
         cust.status        = "done";
         cust.completionTime = clock;
         cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
@@ -479,11 +482,12 @@ export const MACROS = [
       const { entities, clock, getLastCustId, getLastSrvId, felRef, msgs } = ctx;
       const custId = felRef?._contextCustId ?? getLastCustId();
       const srvId  = felRef?._contextSrvId  ?? getLastSrvId();
-      const srv    = entities.find(e => e.id === srvId && e.role === "server")
+      const srvById = findEntityById(ctx.index, entities, srvId);
+      const srv    = (srvById && srvById.role === "server" ? srvById : null)
                   || entities.find(e => e.type.trim().toLowerCase() === srvType.trim().toLowerCase() && e.status === "busy");
       const cust   = srv
-        ? (entities.find(e => e.id === srv.currentCustId) || entities.find(e => e.id === custId))
-        : entities.find(e => e.id === custId);
+        ? (findEntityById(ctx.index, entities, srv.currentCustId) || findEntityById(ctx.index, entities, custId))
+        : findEntityById(ctx.index, entities, custId);
 
       if (srv && cust) {
         if (!claimMatchesPair(cust, srv)) {
@@ -519,11 +523,11 @@ export const MACROS = [
       const id  = match[1] === "ctx"
         ? (felRef?._contextCustId ?? getLastCustId())
         : parseInt(match[1]);
-      const ent = entities.find(e => e.id === id);
+      const ent = findEntityById(ctx.index, entities, id);
       if (ent && ent.status === "waiting") {
         if (!ent.stages) ent.stages = [];
         ent.stages.push(buildStageRecord(ent, null, clock));
-        clearWaitingState(ent);
+        clearWaitingState(ent, ctx.index);
         ent.status     = "reneged";
         ent.renegeTime = clock;
         setOutcome(ent, {
@@ -565,7 +569,7 @@ export const MACROS = [
       }
       const discipline = qDef.discipline || 'FIFO';
 
-      const candidates = listWaiting(queueName, discipline, entities, null, true, false);
+      const candidates = listWaiting(queueName, discipline, entities, null, true, false, ctx.index);
 
       // Resolve batch size: literal number or entity attribute reference
       let batchSize;
@@ -603,6 +607,14 @@ export const MACROS = [
       const batched = candidates.slice(0, batchSize);
       const ids = batched.map(e => e.id);
       const idSet = new Set(ids);
+      // Direct splice bypasses clearWaitingState, so the waiting-queue index
+      // (which tracks these entities by reference) must be updated explicitly.
+      for (const child of batched) {
+        if (child.status === "waiting" && child.queue) {
+          indexRemove(ctx.index, child.queue, child);
+        }
+        indexUntrackEntity(ctx.index, child);
+      }
       for (let i = entities.length - 1; i >= 0; i--) {
         if (idSet.has(entities[i].id)) {
           entities.splice(i, 1);
@@ -644,7 +656,7 @@ export const MACROS = [
       const { entities, clock, felRef, getLastCustId, msgs } = ctx;
 
       const parentId = felRef?._contextCustId ?? getLastCustId();
-      const parent = entities.find(e => e.id === parentId);
+      const parent = findEntityById(ctx.index, entities, parentId);
 
       if (!parent || parent.role !== "batch" || !parent.batch?.children?.length) {
         msgs.push(`UNBATCH: #${parentId} is not a batch entity or has no children`);
@@ -666,7 +678,7 @@ export const MACROS = [
         }
       }
 
-      clearWaitingState(parent);
+      clearWaitingState(parent, ctx.index);
       parent.status = "done";
       parent.completionTime = clock;
       setOutcome(parent, {
@@ -694,9 +706,9 @@ export const MACROS = [
       const matchedQ = helpers.findQueueConfig?.(cType);
       const discipline = matchedQ?.discipline || 'FIFO';
       const queueToken = matchedQ ? matchedQ.name : cType;
-      const ent = selectWaiting(queueToken, discipline, entities, null, !!matchedQ);
+      const ent = selectWaiting(queueToken, discipline, entities, null, !!matchedQ, ctx.index);
       if (ent) {
-        clearWaitingState(ent);
+        clearWaitingState(ent, ctx.index);
         ent.status     = "reneged";
         ent.renegeTime = clock;
         setOutcome(ent, {
@@ -793,7 +805,7 @@ export const MACROS = [
 
       const srv = busyServers[0];
       const custId = srv.currentCustId;
-      const cust = entities.find(e => e.id === custId);
+      const cust = findEntityById(ctx.index, entities, custId);
 
       if (!cust) {
         msgs.push(`PREEMPT(${sType}): server #${srv.id} has no customer`);
@@ -841,7 +853,7 @@ export const MACROS = [
         }
         if (srv.status === "busy" || srv.status === "serving") {
           const custId = srv.currentCustId;
-          const cust = entities.find(e => e.id === custId);
+          const cust = findEntityById(ctx.index, entities, custId);
           if (cust) {
             const remainingService = preemptCustomer(cust, srv, clock, ctx);
             msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
@@ -896,7 +908,7 @@ export const MACROS = [
       const { entities, clock, nextId, msgs, setLastCustId } = ctx;
 
       const custId = ctx.felRef?._contextCustId ?? ctx.getLastCustId?.();
-      const cust = entities.find(e => e.id === custId);
+      const cust = findEntityById(ctx.index, entities, custId);
 
       if (!cust) {
         msgs.push(`SPLIT(${entityType},${n},${targetQueue}): no context entity found`);
@@ -975,7 +987,7 @@ export const MACROS = [
       // subsequent servers get auxiliary claims without re-checking customer status.
       const serverEntries = Object.entries(idleServersByType);
       const primarySrv = serverEntries[0][1];
-      if (!claimServerForEntity(cust, primarySrv, clock)) {
+      if (!claimServerForEntity(cust, primarySrv, clock, ctx.index)) {
         msgs.push(`COSEIZE: claim failed for ${serverEntries[0][0]} #${primarySrv.id}`);
         return;
       }
@@ -1058,8 +1070,12 @@ export const MACROS = [
       };
       entities.push(parent);
       noteEntityCreated?.(parent);
+      // parent is born directly into "waiting" status (bypassing markEntityWaiting/
+      // attemptQueueJoin), so the index must be updated explicitly here too.
+      indexAdd(ctx.index, targetQueue, parent);
+      indexTrackEntity(ctx.index, parent);
 
-      clearWaitingState(entityA);
+      clearWaitingState(entityA, ctx.index);
       entityA.status = "done";
       entityA.completionTime = clock;
       setOutcome(entityA, {
@@ -1071,7 +1087,7 @@ export const MACROS = [
       });
       entityA._matchedInto = parentId;
 
-      clearWaitingState(entityB);
+      clearWaitingState(entityB, ctx.index);
       entityB.status = "done";
       entityB.completionTime = clock;
       setOutcome(entityB, {
@@ -1148,7 +1164,7 @@ export const MACROS = [
       const { state, clock, entities, felRef, getLastCustId, msgs } = ctx;
       const expr   = match[1].trim();
       const custId = felRef?._contextCustId ?? getLastCustId();
-      const entity = custId != null ? entities.find(e => e.id === custId) : null;
+      const entity = custId != null ? findEntityById(ctx.index, entities, custId) : null;
       const amount = evalEntityExpr(expr, { state, clock, entity });
       if (!Number.isFinite(amount)) {
         msgs.push(`COST: expression "${expr}" did not evaluate to a finite number (got ${amount})`);
