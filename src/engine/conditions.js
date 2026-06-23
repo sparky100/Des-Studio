@@ -110,18 +110,11 @@ function resolveQueueValue(queueName, property, state) {
   const queueDef = state.model?.queues?.find(q =>
     String(q.name || "").trim().toLowerCase() === String(queueName || "").trim().toLowerCase()
   );
-  const explicitQueueCount = Array.isArray(state.entities)
-    ? state.entities.filter(entity =>
-        String(entity.queue || "").trim().toLowerCase() === String(queueName || "").trim().toLowerCase() &&
-        entity.status === "waiting"
-      ).length
-    : 0;
+  const discipline = queueDef?.discipline || "FIFO";
+  const inQueueCount = state.helpers?.waitingInQueue?.(queueName, discipline)?.length;
 
-  if (queueDef || explicitQueueCount > 0) {
-    const discipline = queueDef?.discipline || "FIFO";
-    const inQueueCount = state.helpers?.waitingInQueue?.(queueName, discipline)?.length;
+  if (queueDef || (inQueueCount ?? 0) > 0) {
     if (inQueueCount != null) return inQueueCount;
-    if (explicitQueueCount > 0) return explicitQueueCount;
     return state.helpers?.waitingOf?.(queueName, discipline)?.length ?? 0;
   }
 

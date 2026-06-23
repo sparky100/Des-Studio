@@ -11,11 +11,11 @@
 import { MACROS, applyScalar, buildStageRecord } from "./macros.js";
 import { evalCondition, evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
-import { clearWaitingState, attemptQueueJoin, preemptCustomer, releaseServerClaim } from "./entities.js";
+import { clearWaitingState, attemptQueueJoin, preemptCustomer, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById } from "./entities.js";
 
-function completeEntity(cust, ev, clock, state) {
+function completeEntity(cust, ev, clock, state, index = null) {
   const previousQueue = cust.queue ?? cust.lastQueue ?? null;
-  clearWaitingState(cust);
+  clearWaitingState(cust, index);
   cust.status         = "done";
   cust.completionTime = clock;
   cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
@@ -63,7 +63,11 @@ function applyShiftChange(ev, ctx) {
     const addCount = target - current;
     for (let i = 0; i < addCount; i++) {
       const created = ctx.createServerEntity?.(serverTypeName, ctx.clock);
-      if (created) ctx.entities.push(created);
+      if (created) {
+        ctx.entities.push(created);
+        indexAddServer(ctx.index, created);
+        indexTrackEntity(ctx.index, created);
+      }
     }
     // Reactivate suspended servers when capacity increases
     for (const srv of servers) {
@@ -85,7 +89,7 @@ function applyShiftChange(ev, ctx) {
       const busyServers = servers.filter(e => (e.status === "busy" || e.status === "serving") && !e._suspended);
       for (const srv of busyServers) {
         if (excess <= 0) break;
-        const cust = ctx.entities.find(e => e.id === srv.currentCustId);
+        const cust = findEntityById(ctx.index, ctx.entities, srv.currentCustId);
         let rem = 0;
         if (cust) {
           rem = srv._scheduledDuration != null
@@ -96,6 +100,8 @@ function applyShiftChange(ev, ctx) {
         }
         const idx = ctx.entities.indexOf(srv);
         if (idx >= 0) ctx.entities.splice(idx, 1);
+        indexRemoveServer(ctx.index, srv);
+        indexUntrackEntity(ctx.index, srv);
         excess--;
         preempted.push(`#${cust?.id ?? "?"} preempted (${rem.toFixed(1)} remaining)`);
       }
@@ -117,6 +123,8 @@ function applyShiftChange(ev, ctx) {
       const entity = ctx.entities[i];
       if (entity.role === "server" && match(entity.type, serverTypeName) && entity.status === "idle" && !entity._suspended) {
         ctx.entities.splice(i, 1);
+        indexRemoveServer(ctx.index, entity);
+        indexUntrackEntity(ctx.index, entity);
         excess--;
       }
     }
@@ -169,6 +177,7 @@ export function applyEffect(effect, ctx) {
     noteQueueDepth: ctx.noteQueueDepth ?? null,
     streamRegistry: ctx.streamRegistry ?? null,
     _arbitration: ctx._arbitration ?? null,
+    index: ctx.index ?? null,
     getLastCustId: () => lastCustId,
     getLastSrvId:  () => lastSrvId,
     setLastCustId: (id) => { lastCustId = id; },
@@ -233,7 +242,7 @@ export function fireBEvent(ev, ctx) {
 
   // Reneging guard: skip if context customer is no longer waiting
   if (ev._isRenege && ev._contextCustId != null) {
-    const cust = entities.find(e => e.id === ev._contextCustId);
+    const cust = findEntityById(ctx.index, entities, ev._contextCustId);
     if (cust && cust.status !== "waiting") {
       return {
         msgs:       [`Skipped: "${ev.name}" — #${ev._contextCustId} already ${cust.status}`],
@@ -270,7 +279,7 @@ export function fireBEvent(ev, ctx) {
       delete cust._isDelay;
     }
     if (!queueName) {
-      const evTail = completeEntity(cust, ev, clock, ctx.state);
+      const evTail = completeEntity(cust, ev, clock, ctx.state, ctx.index);
       cust.outcome = {
         status: "completed",
         routeId: `route-exit:${ev.id || ev.name || "unknown"}`,
@@ -291,7 +300,7 @@ export function fireBEvent(ev, ctx) {
   // ── Conditional routing (F10.1) ──────────────────────────────────────────
   if (hasConditionalRouting) {
     const custId = effectCtx._lastCustId;
-    const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
+    const cust   = custId ? findEntityById(ctx.index, ctx.entities, custId) : null;
     // Accept entities in "serving" state when this is a DELAY completion (no server context)
     const isDelayCompletion = cust?.status === "serving" && ev._contextCustId != null && !ev._contextSrvId;
     if (cust && (cust.status === "waiting" || isDelayCompletion)) {
@@ -316,7 +325,7 @@ export function fireBEvent(ev, ctx) {
   // ── Probabilistic routing (F10.2) ────────────────────────────────────────
   if (Array.isArray(ev.probabilisticRouting) && ev.probabilisticRouting.length > 0) {
     const custId = effectCtx._lastCustId;
-    const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
+    const cust   = custId ? findEntityById(ctx.index, ctx.entities, custId) : null;
     // Accept entities in "serving" state when this is a DELAY completion (no server context)
     const isDelayCompletion = cust?.status === "serving" && ev._contextCustId != null && !ev._contextSrvId;
     if (cust && (cust.status === "waiting" || isDelayCompletion)) {
@@ -334,7 +343,7 @@ export function fireBEvent(ev, ctx) {
   // ── Loop guard (F12.4): increment loopCount and apply max-circulation guard ──
   if (ev.loopConfig) {
     const custId = effectCtx._lastCustId;
-    const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
+    const cust   = custId ? findEntityById(ctx.index, ctx.entities, custId) : null;
     if (cust && (cust.status === "waiting" || cust.status === "serving")) {
       cust.loopCount = (cust.loopCount || 0) + 1;
       const maxCount = parseInt(ev.loopConfig.maxLoopCount, 10);
@@ -345,7 +354,7 @@ export function fireBEvent(ev, ctx) {
             msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → "${exitQ}"`);
           }
         } else {
-          const evTail = completeEntity(cust, ev, clock, ctx.state);
+          const evTail = completeEntity(cust, ev, clock, ctx.state, ctx.index);
           cust.outcome = {
             status: "completed",
             routeId: `loop-exit:${ev.id || ev.name || "unknown"}`,
@@ -432,7 +441,7 @@ export function fireCEvent(ev, ctx) {
     resolvedSchedules = allCSchedules;
   } else {
     const custId0 = effectCtx._lastCustId;
-    const custEntity0 = custId0 ? ctx.entities.find(e => e.id === custId0) : null;
+    const custEntity0 = custId0 ? findEntityById(ctx.index, ctx.entities, custId0) : null;
     const predicateState0 = {
       currentEntity: custEntity0 ?? null,
       resources: {},
@@ -468,12 +477,12 @@ export function fireCEvent(ev, ctx) {
       let delay = 0;
       if (cs.dist === "ServerAttr") {
         const srvId    = effectCtx._lastSrvId;
-        const srv      = ctx.entities.find(e => e.id === srvId);
+        const srv      = findEntityById(ctx.index, ctx.entities, srvId);
         const attrName = cs.distParams?.attr || "serviceTime";
         delay = Math.max(0, parseFloat(srv?.attrs?.[attrName]) || 1);
         msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [server.${attrName}=${delay}]`);
       } else if (cs.dist === "EntityAttr") {
-        const cust     = perCustId ? ctx.entities.find(e => e.id === perCustId) : null;
+        const cust     = perCustId ? findEntityById(ctx.index, ctx.entities, perCustId) : null;
         const attrName = cs.distParams?.attr || "serviceTime";
         const raw      = cust?.attrs?.[attrName];
         if (raw == null) {
@@ -483,7 +492,7 @@ export function fireCEvent(ev, ctx) {
         msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [entity.${attrName}=${delay}]`);
       } else {
         // Check if the customer has remaining service from preemption/failure
-        const cust = perCustId ? ctx.entities.find(e => e.id === perCustId) : null;
+        const cust = perCustId ? findEntityById(ctx.index, ctx.entities, perCustId) : null;
         if (cust && cust._remainingService != null && cust._remainingService > 0) {
           delay = cust._remainingService;
           delete cust._remainingService;
@@ -508,7 +517,7 @@ export function fireCEvent(ev, ctx) {
 
       // Store scheduled duration on server for preemption/failure remaining-service calculation
       if (cs.useEntityCtx && effectCtx._lastSrvId) {
-        const srv = ctx.entities.find(e => e.id === effectCtx._lastSrvId);
+        const srv = findEntityById(ctx.index, ctx.entities, effectCtx._lastSrvId);
         if (srv) srv._scheduledDuration = delay;
       }
     }
