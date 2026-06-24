@@ -1,0 +1,477 @@
+{
+  "name": "Refugee Displacement Corridor — 90-Day Crisis Response",
+  "model_json": {
+    "name": "Refugee Displacement Corridor — 90-Day Crisis Response",
+    "description": "Models a displacement crisis over 90 days: two arrival streams (general refugees ~190/day, unaccompanied minors ~10/day), official border crossing with random closures and capacity overflow to an unofficial route, registration with international surge staffing from day 30, medical screening, transit camp dwell with automatic reneging (secondary movement), and resettlement. Key policy levers: border officer count, registration surge timing, camp caseworker ratio.",
+    "visibility": "private",
+    "timeUnit": "days",
+    "entityTypes": [
+      {
+        "id": "et_refugee",
+        "name": "Refugee",
+        "role": "customer",
+        "count": 0,
+        "attrDefs": []
+      },
+      {
+        "id": "et_border_officer",
+        "name": "Border Officer",
+        "role": "server",
+        "count": 10,
+        "mtbfDist": "Exponential",
+        "mtbfDistParams": {
+          "mean": "20"
+        },
+        "mttrDist": "Uniform",
+        "mttrDistParams": {
+          "min": "0.5",
+          "max": "2"
+        },
+        "attrDefs": []
+      },
+      {
+        "id": "et_reg_officer",
+        "name": "Registration Officer",
+        "role": "server",
+        "count": 5,
+        "shiftSchedule": [
+          {
+            "time": 0,
+            "capacity": 5
+          },
+          {
+            "time": 30,
+            "capacity": 8
+          },
+          {
+            "time": 60,
+            "capacity": 5
+          }
+        ],
+        "attrDefs": []
+      },
+      {
+        "id": "et_medical_staff",
+        "name": "Medical Staff",
+        "role": "server",
+        "count": 8,
+        "attrDefs": []
+      },
+      {
+        "id": "et_caseworker",
+        "name": "Caseworker",
+        "role": "server",
+        "count": 3,
+        "attrDefs": []
+      }
+    ],
+    "queues": [
+      {
+        "id": "q_border",
+        "name": "Border Queue",
+        "customerType": "Refugee",
+        "capacity": "500",
+        "discipline": "FIFO",
+        "overflowDestination": "Unofficial Crossing Queue"
+      },
+      {
+        "id": "q_unofficial",
+        "name": "Unofficial Crossing Queue",
+        "customerType": "Refugee",
+        "capacity": "",
+        "discipline": "FIFO"
+      },
+      {
+        "id": "q_minor",
+        "name": "Minor Priority Queue",
+        "customerType": "Refugee",
+        "capacity": "",
+        "discipline": "FIFO"
+      },
+      {
+        "id": "q_registration",
+        "name": "Registration Queue",
+        "customerType": "Refugee",
+        "capacity": "",
+        "discipline": "FIFO"
+      },
+      {
+        "id": "q_medical",
+        "name": "Medical Queue",
+        "customerType": "Refugee",
+        "capacity": "",
+        "discipline": "FIFO"
+      },
+      {
+        "id": "q_camp",
+        "name": "Transit Camp Queue",
+        "customerType": "Refugee",
+        "capacity": "",
+        "discipline": "FIFO",
+        "renegeDist": "Exponential",
+        "renegeDistParams": {
+          "mean": "14"
+        }
+      },
+      {
+        "id": "q_resettlement",
+        "name": "Resettlement Queue",
+        "customerType": "Refugee",
+        "capacity": "",
+        "discipline": "FIFO"
+      }
+    ],
+    "bEvents": [
+      {
+        "id": "b_arrive_general",
+        "name": "General Arrival",
+        "scheduledTime": "0",
+        "effect": [
+          "ARRIVE(Refugee, Border Queue)"
+        ],
+        "schedules": [
+          {
+            "eventId": "b_arrive_general",
+            "dist": "Exponential",
+            "distParams": {
+              "mean": "0.00526"
+            }
+          }
+        ]
+      },
+      {
+        "id": "b_arrive_minor",
+        "name": "Minor Arrival",
+        "scheduledTime": "0",
+        "effect": [
+          "ARRIVE(Refugee, Minor Priority Queue)"
+        ],
+        "schedules": [
+          {
+            "eventId": "b_arrive_minor",
+            "dist": "Exponential",
+            "distParams": {
+              "mean": "0.1"
+            }
+          }
+        ]
+      },
+      {
+        "id": "b_border_done",
+        "name": "Border Processing Complete",
+        "scheduledTime": "9999",
+        "effect": [
+          "RELEASE(Border Officer, Registration Queue)"
+        ],
+        "schedules": []
+      },
+      {
+        "id": "b_minor_border_done",
+        "name": "Minor Border Processing Complete",
+        "scheduledTime": "9999",
+        "effect": [
+          "RELEASE(Border Officer, Registration Queue)"
+        ],
+        "schedules": []
+      },
+      {
+        "id": "b_unofficial_crossed",
+        "name": "Unofficial Crossing Complete",
+        "scheduledTime": "9999",
+        "effect": [],
+        "probabilisticRouting": [
+          {
+            "probability": 1,
+            "queueName": "Registration Queue"
+          }
+        ],
+        "schedules": []
+      },
+      {
+        "id": "b_registration_done",
+        "name": "Registration Complete",
+        "scheduledTime": "9999",
+        "effect": [
+          "RELEASE(Registration Officer, Medical Queue)"
+        ],
+        "schedules": []
+      },
+      {
+        "id": "b_medical_done",
+        "name": "Medical Screening Complete",
+        "scheduledTime": "9999",
+        "effect": [
+          "RELEASE(Medical Staff, Transit Camp Queue)"
+        ],
+        "schedules": []
+      },
+      {
+        "id": "b_camp_done",
+        "name": "Camp Processing Complete",
+        "scheduledTime": "9999",
+        "effect": [
+          "RELEASE(Caseworker, Resettlement Queue)"
+        ],
+        "schedules": []
+      },
+      {
+        "id": "b_resettlement_done",
+        "name": "Resettlement Complete",
+        "scheduledTime": "9999",
+        "effect": [
+          "COMPLETE()"
+        ],
+        "schedules": []
+      }
+    ],
+    "cEvents": [
+      {
+        "id": "c_process_minor",
+        "name": "Process Minor at Border",
+        "priority": 1,
+        "condition": "queue(Minor Priority Queue).length > 0 AND idle(Border Officer).count > 0",
+        "effect": [
+          "ASSIGN(Minor Priority Queue, Border Officer)"
+        ],
+        "cSchedules": [
+          {
+            "eventId": "b_minor_border_done",
+            "dist": "Exponential",
+            "distParams": {
+              "mean": "0.014"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_process_border",
+        "name": "Process at Border",
+        "priority": 2,
+        "condition": "queue(Border Queue).length > 0 AND idle(Border Officer).count > 0",
+        "effect": [
+          "ASSIGN(Border Queue, Border Officer)"
+        ],
+        "cSchedules": [
+          {
+            "eventId": "b_border_done",
+            "dist": "Exponential",
+            "distParams": {
+              "mean": "0.021"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_unofficial_cross",
+        "name": "Unofficial Cross",
+        "priority": 3,
+        "condition": "queue(Unofficial Crossing Queue).length >= 1",
+        "effect": [
+          "DELAY(Unofficial Crossing Queue)"
+        ],
+        "cSchedules": [
+          {
+            "eventId": "b_unofficial_crossed",
+            "dist": "Triangular",
+            "distParams": {
+              "min": "0.5",
+              "mode": "2",
+              "max": "5"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_register",
+        "name": "Register",
+        "priority": 1,
+        "condition": "queue(Registration Queue).length > 0 AND idle(Registration Officer).count > 0",
+        "effect": [
+          "ASSIGN(Registration Queue, Registration Officer)"
+        ],
+        "cSchedules": [
+          {
+            "eventId": "b_registration_done",
+            "dist": "Exponential",
+            "distParams": {
+              "mean": "0.083"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_medical_screen",
+        "name": "Medical Screen",
+        "priority": 1,
+        "condition": "queue(Medical Queue).length > 0 AND idle(Medical Staff).count > 0",
+        "effect": [
+          "ASSIGN(Medical Queue, Medical Staff)"
+        ],
+        "cSchedules": [
+          {
+            "eventId": "b_medical_done",
+            "dist": "Triangular",
+            "distParams": {
+              "min": "0.021",
+              "mode": "0.042",
+              "max": "0.083"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_camp_case",
+        "name": "Camp Case Management",
+        "priority": 1,
+        "condition": "queue(Transit Camp Queue).length > 0 AND idle(Caseworker).count > 0",
+        "effect": [
+          "ASSIGN(Transit Camp Queue, Caseworker)"
+        ],
+        "cSchedules": [
+          {
+            "eventId": "b_camp_done",
+            "dist": "Exponential",
+            "distParams": {
+              "mean": "10"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_resettlement",
+        "name": "Process Resettlement",
+        "priority": 0,
+        "condition": "queue(Resettlement Queue).length >= 1",
+        "effect": [
+          "DELAY(Resettlement Queue)"
+        ],
+        "cSchedules": [
+          {
+            "eventId": "b_resettlement_done",
+            "dist": "Exponential",
+            "distParams": {
+              "mean": "1"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      }
+    ],
+    "stateVariables": [],
+    "goals": [
+      {
+        "metric": "summary.avgWait",
+        "operator": "<",
+        "target": 1,
+        "label": "Mean border wait under 1 day",
+        "scope": {
+          "type": "queue",
+          "id": "q_border",
+          "name": "Border Queue"
+        }
+      },
+      {
+        "metric": "summary.avgWait",
+        "operator": "<",
+        "target": 30,
+        "label": "Mean camp wait under 30 days",
+        "scope": {
+          "type": "queue",
+          "id": "q_camp",
+          "name": "Transit Camp Queue"
+        }
+      },
+      {
+        "metric": "resource.utilisation",
+        "operator": "<",
+        "target": 0.9,
+        "label": "Registration Officer utilisation under 90%",
+        "scope": {
+          "type": "resource",
+          "id": "et_reg_officer",
+          "name": "Registration Officer"
+        }
+      }
+    ],
+    "containerTypes": [],
+    "experimentDefaults": {
+      "maxSimTime": 90,
+      "warmupPeriod": 5,
+      "replications": 15,
+      "liveDataMode": null,
+      "terminationCondition": null
+    },
+    "dataSources": [],
+    "sections": [
+      {
+        "id": "sec_arrival",
+        "name": "Displacement & Arrival",
+        "color": "#4A90D9",
+        "memberIds": [
+          "et_refugee",
+          "q_border",
+          "q_unofficial",
+          "q_minor",
+          "b_arrive_general",
+          "b_arrive_minor"
+        ]
+      },
+      {
+        "id": "sec_crossing",
+        "name": "Border Crossing",
+        "color": "#E74C3C",
+        "memberIds": [
+          "et_border_officer",
+          "c_process_border",
+          "b_border_done",
+          "c_process_minor",
+          "b_minor_border_done",
+          "c_unofficial_cross",
+          "b_unofficial_crossed"
+        ]
+      },
+      {
+        "id": "sec_registration",
+        "name": "Registration",
+        "color": "#27AE60",
+        "memberIds": [
+          "q_registration",
+          "et_reg_officer",
+          "c_register",
+          "b_registration_done"
+        ]
+      },
+      {
+        "id": "sec_health",
+        "name": "Medical Screening",
+        "color": "#E67E22",
+        "memberIds": [
+          "q_medical",
+          "et_medical_staff",
+          "c_medical_screen",
+          "b_medical_done"
+        ]
+      },
+      {
+        "id": "sec_camp",
+        "name": "Transit Camp & Resettlement",
+        "color": "#8E44AD",
+        "memberIds": [
+          "q_camp",
+          "q_resettlement",
+          "et_caseworker",
+          "c_camp_case",
+          "b_camp_done",
+          "c_resettlement",
+          "b_resettlement_done"
+        ]
+      }
+    ]
+  }
+}

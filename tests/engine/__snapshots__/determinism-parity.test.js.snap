@@ -2,19 +2,19 @@
 
 exports[`determinism parity — fixed-seed benchmark scenarios > ae-department (seed=687215104) 1`] = `
 {
-  "avgSojourn": 82.4331,
-  "avgSvc": 57.1515,
-  "avgWIP": 41.8244,
-  "avgWait": 27.1667,
-  "c_event_scans": 28989,
-  "c_events_fired": 2464,
-  "entities_created": 800,
-  "events_processed": 5666,
+  "avgSojourn": 79.0957,
+  "avgSvc": 55.6949,
+  "avgWIP": 40.536,
+  "avgWait": 25.6941,
+  "c_event_scans": 23010,
+  "c_events_fired": 2514,
+  "entities_created": 783,
+  "events_processed": 5749,
   "finalTime": 1440,
-  "max_future_event_list_size": 67,
+  "max_future_event_list_size": 66,
   "reneged": 0,
-  "served": 650,
-  "total": 733,
+  "served": 646,
+  "total": 716,
 }
 `;
 
@@ -60,7 +60,7 @@ exports[`determinism parity — fixed-seed benchmark scenarios > many-c-events-h
   "avgSvc": 1.2261,
   "avgWIP": 49.5838,
   "avgWait": 20.6245,
-  "c_event_scans": 11456,
+  "c_event_scans": 6136,
   "c_events_fired": 817,
   "entities_created": 881,
   "events_processed": 2511,
@@ -78,7 +78,7 @@ exports[`determinism parity — fixed-seed benchmark scenarios > many-c-events-m
   "avgSvc": 1.5,
   "avgWIP": 4.723,
   "avgWait": 5.9606,
-  "c_event_scans": 12521,
+  "c_event_scans": 881,
   "c_events_fired": 291,
   "entities_created": 301,
   "events_processed": 881,
@@ -195,6 +195,24 @@ exports[`determinism parity — fixed-seed benchmark scenarios > queue-depth-sca
   "reneged": 0,
   "served": 538,
   "total": 600,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > refugee-displacement-corridor (seed=9001) 1`] = `
+{
+  "avgSojourn": 36.8555,
+  "avgSvc": 12.8006,
+  "avgWIP": 6528.01,
+  "avgWait": 33.6564,
+  "c_event_scans": 528616,
+  "c_events_fired": 30813,
+  "entities_created": 17925,
+  "events_processed": 85081,
+  "finalTime": 90,
+  "max_future_event_list_size": 1308,
+  "reneged": 5503,
+  "served": 16,
+  "total": 17896,
 }
 `;
 
