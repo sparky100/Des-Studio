@@ -291,9 +291,9 @@ Queues are waiting areas for customers.
   - `FIFO` — first in, first out. The default and most appropriate for customer-facing queues.
   - `LIFO` — last in, first out. Appropriate for stack-based processes (e.g. picking from the top of a physical pile). **Rarely correct for customer queues — verify intent before using.**
   - `PRIORITY` — requires the customer entity type to have an attribute named **exactly** `priority` of type `number` (V4). Lower numeric value = higher priority. FIFO tiebreaker on equal values.
-  - `PRIORITY(attrName)` — uses the named attribute instead of `priority`, e.g. `"PRIORITY(severity)"`. The named attribute **must** exist on the customer entity type and be of type `number`. A missing or wrong-typed attribute silently falls back to FIFO. **JSON-import only — the UI discipline picker does not expose the `PRIORITY(attrName)` form.**
-  - `SPT` (Shortest Processing Time) — selects the entity with the smallest `serviceTime` or `processingTime` attribute value. The customer entity type **must** define an attribute named `serviceTime` or `processingTime` of type `number`; without it, discipline order is undefined. FIFO tiebreaker. **JSON-import only — not in the UI discipline picker.**
-  - `EDD` (Earliest Due Date) — selects the entity with the smallest `dueDate` attribute value. The customer entity type **must** define an attribute named `dueDate` of type `number`; without it, discipline order is undefined. FIFO tiebreaker. **JSON-import only — not in the UI discipline picker.**
+  - `PRIORITY(attrName)` — uses the named attribute instead of `priority`, e.g. `"PRIORITY(severity)"`. The named attribute **must** exist on the customer entity type and be of type `number`. A missing or wrong-typed attribute silently falls back to FIFO.
+  - `SPT` (Shortest Processing Time) — selects the entity with the smallest `serviceTime` or `processingTime` attribute value. The customer entity type **must** define an attribute named `serviceTime` or `processingTime` of type `number`; without it, discipline order is undefined. FIFO tiebreaker.
+  - `EDD` (Earliest Due Date) — selects the entity with the smallest `dueDate` attribute value. The customer entity type **must** define an attribute named `dueDate` of type `number`; without it, discipline order is undefined. FIFO tiebreaker.
 - `overflowDestination` (optional): name of another queue to receive overflow entities when this queue is full. UI-editable (appears when capacity is set). When the overflow destination is itself full, the engine recursively checks the next hop (and the one after that), exiting the system only if a cycle or dead end is reached — overflow chains (A→B→C) are checked at every hop, not just the first.
 - `balkProbability` (optional, number 0–1): the probability an entity declines to join this queue, checked **every time** an entity attempts to join it — via `ARRIVE`, `RELEASE`, conditional/probabilistic routing, batch/split, or preemption re-queue — not just on arrival. V21 validates the range.
 - `balkCondition` (optional): a **predicate object** `{ "variable", "operator", "value" }`, evaluated on every join attempt (same scope as `balkProbability` above). Use `"variable": "Queue.<queueName>.length"` to test queue occupancy. **Never a string** (CHK-011). Mutually combinable with `balkProbability` (both are checked if both are set).
@@ -852,7 +852,7 @@ Continuous-level resources (tanks, buffers, stock).
 
 > **Container vs state variable — when to use each:** Use a `containerType` when the resource has a physical level that is bounded, shared across entity interactions, and must be tracked continuously (e.g. a fuel tank, a blood inventory, a buffer). Use a **state variable** when you need a simple scalar counter or flag that is set/incremented by events and read in C-event conditions (e.g. a shift active flag, an entity count, a mode toggle). Containers expose `FILL`/`DRAIN` semantics with capacity clamping; state variables expose `SET()` arithmetic with no bounds enforcement.
 
-> **UI note:** Container types are currently configured via JSON import only — the UI editor tab is not yet active. Users cannot view or edit containers in the UI after import. When generating models with containers, note this limitation to users.
+> **UI note:** Container types are fully editable in the UI via the "Containers" tab — users can add, edit, and remove containers (`id`, `capacity`, `initialLevel`) after import.
 
 ```json
 {
@@ -1859,21 +1859,6 @@ Before finalising any model, verify that each queue stage is stable. A queue is 
 **Rule:** Always verify ρ < 1 for each service stage before generating the model. If a user's parameters imply ρ ≥ 1, flag this explicitly: *"With these parameters the queue is unstable — either increase servers (c), reduce arrival rate (λ), or decrease service time to bring ρ below 1."*
 
 For multi-stage pipelines, check each stage independently. Bottleneck identification (the stage with highest ρ) is often the most valuable insight from a DES model.
-
----
-
-### 13.18 JSON-Only Settings (no UI editor)
-
-Some model fields can only be set at model-generation time (via LLM or JSON import) and **cannot be changed in the UI** after import. When generating models that use these features, tell the user they cannot be adjusted via the UI:
-
-| Setting | Constraint | Workaround |
-|---|---|---|
-| `containerTypes[]` | Container types have no UI editor tab — they cannot be viewed, added, edited, or deleted in the UI | Re-import the model JSON with updated values |
-| `discipline: "SPT"` or `"EDD"` | The UI queue discipline picker only offers FIFO, LIFO, and Priority — SPT and EDD are JSON-import only | Re-import the model JSON to change |
-| `discipline: "PRIORITY(attrName)"` | The UI only supports the default `priority` attribute; custom attribute-name priority is JSON-import only | Re-import the model JSON to change |
-| `paramSource` on schedules | Live data parameter bindings have no UI editor | Re-import the model JSON to change |
-
-All other model settings (routing, probabilistic routing, balking, loop guards, shift schedules, failure models, state variables, goals, data sources, etc.) are editable via the UI after import.
 
 ---
 
