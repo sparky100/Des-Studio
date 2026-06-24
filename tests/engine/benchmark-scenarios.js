@@ -458,6 +458,16 @@ export function createBenchmarkScenarios({ includeStress = false } = {}) {
       replications: 1,
       category: "real-world",
     },
+    {
+      key: "refugee-displacement-corridor",
+      label: "Refugee displacement corridor (90-day, ~18k arrivals, 7 C-events)",
+      model: makeRefugeeDisplacementCorridorModel(),
+      seed: 9001,
+      maxSimTime: 90,
+      maxCycles: 250000,
+      replications: 1,
+      category: "real-world",
+    },
     ...(includeStress ? [{
       key: "large-queues-stress",
       label: "Stress case with large queues",
@@ -483,4 +493,16 @@ function makeAEModel() {
   throw new Error("Cannot find tests/benchmarks/ae-model.json — run from project root");
 }
 
-export { makeAEModel };
+function makeRefugeeDisplacementCorridorModel() {
+  const cwd = typeof process !== "undefined" ? process.cwd() : __dirname;
+  const candidatePaths = [
+    resolve(__dirname, "../benchmarks/refugee-displacement-model.json"),
+    resolve(cwd, "tests/benchmarks/refugee-displacement-model.json"),
+  ];
+  for (const p of candidatePaths) {
+    try { return JSON.parse(readFileSync(p, "utf-8")).model_json; } catch {}
+  }
+  throw new Error("Cannot find tests/benchmarks/refugee-displacement-model.json — run from project root");
+}
+
+export { makeAEModel, makeRefugeeDisplacementCorridorModel };

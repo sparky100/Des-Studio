@@ -156,6 +156,29 @@ function compileEffectImpactTemplate(effectStr) {
   return actions;
 }
 
+// Routing destinations (RELEASE's conditional `routing` / `probabilisticRouting`
+// branches, plus `defaultQueueName` and loop-guard `exitQueueName`) pick a queue
+// dynamically at runtime — the literal effect string never names it, so
+// compileEffectImpactTemplate can't see it. Without marking every statically-known
+// candidate destination dirty here, a C-event waiting on one of those queues can be
+// skipped by the dirty-set filter even though a routed entity just landed there.
+function compileEventImpactTemplate(event) {
+  const template = compileEffectImpactTemplate(event.effect);
+  const destinationQueues = [];
+  for (const branch of event.routing || []) {
+    if (branch?.queueName) destinationQueues.push(branch.queueName);
+  }
+  for (const branch of event.probabilisticRouting || []) {
+    if (branch?.queueName) destinationQueues.push(branch.queueName);
+  }
+  if (event.defaultQueueName) destinationQueues.push(event.defaultQueueName);
+  if (event.loopConfig?.exitQueueName) destinationQueues.push(event.loopConfig.exitQueueName);
+  if (destinationQueues.length > 0) {
+    template.push({ kind: "queueOnly", queueNames: destinationQueues });
+  }
+  return template;
+}
+
 function deriveDirtyFromTemplate(template, event, ctx) {
   const dirty = createDirtySet();
   const currentCustomer = () => {
@@ -593,11 +616,11 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       ...event,
       _compiledCondition: compilePredicate(event.condition),
       _conditionDeps: getPredicateDependencies(event.condition),
-      _effectImpactTemplate: compileEffectImpactTemplate(event.effect),
+      _effectImpactTemplate: compileEventImpactTemplate(event),
     }));
   const enableFilteredPhaseC = sortedCEvents.length >= 8;
   const bEventImpactTemplates = enableFilteredPhaseC
-    ? new Map((runtimeModel.bEvents || []).map(event => [event.id, compileEffectImpactTemplate(event.effect)]))
+    ? new Map((runtimeModel.bEvents || []).map(event => [event.id, compileEventImpactTemplate(event)]))
     : null;
   const compiledTerminationCondition = terminationCondition ? compilePredicate(terminationCondition) : null;
   const predicateState = {
@@ -1118,7 +1141,14 @@ const cycleLog = [];
         ctx.clock = clock;
         const { msgs, felEntries } = fireCEvent(ev, ctx);
         if (enableFilteredPhaseC) {
-          phaseCDirty.all = true;
+          mergeDirtyInto(
+            phaseCDirty,
+            deriveDirtyFromTemplate(
+              ev._effectImpactTemplate,
+              { ...ev, _contextCustId: ctx._lastCustId ?? ev._contextCustId, _contextSrvId: ctx._lastSrvId ?? ev._contextSrvId },
+              ctx
+            )
+          );
         }
         for (const entry of felEntries) fel.push(entry);
         if (felEntries.length) fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
