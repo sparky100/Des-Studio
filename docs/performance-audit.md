@@ -348,3 +348,154 @@ audit and was not touched.
 The 10 analytical performance/correctness benchmarks in
 `tests/engine/benchmarks/` (a stricter, more authoritative subset run via
 `npm run bench`) all passed — see §2.
+
+---
+
+## 8. Implementation Follow-up (Sprint 1: recommendations #1 and #2)
+
+**Status:** Recommendation #1 **implemented**, in a corrected form (see
+below). Recommendation #2 **attempted, measured, and reverted** — it made
+the flagship stress profile slower, not faster, and the gap survived three
+rounds of optimization. This section documents both, with evidence, so the
+"expected impact" column in §6 isn't taken as gospel without a check against
+what actually happened when measured.
+
+### 8.1 Recommendation #1 — entity-pool prune threshold
+
+The audit's literal suggestion ("lower `PRUNE_MIN_LIVE`... or sweep more
+relative to live population") is ambiguous about *which* of the trigger's
+two constants to change. The naive reading — lower both `PRUNE_MIN_LIVE`
+(1000→64) **and** `PRUNE_INTERVAL_CYCLES` (500→32), mirroring the ratio
+suggested by example values — was implemented first and benchmarked. It
+helped the `ae-department` profile (~16% faster) but **regressed**
+`refugee-displacement-corridor` by ~5-9%. Root cause: `PRUNE_INTERVAL_CYCLES`
+is what actually gates how often the sweep's O(live) cost (including a full
+FEL filter pass) runs; on a 90-day sustained-high-population model, cutting
+it ~15× multiplies that recurring cost far more than the smaller ceiling
+saves on a profile that almost never drops back below the old 1000-entry
+threshold anyway.
+
+**Fix actually shipped:** decouple the two constants. Lower only
+`PRUNE_MIN_LIVE` (1000→64); leave `PRUNE_INTERVAL_CYCLES` at its original
+500-cycle cadence. This keeps the sweep's *call frequency* unchanged from
+baseline while still shrinking the sawtooth's ceiling — which is the actual
+mechanism behind the win (cheaper per-cycle `entities`-shaped hot-path scans
+between sweeps), not sweep frequency itself. Measured as a clean win on
+*both* flagship profiles, with no corresponding regression anywhere else in
+the 13-profile suite (see §8.3 table).
+
+### 8.2 Recommendation #2 — binary min-heap FEL (reverted)
+
+A binary min-heap keyed on `scheduledTime` (`src/engine/fel-heap.js`,
+`siftUp`/`siftDown`/`heapify`, O(log F) push/pop) was implemented and fully
+wired into `src/engine/index.js` in place of the array+`Array.sort()` FEL,
+with a determinism-preserving insertion-sequence tie-break (a bare heap has
+no stability guarantee, unlike the stable `Array.sort()` it replaced — this
+was caught by `tests/engine/determinism-parity.test.js` failing on
+exact-simultaneous-event models, a real regression on the first attempt).
+All 16 new unit tests, `npm run bench`, and `determinism-parity` passed
+after the tie-break fix.
+
+**It was still measurably slower on the flagship benchmark.** Tight,
+interleaved A/B runs (alternating heap vs. baseline on the same machine
+state, to control for this environment's run-to-run variance) on
+`refugee-displacement-corridor` consistently showed the heap **25-40%
+slower**, even after three further optimization passes:
+
+1. Switched the tie-break tag from `Object.defineProperty` (forces V8
+   dictionary-mode property storage) to a `WeakMap` — measurable but small
+   improvement.
+2. Switched `siftUp`/`siftDown`'s array-destructuring swap to explicit
+   temp-variable swap (avoids a per-swap array-literal allocation) — no
+   meaningful change.
+3. Found and fixed a real bug in the call site: `pruneStaleEntities` was
+   calling `fel.toArray()` (an O(F) copy of the heap's backing array)
+   **unconditionally on every periodic check**, even when nothing ended up
+   being pruned — the original array-based code paid zero cost in that case.
+   Added a cheap O(N)-over-`entities`-only early-exit check before paying
+   for the copy. This was the single biggest fix of the three (closed most
+   of the gap) but did not close all of it.
+
+**Conclusion: rejected.** Even after all three fixes, the heap remained
+slower than the original array+sort on the one profile that was supposed to
+be its strongest case (F peaks at 1,308). Working hypothesis: at the FEL
+sizes this engine actually exercises — even at its stress-test extreme —
+V8's native `Array.sort()`/`Array.filter()` are cache-friendly, linear-scan,
+heavily JIT-tuned C++ routines, while a hand-rolled binary heap pays
+random-access pointer-chasing on every `siftUp`/`siftDown` plus a JS-closure
+call per comparison. The asymptotic argument (O(log F) vs. O(F log F)) is
+real, but the crossover point where it pays for itself appears to be well
+above F=1,308 — not reached by any model in this codebase's benchmark
+corpus, real-world or stress. `src/engine/fel-heap.js` and its test file
+were removed; the array-based FEL is unchanged from baseline.
+
+This is itself useful evidence for §3/§6's framing: the heap "becomes worth
+doing if/when FEL sizes in the hundreds-thousands become a supported,
+expected use case" — measured now, that crossover is further out than the
+audit's effort/impact estimate assumed. Re-attempt only if a future model
+class pushes F substantially past 1,308, and re-measure rather than
+re-assuming the win.
+
+### 8.3 Before/after — `npm run bench:timing` (13 profiles, no `--stress`)
+
+All values single-replication, same machine, back-to-back runs (baseline =
+`git stash` to the pre-sprint commit, fixed = this sprint's change):
+
+| Profile | wall_clock_ms (before → after) | events/sec (before → after) |
+|---|---|---|
+| M/M/1 small | 26 → 26 | 12,192 → 12,192 |
+| M/M/1 high utilisation | 58 → 51 | 27,724 → 31,529 |
+| Multi-stage post office | 34 → 29 | 20,206 → 23,690 |
+| Glasgow train plan | 3 → 3 | 15,000 → 15,000 |
+| Stadium grouped spectators | 3 → 3 | 18,333 → 18,333 |
+| Many false C-events | 136 → 135 | 6,478 → 6,526 |
+| Many active C-events | 160 → 117 | 15,694 → 21,462 |
+| Queue-depth scaling (light) | 30 → 30 | 49,033 → 49,033 |
+| Queue-depth scaling (medium) | 47 → 42 | 35,681 → 39,929 |
+| Queue-depth scaling (heavy) | 44 → 37 | 41,023 → 48,784 |
+| **A&E department** (real-world) | 397 → 348 | 14,481 → 16,520 |
+| **Refugee displacement corridor** (real-world, stress) | 80,665 → 75,316 | 1,055 → 1,130 |
+
+No profile regressed; several improved meaningfully (the ones with non-trivial
+entity populations — small/trivial profiles are within noise, as expected,
+since they never approach the old 1,000-entry threshold either way).
+
+Single-rep numbers carry run-to-run noise on this machine. Multi-replication
+averages (20× for `ae-department`, 4× for `refugee-displacement-corridor`,
+freshly measured) are more reliable and show a consistent ~14-18% wall-time
+improvement on both flagship profiles:
+
+| Profile | avg wall_ms before | avg wall_ms after | improvement |
+|---|---|---|---|
+| A&E department (20 reps) | 339.4 | 277.6 | ~18% faster |
+| Refugee displacement corridor (4 reps) | ~72,500 | ~65,700 | ~9-15% faster |
+
+**Correctness:** `npm run bench` (10/10) and `npx tsc --noEmit` both clean
+after the change. Full `tests/engine/` suite: same 5 pre-existing failing
+files as on a clean tree (`resolve-inline-schedules`, `run-admission`,
+`single-run-control`, `three-phase`, `time-varying` — all confirmed via
+`git stash` to fail identically without this change) plus the known flaky
+`distribution-fitting` test (passes in isolation) — no new failures.
+`determinism-parity` (14/14) and `pruning` (8/8) pass, including the
+bit-identical seeded-reproducibility benchmark.
+
+### 8.4 Is this optimal?
+
+**No** — and it shouldn't be read as a final answer to "is the FEL/pruning
+subsystem as fast as it can be." It's a measured, low-risk, net-positive
+change with no correctness cost, not a proof of optimality. What's known
+after this sprint:
+
+- The `refugee-displacement-corridor` profile remains the slowest in the
+  suite by 1-2 orders of magnitude (queue-depth- and FEL-size-driven, not
+  fixed by this sprint) — that's inherent to a 90-day, ~18k-arrival, deep-
+  backlog model, not a bug.
+- The binary-heap FEL was a real, reasonable idea that real measurement
+  rejected at this engine's actual scale — see §8.2. A *d*-ary heap (fewer
+  comparisons per level, better cache locality than binary) or a batched
+  "pop all due in one pass" heap variant are the more promising next
+  attempts if FEL-size growth ever becomes the bottleneck again, but neither
+  has been tried, and neither should be assumed to help without the same
+  measure-first discipline applied here.
+- Recommendations #3 (RNG/CRN stream isolation) and #4 (intermediate
+  benchmark profile) from §6 remain untouched — out of this sprint's scope.
