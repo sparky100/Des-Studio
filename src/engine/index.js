@@ -569,7 +569,15 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let _completed = [];
   const allEntitiesForStats = () => (_completed.length ? entities.concat(_completed) : entities);
   // Below this many live entities, a sweep isn't worth its own O(live) cost.
-  const PRUNE_MIN_LIVE = 1000;
+  // Kept low (rather than the old 1,000) so `entities` tracks live population
+  // instead of sawtoothing up to a high ceiling between sweeps — that ceiling
+  // is what hot-path scans over `entities` pay for on every cycle, not the
+  // sweep itself. PRUNE_INTERVAL_CYCLES is left unchanged: it's what actually
+  // gates how often the O(live) sweep (and its FEL filter pass) runs, and on
+  // long sustained-high-population runs (e.g. the refugee-displacement-
+  // corridor benchmark) lowering it too multiplies that O(live) cost far more
+  // than the smaller ceiling saves — measured as a net regression when tried.
+  const PRUNE_MIN_LIVE = 64;
   // Cheap periodic trigger — checking "what fraction is terminal" before
   // deciding to sweep would itself be an O(N) scan, defeating the purpose.
   const PRUNE_INTERVAL_CYCLES = 500;
