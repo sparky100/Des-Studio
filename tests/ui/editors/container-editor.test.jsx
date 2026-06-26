@@ -59,4 +59,29 @@ describe('ContainerEditor', () => {
     expect(screen.getAllByText(/FILL/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/DRAIN/).length).toBeGreaterThan(0);
   });
+
+  it('shows the unbounded checkbox checked when capacity is empty', () => {
+    const containers = [{ id: 'Inventory', capacity: '', initialLevel: '0' }];
+    render(<ContainerEditor containers={containers} onChange={vi.fn()} />);
+    expect(screen.getByRole('checkbox', { name: /unbounded/i })).toBeChecked();
+    expect(screen.getByPlaceholderText(/unbounded/i)).toBeDisabled();
+  });
+
+  it('clears capacity when the unbounded checkbox is checked', () => {
+    const onChange = vi.fn();
+    const containers = [{ id: 'Tank', capacity: '500', initialLevel: '0' }];
+    render(<ContainerEditor containers={containers} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: /unbounded/i }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0][0].capacity).toBe('');
+  });
+
+  it('restores a default capacity when the unbounded checkbox is unchecked', () => {
+    const onChange = vi.fn();
+    const containers = [{ id: 'Tank', capacity: '', initialLevel: '0' }];
+    render(<ContainerEditor containers={containers} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: /unbounded/i }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0][0].capacity).toBe('1000');
+  });
 });
