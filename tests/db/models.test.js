@@ -25,6 +25,7 @@ import {
   listSweeps,
   deleteSweep,
   getRun,
+  updateModelTags,
 } from '../../src/db/models.js';
 import { supabase } from '../../src/db/supabase.js';
 
@@ -1657,6 +1658,75 @@ describe('Sprint 71 — persistence layer', () => {
         entity_types: [], b_events: [], c_events: [], queues: [],
       });
       expect(result.containerTypes).toEqual([]);
+    });
+  });
+
+  // ── Model Library tags — round-trip + scoped update helper ───────────────
+  describe('round-trip — tags survive saveModel + norm()', () => {
+    it('the insert payload preserves tags as a top-level column', async () => {
+      const tags = ['logistics', 'high-volume'];
+      const model = {
+        name: 'Tagged RT Model',
+        entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
+        tags,
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'tag-rt-id', name: model.name, owner_id: 'u1' }, error: null,
+      });
+      await saveModel(model, 'u1');
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.tags).toEqual(tags);
+    });
+
+    it('tags defaults to [] when not supplied', async () => {
+      const model = {
+        name: 'Untagged RT Model',
+        entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'no-tag-id', name: model.name, owner_id: 'u1' }, error: null,
+      });
+      await saveModel(model, 'u1');
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.tags).toEqual([]);
+    });
+
+    it('norm() preserves tags from a DB row', () => {
+      const tags = ['logistics', 'high-volume'];
+      const result = norm({
+        id: 'm-tag-rt', name: 'Tagged RT Model',
+        entity_types: [], b_events: [], c_events: [], queues: [], tags,
+        model_json: {},
+      });
+      expect(result.tags).toEqual(tags);
+    });
+  });
+
+  describe('updateModelTags', () => {
+    it('updates the tags column scoped to id and owner_id', async () => {
+      supabase.from('des_models').update.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+
+      const result = await updateModelTags('model-1', 'u1', ['alpha', 'beta']);
+
+      expect(supabase.from).toHaveBeenCalledWith('des_models');
+      expect(supabase.from('des_models').update).toHaveBeenCalledWith({ tags: ['alpha', 'beta'] });
+      expect(supabase.from('des_models').eq).toHaveBeenNthCalledWith(1, 'id', 'model-1');
+      expect(supabase.from('des_models').eq).toHaveBeenNthCalledWith(2, 'owner_id', 'u1');
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('coerces a non-array tags argument to []', async () => {
+      supabase.from('des_models').update.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+
+      await updateModelTags('model-1', 'u1', null);
+
+      expect(supabase.from('des_models').update).toHaveBeenCalledWith({ tags: [] });
     });
   });
 
