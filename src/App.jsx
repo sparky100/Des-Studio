@@ -436,13 +436,15 @@ export default function App({ onThemeChange }){
   },[uid]);
 
   const handleUpdateModelTags = useCallback(async (model, nextTags) => {
-    if(!model||!uid)return;
+    if(!model||!uid)return{ok:false,error:"Not signed in."};
     setActionError('');
     try{
       await updateModelTags(model.id, uid, nextTags);
       setModels(current=>current.map(m=>m.id===model.id ? { ...m, tags: nextTags } : m));
+      return{ok:true};
     }catch(e){
       setActionError(e.message);
+      return{ok:false,error:e.message};
     }
   },[uid]);
 
@@ -689,6 +691,12 @@ export default function App({ onThemeChange }){
         userId={uid ?? null}
         currentPage={openId ? `model/${openId}` : shareToken ? `share/${shareToken}` : 'library'}
       />
+      {actionError && (
+        <div role="alert" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'8px 20px',background:C.red+'18',borderBottom:`1px solid ${C.red}44`,color:C.red,fontFamily:FONT,fontSize:12}}>
+          <span>{actionError}</span>
+          <button type="button" aria-label="Dismiss error" onClick={()=>setActionError('')} style={{background:'none',border:'none',color:C.red,cursor:'pointer',fontSize:14,lineHeight:1}}>✕</button>
+        </div>
+      )}
       <ModelLibrary
         modelsLoading={loading}
         signedInThisSession={signedInThisSession && !welcomeShownRef.current}

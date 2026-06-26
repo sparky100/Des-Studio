@@ -165,14 +165,15 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsC
             placeholder="+ tag"
             aria-label={`Add tag to ${model.name}`}
             onClick={e => e.stopPropagation()}
-            onKeyDown={e => {
+            onKeyDown={async e => {
               if ((e.key === "Enter" || e.key === ",") && e.target.value.trim()) {
                 e.stopPropagation();
-                const tag = e.target.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
-                if (!tag) { e.target.value = ""; return; }
+                const inputEl = e.target;
+                const tag = inputEl.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+                if (!tag) { inputEl.value = ""; return; }
                 const next = [...new Set([...cardTags, tag])];
-                onTagsChange(model, next);
-                e.target.value = "";
+                const result = await onTagsChange(model, next);
+                if (result?.ok !== false) inputEl.value = "";
               }
             }}
             style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 8px", outline: "none", width: 56 }}
