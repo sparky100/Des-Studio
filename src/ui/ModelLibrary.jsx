@@ -25,7 +25,8 @@ function filterAndSort(models, { search, sort, tags }) {
   const q = search.trim().toLowerCase();
   if (q) result = result.filter(m =>
     m.name.toLowerCase().includes(q) ||
-    (m.description || "").toLowerCase().includes(q)
+    (m.description || "").toLowerCase().includes(q) ||
+    (m.tags || []).some(t => t.includes(q))
   );
   if (tags.length > 0) result = result.filter(m =>
     (m.tags || []).some(t => tags.includes(t))
@@ -113,7 +114,7 @@ function FilterEmpty({ onClear }) {
 
 // --- ModelCard ---
 
-export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, profiles = [], currentUserId, currentVersion, scenarioCount = 0, isScenario = false }) => {
+export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsChange, profiles = [], currentUserId, currentVersion, scenarioCount = 0, isScenario = false }) => {
   const { C, FONT } = useTheme();
   const owner = (profiles || []).find(p => p.id === model.owner_id) || null;
   const fmtDate = iso => { try { return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { return ''; } };
@@ -149,7 +150,35 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, profile
         </div>
       </div>
       <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>{model.description}</div>
-      {visibleTags.length > 0 && (
+      {isOwner && onTagsChange ? (
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }} onClick={e => e.stopPropagation()}>
+          {cardTags.map(tag => (
+            <span key={tag} role="button" tabIndex={0} aria-label={`Remove tag ${tag}`} title="Click to remove tag"
+              onClick={e => { e.stopPropagation(); onTagsChange(model, cardTags.filter(t => t !== tag)); }}
+              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onTagsChange(model, cardTags.filter(t => t !== tag)); } }}
+              style={{ padding: "2px 8px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontFamily: FONT, fontSize: 10, cursor: "pointer", lineHeight: 1.4 }}>
+              {tag} ×
+            </span>
+          ))}
+          <input
+            type="text"
+            placeholder="+ tag"
+            aria-label={`Add tag to ${model.name}`}
+            onClick={e => e.stopPropagation()}
+            onKeyDown={e => {
+              if ((e.key === "Enter" || e.key === ",") && e.target.value.trim()) {
+                e.stopPropagation();
+                const tag = e.target.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+                if (!tag) { e.target.value = ""; return; }
+                const next = [...new Set([...cardTags, tag])];
+                onTagsChange(model, next);
+                e.target.value = "";
+              }
+            }}
+            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 8px", outline: "none", width: 56 }}
+          />
+        </div>
+      ) : visibleTags.length > 0 && (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
           {visibleTags.map(tag => (
             <button key={tag} type="button" aria-label={`Filter by tag ${tag}`}
@@ -400,7 +429,7 @@ const FirstRunPanel = ({ onCreateBlank, onBrowseTemplates }) => {
 
 function ModelGrid({
   models, tabKey, filter, onFilterChange, source, emptyIcon, emptyMsg, firstRun,
-  onOpenModel, onDeleteModel, onCopyModel, onTagClick,
+  onOpenModel, onDeleteModel, onCopyModel, onTagClick, onTagsChange,
   currentUserId, profiles,
   onCreateBlank, onBrowseTemplates,
 }) {
@@ -424,6 +453,7 @@ function ModelGrid({
               onDelete={onDeleteModel}
               onCopy={onCopyModel}
               onTagClick={onTagClick}
+              onTagsChange={onTagsChange}
               currentUserId={currentUserId}
               profiles={profiles}
               currentVersion={m.latestVersion}
@@ -440,6 +470,7 @@ export function ModelLibrary({
   myModels, pubModels, communityModels,
   profiles, currentUserId,
   onOpenModel, onDeleteModel, onCopyModel, onStartTemplate,
+  onTagsChange,
   onCreateNewModel,
   onImportFile,
   onPasteJsonImport,
@@ -582,6 +613,7 @@ export function ModelLibrary({
           emptyIcon="📁" emptyMsg="No models yet."
           onOpenModel={onOpenModel} onDeleteModel={onDeleteModel} onCopyModel={onCopyModel}
           onTagClick={tag => addTagFilter("my", tag)}
+          onTagsChange={onTagsChange}
           currentUserId={currentUserId} profiles={profiles}
           onCreateBlank={() => setShowNew(true)} onBrowseTemplates={() => setTab("templates")} />
       )}

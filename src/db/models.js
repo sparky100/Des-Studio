@@ -160,6 +160,7 @@ function toRow(model, userId) {
     c_events:        model.cEvents        || [],
     queues:          model.queues         || [],
     goals:           model.goals          || [],
+    tags:            model.tags           || [],
     model_json:      modelJsonFromModel(model),
     owner_id:        userId,
   };
@@ -350,6 +351,16 @@ export async function setAccess(id, access, userId) {
     .eq("id", id)
     .eq("owner_id", userId);
   if (error) throw error;
+}
+
+export async function updateModelTags(modelId, userId, tags) {
+  const { error } = await supabase
+    .from("des_models")
+    .update({ tags: Array.isArray(tags) ? tags : [] })
+    .eq("id", modelId)
+    .eq("owner_id", userId);
+  if (error) throw error;
+  return { ok: true };
 }
 
 // ── Simulation run history ────────────────────────────────────────────────────

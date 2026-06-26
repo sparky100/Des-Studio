@@ -11,7 +11,8 @@ import { fetchModels, fetchProfiles,
          fetchRunStatsForModels,
          validateDbSchema,
          fetchUserSettings,
-         getPlatformConfig }              from "./db/models.js";
+         getPlatformConfig,
+         updateModelTags }              from "./db/models.js";
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
 import { GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
@@ -434,6 +435,17 @@ export default function App({ onThemeChange }){
     setModels(current=>current.filter(m=>m.id!==model.id));
   },[uid]);
 
+  const handleUpdateModelTags = useCallback(async (model, nextTags) => {
+    if(!model||!uid)return;
+    setActionError('');
+    try{
+      await updateModelTags(model.id, uid, nextTags);
+      setModels(current=>current.map(m=>m.id===model.id ? { ...m, tags: nextTags } : m));
+    }catch(e){
+      setActionError(e.message);
+    }
+  },[uid]);
+
   const handleCopyModel = useCallback(async (model) => {
     if(!model||!uid)return;
     setLoading(true);setActionError('');
@@ -690,6 +702,7 @@ export default function App({ onThemeChange }){
         onOpenModel={handleOpenModel}
         onDeleteModel={handleDeleteModel}
         onCopyModel={handleCopyModel}
+        onTagsChange={handleUpdateModelTags}
         onStartTemplate={handleStartTemplate}
         onCreateNewModel={async (name, desc, modelData, options = {}) => {
           const nextOptions = {
