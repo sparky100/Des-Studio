@@ -1,5 +1,6 @@
 import { describe, test, expect, vi } from 'vitest';
 import { evalCondition, evaluatePredicate, buildConditionTokens, compilePredicate, getPredicateDependencies } from '../../src/engine/conditions.js';
+import { buildEngine } from '../../src/engine/index.js';
 
 // Tests for the safe JSON predicate evaluator (Addition 1 §4).
 // These tests FAIL on the unmodified codebase (evaluatePredicate does not exist).
@@ -211,6 +212,42 @@ describe('evaluatePredicate — safe JSON predicate evaluator', () => {
     )).toBe(false);
   });
 
+  // ── container() token resolution ──────────────────────────────────────────────
+
+  test('resolves container(Id).level from state.__container_<id>', () => {
+    expect(evaluatePredicate(
+      { variable: 'container(Tank).level', operator: '>=', value: 10 },
+      { __container_Tank: 15 }
+    )).toBe(true);
+  });
+
+  test('resolves container(Id).capacity, defaulting to Infinity when unset', () => {
+    expect(evaluatePredicate(
+      { variable: 'container(Tank).capacity', operator: '>', value: 999999 },
+      { __container_Tank: 15 }
+    )).toBe(true);
+  });
+
+  test('resolves container(Id).capacity from state.__containerCap_<id> when set', () => {
+    expect(evaluatePredicate(
+      { variable: 'container(Tank).capacity', operator: '==', value: 1000 },
+      { __containerCap_Tank: 1000 }
+    )).toBe(true);
+  });
+
+  test('resolves container(Id).min and container(Id).max', () => {
+    const state = { __containerMin_Tank: 5, __containerMax_Tank: 95 };
+    expect(evaluatePredicate({ variable: 'container(Tank).min', operator: '==', value: 5 }, state)).toBe(true);
+    expect(evaluatePredicate({ variable: 'container(Tank).max', operator: '==', value: 95 }, state)).toBe(true);
+  });
+
+  test('undeclared container resolves to undefined, not a thrown error', () => {
+    expect(evaluatePredicate(
+      { variable: 'container(Ghost).level', operator: '==', value: 0 },
+      {}
+    )).toBe(false);
+  });
+
   // ── Compound predicates ───────────────────────────────────────────────────────
 
   test('AND compound: true when all clauses are true', () => {
@@ -378,6 +415,23 @@ describe('compilePredicate — reusable predicate evaluators', () => {
     expect(Array.from(deps.builtins)).toEqual(['served']);
     expect(Array.from(deps.stateVars)).toEqual(['batchCount']);
   });
+
+  test('captures container dependencies and not as unknown', () => {
+    const deps = getPredicateDependencies('container(Tank).level >= 10');
+    expect(Array.from(deps.containers)).toEqual(['tank']);
+    expect(deps.unknown).toBe(false);
+  });
+
+  test('container dependency bucket merges across AND/OR clauses', () => {
+    const deps = getPredicateDependencies({
+      operator: 'AND',
+      clauses: [
+        { variable: 'container(Tank).level', operator: '>=', value: 10 },
+        { variable: 'container(Buffer).capacity', operator: '>', value: 0 },
+      ],
+    });
+    expect(Array.from(deps.containers).sort()).toEqual(['buffer', 'tank']);
+  });
 });
 
 describe('evalCondition — legacy condition string evaluator', () => {
@@ -412,6 +466,63 @@ describe('buildConditionTokens — token list for Condition Builder UI', () => {
     const clockIdx = tokens.findIndex(t => t.value === 'clock');
     const servedIdx = tokens.findIndex(t => t.value === 'served');
     expect(clockIdx).toBeLessThan(servedIdx);
+  });
+
+  test('does not throw when containers param is omitted', () => {
+    expect(() => buildConditionTokens([], [], [])).not.toThrow();
+  });
+
+  test('emits container(Id).level and .capacity tokens for each declared container', () => {
+    const tokens = buildConditionTokens([], [], [], [{ id: 'Tank' }, { id: 'Buffer' }]);
+    expect(tokens.some(t => t.value === 'container(Tank).level')).toBe(true);
+    expect(tokens.some(t => t.value === 'container(Tank).capacity')).toBe(true);
+    expect(tokens.some(t => t.value === 'container(Buffer).level')).toBe(true);
+    expect(tokens.some(t => t.value === 'container(Buffer).capacity')).toBe(true);
+  });
+});
+
+describe('container(Id).level — end-to-end blocking C-event', () => {
+  test('DRAIN only fires once a condition referencing container(Tank).level is satisfied', () => {
+    const model = {
+      entityTypes: [
+        { id: 'C', name: 'Customer', role: 'customer', attrDefs: [] },
+        { id: 'S', name: 'Server',   role: 'server',   count: '1', attrDefs: [] },
+      ],
+      queues: [{ id: 'q', name: 'Queue', customerType: 'Customer', discipline: 'FIFO' }],
+      stateVariables: [],
+      containerTypes: [{ id: 'Tank', capacity: '1000', initialLevel: '0' }],
+      bEvents: [
+        { id: 'arr',  name: 'Arrive',   scheduledTime: '1', effect: 'ARRIVE(Customer, Queue)', schedules: [] },
+        { id: 'fill', name: 'Fill',     scheduledTime: '3', effect: 'FILL(Tank, 20)', schedules: [] },
+        { id: 'done', name: 'Complete', scheduledTime: '9999', effect: 'COMPLETE()', schedules: [] },
+      ],
+      cEvents: [
+        {
+          // Condition only holds at exactly 20 (the post-FILL level) — after one
+          // DRAIN(10) the level (10) no longer satisfies ">= 20", so the guard
+          // naturally prevents repeat firing within this same test, without needing
+          // to special-case engine pass-counting.
+          id: 'drain', name: 'Drain', priority: 1,
+          condition: 'container(Tank).level >= 20',
+          effect: 'DRAIN(Tank, 10)',
+          cSchedules: [],
+        },
+      ],
+      maxSimTime: 10,
+    };
+    const engine = buildEngine(model, 42, 0, 10);
+    let sawNonZeroBeforeFill = false;
+    let snap;
+    while (true) {
+      const step = engine.step();
+      snap = step.snap;
+      if (snap.clock < 3 && (snap.containers?.Tank?.level ?? 0) !== 0) sawNonZeroBeforeFill = true;
+      if (step.done) break;
+    }
+    // DRAIN cannot have fired before the FILL at t=3 raised the level to 20.
+    expect(sawNonZeroBeforeFill).toBe(false);
+    // After FILL(20) then a single DRAIN(10): level settles at 10.
+    expect(snap.containers?.Tank?.level).toBe(10);
   });
 });
 

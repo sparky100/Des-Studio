@@ -338,4 +338,65 @@ describe("visual designer graph operations", () => {
       expect.objectContaining({ nodeId: "queue:main-q", message: expect.stringContaining("no downstream activity") }),
     ]));
   });
+
+  it("addVisualNode adds a container with an id that avoids existing container ids", () => {
+    const modelWithContainer = { ...baseModel, containerTypes: [{ id: "container-1", capacity: "100", initialLevel: "0" }] };
+    const next = addVisualNode(modelWithContainer, "container");
+
+    expect(next.containerTypes).toHaveLength(2);
+    const added = next.containerTypes.find(ct => ct.id !== "container-1");
+    expect(added).toEqual(expect.objectContaining({ id: "container-2", capacity: null, initialLevel: 0 }));
+    expect(deriveGraphFromModel(next).nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "container:container-2", type: "container", refId: "container-2" }),
+    ]));
+  });
+
+  it("validateVisualConnection rejects any connection touching a container node", () => {
+    const modelWithContainer = { ...baseModel, containerTypes: [{ id: "Tank", capacity: "100", initialLevel: "0" }] };
+    const graph = deriveGraphFromModel(modelWithContainer);
+
+    expect(validateVisualConnection(graph, "container:Tank", "queue:main-q")).toEqual(expect.objectContaining({ ok: false }));
+    expect(validateVisualConnection(graph, "queue:main-q", "container:Tank")).toEqual(expect.objectContaining({ ok: false }));
+    expect(validateVisualConnection(graph, "container:Tank", "container:Tank")).toEqual(expect.objectContaining({ ok: false }));
+  });
+
+  it("updateVisualNode renames a container id and propagates the rename into FILL/DRAIN/container() references", () => {
+    const modelWithContainer = {
+      ...baseModel,
+      containerTypes: [{ id: "Tank", capacity: "1000", initialLevel: "500" }],
+      bEvents: [
+        ...baseModel.bEvents,
+        { id: "fill", name: "Fill", scheduledTime: "2", effect: "FILL(Tank, 100)", schedules: [] },
+      ],
+      cEvents: [
+        ...baseModel.cEvents,
+        { id: "drain", name: "Drain", priority: 2, condition: "container(Tank).level >= 10", effect: "DRAIN(Tank, 10)", cSchedules: [] },
+      ],
+    };
+    const graph = deriveGraphFromModel(modelWithContainer);
+    const containerNode = graph.nodes.find(node => node.id === "container:Tank");
+    expect(containerNode).toBeDefined();
+
+    const next = updateVisualNode(modelWithContainer, containerNode, { id: "Reservoir" });
+
+    expect(next.containerTypes.find(ct => ct.id === "Reservoir")).toBeDefined();
+    expect(next.containerTypes.find(ct => ct.id === "Tank")).toBeUndefined();
+    expect(next.bEvents.find(event => event.id === "fill").effect).toBe("FILL(Reservoir, 100)");
+    expect(next.cEvents.find(event => event.id === "drain")).toEqual(expect.objectContaining({
+      condition: "container(Reservoir).level >= 10",
+      effect: "DRAIN(Reservoir, 10)",
+    }));
+  });
+
+  it("updateVisualNode updates container capacity and initialLevel without renaming", () => {
+    const modelWithContainer = { ...baseModel, containerTypes: [{ id: "Tank", capacity: "1000", initialLevel: "500" }] };
+    const graph = deriveGraphFromModel(modelWithContainer);
+    const containerNode = graph.nodes.find(node => node.id === "container:Tank");
+
+    const next = updateVisualNode(modelWithContainer, containerNode, { capacity: "2000", initialLevel: "750" });
+
+    expect(next.containerTypes.find(ct => ct.id === "Tank")).toEqual(expect.objectContaining({
+      id: "Tank", capacity: "2000", initialLevel: "750",
+    }));
+  });
 });

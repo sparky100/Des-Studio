@@ -339,3 +339,41 @@ describe("dagre layout", () => {
     assertNodesHaveFiniteCoords({ nodes: others });
   });
 });
+
+describe("deriveGraphFromModel — container nodes", () => {
+  it("emits one container node per declared container, with zero edges", () => {
+    const model = {
+      ...minimalModel,
+      containerTypes: [
+        { id: "Tank", capacity: "1000", initialLevel: "500" },
+        { id: "Buffer", capacity: null, initialLevel: 0 },
+      ],
+    };
+    const graph = deriveGraphFromModel(model);
+
+    const containerNodes = graph.nodes.filter(node => node.type === "container");
+    expect(containerNodes).toHaveLength(2);
+    expect(containerNodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "container:Tank", type: "container", refId: "Tank", sublabel: "cap 1000" }),
+      expect.objectContaining({ id: "container:Buffer", type: "container", refId: "Buffer", sublabel: "unbounded" }),
+    ]));
+
+    // Containers don't participate in entity flow — no edge should touch them.
+    const containerNodeIds = new Set(containerNodes.map(node => node.id));
+    expect(graph.edges.some(edge => containerNodeIds.has(edge.from) || containerNodeIds.has(edge.to))).toBe(false);
+  });
+
+  it("gives container nodes finite layout coordinates", () => {
+    const model = {
+      ...minimalModel,
+      containerTypes: [{ id: "Tank", capacity: "1000", initialLevel: "500" }],
+    };
+    const graph = deriveGraphFromModel(model);
+    assertNodesHaveFiniteCoords({ nodes: graph.nodes.filter(node => node.type === "container") });
+  });
+
+  it("produces no container nodes when none are declared", () => {
+    const graph = deriveGraphFromModel(minimalModel);
+    expect(graph.nodes.some(node => node.type === "container")).toBe(false);
+  });
+});

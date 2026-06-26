@@ -94,6 +94,23 @@ function optionalPositiveIntTransform(raw) {
   return Number.isFinite(n) && n > 0 ? String(n) : "";
 }
 
+// Coerces to a positive number string, or "" (unlimited) when blank/invalid — like
+// optionalPositiveIntTransform but allows decimals, for container capacity/level.
+function optionalPositiveNumberTransform(raw) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return "";
+  const n = parseFloat(trimmed);
+  return Number.isFinite(n) && n > 0 ? String(n) : "";
+}
+
+// Coerces to a non-negative number string, falling back to "0" when blank/invalid.
+function nonNegativeNumberTransform(raw) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return "0";
+  const n = parseFloat(trimmed);
+  return Number.isFinite(n) && n >= 0 ? String(n) : "0";
+}
+
 export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode, onDeleteNode, onClose }) {
   const { C, FONT } = useTheme();
   const node = (graph.nodes || []).find(item => item.id === selectedNodeId);
@@ -120,6 +137,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
   const bEvent = (model.bEvents || []).find(event => event.id === bEventRefId);
   const cEvent = (model.cEvents || []).find(event => event.id === node.refId);
   const queue = (model.queues || []).find(item => item.id === node.refId);
+  const containerType = (model.containerTypes || []).find(item => item.id === node.refId);
   const sourceCustomer = effectValue(bEvent?.effect, /ARRIVE\(([^,)]+)/i);
   const sourceQueue = effectValue(bEvent?.effect, /ARRIVE\([^,]+,\s*([^)]+)\)/i);
   const sinkMacro = String(bEvent?.effect || "").toUpperCase().includes("RENEGE") ? "RENEGE" : "COMPLETE";
@@ -137,7 +155,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
     <div style={{ background: C.panel, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <SH label="Inspector" color={C.accent}>
-          <Tag label={node.type} color={node.type === VISUAL_NODE_TYPES.SINK ? C.red : node.type === VISUAL_NODE_TYPES.ACTIVITY ? C.purple : node.type === VISUAL_NODE_TYPES.QUEUE ? C.cEvent : C.green} />
+          <Tag label={node.type} color={node.type === VISUAL_NODE_TYPES.SINK ? C.red : node.type === VISUAL_NODE_TYPES.ACTIVITY ? C.purple : node.type === VISUAL_NODE_TYPES.QUEUE ? C.cEvent : node.type === VISUAL_NODE_TYPES.CONTAINER ? C.amber : C.green} />
         </SH>
         {onClose && (
           <button
@@ -258,6 +276,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               entityTypes={model.entityTypes || []}
               stateVariables={model.stateVariables || []}
               queues={model.queues || []}
+              containers={model.containerTypes || []}
             />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -352,6 +371,26 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               <option value="RENEGE">RENEGE</option>
             </SelectField>
           )}
+        </>
+      )}
+
+      {node.type === VISUAL_NODE_TYPES.CONTAINER && containerType && (
+        <>
+          <CommitField label="Container ID" value={containerType.id} disabled={!canEdit} onChange={value => onPatchNode(node, { id: value })} />
+          <CommitField
+            label="Capacity (blank = unbounded)"
+            value={containerType.capacity ?? ""}
+            disabled={!canEdit}
+            transform={optionalPositiveNumberTransform}
+            onChange={value => onPatchNode(node, { capacity: value === "" ? null : value })}
+          />
+          <CommitField
+            label="Initial level"
+            value={containerType.initialLevel ?? 0}
+            disabled={!canEdit}
+            transform={nonNegativeNumberTransform}
+            onChange={value => onPatchNode(node, { initialLevel: value })}
+          />
         </>
       )}
 

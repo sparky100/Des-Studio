@@ -23,6 +23,7 @@ function createDependencySet() {
     stateVars: new Set(),
     builtins: new Set(),
     entityAttrs: new Set(),
+    containers: new Set(),
     unknown: false,
     clock: false,
   };
@@ -34,6 +35,7 @@ function mergeDependencySets(target, source) {
   for (const value of source.stateVars) target.stateVars.add(value);
   for (const value of source.builtins) target.builtins.add(value);
   for (const value of source.entityAttrs) target.entityAttrs.add(value);
+  for (const value of source.containers) target.containers.add(value);
   target.unknown = target.unknown || source.unknown;
   target.clock = target.clock || source.clock;
   return target;
@@ -141,6 +143,19 @@ function resolveAttrValue(resourceName, attrName, state) {
   return entity?.attrs?.[attrName];
 }
 
+function resolveContainerValue(containerName, property, state) {
+  // Container state lives on the engine's flat scalar-state object. In production,
+  // the predicate context only exposes that object via `.scalars` (mirroring how
+  // plain user-defined state variables are resolved) — direct test-built state
+  // objects set the keys at the top level instead, so check both.
+  const key = property === "capacity" ? `__containerCap_${containerName}`
+    : property === "min" ? `__containerMin_${containerName}`
+    : property === "max" ? `__containerMax_${containerName}`
+    : `__container_${containerName}`;
+  const value = state[key] ?? state.scalars?.[key];
+  return property === "capacity" ? (value ?? Infinity) : value;
+}
+
 function resolveVariable(ref, state) {
   if (typeof ref !== "string" || !ref.trim()) return undefined;
   const text = ref.trim();
@@ -163,6 +178,11 @@ function resolveVariable(ref, state) {
   const attrToken = text.match(/^attr\(([^,]+)\s*,\s*([^)]+)\)$/i);
   if (attrToken) {
     return resolveAttrValue(attrToken[1].trim(), attrToken[2].trim(), state);
+  }
+
+  const containerToken = text.match(/^container\(([^)]+)\)\.(level|capacity|min|max)$/i);
+  if (containerToken) {
+    return resolveContainerValue(containerToken[1].trim(), containerToken[2].toLowerCase(), state);
   }
 
   if (text === "served") return state.__served ?? state.served ?? 0;
@@ -240,6 +260,7 @@ export function getPredicateDependencies(predicate) {
     const idleToken = variable.match(/^idle\(([^)]+)\)\.count$/i);
     const busyToken = variable.match(/^busy\(([^)]+)\)\.count$/i);
     const attrToken = variable.match(/^attr\(([^,]+)\s*,\s*([^)]+)\)$/i);
+    const containerToken = variable.match(/^container\(([^)]+)\)\.(level|capacity|min|max)$/i);
     if (queueToken) {
       deps.queues.add(normalizeDependencyName(queueToken[1]));
     } else if (idleToken || busyToken) {
@@ -247,6 +268,8 @@ export function getPredicateDependencies(predicate) {
     } else if (attrToken) {
       deps.resources.add(normalizeDependencyName(attrToken[1]));
       deps.entityAttrs.add(attrToken[2].trim());
+    } else if (containerToken) {
+      deps.containers.add(normalizeDependencyName(containerToken[1]));
     } else if (variable === "served" || variable === "reneged" || variable === "loopCount") {
       deps.builtins.add(variable);
     } else if (variable === "clock") {
@@ -423,7 +446,7 @@ export function evalCondition(condition, helpers, state, clock) {
  * Build the list of valid condition tokens for the ConditionBuilder UI.
  * Derived from the model's entity types and state variables.
  */
-export function buildConditionTokens(entityTypes = [], stateVariables = [], queues = []) {
+export function buildConditionTokens(entityTypes = [], stateVariables = [], queues = [], containers = []) {
   const tokens = [];
 
   for (const et of entityTypes) {
@@ -466,6 +489,13 @@ export function buildConditionTokens(entityTypes = [], stateVariables = [], queu
         valueType: "number",
       });
     }
+  }
+
+  for (const ct of containers) {
+    const id = ct.id?.trim() || "";
+    if (!id) continue;
+    tokens.push({ label: `container(${id}).level  — current level`, value: `container(${id}).level`, valueType: "number" });
+    tokens.push({ label: `container(${id}).capacity  — max level`, value: `container(${id}).capacity`, valueType: "number" });
   }
 
   return tokens;
