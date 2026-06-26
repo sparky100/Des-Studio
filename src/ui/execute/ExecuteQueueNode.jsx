@@ -5,11 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { TOKEN_COLORS } from "../shared/tokens.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { Sparkline } from "./Sparkline.jsx";
 
 const MAX_DOT_SHOWN = 8;
 const HISTORY_LEN   = 20;
-const SPARKLINE_W   = 138;
-const SPARKLINE_H   = 22;
 
 function depthColor(depth, C) {
   if (depth === 0) return C.green;
@@ -101,51 +100,6 @@ function EntityDots({ entities }) {
   );
 }
 
-function Sparkline({ history }) {
-  const { C } = useTheme();
-  const QUEUE_COLOR = C.cEvent;
-  if (history.length < 2) {
-    return (
-      <div style={{
-        width: SPARKLINE_W,
-        height: SPARKLINE_H,
-        borderTop: `1px dashed ${QUEUE_COLOR}33`,
-      }} />
-    );
-  }
-  const max = Math.max(...history, 1);
-  const pts = history.map((v, i) => {
-    const x = (i / (history.length - 1)) * SPARKLINE_W;
-    const y = SPARKLINE_H - 2 - (v / max) * (SPARKLINE_H - 4);
-    return [x, y];
-  });
-  const linePts = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  const fillPts = [
-    ...pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`),
-    `${SPARKLINE_W},${SPARKLINE_H}`,
-    `0,${SPARKLINE_H}`,
-  ].join(" ");
-
-  return (
-    <svg
-      width={SPARKLINE_W}
-      height={SPARKLINE_H}
-      aria-hidden="true"
-      style={{ display: "block", overflow: "visible" }}
-    >
-      <polygon points={fillPts} fill={QUEUE_COLOR} fillOpacity={0.1} />
-      <polyline
-        points={linePts}
-        fill="none"
-        stroke={QUEUE_COLOR}
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 export function ExecuteQueueNode({ data }) {
   const { C, FONT } = useTheme();
   const QUEUE_COLOR = C.cEvent;
@@ -232,7 +186,7 @@ export function ExecuteQueueNode({ data }) {
 
       {history.length >= 2 && (
         <div style={{ marginTop: 3 }}>
-          <Sparkline history={history} />
+          <Sparkline history={history} color={QUEUE_COLOR} />
         </div>
       )}
     </div>
