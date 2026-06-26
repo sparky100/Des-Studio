@@ -21,10 +21,11 @@ const ContainerEditor = ({ containers, onChange }) => {
         </div>
         <Btn variant="primary" onClick={add}>+ Add Container</Btn>
       </div>
-      <InfoBox color={C.cyan}>
+      <InfoBox color={C.accent}>
         A container is a named continuous-level store (tank, buffer, inventory).{" "}
-        <strong style={{ color: C.cyan }}>FILL</strong> adds to it (B-event);{" "}
-        <strong style={{ color: C.cyan }}>DRAIN</strong> subtracts when level ≥ amount (C-event).
+        <strong style={{ color: C.accent }}>FILL</strong> adds to it (B-event);{" "}
+        <strong style={{ color: C.accent }}>DRAIN</strong> subtracts when level ≥ amount (C-event).{" "}
+        Leave capacity unset for an unbounded container (no upper limit).
       </InfoBox>
       {containers.length === 0 && (
         <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:"40px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
@@ -34,7 +35,9 @@ const ContainerEditor = ({ containers, onChange }) => {
           <Btn variant="primary" onClick={add}>+ Add Container</Btn>
         </div>
       )}
-      {containers.map((ct, i) => (
+      {containers.map((ct, i) => {
+        const isUnbounded = ct.capacity == null || ct.capacity === "";
+        return (
         <div key={ct.id || i} style={{
           background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6,
           padding: 10, display: "flex", flexDirection: "column", gap: 8,
@@ -45,23 +48,33 @@ const ContainerEditor = ({ containers, onChange }) => {
               onChange={e => upd(i, "id", e.target.value)}
               placeholder="ContainerName"
               style={{
-                width: 160, background: "transparent", border: `1px solid ${C.cyan}44`,
-                borderRadius: 4, color: C.cyan, fontFamily: FONT, fontSize: 12,
+                width: 160, background: "transparent", border: `1px solid ${C.accent}44`,
+                borderRadius: 4, color: C.accent, fontFamily: FONT, fontSize: 12,
                 padding: "5px 8px", outline: "none",
               }}
             />
             <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>capacity</span>
             <input
               type="number" min="1" step="1"
-              value={ct.capacity}
+              value={isUnbounded ? "" : ct.capacity}
               onChange={e => upd(i, "capacity", e.target.value)}
-              placeholder="1000"
+              placeholder="∞ unbounded"
+              disabled={isUnbounded}
               style={{
                 width: 90, background: "transparent", border: `1px solid ${C.border}`,
                 borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
                 padding: "5px 8px", outline: "none",
+                opacity: isUnbounded ? 0.5 : 1,
               }}
             />
+            <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: C.muted, fontFamily: FONT, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={isUnbounded}
+                onChange={e => upd(i, "capacity", e.target.checked ? "" : "1000")}
+              />
+              unbounded
+            </label>
             <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>initial level</span>
             <input
               type="number" min="0" step="1"
@@ -77,7 +90,8 @@ const ContainerEditor = ({ containers, onChange }) => {
             <Btn small variant="danger" ariaLabel={`Remove container ${ct.id || i + 1}`} onClick={() => rem(i)}>✕</Btn>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
