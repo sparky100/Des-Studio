@@ -192,6 +192,8 @@ export interface DataSourceDefinition {
 export interface DesModelJson {
   name?: string;
   description?: string;
+  /** Internal/explanatory notes — not shown in the Model Library, available via the Overview tab. */
+  notes?: string;
   visibility?: "private" | "public";
   /** Defines what one simulation clock unit represents. Default "minutes". */
   timeUnit?: TimeUnit;

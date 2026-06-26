@@ -149,6 +149,7 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsC
           {scenarioCount > 0 && <Tag label={`${scenarioCount} scenario${scenarioCount !== 1 ? "s" : ""}`} color={C.purple} />}
         </div>
       </div>
+      {/* model.notes is intentionally excluded here — it's internal-only, surfaced on the Overview tab instead */}
       <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>{model.description}</div>
       {isOwner && onTagsChange ? (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }} onClick={e => e.stopPropagation()}>
