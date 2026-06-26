@@ -26,6 +26,7 @@ import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_NODE_HEIGHT } from "./execu
 import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
+import { ContainerGaugeStrip } from "./ContainerGaugeStrip.jsx";
 export { DEFAULT_KPI_SLOTS };
 
 // ── Configurable KPI bar (F9C.7) ─────────────────────────────────────────────
@@ -762,6 +763,10 @@ export function ExecuteCanvas({
             ))}
           </div>
         </div>
+      )}
+
+      {snap?.containers && Object.keys(snap.containers).length > 0 && (
+        <ContainerGaugeStrip containers={snap.containers} model={model} />
       )}
 
       <div
