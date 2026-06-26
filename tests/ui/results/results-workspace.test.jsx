@@ -360,4 +360,30 @@ describe("ResultsWorkspace", () => {
     expect(screen.queryByText("Balked")).not.toBeInTheDocument();
     expect(screen.queryByText("Blocked")).not.toBeInTheDocument();
   });
+
+  test("shows Container Levels section when summary.containerLevels is present", () => {
+    const containerModel = {
+      ...model,
+      containerTypes: [{ id: "Tank", capacity: "1000", initialLevel: "0" }],
+    };
+    const containerResults = {
+      ...results,
+      summary: { containerLevels: { Tank: { min: 100, avg: 450, max: 900, final: 600 } } },
+    };
+
+    render(<ResultsWorkspace results={containerResults} model={containerModel} />);
+
+    expect(screen.getByText("CONTAINER LEVELS")).toBeInTheDocument();
+    const tankCard = screen.getByText("TANK").closest("div").parentElement;
+    expect(within(tankCard).getByText("600 / 1000")).toBeInTheDocument();
+    expect(within(tankCard).getByText("100")).toBeInTheDocument();
+    expect(within(tankCard).getByText("450")).toBeInTheDocument();
+    expect(within(tankCard).getByText("900")).toBeInTheDocument();
+  });
+
+  test("hides Container Levels section when no containers exist", () => {
+    render(<ResultsWorkspace results={results} model={model} />);
+
+    expect(screen.queryByText("CONTAINER LEVELS")).not.toBeInTheDocument();
+  });
 });

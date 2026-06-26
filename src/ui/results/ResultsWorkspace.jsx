@@ -445,6 +445,11 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     });
   }
   const perResourceEntries = Object.entries(summary.perResource || {});
+  const containerEntries = Object.entries(summary.containerLevels || {});
+  const containerCapacities = {};
+  (model?.containerTypes || []).forEach(ct => {
+    if (ct.capacity != null && ct.capacity !== "") containerCapacities[ct.id] = Number(ct.capacity);
+  });
   const outcomeEntries = Object.entries(summary.outcomes || {})
     .map(([routeId, outcome]) => ({
       routeId,
@@ -642,6 +647,38 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
         </>
         );
       })()}
+      {containerEntries.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+            CONTAINER LEVELS
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+            {containerEntries.map(([id, lvl]) => {
+              const capacity = containerCapacities[id];
+              const hasCapacity = Number.isFinite(capacity) && capacity > 0;
+              const fillRatio = hasCapacity && lvl.final != null ? lvl.final / capacity : null;
+              const fillColor = fillRatio == null ? C.accent : fillRatio >= 1 ? C.red : fillRatio >= 0.85 ? C.amber : C.accent;
+              return (
+                <div key={id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                  <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
+                    {id.toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: 18, color: fillColor, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>
+                    {hasCapacity ? `${formatMetricValue(lvl.final, 0)} / ${formatMetricValue(capacity, 0)}` : formatMetricValue(lvl.final, 0)}
+                  </div>
+                  <StatCards
+                    items={[
+                      { label: "Min", value: formatMetricValue(lvl.min) },
+                      { label: "Avg", value: formatMetricValue(lvl.avg) },
+                      { label: "Max", value: formatMetricValue(lvl.max) },
+                    ]}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </section>
   );
 }
