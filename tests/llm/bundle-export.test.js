@@ -59,6 +59,18 @@ describe("buildLLMBundle", () => {
     expect(bundle).toContain("## Results");
   });
 
+  it("includes notes alongside description when present", () => {
+    const modelWithNotes = { ...model, notes: "Internal: excludes weekend shifts." };
+    const bundle = buildLLMBundle(modelWithNotes, singleRepResults, { replications: 1 });
+    expect(bundle).toContain("**Description:** A small outpatient clinic.");
+    expect(bundle).toContain("**Notes:** Internal: excludes weekend shifts.");
+  });
+
+  it("omits the Notes line when notes is absent", () => {
+    const bundle = buildLLMBundle(model, singleRepResults, { replications: 1 });
+    expect(bundle).not.toContain("**Notes:**");
+  });
+
   it("contains Three-Phase method reference in the preamble", () => {
     const bundle = buildLLMBundle(model, singleRepResults, {});
     expect(bundle).toContain("Three-Phase");

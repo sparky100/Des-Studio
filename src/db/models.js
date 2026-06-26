@@ -102,6 +102,7 @@ export function norm(r) {
     id:             r.id,
     name:           r.name,
     description:    r.description || "",
+    notes:          modelJson.notes || "",
     tags:           r.tags || [],
     visibility:     r.visibility,
     access:         r.access      || {},
@@ -144,6 +145,7 @@ function modelJsonFromModel(model = {}) {
   };
   if (model.dataSources?.length) json.dataSources = model.dataSources;
   if (model.sections?.length) json.sections = model.sections;
+  if (model.notes) json.notes = model.notes;
   return json;
 }
 

@@ -825,6 +825,49 @@ Queues are overloaded and throughput is below target.
       expect(prompt.messages[0].content).toMatch(/binding constraint/i);
     });
   });
+
+  describe("notes — flows into AI prompt payloads alongside description", () => {
+    const modelWithNotes = {
+      ...model,
+      notes: "Internal caveat: triage queue capacity is a placeholder.",
+    };
+
+    it("includes notes in buildNarrativePrompt payload", () => {
+      const prompt = buildNarrativePrompt(modelWithNotes, {}, { summary: { avgWait: 1, avgSvc: 1 } });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.notes).toBe(modelWithNotes.notes);
+    });
+
+    it("includes notes in buildSuggestionPrompt payload", () => {
+      const prompt = buildSuggestionPrompt(modelWithNotes, {}, {});
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.notes).toBe(modelWithNotes.notes);
+    });
+
+    it("includes notes in buildExplainResultsPrompt payload", () => {
+      const prompt = buildExplainResultsPrompt(modelWithNotes, {}, { summary: { avgWait: 1, avgSvc: 1 } });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.notes).toBe(modelWithNotes.notes);
+    });
+
+    it("includes notes in buildResultsQueryPrompt payload", () => {
+      const prompt = buildResultsQueryPrompt("What is the average wait?", modelWithNotes, { summary: { avgWait: 1 } });
+      const parsed = JSON.parse(prompt.messages[prompt.messages.length - 1].content);
+      expect(parsed.data.model.notes).toBe(modelWithNotes.notes);
+    });
+
+    it("includes notes in buildPlanRefinementPrompt payload", () => {
+      const prompt = buildPlanRefinementPrompt(modelWithNotes, {}, { summary: { avgWait: 1, avgSvc: 1 } });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.notes).toBe(modelWithNotes.notes);
+    });
+
+    it("defaults notes to an empty string when absent from the model", () => {
+      const prompt = buildSuggestionPrompt(model, {}, {});
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.notes).toBe("");
+    });
+  });
 });
 
 // ── Sprint 70 — Constrained Plan Refinement ──────────────────────────────────

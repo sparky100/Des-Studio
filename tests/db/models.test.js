@@ -1661,6 +1661,69 @@ describe('Sprint 71 — persistence layer', () => {
     });
   });
 
+  // ── notes — internal/explanatory field, separate from description ───────
+  describe('round-trip — model_json.notes survives saveModel insert', () => {
+    it('the insert payload model_json contains notes from the input object', async () => {
+      const notes = 'Internal assumption: peak arrivals follow the Q3 forecast.';
+      const model = {
+        name: 'Notes RT Model',
+        entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
+        notes,
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'notes-rt-id', name: model.name, owner_id: 'u1' }, error: null,
+      });
+      await saveModel(model, 'u1');
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json.notes).toBe(notes);
+    });
+
+    it('model_json.notes is omitted when not supplied', async () => {
+      const model = {
+        name: 'No Notes',
+        entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'no-notes-id', name: model.name, owner_id: 'u1' }, error: null,
+      });
+      await saveModel(model, 'u1');
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json.notes).toBeUndefined();
+    });
+  });
+
+  describe('norm() — deserialises notes from model_json', () => {
+    it('reads notes from model_json', () => {
+      const result = norm({
+        id: 'notes-norm-1', name: 'With Notes',
+        entity_types: [], b_events: [], c_events: [], queues: [],
+        model_json: { notes: 'Caveat: excludes holiday schedules.' },
+      });
+      expect(result.notes).toBe('Caveat: excludes holiday schedules.');
+    });
+
+    it('defaults notes to "" when absent from model_json', () => {
+      const result = norm({
+        id: 'notes-norm-2', name: 'No Notes',
+        entity_types: [], b_events: [], c_events: [], queues: [],
+        model_json: {},
+      });
+      expect(result.notes).toBe('');
+    });
+
+    it('defaults notes to "" when model_json is absent entirely', () => {
+      const result = norm({
+        id: 'notes-norm-3', name: 'Legacy Row',
+        entity_types: [], b_events: [], c_events: [], queues: [],
+      });
+      expect(result.notes).toBe('');
+    });
+  });
+
   // ── Model Library tags — round-trip + scoped update helper ───────────────
   describe('round-trip — tags survive saveModel + norm()', () => {
     it('the insert payload preserves tags as a top-level column', async () => {

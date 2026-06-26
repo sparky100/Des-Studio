@@ -1185,6 +1185,25 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               }
             </div>
 
+            {/* Notes — internal/explanatory context, not shown in the Model Library */}
+            {(canEdit || model.notes) && (
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                <div style={{fontSize:11,fontWeight:700,color:C.muted,fontFamily:FONT,letterSpacing:"1px",textTransform:"uppercase"}}>Notes</div>
+                {canEdit
+                  ? <textarea
+                      value={model.notes||""}
+                      onChange={e=>setField("notes",e.target.value)}
+                      placeholder="Internal notes — assumptions, caveats, context for collaborators. Not shown in the Model Library."
+                      rows={4}
+                      style={{background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,borderRadius:0,color:C.muted,fontFamily:SANS,fontSize:14,lineHeight:1.8,padding:"8px 0",outline:"none",width:"100%",resize:"vertical"}}
+                      onFocus={e=>e.target.style.borderBottomColor=C.accent}
+                      onBlur={e=>e.target.style.borderBottomColor=C.border}
+                    />
+                  : <div style={{fontSize:14,color:C.muted,fontFamily:SANS,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{model.notes}</div>
+                }
+              </div>
+            )}
+
             {/* Key metrics from last run */}
             {overviewHistory.length > 0 && (() => {
               const lastRow = overviewHistory[0];

@@ -439,6 +439,7 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
+      notes: model.notes || "",
       goals: goalsToPrompt(model),
       ...(stateVariables.length ? { stateVariables } : {}),
       ...(sectionsDigest.length ? { sections: sectionsDigest } : {}),
@@ -879,6 +880,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
+      notes: model.notes || "",
       entityTypes,
       queues,
       stateVariables: (model.stateVariables || []).map(v => ({ name: v.name, initialValue: v.initialValue })),
@@ -992,6 +994,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
+      notes: model.notes || "",
       goals: goalsToPrompt(model),
       ...(entityTypes.length ? { entityTypes } : {}),
       ...(queues.length ? { queues } : {}),
@@ -1257,6 +1260,7 @@ export function buildResultsQueryPrompt(question, model = {}, results = {}, conv
       model: {
         name: model.name || DEFAULT_MODEL_NAME,
         description: model.description || "",
+        notes: model.notes || "",
         entityTypes,
         queues,
         stateVariables: (model.stateVariables || []).map(v => ({ name: v.name, initialValue: v.initialValue })),
@@ -1381,6 +1385,7 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
+      notes: model.notes || "",
     },
     scheduleDigest: extractScheduleDigest(model),
     capacityEnvelope: extractCapacityEnvelope(model),
@@ -1674,6 +1679,7 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
     const modelDigest = {
       name: model.name || 'Unnamed',
       description: model.description || '',
+      notes: model.notes || '',
       entityTypes,
       queues,
       bEvents: bEvents.length ? bEvents : undefined,
@@ -1745,6 +1751,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description ? truncateWords(model.description, 60) : undefined,
+      notes: model.notes ? truncateWords(model.notes, 60) : undefined,
       goals,
       entityTypes: (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count })),
       queues: (model.queues || []).map(q => ({ name: q.name, capacity: q.capacity ?? null })),
