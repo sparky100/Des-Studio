@@ -1492,6 +1492,56 @@ describe('Sprint 71 — persistence layer', () => {
     });
   });
 
+  // ── round-trip: Lognormal dist/distParams on B-event/C-event schedules (Sprint 86 — F86.5) ──
+  describe('round-trip — Lognormal dist/distParams on schedules survive saveModel + norm()', () => {
+    const bEvents = [
+      {
+        id: 'b-rt', name: 'Arrive', scheduledTime: '0', effect: 'ARRIVE(Customer)',
+        schedules: [{ eventId: 'b-rt', dist: 'Lognormal', distParams: { logMean: '1', logStdDev: '0.5' } }],
+      },
+    ];
+    // condition intentionally omitted — its string→object normalization in
+    // norm() is unrelated to this round-trip, which targets dist/distParams only.
+    const cEvents = [
+      {
+        id: 'c-rt', name: 'Serve', effect: 'ASSIGN(Customer, Server)',
+        cSchedules: [{ id: 'cs-rt', eventId: 'b-rt', dist: 'Lognormal', distParams: { logMean: '2', logStdDev: '0.3' }, useEntityCtx: true }],
+      },
+    ];
+
+    it('the insert payload preserves Lognormal dist/distParams on bEvents and cEvents', async () => {
+      const model = {
+        name: 'Lognormal RT Model',
+        entityTypes: [], stateVariables: [], queues: [],
+        bEvents, cEvents,
+      };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.b_events).toEqual(bEvents);
+      expect(insertArg.c_events).toEqual(cEvents);
+    });
+
+    it('norm() preserves Lognormal dist/distParams on bEvents and cEvents from a DB row', () => {
+      const result = norm({
+        id: 'm-rt', name: 'Lognormal RT Model',
+        entity_types: [], b_events: bEvents, c_events: cEvents, queues: [],
+        model_json: {},
+      });
+
+      expect(result.bEvents).toEqual(bEvents);
+      expect(result.cEvents).toEqual(cEvents);
+    });
+  });
+
   // ── 71.1.4  Round-trip: model_json.sections survives saveModel insert ────
   describe('round-trip — model_json.sections survives saveModel insert', () => {
     it('the insert payload model_json contains sections from the input object', async () => {

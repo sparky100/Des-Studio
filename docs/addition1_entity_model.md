@@ -167,6 +167,8 @@ The Predicate Builder is the UI component that constructs condition expressions 
 
 A single predicate is a triple: variable reference, operator, and value. The operator options are filtered by the `valueType` of the selected variable.
 
+> **`value` is always a literal, never a second dynamic reference.** Both the legacy string condition DSL and this JSON predicate form parse the right-hand side as a fixed literal at model-load time — it is never resolved as another `Queue.<id>.length`, `Resource.<id>.busyCount`, or state-variable reference. A predicate comparing two dynamic tokens to each other (e.g. attempting `{ "variable": "Queue.q_main.length", "operator": ">", "value": "Queue.q_other.length" }`) parses `value` as a non-numeric literal and the comparison is always `false` — no error is raised. To gate logic on a dynamic threshold, introduce a dedicated state variable and compare it to a literal constant in its own clause instead of comparing two dynamic tokens directly.
+
 ```json
 {
   "variable": "Queue.q_main.length",
@@ -288,7 +290,7 @@ This section defines every action the engine supports. This is the **complete an
 | **Inputs** | `entityId: string` — the entity that may renege. `queueId: string` — the queue the entity is waiting in. `patienceDist: Distribution` — patience time sampled at arrival. `nextNodeId: string` — Sink or alternative Queue to route the reneging entity to. |
 | **Preconditions** | Entity must still be in `queueId` when the B-Event fires. If the entity has already been seized (SEIZE fired first), the RENEGE B-Event is cancelled silently — this is the standard race condition and is correct behaviour. |
 | **State changes** | 1. If entity is still in queue: entity removed. `Queue.<queueId>.length` decremented by 1. 2. Renege count for this queue incremented by 1. 3. Entity routed to `nextNodeId` per the COMPLETE routing rules. 4. If entity has already been seized: no state change. RENEGE B-Event is a no-op. |
-| **Scheduling** | The renege timer can be scheduled two ways: (1) manually, as a second `schedules[]` entry (`isRenege: true`) on whichever B-event delivers the entity into the queue — not necessarily the ARRIVE action, since RELEASE/routing/batch/split can all join a queue; or (2) automatically, by setting `renegeDist`/`renegeDistParams` directly on the Queue itself, which the engine schedules at `T_join + sample(renegeDist)` with no B-Event authoring required. Both mechanisms can coexist on the same queue. |
+| **Scheduling** | **Preferred:** set `renegeDist`/`renegeDistParams` directly on the Queue itself — the engine auto-schedules the timer at `T_join + sample(renegeDist)` for every entity that joins that queue, regardless of how it arrived (ARRIVE, RELEASE-routing, BATCH, SPLIT), with no B-Event authoring required. Use this for any simple patience-based abandonment. **Fallback (conditional reneging only):** manually add a second `schedules[]` entry (`isRenege: true`) on whichever B-event delivers the entity into the queue — reserve this for cases where reneging must be conditional on something the queue-level timer can't express (e.g. only renege while a state variable holds a specific value). Both mechanisms can coexist on the same queue. |
 | **Error conditions** | If `patienceDist`/`renegeDist` produces a non-positive sample, the engine must raise a validation error. An entity cannot renege before it joins the queue. |
 
 ---
@@ -563,7 +565,7 @@ All stochastic delays — inter-arrival times, service durations, patience times
 | `normal` | `mean: number, stdDev: number` (stdDev > 0) | mean | Use Box-Muller transform. Clamp negative samples to 0 for durations. |
 | `triangular` | `min, mode, max` (min ≤ mode ≤ max) | (min + mode + max) / 3 | Common for expert-estimate durations when data is limited. |
 | `fixed` | `value: number` (value > 0) | value | Deterministic constant. No randomness. Useful for M/D/1 benchmarks. |
-| `lognormal` | `logMean: number, logStdDev: number` | exp(logMean + logStdDev²/2) | **Not yet implemented in the engine.** For right-skewed service times. Parameters are mean and stddev of the underlying normal. |
+| `lognormal` | `logMean: number, logStdDev: number` (logStdDev > 0) | exp(logMean + logStdDev²/2) | **Implemented (Sprint 86).** Always positive — no zero-clamping needed. Recommended for heavily right-skewed durations (repair times, complex task durations with a long tail). Parameters are the mean and stddev of the underlying normal distribution, not the mean/stddev of the sampled values themselves. |
 | `empirical` | `values: number[]` (non-empty), optional `sourceFile`, `column` | mean(values) | Samples uniformly from list. Values may be entered inline or imported from CSV. |
 | `piecewise` | `periods: { startTime, distribution }[]` | active period mean | Selects the period with the greatest `startTime <= clock`, then delegates sampling to that period's distribution. |
 | `erlang` | `k: integer` (≥ 1), `mean: number` (> 0) | mean | k-phase service process. `Sample = -ln(∏ᵢ₌₁ᵏ Uᵢ) / (k / mean)`. Generalises exponential (k=1). |
@@ -846,9 +848,9 @@ The complete macro set implemented in the engine. This is the authoritative list
 | PREEMPT | B-Event | 32 | Interrupts busy server; re-queues displaced entity with remaining service time |
 | FAIL | B-Event | 32 | Sets matching servers to failed status |
 | REPAIR | B-Event | 32 | Restores failed servers to idle |
-| SPLIT | C/B-Event | 33 | Creates N-1 clones of the context entity and routes them |
+| SPLIT | C/B-Event | 33 | `SPLIT(EntityType, N, Queue)` — exactly 3 args. Creates N-1 clones of the context entity and routes them to Queue; records `_splitParent`/`_splitChildren`. Trigger from a one-shot context only (e.g. a cSchedule-fired B-event) — a recurring C-event condition on the same entity/queue will refire unboundedly since SPLIT doesn't change the context entity's status. |
 | COSEIZE | C-Event | 33 | Atomically seizes multiple server types simultaneously |
-| MATCH | C-Event | 33 | Pairs entities from two queues into a batch |
+| MATCH | C-Event | 33 | `MATCH(TypeA, QueueA, TypeB, QueueB, Target)` — pairs one entity from each queue into a batch entity in Target. Merged attrs = `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — QueueB's value overwrites QueueA's on any name collision. |
 | RENEGE_OLDEST | C-Event | post-33 | Removes the oldest waiting entity of a given type per queue discipline |
 | FILL | B or C-Event | post-33 | Adds amount to a declared container level (clamped to capacity) |
 | DRAIN | B or C-Event | post-33 | Subtracts amount from a declared container level (guard: level must be ≥ amount) |

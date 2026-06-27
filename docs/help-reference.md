@@ -70,6 +70,8 @@ State-triggered events. Fire when condition becomes true. Defined in `cEvents[]`
 - `priority`: Integer; lower fires first
 - `cSchedules[]`: Service duration distributions
 
+**Condition syntax limitation — variable-vs-literal only:** Each clause (`queue(...).length > 0`, `idle(...).count == 0`, `stateVarName == 1`, etc.) compares one dynamic token against a literal constant. The right-hand side is captured as a fixed literal when the model loads — it is never re-resolved as another queue length, server count, or state variable. A clause like `queue(TraumaQueue).length > traumaInService` parses the right side as a non-numeric literal and silently evaluates to `false` forever (no error, no warning — the C-event just never fires). To gate on a dynamic threshold, compare each side against its own literal in a separate `AND` clause instead of comparing two dynamic tokens to each other, e.g. `queue(TraumaQueue).length > 0 AND traumaInService == 0`.
+
 **Starvation anti-pattern:** When two C-events share a resource and one has a lower priority number (higher urgency), the other may never fire if the first queue is always populated. Symptom: entities accumulate in mid-journey queues; `served=0` or very low for some replications. Diagnosis: check whether any terminal C-event (discharge, exit) has a higher priority number than an entry C-event on the same resource. Fix: set the terminal C-event priority to 0 (highest) so completions are not deferred indefinitely.
 
 **Cross-referencing C-Events and B-Events:** Each `cSchedules[]` entry in the C-Events editor shows a plain-language summary of what its linked B-event actually does (e.g. "Releases Nurse · routes 80% → Discharge Queue, 20% → Transfer Queue", "Entity exits simulation", or — for macros without a friendly phrase yet — the raw macro call as a fallback, so nothing is ever hidden). Clicking the B-event's name jumps straight to it in the B-Events tab. Conversely, if a B-event is referenced by any C-event's `cSchedules`, the B-Events editor shows a "Scheduled by" link back to that C-event. This is presentation only — it does not change the underlying `bEvents[]`/`cEvents[]` data.
@@ -136,7 +138,7 @@ All 20 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | SPLIT | `SPLIT(EntityType, N, QueueName)` | Creates N-1 clones of context entity | N-1 new entities added to entity pool | Omitting QueueName |
 | BATCH | `BATCH(QueueName, N)` or `BATCH(QueueName, Entity.attrName)` | Collects N entities into single batch entity | N-1 originals marked done; one batch replaces them | Using N < 2 |
 | UNBATCH | `UNBATCH(QueueName)` | Splits batch entity back into constituents | Batch marked done; original entities restored | Using on non-batch entity |
-| MATCH | `MATCH(TypeA, QueueA, TypeB, QueueB, QueueName)` | Pairs one entity from each queue into combined batch | Originals marked with _matchedInto | Queues must both have eligible entities |
+| MATCH | `MATCH(TypeA, QueueA, TypeB, QueueB, QueueName)` | Pairs one entity from each queue into combined batch | Originals marked with _matchedInto; merged attrs = `{...A.attrs, ...B.attrs}` — QueueB overwrites QueueA on name collision | Queues must both have eligible entities; relying on attribute overwrite order without naming attrs distinctly |
 | COSEIZE | `COSEIZE(QueueName, ServerType1, ServerType2, ...)` | Atomically seizes entity and multiple server types | All servers set to busy; fails cleanly if any unavailable | Partial seizure never occurs |
 
 ### State Manipulation Macros
@@ -180,7 +182,7 @@ Server entity types can be configured with random failures using `mtbfDist` and 
 
 ## Distributions
 
-All 11 distribution types. Parameter values must be strings (e.g., "5" not 5).
+All 12 distribution types. Parameter values must be strings (e.g., "5" not 5).
 
 ### Parametric Distributions
 
@@ -192,6 +194,7 @@ All 11 distribution types. Parameter values must be strings (e.g., "5" not 5).
 | Normal | `{ mean: "N", stddev: "N" }` | stddev > 0 | Bell-shaped empirical data; negative samples clamped to 0 |
 | Triangular | `{ min: "N", mode: "N", max: "N" }` | min ≤ mode ≤ max | Three-point estimates when data scarce |
 | Erlang | `{ k: "N", mean: "N" }` | k integer ≥ 1, mean > 0 | Sum of k exponential phases; more regular than Exponential |
+| Lognormal | `{ logMean: "N", logStdDev: "N" }` | logStdDev > 0 | Right-skewed durations with a long tail (repair times, complex tasks); naturally non-negative, no clamping needed. Mean = exp(logMean + logStdDev²/2) |
 
 ### Time-Varying Distributions
 

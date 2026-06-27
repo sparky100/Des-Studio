@@ -315,6 +315,7 @@ Used in B-event schedules, C-event service times, and entity attribute defaults.
 | `Normal`      | `{ "mean": "10", "stddev": "2" }`            | stddev > 0 (V5); warning V11 if mean < 2×stddev — negative samples clamped to 0. **For service times, prefer `Triangular` (bounded expert estimate) or `Erlang` (always positive, right-skewed) over Normal unless data specifically supports it.** |
 | `Triangular`  | `{ "min": "2", "mode": "5", "max": "10" }`   | min ≤ mode ≤ max (V5). **Recommended for service times estimated by experts (best/likely/worst case).** |
 | `Erlang`      | `{ "k": "3", "mean": "6" }`                  | k integer ≥ 1; mean > 0 (V5). **Recommended for multi-phase service processes — always positive, right-skewed like real service times.** |
+| `Lognormal`   | `{ "logMean": "1", "logStdDev": "0.5" }`     | logStdDev > 0 (V5). Always positive, no clamping needed. Mean of samples = `exp(logMean + logStdDev²/2)`. **Recommended for heavily right-skewed durations (e.g. repair times, task durations with a long tail) where the fitted distribution's underlying normal is in log-space — this is what `fitDistribution()`'s automatic fitter selects for such data.** |
 | `Empirical`   | `{ "values": [4, 6, 8, 12] }` (or via CSV import) | Non-empty array required; samples uniformly from the list. An empty `values` array will produce no samples (no validation error — treat as a modelling error). |
 | `Piecewise`   | `{ "periods": [{ "startTime": "0", "dist": "Exponential", "distParams": { "mean": "3" } }, ...] }` | First period must start at 0 (V12); periods sorted ascending (V13); nested Piecewise not supported (V12) |
 | `Schedule`    | `{ "times": [10, 25, 40] }` or `{ "rows": [{ "time": 10, "attrs": { ... } }, ...] }` | Planned absolute arrival times; exhausts and stops. Empty rows/times array produces no arrivals (CHK-009). |
@@ -323,7 +324,7 @@ Used in B-event schedules, C-event service times, and entity attribute defaults.
 
 **All numeric parameter values must be strings** (e.g. `"5"`, not `5`).
 
-> **Distribution selection guidance for service times:** Use `Exponential` for memoryless inter-arrival times (Poisson process). Use `Triangular` when you have a best/typical/worst estimate. Use `Erlang` when service consists of multiple identifiable phases. Use `Empirical` when you have historical data. Avoid `Normal` for times that must be non-negative unless mean ≫ stddev.
+> **Distribution selection guidance for service times:** Use `Exponential` for memoryless inter-arrival times (Poisson process). Use `Triangular` when you have a best/typical/worst estimate. Use `Erlang` when service consists of multiple identifiable phases. Use `Lognormal` for right-skewed durations with a long tail (repair times, complex task durations). Use `Empirical` when you have historical data. Avoid `Normal` for times that must be non-negative unless mean ≫ stddev.
 
 ---
 
@@ -734,7 +735,7 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `DELAY` | `DELAY(QueueName)` | Holds the front entity from `QueueName` for the duration sampled by the `cSchedules` entry, **without seizing any server**. Use for resource-free waits (cooling period, mandatory hold, recovery, paperwork delay). `DELAY` must be the entire effect — never combine with `ASSIGN`/`RELEASE` in the same C-event. The completion B-event needs `"useEntityCtx": true` to know which entity to route, and may use `COMPLETE()` or routing-table exit, same as a normal service completion. `QueueName` must reference a defined queue (V47). See §6.2. |
 | `BATCH` | `BATCH(QueueName, N)` | Accumulates N entities from `QueueName` into a parent batch entity. N ≥ 2 (V22). `QueueName` must reference a defined queue. |
 | `COSEIZE` | `COSEIZE(QueueName, Srv1, Srv2, ...)` | Atomically seizes one entity and multiple server types simultaneously. Fails cleanly if any server is unavailable. All server type names must reference defined server entity types. |
-| `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each of `QueueA` and `QueueB` into a combined batch in `TargetQueue`. All queue names must reference defined queues. `TypeA` and `TypeB` must match defined customer entity type names. |
+| `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each of `QueueA` and `QueueB` into a combined batch in `TargetQueue`. All queue names must reference defined queues. `TypeA` and `TypeB` must match defined customer entity type names. The resulting batch entity's attrs are `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — on any attribute name collision, `QueueB`'s value overwrites `QueueA`'s. Order the two source queues deliberately when both define an attribute with the same name. |
 | `SET` | `SET(variableName, expression)` | Sets a state variable to an arithmetic expression. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost`. |
@@ -796,6 +797,17 @@ Combine with `AND`, `OR`, `NOT`. Queue and server names must match exactly (case
 ```
 
 > **This string format is valid ONLY for `cEvents[].condition`.** Do not use it anywhere else.
+
+> **Comparisons are variable-vs-literal only — NEVER variable-vs-variable.** The right-hand side of
+> every clause is parsed as a fixed literal at model-load time (`migrateLegacyCondition`); it is
+> never resolved as a queue length, server count, or state variable. A condition like
+> `"queue(TraumaQueue).length > traumaInService"` parses the right side as a non-numeric literal
+> (`NaN`) and silently evaluates to `false` forever — no error, no warning, the C-event simply
+> never fires. To gate logic on a dynamic threshold, compare each dynamic token against its own
+> literal constant in a separate `AND` clause instead of comparing two dynamic tokens to each other:
+>
+> ✓ `"queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"`
+> ✗ `"queue(TraumaQueue).length > traumaInService"` — right side is a literal, not the state variable
 
 ---
 

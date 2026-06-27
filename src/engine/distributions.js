@@ -61,6 +61,9 @@ const DIST_ALIASES = {
   triangular: "Triangular",
   erlang: "Erlang",
   empirical: "Empirical",
+  lognormal: "Lognormal",
+  "log-normal": "Lognormal",
+  log_normal: "Lognormal",
   serverattr: "ServerAttr",
   "server-attr": "ServerAttr",
   server_attr: "ServerAttr",
@@ -166,6 +169,17 @@ export const DISTRIBUTIONS = {
       let prod = 1;
       for (let i = 0; i < k; i++) prod *= rng();
       return -Math.log(Math.max(1e-15, prod)) / (k / m);
+    },
+  },
+  Lognormal: {
+    params: ["logMean", "logStdDev"],
+    label:  "Lognormal(logMean, logStdDev)",
+    hint:   "Right-skewed, naturally positive — exp() of a Normal. Good for service/repair times.",
+    sample: (p, rng) => {
+      const logMean = parseFloat(p.logMean) || 0, logStdDev = parseFloat(p.logStdDev) || 0.2;
+      const u1 = rng(), u2 = rng();
+      const z = Math.sqrt(-2 * Math.log(Math.max(1e-15, u1))) * Math.cos(2 * Math.PI * u2);
+      return Math.exp(logMean + logStdDev * z);
     },
   },
   Empirical: {
