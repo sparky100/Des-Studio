@@ -222,11 +222,13 @@ const emptyModel = {
 
 describe("exportToSimPy", () => {
   describe("return shape", () => {
-    it("returns { script, category, todoMacros } for a minimal model", () => {
+    it("returns { script, category, todoMacros, warnings } for a minimal model", () => {
       const result = exportToSimPy(minimalModel);
       expect(result).toHaveProperty("script");
       expect(result).toHaveProperty("category");
       expect(result).toHaveProperty("todoMacros");
+      expect(result).toHaveProperty("warnings");
+      expect(Array.isArray(result.warnings)).toBe(true);
       expect(typeof result.script).toBe("string");
       expect(result.script.length).toBeGreaterThan(100);
     });
@@ -399,10 +401,20 @@ describe("exportToSimPy", () => {
       expect(result.script).toContain("simpy.AllOf");
     });
 
-    it("requests both resources", () => {
+    it("requests both resources with priority", () => {
       const result = exportToSimPy(coseizeModel);
-      expect(result.script).toContain("Doctor_resource.request()");
-      expect(result.script).toContain("Nurse_resource.request()");
+      expect(result.script).toContain("Doctor_resource.request(priority=9999)");
+      expect(result.script).toContain("Nurse_resource.request(priority=9999)");
+    });
+
+    it("passes the c-event's priority to both COSEIZE resource requests", () => {
+      const model = {
+        ...coseizeModel,
+        cEvents: [{ ...coseizeModel.cEvents[0], priority: 2 }],
+      };
+      const result = exportToSimPy(model);
+      expect(result.script).toContain("Doctor_resource.request(priority=2)");
+      expect(result.script).toContain("Nurse_resource.request(priority=2)");
     });
 
     it("uses normal distribution for service time", () => {
@@ -430,9 +442,9 @@ describe("exportToSimPy", () => {
   });
 
   describe("resources", () => {
-    it("creates a simpy.Resource for each server type", () => {
+    it("creates a simpy.PriorityResource for each server type", () => {
       const result = exportToSimPy(minimalModel);
-      expect(result.script).toContain("Clerk_resource = simpy.Resource(env, capacity=2)");
+      expect(result.script).toContain("Clerk_resource = simpy.PriorityResource(env, capacity=2)");
     });
 
     it("defaults capacity to 1 when count is absent", () => {
@@ -444,7 +456,7 @@ describe("exportToSimPy", () => {
         ],
       };
       const result = exportToSimPy(model);
-      expect(result.script).toContain("Clerk_resource = simpy.Resource(env, capacity=1)");
+      expect(result.script).toContain("Clerk_resource = simpy.PriorityResource(env, capacity=1)");
     });
 
     it("uses shiftSchedule[0].capacity as initial capacity when shift schedule is present", () => {
@@ -456,7 +468,7 @@ describe("exportToSimPy", () => {
         ],
       };
       const result = exportToSimPy(model);
-      expect(result.script).toContain("Clerk_resource = simpy.Resource(env, capacity=5)");
+      expect(result.script).toContain("Clerk_resource = simpy.PriorityResource(env, capacity=5)");
     });
 
     it("shiftSchedule[0].capacity overrides count=0", () => {
@@ -468,8 +480,34 @@ describe("exportToSimPy", () => {
         ],
       };
       const result = exportToSimPy(model);
-      expect(result.script).toContain("Clerk_resource = simpy.Resource(env, capacity=10)");
+      expect(result.script).toContain("Clerk_resource = simpy.PriorityResource(env, capacity=10)");
       expect(result.script).not.toContain("capacity=0");
+    });
+
+    it("passes the c-event's priority to a single-resource ASSIGN request", () => {
+      const model = {
+        ...minimalModel,
+        cEvents: [{ ...minimalModel.cEvents[0], priority: 1 }],
+      };
+      const result = exportToSimPy(model);
+      expect(result.script).toContain("Clerk_resource.request(priority=1)");
+    });
+
+    it("falls back to priority=9999 when the c-event has no explicit priority", () => {
+      const result = exportToSimPy(minimalModel);
+      expect(result.script).toContain("Clerk_resource.request(priority=9999)");
+    });
+
+    it("retriggers queued requests after a shift-schedule capacity increase", () => {
+      const model = {
+        ...minimalModel,
+        entityTypes: [
+          { id: "e1", name: "Customer", role: "customer" },
+          { id: "e2", name: "Clerk", role: "server", count: 1, shiftSchedule: [{ time: 0, capacity: 1 }, { time: 240, capacity: 3 }] },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.script).toContain("_trigger_put(None)");
     });
   });
 
@@ -671,6 +709,41 @@ describe("exportToSimPy", () => {
     it("uses fallback 'Untitled' for model name in docstring", () => {
       const result = exportToSimPy(emptyModel);
       expect(result.script).toContain("Untitled");
+    });
+  });
+
+  describe("warnings", () => {
+    it("returns an empty warnings array for a fully-translated model", () => {
+      const result = exportToSimPy(minimalModel);
+      expect(result.warnings).toEqual([]);
+    });
+
+    it("flags an unsupported inter-arrival distribution", () => {
+      const model = {
+        ...minimalModel,
+        bEvents: [
+          {
+            ...minimalModel.bEvents[0],
+            schedules: [{ dist: "Weibull", distParams: {} }],
+          },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.warnings.some(w => /not auto-translated/.test(w))).toBe(true);
+    });
+
+    it("flags a non-FIFO queue discipline", () => {
+      const model = {
+        ...minimalModel,
+        queues: [{ id: "q1", name: "WaitQueue", discipline: "LIFO" }],
+      };
+      const result = exportToSimPy(model);
+      expect(result.warnings.some(w => /LIFO/.test(w))).toBe(true);
+    });
+
+    it("flags DRAIN's fail-fast-vs-blocking divergence", () => {
+      const result = exportToSimPy(containerModel);
+      expect(result.warnings.some(w => /DRAIN/.test(w))).toBe(true);
     });
   });
 

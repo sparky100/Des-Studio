@@ -14,7 +14,6 @@ import { ScheduleManager } from "./editors/ScheduleManager.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
 import { GoalsEditor } from "./editors/GoalsEditor.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
-import { formatRunTimestamp } from "./execute/executeHelpers.js";
 import { AiAssistantPanel } from "./execute/AiAssistantPanel.jsx";
 import { LogViewer } from "./execute/LogViewer.jsx";
 import { EntitySummaryTable } from "./execute/SweepViews.jsx";
@@ -1076,7 +1075,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         past={past} future={future} currentVersion={currentVersion}
         onBack={handleBack} onUndo={undo} onRedo={redo} onSave={save} onDiscard={discard}
         onHelpOpen={overrides.onHelpOpen}
-        onExportSimPy={()=>setShowSimPyExport(true)}
       />
       <ModelTabBar
         tab={tab} setTab={setTab}
@@ -1320,23 +1318,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           <SimPyExportModal
             model={model}
             onClose={()=>setShowSimPyExport(false)}
-            onResultsReady={r=>{
-              setLatestResults(r);
-              setLatestReplicationResults(r?.replications || []);
-              setShowSimPyExport(false);
-              setTab("results");
-              setResultsView("summary");
-              if (r && overrides.userId && modelId) {
-                const cfg = model.experimentDefaults || {};
-                saveSimulationRun(modelId, overrides.userId, r, {
-                  runLabel: `SimPy ${formatRunTimestamp()}`,
-                  replications: r.replications?.length ?? 1,
-                  maxTime: cfg.maxSimTime ?? 500,
-                  warmupPeriod: cfg.warmupPeriod ?? 0,
-                  seed: cfg.seed ?? 42,
-                }).then(runId => handleRunSaved(runId)).catch(console.error);
-              }
-            }}
           />
         )}
         {tab==="state"&&renderAuthoringShell(
@@ -1710,7 +1691,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12}}>
                 <div>
                   <div style={{fontSize:12,color:C.text,fontFamily:FONT,fontWeight:700,marginBottom:4}}>SimPy Python</div>
-                  <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>Export this model as a runnable SimPy simulation script.</div>
+                  <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>Download a portable starting-point Python script (caveats apply — see export dialog).</div>
                 </div>
                 <Btn small variant="ghost" onClick={()=>setShowSimPyExport(true)}>Export SimPy</Btn>
               </div>
