@@ -305,8 +305,9 @@ export function fireBEvent(ev, ctx) {
     const isDelayCompletion = cust?.status === "serving" && ev._contextCustId != null && !ev._contextSrvId;
     if (cust && (cust.status === "waiting" || isDelayCompletion)) {
       let routed;
+      const routingPredicateState = { currentEntity: cust, resources: {}, queues: {}, ...ctx.state };
       for (const branch of routingBranches) {
-        if (branch.condition && evaluatePredicate(branch.condition, { currentEntity: cust })) {
+        if (branch.condition && evaluatePredicate(branch.condition, routingPredicateState)) {
           routed = branch.queueName;
           break;
         }

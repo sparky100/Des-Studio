@@ -364,13 +364,26 @@ describe("visual designer graph operations", () => {
     const modelWithContainer = {
       ...baseModel,
       containerTypes: [{ id: "Tank", capacity: "1000", initialLevel: "500" }],
+      queues: [
+        ...baseModel.queues,
+        { id: "balk-q", name: "Balk Queue", discipline: "FIFO", balkCondition: { variable: "container(Tank).level", operator: ">=", value: 900 } },
+      ],
       bEvents: [
         ...baseModel.bEvents,
         { id: "fill", name: "Fill", scheduledTime: "2", effect: "FILL(Tank, 100)", schedules: [] },
+        {
+          id: "route-be", name: "Route", scheduledTime: "3", effect: "RELEASE(Nurse)",
+          routing: [{ condition: { variable: "container(Tank).level", operator: ">=", value: 10 }, queueName: "main-q" }],
+          schedules: [],
+        },
       ],
       cEvents: [
         ...baseModel.cEvents,
         { id: "drain", name: "Drain", priority: 2, condition: "container(Tank).level >= 10", effect: "DRAIN(Tank, 10)", cSchedules: [] },
+        {
+          id: "sched-ce", name: "Scheduled", priority: 3, condition: "queue(main-q).length > 0", effect: "ASSIGN(main-q, Nurse)",
+          cSchedules: [{ eventId: "drain", dist: "Fixed", distParams: { value: "1" }, when: { variable: "container(Tank).level", operator: "<", value: 5 } }],
+        },
       ],
     };
     const graph = deriveGraphFromModel(modelWithContainer);
@@ -386,6 +399,9 @@ describe("visual designer graph operations", () => {
       condition: "container(Reservoir).level >= 10",
       effect: "DRAIN(Reservoir, 10)",
     }));
+    expect(next.bEvents.find(event => event.id === "route-be").routing[0].condition.variable).toBe("container(Reservoir).level");
+    expect(next.cEvents.find(event => event.id === "sched-ce").cSchedules[0].when.variable).toBe("container(Reservoir).level");
+    expect(next.queues.find(q => q.id === "balk-q").balkCondition.variable).toBe("container(Reservoir).level");
   });
 
   it("updateVisualNode updates container capacity and initialLevel without renaming", () => {
