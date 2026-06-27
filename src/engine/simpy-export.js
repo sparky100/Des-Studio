@@ -1,8 +1,10 @@
 // engine/simpy-export.js — Export a DES Studio model as a runnable SimPy Python script
 //
-// exportToSimPy(model) → { script: string, category: 1 | 2, todoMacros: string[] }
+// exportToSimPy(model) → { script: string, category: 1 | 2, todoMacros: string[], warnings: string[] }
 //   category 1 — fully runnable; no manual edits needed
 //   category 2 — partial; sections marked with # TODO require user completion
+//   warnings   — semantic divergences from the native engine that aren't auto-translated
+//                (non-FIFO queue discipline, unsupported distributions, DRAIN semantics)
 
 // Macros whose SimPy translation requires manual completion
 const TODO_MACRO_SET = new Set([
@@ -14,8 +16,9 @@ const TODO_MACRO_SET = new Set([
 export function exportToSimPy(model) {
   const todoMacros = collectTodoMacros(model);
   const category = todoMacros.length > 0 ? 2 : 1;
-  const script = buildScript(model, new Set(todoMacros));
-  return { script, category, todoMacros };
+  const warnings = [];
+  const script = buildScript(model, new Set(todoMacros), warnings);
+  return { script, category, todoMacros, warnings };
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -329,7 +332,7 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
 
 // ── Script builder ────────────────────────────────────────────────────────────
 
-function buildScript(model, todoSet) {
+function buildScript(model, todoSet, warnings = []) {
   const bEvents     = model.bEvents     || [];
   const cEvents     = model.cEvents     || [];
   const entityTypes = model.entityTypes || [];
@@ -537,6 +540,7 @@ class Stats:
       } else {
         const iaExpr = distToExpr(iaDist, iaParams);
         const iaNote = distUnsupportedNote(iaDist);
+        if (iaNote) warnings.push(`${b.name || 'arrival'}: ${iaNote.replace(/^#\s*/, '')}`);
         fnBody += `    while True:\n`;
         if (iaNote) fnBody += `        ${iaNote}\n`;
         fnBody += `        yield env.timeout(${iaExpr})  # inter-arrival: ${iaLabel}\n`;
@@ -582,6 +586,7 @@ class Stats:
       const svcExpr = distToExpr(svcDist, svcParams);
       const svcLabel = distLabel(svcDist, svcParams);
       const svcNote = distUnsupportedNote(svcDist);
+      if (svcNote) warnings.push(`${c.name || 'service'}: ${svcNote.replace(/^#\s*/, '')}`);
 
       const completionBEvent = findCompletionBEvent(c, bEvents);
 
@@ -592,11 +597,15 @@ class Stats:
       const resArgs = serverTypes.map(st => safeId(st) + '_resource').join(', ');
       const resVars = serverTypes.map(st => safeId(st) + '_resource');
 
+      // C-event priority: lower number = served first, matching the native engine's
+      // C-scan ordering (src/engine/index.js sorts by priority ?? 9999 ascending).
+      const priority = c.priority ?? 9999;
+
       // COSEIZE: AllOf across multiple resources
       let seizeBlock;
       if (isCoseize) {
         const reqVars = resVars.map((r, i) => `_req${i}`);
-        const reqDecls = resVars.map((r, i) => `    ${reqVars[i]} = ${r}.request()`).join('\n');
+        const reqDecls = resVars.map((r, i) => `    ${reqVars[i]} = ${r}.request(priority=${priority})`).join('\n');
         const svcBusyLines = serverTypes.map(st =>
           `        stats.resource_busy["${st}"] = stats.resource_busy.get("${st}", 0.0) + _svc_t`
         ).join('\n');
@@ -618,7 +627,7 @@ ${svcBusyLines}
       } else {
         const svcNoteLine = svcNote ? `        ${svcNote}\n` : '';
         seizeBlock =
-`    with ${resVars[0]}.request() as _req:
+`    with ${resVars[0]}.request(priority=${priority}) as _req:
         yield _req
         entity.service_start_time = env.now
         entity.wait_time_acc += entity.service_start_time - entity.queue_join_time
@@ -677,6 +686,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const delayExpr = distToExpr(delayDist, delayParams);
       const delayLabel = distLabel(delayDist, delayParams);
       const delayNote = distUnsupportedNote(delayDist);
+      if (delayNote) warnings.push(`${c.name || 'delay'}: ${delayNote.replace(/^#\s*/, '')}`);
 
       const completionBEvent = findCompletionBEvent(c, bEvents);
 
@@ -723,6 +733,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
 # If your model relies on the fail-fast DRAIN guard, replace Container.get() with
 # an explicit level check before yielding.
 `);
+    warnings.push('Model uses DRAIN — DES Studio fails fast if level < amount, but SimPy Container.get() blocks until enough is available. Not auto-translated.');
   }
 
   // ── Shift schedule processes ───────────────────────────────────────────────
@@ -744,6 +755,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
         _current = ${resId}.capacity
         if _cap > _current:
             ${resId}._capacity = _cap
+            ${resId}._trigger_put(None)  # wake queued requests now that capacity increased
         elif _cap < _current:
             # Capacity reduction: will take effect as servers become idle
             ${resId}._capacity = _cap
@@ -803,6 +815,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
         runLines.push(`    # Note: queue "${q.name}" uses ${q.discipline} discipline — SimPy Store is FIFO.`);
         runLines.push(`    #   For LIFO: append to end and pop from end (store.items.append/pop).`);
         runLines.push(`    #   For PRIORITY: sort store.items after each put using entity.priority.`);
+        warnings.push(`Queue "${q.name}" uses ${q.discipline} discipline — SimPy Store is FIFO; not auto-translated.`);
       }
     }
     runLines.push(``);
@@ -836,7 +849,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
         const c = s.count != null && s.count !== '' ? parseInt(String(s.count), 10) : 1;
         return Number.isFinite(c) && c >= 1 ? c : 1;
       })();
-      runLines.push(`    ${resId} = simpy.Resource(env, capacity=${cap})`);
+      runLines.push(`    ${resId} = simpy.PriorityResource(env, capacity=${cap})`);
     }
     runLines.push(``);
   }
