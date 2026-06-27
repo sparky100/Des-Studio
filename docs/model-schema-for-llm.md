@@ -1,11 +1,12 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 2.2.3
-**Date:** 2026-06-22
+**Version:** 2.3.0
+**Date:** 2026-06-27
 **Sprint baseline:** Sprint 88
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
+| v2.3.0 | 2026-06-27 | Container conditions & expression amounts | Added `container(Id).level/.capacity/.min/.max` predicates to the §6.1 Format A table — container levels can now be read directly in `cEvents[].condition` strings (e.g. `"container(Tank).level >= 10"`), enabling DRAIN-blocking conditions. Updated `FILL`/`DRAIN` macro rows in §5 and §6 effect-macro tables: `amount` now accepts an expression (state variable or arithmetic combination, same evaluator as `SET`), not just a numeric literal. Updated V27 in §10 to document the new amount-shape checks: a bare numeric `amount` ≤ 0 is now a blocking error; a bare non-numeric `amount` that doesn't match a declared state variable name is a warning. Added a "Reading container levels in conditions" note to §8. |
 | v2.2.3 | 2026-06-22 | overflowDestination id/name clarification | **Fixed a bug in §13's Complete Reference Model itself:** the "ED Wait Queue" overflow example used `"overflowDestination": "q_ed_overflow"` (the target queue's `id`) instead of `"ED Overflow Queue"` (its `name`) — LLMs copying this example verbatim would reproduce a V20 validation error. Corrected the example and added TOP LLM MISTAKES #20 (`overflowDestination` set to a queue's `id` instead of its `name`) — it is a name-style reference like `ARRIVE`/`RELEASE`/`ASSIGN` macro arguments, not an id-style one. Strengthened the §16 naming-rules cross-reference line to call out the id-vs-name contrast explicitly. |
 | v2.2.2 | 2026-06-20 | DELAY completion resolution options (COMPLETE/routing/RELEASE) | Rewrote §6.2 Rules' "completion B-event" bullet into three explicit, mutually-exclusive options: (1) `COMPLETE()` — safe with no server, engine checks `_isDelay`; (2) a routing table (`routing[]`/`probabilisticRouting[]`) with no effect macro at all — the correct choice for "delay then continue to another queue, no server involved," since the engine's routing logic explicitly accepts a delay-held entity the same as a waiting one; (3) `RELEASE(ServerType[, TargetQueue])` — only valid when a server was genuinely seized earlier in the same entity's journey and held through the delay; `RELEASE` has no `_isDelay` awareness and will either no-op or act on an unrelated customer's claim if invented for a chain where nothing was ever seized. |
 | v2.2.1 | 2026-06-20 | DELAY completion ARRIVE/ServerAttr clarification | Added TOP LLM MISTAKES #18 (`cSchedules[].dist: "ServerAttr"` on a `DELAY` C-event — no server exists to read from, silently falls back to a fixed delay of `1`) and #19 (a `DELAY` completion B-event whose **only** effect is `ARRIVE(...)` — never resolves the delayed entity, which is stuck in `"serving"` forever). Updated §6.2 Rules and the V47 validation table row (§10) to document both, including the legitimate exception: `ARRIVE` combined with `COMPLETE()`/`RELEASE()`/a routing table on the same B-event is fine (e.g. to spawn a derived/log entity while the delayed entity is separately resolved) — only a *bare* `ARRIVE` with nothing else is blocked. |
@@ -489,7 +490,7 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | `COMPLETE` | `COMPLETE()` | Marks current entity as served and removes it from the system. Also releases the server automatically — no preceding `RELEASE()` needed. Use this alone as the terminal effect on the final service B-event. |
 | `RENEGE` | `RENEGE(ctx)` | Marks current entity as reneged (abandoned). Always use `ctx` as the argument. |
 | `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch entity, sends each member to `QueueName`. `QueueName` must reference a defined queue (V23). Every UNBATCH should be paired with a corresponding BATCH that created the batch entity being unbatched. |
-| `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level. `containerId` must match a declared container `id`. |
+| `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id`. `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
 | `PREEMPT` | `PREEMPT(ServerType)` | Interrupts in-progress service; displaced entity re-queues with remaining service time. |
 | `FAIL` | `FAIL(ServerType)` | Marks servers of this type as failed; interrupts in-progress service. Pair with a scheduled `REPAIR` B-event. |
 | `REPAIR` | `REPAIR(ServerType)` | Restores failed servers to idle; triggers a C-scan for waiting entities. |
@@ -740,8 +741,8 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost`. |
 | `RENEGE_OLDEST` | `RENEGE_OLDEST(CustomerType)` | Removes the oldest entity of the given type from its queue. `CustomerType` must exactly match a defined customer entity type name (case-sensitive). Used for max-queue-length policies or timeout eviction. |
-| `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id` (V27). |
-| `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not) (V27). |
+| `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id` (V27). `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
+| `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not) (V27). `amount` accepts the same literal/state-variable/expression forms as `FILL`. |
 | `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2. `QueueName` must reference a defined queue. |
 
 ### 6.2 Resource-Free Activities (`DELAY`)
@@ -785,6 +786,9 @@ Used **only** in `cEvents[].condition`. Written as a string expression.
 | `idle(ServerType).count >= N` | At least N servers are idle |
 | `state.variableName > N` | User-defined state variable exceeds threshold. `variableName` must match a `stateVariables[].name`. Supports all comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`. |
 | `state.variableName == 1` | User-defined state variable equals a value. Useful for shift/mode flags set via `SET(variableName, ...)`. |
+| `container(ContainerId).level > N` | Current level of a declared container. `ContainerId` must match a `containerTypes[].id`. |
+| `container(ContainerId).capacity > N` | Declared capacity of a container (`Infinity` if unbounded). |
+| `container(ContainerId).min > N` / `container(ContainerId).max > N` | Minimum / maximum level observed for that container so far this run. |
 
 Combine with `AND`, `OR`, `NOT`. Queue and server names must match exactly (case-sensitive).
 
@@ -795,6 +799,11 @@ Combine with `AND`, `OR`, `NOT`. Queue and server names must match exactly (case
 ```json
 "condition": "queue(Batch Queue).length >= 5 AND state.batchingEnabled == 1"
 ```
+
+```json
+"condition": "container(Tank).level >= 10"
+```
+DRAIN-blocking is an emergent property of this: a C-event with this condition and effect `["DRAIN(Tank, 10)"]` is re-scanned every cycle and simply won't fire until the level reaches 10 — no special "blocking" syntax is needed.
 
 > **This string format is valid ONLY for `cEvents[].condition`.** Do not use it anywhere else.
 
@@ -879,6 +888,8 @@ Continuous-level resources (tanks, buffers, stock).
 - `initialLevel` (optional, default 0): must be ≥ 0 and ≤ `capacity` (V26).
 - Manipulated by `FILL(id, amount)` and `DRAIN(id, amount)` in both B-events and C-events — the first argument must match the container's `id` exactly (case-insensitive) (V27).
 - `DRAIN` is a no-op (with error log) if the current level < amount — levels never go negative.
+
+> **Reading container levels in conditions:** Use `container(Id).level`, `.capacity`, `.min`, or `.max` directly inside any `cEvents[].condition` (or routing/balk) string — see §6.1 Format A. There is no need to fall back to a raw `state` key. This is what makes a "blocking DRAIN" possible: give a C-event a condition like `"container(Tank).level >= 10"` and effect `["DRAIN(Tank, 10)"]`, and the Three-Phase engine's per-cycle C-event re-scan will simply leave it un-fired until the level condition is met — no special blocking syntax required.
 
 ---
 
@@ -1027,7 +1038,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V24 | `loopConfig.maxLoopCount` must be an integer ≥ 1. `loopConfig.exitQueueName`, when set, must reference a defined queue. |
 | V25 | `RENEGE` must always use `(ctx)` as its argument — never an entity type name like `RENEGE(Patient)` |
 | V26 | Container `id` must be unique and non-empty; `capacity` > 0 when set; `initialLevel` ≥ 0 and ≤ `capacity`. Also: B-event `scheduledTime` must be numeric. |
-| V27 | `FILL` and `DRAIN` macros must reference a declared container `id` |
+| V27 | `FILL` and `DRAIN` macros must reference a declared container `id`. A bare numeric `amount` ≤ 0 is a blocking error. A bare non-numeric `amount` that doesn't match a declared state variable name is a warning (likely a typo). `amount` expressions containing operators/parens (e.g. `RefillRate * 2`) can't be statically validated and are accepted without a check. |
 | V28 | `epoch`, when set, must be a valid ISO 8601 datetime string (e.g. `"2026-05-18T08:00:00"`) |
 | V30 | If `probabilisticRouting` contains a `null` (exit) branch, the B-event's effect **must** include `COMPLETE()`, `RENEGE(ctx)`, or `RELEASE()` — otherwise entities routed to exit aren't counted as served. Use `RELEASE()` for mid-network events that free a server; use `COMPLETE()` for terminal events. |
 | V31 | If `routing` (conditional) contains a `null` (exit) branch, the B-event's effect **must** include `COMPLETE()`, `RENEGE(ctx)`, or `RELEASE()`. |
