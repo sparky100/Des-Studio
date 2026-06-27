@@ -89,6 +89,31 @@ describe("deriveGraphFromModel", () => {
     expect(edgePairs).toContain("activity:start-consult->sink:consult-complete");
   });
 
+  it("derives queue->activity edge when condition is normalized to object form", () => {
+    // Regression guard: db/models.js's norm() converts string conditions to
+    // { operator, clauses: [...] } via normalizeModelConditions() on every model
+    // load. The clause "variable" stays in the queue(...)/idle(...) dialect, so
+    // graph.js must recognize that dialect, not just the legacy Queue.X.length one.
+    const model = {
+      ...minimalModel,
+      cEvents: [
+        {
+          ...minimalModel.cEvents[0],
+          condition: {
+            operator: "AND",
+            clauses: [
+              { variable: "queue(Waiting).length", operator: ">", value: 0 },
+              { variable: "idle(Server).count", operator: ">", value: 0 },
+            ],
+          },
+        },
+      ],
+    };
+    const graph = deriveGraphFromModel(model);
+    const edgePairs = graph.edges.map(edge => `${edge.from}->${edge.to}`);
+    expect(edgePairs).toContain("queue:waiting->activity:start-service");
+  });
+
   it("binds direct-exit routing sinks to the matching route count key", () => {
     const graph = deriveGraphFromModel({
       ...twoStageModel,

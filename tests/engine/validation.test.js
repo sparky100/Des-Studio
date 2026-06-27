@@ -44,6 +44,47 @@ describe("validateModel", () => {
     ]));
   });
 
+  it("recognizes the function-call dialect (queue(...)) in structured predicate conditions", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      bEvents: [],
+      queues: [{ id: "main", name: "ServiceQueue", discipline: "FIFO" }],
+      cEvents: [{
+        id: "c1",
+        name: "Start Service",
+        condition: {
+          operator: "AND",
+          clauses: [
+            { variable: "queue(ServiceQueue).length", operator: ">", value: 0 },
+          ],
+        },
+        cSchedules: [],
+      }],
+    };
+
+    expect(validateModel(model).errors.filter(error => error.code === "V9")).toEqual([]);
+  });
+
+  it("reports unknown queues referenced via the function-call dialect", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      bEvents: [],
+      queues: [{ id: "main", name: "ServiceQueue", discipline: "FIFO" }],
+      cEvents: [{
+        id: "c1",
+        name: "Start Service",
+        condition: { variable: "queue(MissingQueue).length", operator: ">", value: 0 },
+        cSchedules: [],
+      }],
+    };
+
+    expect(validateModel(model).errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V9" }),
+    ]));
+  });
+
   it("detects COMPLETE effects when a B-event stores effects as an array", () => {
     const model = {
       entityTypes: [],
