@@ -828,8 +828,9 @@ Variable name prefixes:
 - `Entity.flight_id` — reads the `flight_id` attribute of the current entity
 - `Entity.route_type` — reads the `route_type` attribute of the current entity
 - `Queue.Arrival Holding Queue.length` — reads the current length of that queue
+- `container(ContainerId).level` / `.capacity` / `.min` / `.max` — same parenthesis-form tokens as Format A §6.1, also valid as a `variable` value here (e.g. `{ "variable": "container(Tank).level", "operator": ">=", "value": 10 }` as a `balkCondition` or `routing[].condition`)
 
-> **Do not use the string format (Format A) for balkCondition, routing conditions, or when predicates.** The engine calls a different evaluator for these fields; a string value will produce a pre-run error (CHK-011 or CHK-012).
+> **Do not use the string format (Format A) for balkCondition, routing conditions, or when predicates.** The engine calls a different evaluator for these fields; a string value will produce a pre-run error (CHK-011 or CHK-012). This restriction is about the *outer* shape — the whole condition must be a JSON object, not a string with `AND`/`OR`. A single token like `container(Tank).level` or `queue(X).length` is still valid as the *value* of the `variable` field inside that object.
 
 ---
 

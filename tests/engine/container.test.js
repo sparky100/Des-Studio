@@ -364,3 +364,51 @@ describe('container state resets cleanly across replications', () => {
     expect(rep2.summary.containerLevels?.Tank?.min).toBe(500);
   });
 });
+
+describe('container() token — bEvents[].routing[].condition', () => {
+  // Regression: the routing-condition call site only passed { currentEntity } to
+  // evaluatePredicate, omitting ctx.state — so container()/Queue()/Resource() tokens
+  // always resolved to undefined there even though the same tokens work correctly
+  // in cEvents[].condition and queues[].balkCondition (which do pass ctx.state).
+  test('routes by container level via a routing-table condition', () => {
+    const model = {
+      entityTypes: [
+        { id: 'et-patient', name: 'Patient', role: 'customer', attrDefs: [] },
+        { id: 'et-nurse', name: 'Nurse', role: 'server', count: '1', attrDefs: [] },
+      ],
+      queues: [
+        { id: 'q-wait', name: 'Waiting Queue', discipline: 'FIFO' },
+        { id: 'q-icu', name: 'ICU Queue', discipline: 'FIFO' },
+        { id: 'q-ward', name: 'Ward Queue', discipline: 'FIFO' },
+      ],
+      containerTypes: [{ id: 'Tank', capacity: '100', initialLevel: '50' }],
+      stateVariables: [],
+      bEvents: [
+        { id: 'be-arrive', name: 'Patient Arrives', scheduledTime: '0', effect: 'ARRIVE(Patient, Waiting Queue)', schedules: [] },
+        {
+          id: 'be-release', name: 'Service Complete', scheduledTime: '9999',
+          effect: 'RELEASE(Nurse)',
+          routing: [
+            { condition: { variable: 'container(Tank).level', operator: '>=', value: 10 }, queueName: 'ICU Queue' },
+          ],
+          defaultQueueName: 'Ward Queue',
+          schedules: [],
+        },
+      ],
+      cEvents: [
+        {
+          id: 'ce-serve', name: 'Start Service', priority: 1,
+          condition: 'queue(Patient).length > 0 AND idle(Nurse).count > 0',
+          effect: 'ASSIGN(Waiting Queue, Nurse)',
+          cSchedules: [{ eventId: 'be-release', dist: 'Fixed', distParams: { value: '2' }, useEntityCtx: true }],
+        },
+      ],
+    };
+
+    const result = buildEngine(model, 42, 0, 20).runAll();
+    const patient = result.entitySummary.find(e => e.role === 'customer');
+    // Tank starts at level 50 (>= 10), so the routing condition must match ICU Queue,
+    // not silently fall through to defaultQueueName.
+    expect(patient.queue).toBe('ICU Queue');
+  });
+});
