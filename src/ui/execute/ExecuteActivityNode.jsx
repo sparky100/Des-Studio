@@ -65,6 +65,44 @@ function PoolText({ activityBusyCount, busyCount, failedCount, capacity }) {
   );
 }
 
+function ResourceRow({ serverName, capacity, busyCount, activityBusyCount, failedCount, utilisation }) {
+  const { C, FONT } = useTheme();
+  const useText     = capacity > MAX_DOTS;
+  const hasFailures = failedCount > 0;
+  return (
+    <>
+      {serverName && (
+        <div style={{ fontSize: 9, color: C.muted }}>
+          {serverName}
+        </div>
+      )}
+      {useText
+        ? <PoolText activityBusyCount={activityBusyCount} busyCount={busyCount} failedCount={failedCount} capacity={capacity} />
+        : <DotGrid  capacity={capacity} activityBusyCount={activityBusyCount} totalBusyCount={busyCount} failedCount={failedCount} />
+      }
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginTop: 1,
+      }}>
+        <span style={{
+          fontSize: 9,
+          fontFamily: FONT,
+          color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted,
+        }}>
+          {utilisation.toFixed(0)}%
+        </span>
+        {hasFailures && (
+          <span style={{ fontSize: 9, color: C.red, fontFamily: FONT, fontWeight: 600 }}>
+            ⚠ {failedCount} failed
+          </span>
+        )}
+      </div>
+    </>
+  );
+}
+
 export function ExecuteActivityNode({ data }) {
   const { C, FONT } = useTheme();
   const ACTIVITY_COLOR = C.purple;
@@ -94,8 +132,7 @@ export function ExecuteActivityNode({ data }) {
   const failedCount        = live?.failedCount        ?? 0;
   const utilisation        = live?.utilisation        ?? 0;
   const serverName         = live?.serverTypeName     ?? null;
-  const useText            = capacity > MAX_DOTS;
-  const hasFailures        = failedCount > 0;
+  const rows               = live?.perType?.length > 1 ? live.perType : null;
 
   return (
     <div style={{
@@ -152,42 +189,38 @@ export function ExecuteActivityNode({ data }) {
         {data.label}
       </div>
 
-      {/* Server type sublabel */}
-      {serverName && (
-        <div style={{ fontSize: 9, color: C.muted }}>
-          {serverName}
-        </div>
-      )}
-
       {live ? (
-        <>
-          {/* Dot grid or text pool */}
-          {useText
-            ? <PoolText activityBusyCount={activityBusyCount} busyCount={busyCount} failedCount={failedCount} capacity={capacity} />
-            : <DotGrid  capacity={capacity} activityBusyCount={activityBusyCount} totalBusyCount={busyCount} failedCount={failedCount} />
-          }
-
-          {/* Utilisation row */}
-          <div style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginTop: 1,
-          }}>
-            <span style={{
-              fontSize: 9,
-              fontFamily: FONT,
-              color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted,
-            }}>
-              {utilisation.toFixed(0)}%
-            </span>
-            {hasFailures && (
-              <span style={{ fontSize: 9, color: C.red, fontFamily: FONT, fontWeight: 600 }}>
-                ⚠ {failedCount} failed
-              </span>
+        rows ? (
+          rows.map((row, i) => (
+            <div key={row.serverTypeName ?? i} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <ResourceRow
+                serverName={row.serverTypeName}
+                capacity={row.capacity}
+                busyCount={row.busyCount}
+                activityBusyCount={row.activityBusyCount}
+                failedCount={row.failedCount}
+                utilisation={row.utilisation}
+              />
+            </div>
+          ))
+        ) : (
+          <>
+            {/* Server type sublabel */}
+            {serverName && (
+              <div style={{ fontSize: 9, color: C.muted }}>
+                {serverName}
+              </div>
             )}
-          </div>
-        </>
+            <ResourceRow
+              serverName={null}
+              capacity={capacity}
+              busyCount={busyCount}
+              activityBusyCount={activityBusyCount}
+              failedCount={failedCount}
+              utilisation={utilisation}
+            />
+          </>
+        )
       ) : (
         <div style={{ fontSize: 9, color: C.muted }}>—</div>
       )}

@@ -1,6 +1,7 @@
 // ui/execute/NodeDetailSidebar.jsx — Detail sidebar for queue and activity nodes
 import { useEffect, useCallback, useMemo } from "react";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { deriveActivityLiveData } from "./activityLiveData.js";
 
 // Spacing, radius, and z-index tokens (mirrors tokens.js for test compatibility)
 const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
@@ -21,63 +22,6 @@ function deriveQueueLiveData(snap, label, model) {
     capacity: Number.isFinite(cap) && cap > 0 ? cap : null,
     entities: queueEntities,
     discipline: qDef?.discipline ?? null,
-    clock: snap.clock,
-  };
-}
-
-function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
-  if (!snap) return null;
-  const entities = snap.entities || [];
-  const servers = entities.filter(e => e.role === "server");
-  const meta = serverTypeIndex.get(refId);
-  const serverType = meta?.serverType;
-  const relevant = serverType
-    ? servers.filter(e => e.type.trim().toLowerCase() === serverType.trim().toLowerCase())
-    : servers;
-  const busyCount = relevant.filter(e => e.status === "busy" && !e._suspended).length;
-  const idleCount = relevant.filter(e => e.status === "idle" && !e._suspended).length;
-  const failedCount = relevant.filter(e => e.status === "failed").length;
-  const suspendedCount = relevant.filter(e => e._suspended).length;
-  const actualCapacity = relevant.length;
-  const customers = entities.filter(e => e.role !== "server");
-  const cEvent = (model?.cEvents || []).find(ce => ce.id === refId);
-  const cEventName = cEvent?.name ?? null;
-  const activityBusyCount = relevant.filter(e => {
-    if (e.status !== "busy") return false;
-    const cust = e.currentCustId != null ? customers.find(c => c.id === e.currentCustId) : null;
-    return cust?.ceventName === cEventName;
-  }).length;
-  const serverDetails = relevant.map(srv => {
-    const cust = srv.currentCustId != null
-      ? customers.find(c => c.id === srv.currentCustId)
-      : null;
-    return {
-      id: srv.id,
-      status: srv.status,
-      suspended: !!srv._suspended,
-      busyTime: srv._busyTime ?? 0,
-      starvationTime: srv._starvationTime ?? 0,
-      downtime: srv._downtime ?? 0,
-      scheduledDuration: srv._scheduledDuration ?? null,
-      serviceStart: srv._busyStart ?? null,
-      customerId: srv.currentCustId ?? null,
-      customerType: cust?.type ?? null,
-      customerEntityId: cust?.attrs?.entityId ?? null,
-      customerArrivalTime: cust?.arrivalTime ?? null,
-      ceventName: cust?.ceventName ?? null,
-    };
-  });
-  return {
-    serverTypeName: serverType ?? null,
-    capacity: actualCapacity,
-    busyCount,
-    activityBusyCount,
-    idleCount,
-    failedCount,
-    suspendedCount,
-    utilisation: actualCapacity > 0 ? (busyCount / actualCapacity) * 100 : 0,
-    completionSignal: snap.served,
-    servers: serverDetails,
     clock: snap.clock,
   };
 }
@@ -164,12 +108,12 @@ function QueueDetail({ label, liveData, onEntitySelect }) {
   );
 }
 
-export function ActivityDetail({ label, liveData, onEntitySelect }) {
+function ActivityResourceBlock({ typeStats, clock, onEntitySelect }) {
   const { C, FONT } = useTheme();
   const {
-    serverTypeName, capacity, busyCount, activityBusyCount, idleCount, failedCount, suspendedCount = 0,
-    utilisation, servers = [], clock,
-  } = liveData || {};
+    capacity, busyCount, activityBusyCount, idleCount, failedCount, suspendedCount = 0,
+    utilisation, servers = [],
+  } = typeStats || {};
 
   const statusColor = { busy: C.busy, idle: C.idle, failed: C.red, suspended: C.muted };
   const statusBg = { busy: `${C.busy}18`, idle: `${C.idle}18`, failed: `${C.red}18`, suspended: `${C.muted}18` };
@@ -195,12 +139,6 @@ export function ActivityDetail({ label, liveData, onEntitySelect }) {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: SPACE.sm, marginBottom: SPACE.sm }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: FONT }}>{label}</span>
-        {serverTypeName && (
-          <span style={{ fontSize: 10, color: C.server, fontFamily: FONT }}>{serverTypeName}</span>
-        )}
-      </div>
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: SPACE.sm,
         marginBottom: SPACE.sm,
@@ -358,6 +296,33 @@ export function ActivityDetail({ label, liveData, onEntitySelect }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+export function ActivityDetail({ label, liveData, onEntitySelect }) {
+  const { C, FONT } = useTheme();
+  const blocks = liveData?.perType?.length > 1 ? liveData.perType : [liveData || {}];
+  const single = blocks.length === 1 ? blocks[0] : null;
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: SPACE.sm, marginBottom: SPACE.sm }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: FONT }}>{label}</span>
+        {single?.serverTypeName && (
+          <span style={{ fontSize: 10, color: C.server, fontFamily: FONT }}>{single.serverTypeName}</span>
+        )}
+      </div>
+      {blocks.map((block, i) => (
+        <div key={block.serverTypeName ?? i} style={{ marginBottom: i < blocks.length - 1 ? SPACE.lg : 0 }}>
+          {blocks.length > 1 && (
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.server, fontFamily: FONT, marginBottom: SPACE.sm }}>
+              {block.serverTypeName}
+            </div>
+          )}
+          <ActivityResourceBlock typeStats={block} clock={liveData?.clock} onEntitySelect={onEntitySelect} />
+        </div>
+      ))}
     </div>
   );
 }

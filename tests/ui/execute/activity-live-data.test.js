@@ -1,0 +1,104 @@
+import { describe, test, expect } from "vitest";
+import { extractServerTypes, buildServerTypeIndex, deriveActivityLiveData } from "../../../src/ui/execute/activityLiveData.js";
+
+describe("extractServerTypes", () => {
+  test("ASSIGN returns a single server type", () => {
+    const effect = [{ macro: "ASSIGN", args: ["Queue", "Server"] }];
+    expect(extractServerTypes(effect)).toEqual(["Server"]);
+  });
+
+  test("COSEIZE with 2 types returns both", () => {
+    const effect = [{ macro: "COSEIZE", args: ["SurgeryQueue", "Surgeon", "Anesthetist"] }];
+    expect(extractServerTypes(effect)).toEqual(["Surgeon", "Anesthetist"]);
+  });
+
+  test("COSEIZE with 3+ types returns all", () => {
+    const effect = [{ macro: "COSEIZE", args: ["Queue", "TypeA", "TypeB", "TypeC"] }];
+    expect(extractServerTypes(effect)).toEqual(["TypeA", "TypeB", "TypeC"]);
+  });
+
+  test("returns empty array when no effect", () => {
+    expect(extractServerTypes(null)).toEqual([]);
+  });
+
+  test("handles string effect", () => {
+    expect(extractServerTypes("COSEIZE(Queue, Surgeon, Anesthetist)")).toEqual(["Surgeon", "Anesthetist"]);
+  });
+});
+
+describe("buildServerTypeIndex", () => {
+  test("indexes ASSIGN and COSEIZE c-events with capacities", () => {
+    const cEvents = [
+      { id: "ce-1", name: "Serve", effect: [{ macro: "ASSIGN", args: ["Queue", "Clerk"] }] },
+      { id: "ce-2", name: "Surgery", effect: [{ macro: "COSEIZE", args: ["SurgeryQueue", "Surgeon", "Anesthetist"] }] },
+    ];
+    const entityTypes = [
+      { name: "Clerk", role: "server", count: "2" },
+      { name: "Surgeon", role: "server", count: "3" },
+      { name: "Anesthetist", role: "server", count: "1" },
+    ];
+    const index = buildServerTypeIndex(cEvents, entityTypes);
+    expect(index.get("ce-1")).toEqual({ serverTypes: ["Clerk"], capacities: [2], ceventName: "Serve" });
+    expect(index.get("ce-2")).toEqual({ serverTypes: ["Surgeon", "Anesthetist"], capacities: [3, 1], ceventName: "Surgery" });
+  });
+
+  test("skips c-events with no server types", () => {
+    const cEvents = [{ id: "ce-3", name: "NoOp", effect: null }];
+    const index = buildServerTypeIndex(cEvents, []);
+    expect(index.has("ce-3")).toBe(false);
+  });
+});
+
+function makeSnap({ clock = 10.0, entities = [], served = 0 } = {}) {
+  return { clock, entities, served };
+}
+
+describe("deriveActivityLiveData", () => {
+  const model = {
+    cEvents: [{ id: "ce-2", name: "Surgery", effect: [{ macro: "COSEIZE", args: ["SurgeryQueue", "Surgeon", "Anesthetist"] }] }],
+  };
+
+  test("returns null when no snapshot", () => {
+    expect(deriveActivityLiveData(null, "ce-2", new Map(), model)).toBeNull();
+  });
+
+  test("produces a perType entry per server type for COSEIZE", () => {
+    const serverTypeIndex = buildServerTypeIndex(model.cEvents, [
+      { name: "Surgeon", role: "server", count: "2" },
+      { name: "Anesthetist", role: "server", count: "1" },
+    ]);
+    const snap = makeSnap({
+      entities: [
+        { id: 1, type: "Surgeon", role: "server", status: "busy", currentCustId: 100 },
+        { id: 2, type: "Surgeon", role: "server", status: "idle" },
+        { id: 3, type: "Anesthetist", role: "server", status: "busy", currentCustId: 100 },
+        { id: 100, type: "Patient", role: "customer", status: "busy", ceventName: "Surgery" },
+      ],
+    });
+    const live = deriveActivityLiveData(snap, "ce-2", serverTypeIndex, model);
+    expect(live.perType).toHaveLength(2);
+
+    const surgeon = live.perType.find(t => t.serverTypeName === "Surgeon");
+    expect(surgeon.capacity).toBe(2);
+    expect(surgeon.busyCount).toBe(1);
+    expect(surgeon.idleCount).toBe(1);
+    expect(surgeon.activityBusyCount).toBe(1);
+
+    const anesthetist = live.perType.find(t => t.serverTypeName === "Anesthetist");
+    expect(anesthetist.capacity).toBe(1);
+    expect(anesthetist.busyCount).toBe(1);
+    expect(anesthetist.activityBusyCount).toBe(1);
+
+    // Top-level fields mirror the first type (Surgeon) for backward compatibility.
+    expect(live.serverTypeName).toBe("Surgeon");
+    expect(live.capacity).toBe(2);
+  });
+
+  test("returns empty perType and zeroed fields when c-event isn't indexed", () => {
+    const snap = makeSnap({ entities: [{ id: 1, type: "Clerk", role: "server", status: "idle" }] });
+    const live = deriveActivityLiveData(snap, "ce-unknown", new Map(), model);
+    expect(live.perType).toEqual([]);
+    expect(live.serverTypeName).toBeNull();
+    expect(live.busyCount).toBe(0);
+  });
+});
