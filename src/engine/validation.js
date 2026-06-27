@@ -228,6 +228,12 @@ export function validateModel(model) {
           err('V5', `${context}: Erlang mean must be > 0 (got '${p.mean ?? ''}').`, tab);
         break;
       }
+      case 'Lognormal': {
+        const s = parseFloat(p.logStdDev);
+        if (isNaN(s) || s <= 0)
+          err('V5', `${context}: Lognormal logStdDev must be > 0 (got '${p.logStdDev ?? ''}').`, tab);
+        break;
+      }
       default:
         break;
     }

@@ -99,7 +99,7 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 | `phases.js` | Phase A (clock advance), Phase B (B-Event fire), Phase C (C-scan with restart rule) |
 | `macros.js` | 19 effect macros: ARRIVE, ASSIGN, BATCH, COMPLETE, COSEIZE, COST, DRAIN, FAIL, FILL, MATCH, PREEMPT, RELEASE, RENEGE, RENEGE_OLDEST, REPAIR, SET, SET_ATTR, SPLIT, UNBATCH |
 | `entities.js` | Entity lifecycle, queue discipline sort functions, server pool management, `_busyStart`/`_busyTime` utilisation tracking. `attemptQueueJoin(entity, queueName, clock, ctx, opts)` is the single centralized join function — called from every queue-join site (ARRIVE, RELEASE, BATCH/UNBATCH/SPLIT, conditional/probabilistic routing, loop-guard exit, preemption re-queue) and enforces balking (F11.2), capacity/overflow (F11.1/F11.3, recursing through `overflowDestination` chains with a `visitedQueues` cycle guard), and queue-level auto-reneging (`renegeDist`) uniformly regardless of how the entity reaches the queue. |
-| `distributions.js` | Sampler registry, seeded RNG (mulberry32), all 11 distribution types |
+| `distributions.js` | Sampler registry, seeded RNG (mulberry32), all 12 distribution types |
 | `conditions.js` | Safe predicate evaluator — no `eval`, no `new Function` |
 | `validation.js` | V1–V39 (V7 unused); 38 distinct rules, pre-run gate |
 | `statistics.js` | CI, batch means, ANOVA, Tukey HSD, Welch test; exports `summarizeEntitySummary` used by engine and persistence |
@@ -284,6 +284,7 @@ interface CEvent {
 | `Normal` | `mean`, `std` | Clamped to ≥ 0 |
 | `Triangular` | `min`, `mode`, `max` | |
 | `Fixed` | `value` | Deterministic |
+| `Lognormal` | `logMean`, `logStdDev` | Always positive, no clamping; recommended for right-skewed durations (repair times, long-tail tasks). Mean = exp(logMean + logStdDev²/2) |
 | `Erlang` | `k`, `mean` | k-stage exponential |
 | `Empirical` | `values[]` | Inline or CSV-imported |
 | `Piecewise` | `periods[]` | Time-varying; clock-aware selection |
@@ -468,6 +469,10 @@ The returned `Engine` object exposes:
 | `getFelSize()` | `number` | Current Future Event List size. |
 
 **`buildEngine()` is the only engine import allowed in UI code.** No UI component may import from `src/engine/macros.js`, `src/engine/phases.js`, or any other engine sub-module directly.
+
+#### 3.1.0a MTBF/MTTR auto-scheduling
+
+`makeFailureEvents(model, rng, streamRegistry)` (`index.js:326-387`) is a genuine engine-automatic feature, not a model-authoring pattern built from B-events. For every server entityType with `mtbfDist`/`mtbfDistParams` (alias: `failureDist`/`failureDistParams`) and `mttrDist`/`mttrDistParams` (alias: `repairDist`/`repairDistParams`) set, the engine internally generates FAILURE/REPAIR pseudo-events with zero B-event/C-event authoring required by the model author. `failureScope` selects the blast radius: `"unit"` (default) fails one server instance per failure event; `"pool"` fails every server of that type simultaneously. The manual `FAIL`/`REPAIR` macros remain available for explicit, scenario-triggered outages (e.g. conditional on something the auto-schedule can't express) but are a separate mechanism layered on top, not a prerequisite for MTBF/MTTR behaviour.
 
 #### 3.1.1 Wait time computation (Sprint 83)
 

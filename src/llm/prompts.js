@@ -831,6 +831,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "You MUST follow the 6-step chain-of-thought framework: binding constraint → cause → specific change → predicted effect → goal impact → ranking.",
     "Never give vague advice like 'consider increasing capacity' — always name the exact parameter and specific value.",
     "When the model has a failure/repair model on a resource, factor availability into capacity calculations. If failureScope is 'unit', only one server is affected per failure event; if 'pool', all servers of that type fail together.",
+    "When a cEvent's effect contains PREEMPT, remember the interrupted entity's remaining service time is preserved automatically (not resampled) — do not suggest a 'fix lost service time' change, and when estimating the impact of adding/removing preemption capacity, account for the preempted entity re-entering its queue ahead of fresh arrivals under FIFO/PRIORITY discipline.",
     "When a loop guard is present, consider whether the loop count limit is causing premature exits.",
     "When state variables are present, they may represent conditions that affect routing or service rates.",
     "A cEvent with activityType:'delay' uses the DELAY macro — the entity is held for a sampled duration but NO server is claimed.",

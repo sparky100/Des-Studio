@@ -198,6 +198,63 @@ describe('EntityAttr distribution — S40.1', () => {
   });
 });
 
+// ── Sprint 86 (F86.5) — Lognormal distribution ───────────────────────────────
+
+describe('Lognormal distribution — Sprint 86 (F86.5)', () => {
+  test('normalizes lognormal aliases to Lognormal', () => {
+    expect(normalizeDistributionName('lognormal')).toBe('Lognormal');
+    expect(normalizeDistributionName('log-normal')).toBe('Lognormal');
+    expect(normalizeDistributionName('log_normal')).toBe('Lognormal');
+    expect(normalizeDistributionName('Lognormal')).toBe('Lognormal');
+  });
+
+  test('Lognormal is registered in DISTRIBUTIONS with correct metadata', () => {
+    const def = DISTRIBUTIONS['Lognormal'];
+    expect(def).toBeDefined();
+    expect(def.params).toEqual(['logMean', 'logStdDev']);
+    expect(def.label).toBeTruthy();
+    expect(def.hint).toBeTruthy();
+  });
+
+  test('same seed used in Lognormal sampler produces identical sample sequence', () => {
+    const seq1 = Array.from({ length: 50 }, () =>
+      sample('Lognormal', { logMean: '1', logStdDev: '0.5' }, mulberry32(777))
+    );
+    const seq2 = Array.from({ length: 50 }, () =>
+      sample('Lognormal', { logMean: '1', logStdDev: '0.5' }, mulberry32(777))
+    );
+    expect(seq1).toEqual(seq2);
+  });
+
+  test('all samples are positive (naturally non-negative, no clipping needed)', () => {
+    const rng = mulberry32(99);
+    for (let i = 0; i < 500; i++) {
+      const v = sample('Lognormal', { logMean: '0', logStdDev: '1' }, rng);
+      expect(v).toBeGreaterThan(0);
+    }
+  });
+
+  test('empirical mean of a large sample matches the analytic lognormal mean exp(logMean + logStdDev^2/2)', () => {
+    const logMean = 1, logStdDev = 0.5;
+    const rng = mulberry32(2024);
+    const n = 20000;
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      sum += sample('Lognormal', { logMean: String(logMean), logStdDev: String(logStdDev) }, rng);
+    }
+    const empiricalMean = sum / n;
+    const analyticMean = Math.exp(logMean + (logStdDev * logStdDev) / 2);
+    expect(Math.abs(empiricalMean - analyticMean) / analyticMean).toBeLessThan(0.05);
+  });
+
+  test('alias lowercase "lognormal" round-trips through sample() identically to canonical name', () => {
+    const params = { logMean: '0.5', logStdDev: '0.3' };
+    const a = sample('lognormal', params, mulberry32(5));
+    const b = sample('Lognormal', params, mulberry32(5));
+    expect(a).toBe(b);
+  });
+});
+
 // ── S40.2 — Schedule rows[] ───────────────────────────────────────────────────
 
 describe('Schedule rows[] — S40.2', () => {

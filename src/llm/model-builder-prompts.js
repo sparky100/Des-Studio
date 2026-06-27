@@ -163,6 +163,19 @@ pattern, consult §10 directly.`,
     ✗ WRONG — COMPLETE() blocks the routing, entity exits immediately and never routes:
       "effect": ["COMPLETE()"], "probabilisticRouting": [{"queueName": "Voucher Queue", "probability": 0.9}, {"queueName": null, "probability": 0.1}]
 
+12. C-event/B-event condition strings only support "variable OPERATOR literal" comparisons —
+    NEVER compare two dynamic tokens against each other (queue(...)/idle(...)/busy(...)/attr(...)
+    calls or state variable names on both sides). The runtime evaluator (compilePredicate) parses
+    the right-hand side as a fixed literal at model-load time — it is never re-resolved as a state
+    variable. A condition comparing a dynamic left side against a state-variable right side silently
+    evaluates to false forever (the literal parses as NaN) — no error, no warning, the C-event
+    just never fires. To gate on an accumulated/dynamic quantity, add a dedicated state variable and
+    compare it against a literal constant in its own AND-clause, never against another dynamic token.
+
+    ✓ CORRECT: "condition": "queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"
+    ✗ WRONG:   "condition": "queue(TraumaQueue).length > traumaInService"  — right side treated as a
+               literal token, parses to NaN, comparison is always false, C-event never fires
+
 13. C-event name MUST NOT start with the word "Start".
     The effect picker prepends "Start" automatically — a C-event named "Start Triage"
     displays as "Start Start Triage with…" in the UI.
@@ -202,7 +215,50 @@ pattern, consult §10 directly.`,
 
     ✓ CORRECT: "effect": ["DELAY(Recovery Queue)"], cSchedules useEntityCtx:true → completion B-event
     ✗ WRONG:   "effect": ["ASSIGN(Recovery Queue, Recovery Room)"] when "Recovery Room" is not a
-               real staffed/equipped resource the user described — fabricated server type`,
+               real staffed/equipped resource the user described — fabricated server type
+
+16. PREEMPT(ServerType) interrupts the FIRST busy/serving server of that type it finds — it has
+    no awareness of which entity that server is currently attending to, and no way to target a
+    specific server. It always preserves the interrupted entity's remaining service time exactly
+    (the engine stores and re-applies it automatically) and re-queues that entity with skipBalk —
+    no model-side wiring is needed for either behavior. Because PREEMPT cannot exclude a server
+    already dedicated to another protected case, a model with repeated/recurring preemption needs
+    a dedicated state-variable counter (incremented/decremented via SET in the same effect as the
+    ASSIGN/RELEASE that starts/ends the protected service) so the preempt condition can skip
+    servers already committed — see rule 12 for why that counter must be compared to a literal,
+    never to a dynamic queue length.
+
+17. FAIL(ServerType)/REPAIR(ServerType) are manual macros for explicit, scenario-triggered outages
+    (e.g. a user action, an inspection finding, a one-off breakdown). For routine, statistically
+    recurring downtime, prefer the MTBF/MTTR auto-scheduling pattern instead: set mtbfDist/
+    mtbfDistParams and mttrDist/mttrDistParams (plus failureScope: "unit" or "pool") directly on
+    the server entityType — this is a model-authoring pattern, not a separate engine feature, but
+    it is far less error-prone than hand-wiring Exponential B-events that call FAIL/REPAIR. Use the
+    manual macros only when failures must be conditional on something the auto-schedule can't
+    express (e.g. only fail a server while it is serving a specific entity type).
+
+18. MATCH(QueueA, QueueB, TargetQueue) merges the matched pair's attrs as
+    {...entityFromQueueA.attrs, ...entityFromQueueB.attrs} — QueueB's attributes overwrite QueueA's
+    on any name collision. Order the two source queues deliberately when both sides define an
+    attribute with the same name; the one named second always wins.
+
+19. SPLIT takes exactly THREE arguments: SPLIT(EntityType, N, QueueName) — entity type to spawn,
+    clone count, and the destination queue. A 2-arg form (SPLIT(N, QueueName)) is invalid and will
+    not run. Only trigger SPLIT from a one-shot context (a cSchedule-fired B-event using the
+    ctx entity), never from a recurring C-event condition on the same source queue/entity — since
+    SPLIT doesn't change the context entity's own status, a condition that stays true would refire
+    it unboundedly.
+
+    ✓ CORRECT: "effect": ["SPLIT(Order, 3, Picking Queue)"]
+    ✗ WRONG:   "effect": ["SPLIT(3, Picking Queue)"]  — missing EntityType argument, non-functional
+
+20. For simple patience-based abandonment (an entity waits at most some duration before leaving),
+    prefer setting renegeDist/renegeDistParams directly on the Queue object over hand-wiring a
+    manual RENEGE(ctx) B-event schedule — it applies automatically to every entity that joins that
+    queue regardless of how it arrived (ARRIVE, RELEASE-routing, BATCH, SPLIT), with no extra
+    B-event or schedule needed. Reserve the manual RENEGE(ctx) B-event pattern (rule 8) for
+    reneging that must be conditional on something other than a fixed/sampled wait duration (e.g.
+    only renege while a specific state variable holds a value).`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:

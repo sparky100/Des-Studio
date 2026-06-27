@@ -179,10 +179,8 @@ const CALL_CENTER = {
     { id: "b_arrive", name: "Arrival", scheduledTime: "0", effect: ["ARRIVE(Caller, Caller)"],
       schedules: [
         { eventId: "b_arrive",  dist: "Exponential", distParams: { mean: "0.667" } },
-        { eventId: "b_renege",  dist: "Fixed",        distParams: { value: "10" }, isRenege: true },
       ] },
-    { id: "b_complete", name: "Complete",          scheduledTime: "9999", effect: ["COMPLETE()"],    schedules: [] },
-    { id: "b_renege",   name: "Abandonment Timer", scheduledTime: "9999", effect: ["RENEGE(ctx)"],   schedules: [] },
+    { id: "b_complete", name: "Complete", scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
   ],
   cEvents: [{
     id: "c_seize", name: "Assign Agent", priority: 1,
@@ -190,7 +188,11 @@ const CALL_CENTER = {
     effect: ["ASSIGN(Caller, Agent)"],
     cSchedules: [{ eventId: "b_complete", dist: "Exponential", distParams: { mean: "2.5" }, useEntityCtx: true }],
   }],
-  queues: [{ id: "q_caller", name: "Caller", customerType: "Caller", capacity: "", discipline: "FIFO" }],
+  // Queue-level renegeDist is the recommended abandonment pattern (Sprint 86 /
+  // F86.4): every caller that joins this queue automatically gets a patience
+  // timer scheduled — no manual B-event/schedule wiring needed.
+  queues: [{ id: "q_caller", name: "Caller", customerType: "Caller", capacity: "", discipline: "FIFO",
+    renegeDist: "Fixed", renegeDistParams: { value: "10" } }],
 };
 
 const FAST_FOOD = {
@@ -597,6 +599,52 @@ const ORDER_FULFILLMENT = {
   ],
 };
 
+const BULK_ORDER_SPLIT = {
+  name: "Bulk Order Splitting",
+  description: "Bulk orders arrive and are processed by an intake clerk, who clones each one into 3 individual items (SPLIT(Item, 4, PickQueue) — N=4 means 3 clones) for picking by 2 pickers; the parent order itself completes at intake. Demonstrates the correct 3-arg SPLIT(EntityType, N, Queue) signature, fired once per order from a cSchedule-triggered completion B-event — never from a recurring C-event condition.",
+  domain: "Manufacturing",
+  templateMeta: {
+    scenarioType: "Entity cloning / decomposition with SPLIT",
+    keyMacros: ["ARRIVE", "ASSIGN", "SPLIT", "COMPLETE"],
+    paramGuide: "Order arrival mean 8 min. Intake (split) time Fixed 1 min. Pick time Triangular(2,4,7) min. 1 clerk, 2 pickers. Each order splits into 4 items (3 clones + parent retired at intake) → ~81% picker utilisation.",
+    limitations: "Fixed split count (4 items per order) — no variable basket size. Single item type, no per-item attributes.",
+  },
+  entityTypes: [
+    { id: "et_order",  name: "BulkOrder",   role: "customer", count: 0, attrDefs: [] },
+    { id: "et_item",   name: "Item",        role: "customer", count: 0, attrDefs: [] },
+    { id: "et_clerk",  name: "IntakeClerk", role: "server",   count: 1, attrDefs: [] },
+    { id: "et_picker", name: "Picker",      role: "server",   count: 2, attrDefs: [] },
+  ],
+  stateVariables: [{ name: "itemsPicked", initialValue: "0" }],
+  bEvents: [
+    { id: "b_arrive", name: "Order Arrival", scheduledTime: "0", effect: ["ARRIVE(BulkOrder, IntakeQueue)"],
+      schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "8" } }] },
+    // Fired via cSchedule(useEntityCtx: true) below — the context entity is the
+    // specific BulkOrder the clerk just claimed. SPLIT runs first (clones 3
+    // Items into PickQueue while the parent order is still "serving"), then
+    // COMPLETE() finalises the parent order and releases the clerk. This is the
+    // one-shot pattern: SPLIT never appears in a recurring C-event condition.
+    { id: "b_intake_done", name: "Intake Split", scheduledTime: "9999",
+      effect: ["SPLIT(Item, 4, PickQueue)", "COMPLETE()"], schedules: [] },
+    { id: "b_pick_done", name: "Pick Done", scheduledTime: "9999",
+      effect: ["COMPLETE()", "itemsPicked++"], schedules: [] },
+  ],
+  cEvents: [
+    { id: "c_intake", name: "Intake Order", priority: 1,
+      condition: "queue(IntakeQueue).length > 0 AND idle(IntakeClerk).count > 0",
+      effect: ["ASSIGN(IntakeQueue, IntakeClerk)"],
+      cSchedules: [{ eventId: "b_intake_done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+    { id: "c_pick", name: "Pick Item", priority: 2,
+      condition: "queue(PickQueue).length > 0 AND idle(Picker).count > 0",
+      effect: ["ASSIGN(PickQueue, Picker)"],
+      cSchedules: [{ eventId: "b_pick_done", dist: "Triangular", distParams: { min: "2", mode: "4", max: "7" }, useEntityCtx: true }] },
+  ],
+  queues: [
+    { id: "q_intake", name: "IntakeQueue", customerType: "BulkOrder", capacity: "", discipline: "FIFO" },
+    { id: "q_pick",   name: "PickQueue",   customerType: "Item",      capacity: "", discipline: "FIFO" },
+  ],
+};
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 // ── Sprint 41-45: New capability templates ───────────────────────────────────
@@ -638,22 +686,31 @@ const MACHINE_SHOP_FAILURES = {
 
 const PRIORITY_ED_BALKING = {
   name: "Priority ED with Balking",
-  description: "Emergency department with priority triage (severity 1–5). High-severity patients jump the queue. Patients balk at a 10% rate when the department is busy. Use the PRIORITY discipline and goal-aware sweep to find minimum doctor count.",
+  description: "Emergency department with priority triage (severity 1–5). High-severity patients jump the queue. Patients balk at a 10% rate when the department is busy. Resuscitation-level arrivals (trauma codes) PREEMPT a doctor mid-consultation when none are free — the bumped patient resumes with their remaining consultation time preserved, not a fresh one. Use the PRIORITY discipline and goal-aware sweep to find minimum doctor count.",
   domain: "Healthcare",
   templateMeta: {
-    scenarioType: "Priority queue with balking and attribute-based ordering",
-    keyMacros: ["ARRIVE", "ASSIGN", "COMPLETE"],
-    paramGuide: "Arrival mean 4 min. Severity Uniform(1,5). Consultation Triangular(15,25,40) min. 3 doctors. Balk probability 10%.",
-    limitations: "No triage pre-assessment stage. Severity assigned once at arrival.",
+    scenarioType: "Priority queue with balking, attribute-based ordering, and server preemption",
+    keyMacros: ["ARRIVE", "ASSIGN", "PREEMPT", "COMPLETE"],
+    paramGuide: "Arrival mean 4 min. Severity Uniform(1,5). Consultation Triangular(15,25,40) min. 3 doctors. Balk probability 10%. Trauma codes arrive mean 30 min and preempt a doctor when all are busy.",
+    limitations: "No triage pre-assessment stage. Severity assigned once at arrival. Preemption always interrupts whichever doctor happens to be busy first — it does not target the lowest-severity patient specifically (the engine has no condition-language way to inspect the attributes of the patient a busy doctor is currently treating), so the model tracks a traumaInService counter to stop preemption from re-targeting a doctor already dedicated to a trauma case.",
   },
   entityTypes: [
     { id: "et_patient", name: "Patient", role: "customer", count: 0, attrDefs: [
       { id: "a_pri", name: "priority", valueType: "number", defaultValue: 3, mutable: false,
         dist: "Uniform", distParams: { min: "1", max: "5" } },
     ]},
+    { id: "et_trauma", name: "TraumaCode", role: "customer", count: 0, attrDefs: [] },
     { id: "et_doctor", name: "Doctor", role: "server", count: 3, attrDefs: [] },
   ],
-  stateVariables: [],
+  // traumaInService tracks how many doctors are currently dedicated to a trauma
+  // case. The preempt condition below gates on "more trauma waiting than already
+  // in service", not just "a doctor is busy" — without this, PREEMPT(Doctor)'s
+  // first-busy-server selection (src/engine/macros.js) has no way to avoid
+  // re-targeting a doctor that's already treating a trauma patient, which can
+  // otherwise thrash: bump that patient, reassign them via FIFO (their original
+  // arrival time still wins), bump them again, forever, never reaching the new
+  // arrival the preemption was meant to make room for.
+  stateVariables: [{ name: "traumaInService", initialValue: "0" }],
   goals: [
     { metric: "avgWait", operator: "<",  target: "20", label: "avgWait < 20 min" },
     { metric: "reneged", operator: "<",  target: "10", label: "balked < 10" },
@@ -661,15 +718,41 @@ const PRIORITY_ED_BALKING = {
   bEvents: [
     { id: "b_arrive",   name: "Patient Arrives",     scheduledTime: "0",    effect: ["ARRIVE(Patient, Waiting)"],
       schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "4" } }] },
+    { id: "b_trauma",   name: "Trauma Code Arrives",  scheduledTime: "0",    effect: ["ARRIVE(TraumaCode, TraumaQueue)"],
+      schedules: [{ eventId: "b_trauma", dist: "Exponential", distParams: { mean: "30" } }] },
     { id: "b_complete", name: "Consultation Done",   scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
+    { id: "b_trauma_done", name: "Trauma Consult Done", scheduledTime: "9999",
+      effect: ["COMPLETE()", "SET(traumaInService, traumaInService-1)"], schedules: [] },
   ],
-  cEvents: [{
-    id: "c_consult", name: "Consult", priority: 1,
-    condition: "queue(Waiting).length > 0 AND idle(Doctor).count > 0",
-    effect: ["ASSIGN(Waiting, Doctor)"],
-    cSchedules: [{ eventId: "b_complete", dist: "Triangular", distParams: { min: "15", mode: "25", max: "40" }, useEntityCtx: true }],
-  }],
-  queues: [{ id: "q_wait", name: "Waiting", customerType: "Patient", capacity: "30", discipline: "PRIORITY", balkProbability: 0.1 }],
+  cEvents: [
+    // Highest priority: only preempt when a trauma code is waiting, no doctor
+    // is idle, AND no doctor is already dedicated to a trauma case. The last
+    // clause is required because the condition language only supports
+    // variable-vs-literal comparisons (no variable-vs-variable, e.g.
+    // "queue(...).length > traumaInService" silently evaluates to false —
+    // migrateLegacyCondition treats the right-hand side as a literal token) —
+    // so traumaInService must be checked against the constant 0, not against
+    // the queue length. PREEMPT picks the first busy server it finds and
+    // re-queues that patient with remaining consultation time preserved (not
+    // reset) — see entities.js preemptCustomer.
+    { id: "c_preempt", name: "Preempt for Trauma", priority: 0,
+      condition: "queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0",
+      effect: ["PREEMPT(Doctor)"], cSchedules: [] },
+    // Trauma codes claim the now-free (or already-idle) doctor ahead of any
+    // waiting regular patient.
+    { id: "c_consult_trauma", name: "Consult Trauma", priority: 1,
+      condition: "queue(TraumaQueue).length > 0 AND idle(Doctor).count > 0",
+      effect: ["ASSIGN(TraumaQueue, Doctor)", "SET(traumaInService, traumaInService+1)"],
+      cSchedules: [{ eventId: "b_trauma_done", dist: "Triangular", distParams: { min: "10", mode: "18", max: "30" }, useEntityCtx: true }] },
+    { id: "c_consult", name: "Consult", priority: 2,
+      condition: "queue(Waiting).length > 0 AND idle(Doctor).count > 0",
+      effect: ["ASSIGN(Waiting, Doctor)"],
+      cSchedules: [{ eventId: "b_complete", dist: "Triangular", distParams: { min: "15", mode: "25", max: "40" }, useEntityCtx: true }] },
+  ],
+  queues: [
+    { id: "q_wait", name: "Waiting", customerType: "Patient", capacity: "30", discipline: "PRIORITY", balkProbability: 0.1 },
+    { id: "q_trauma", name: "TraumaQueue", customerType: "TraumaCode", capacity: "", discipline: "FIFO" },
+  ],
 };
 
 const COST_CALL_CENTRE = {
@@ -691,6 +774,11 @@ const COST_CALL_CENTRE = {
     { metric: "totalCost", operator: "<",  target: "500", label: "totalCost < £500" },
     { metric: "avgWait",   operator: "<",  target: "3",   label: "avgWait < 3 min" },
   ],
+  // Kept on the manual isRenege B-event pattern (not queue-level renegeDist):
+  // the queue-level mechanism always fires a bare RENEGE(ctx) with no way to
+  // attach a second macro, but this template needs COST(2) to run in the same
+  // event as the abandonment. Manual B-event reneging remains the right choice
+  // whenever the renege needs a side effect beyond the status change itself.
   bEvents: [
     { id: "b_arrive",   name: "Call Arrives",    scheduledTime: "0",
       effect: ["ARRIVE(Call, Queue)"],
@@ -1034,6 +1122,7 @@ export const TEMPLATES = [
   { id: "construction",    ...CONSTRUCTION },
   { id: "warehouse",       ...WAREHOUSE },
   { id: "order-fulfillment", ...ORDER_FULFILLMENT },
+  { id: "bulk-order-split", ...BULK_ORDER_SPLIT },
   // Logistics
   { id: "port-berth",      ...PORT_BERTH },
   // Technology

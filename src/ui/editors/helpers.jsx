@@ -125,6 +125,24 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       opts.push({label:`Drain ${c} by 100`,value:`DRAIN(${c}, 100)`});
     });
   }
+  // MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue) — pairs one entity from each
+  // of two queues, merges attrs (B overwrites A on collision), routes pair to TargetQueue.
+  if(queues.length>=2){
+    opts.push({label:'── MATCH (pair one entity from each of two queues) ──',value:'',disabled:true});
+    for(let i=0;i<queues.length;i++){
+      for(let j=i+1;j<queues.length;j++){
+        const qa=queues[i], qb=queues[j];
+        const typeA = qa.customerType ? normTypeName(qa.customerType) : (custs[0]||'Entity');
+        const typeB = qb.customerType ? normTypeName(qb.customerType) : (custs[0]||'Entity');
+        queues.forEach(qt=>{
+          opts.push({
+            label: `Match ${typeA} from ${queueDisplayName(qa.name)} + ${typeB} from ${queueDisplayName(qb.name)} → ${queueDisplayName(qt.name)}`,
+            value: `MATCH(${typeA}, ${qa.name}, ${typeB}, ${qb.name}, ${qt.name})`,
+          });
+        });
+      }
+    }
+  }
   return opts;
 };
 
@@ -219,11 +237,14 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerType
       opts.push({label:`REPAIR ${s} servers`,value:`REPAIR(${s})`});
     });
   }
-  // SPLIT
+  // SPLIT(EntityType, N, TargetQueue) — creates N-1 clones of the context entity in TargetQueue
   if(queues.length>0&&custs.length>0){
-    opts.push({label:'── SPLIT (clone entity to queue) ──',value:'',disabled:true});
+    opts.push({label:'── SPLIT (clone entity into queue) ──',value:'',disabled:true});
     queues.forEach(q=>{
-      opts.push({label:`SPLIT 2 copies → ${queueDisplayName(q.name)}`,value:`SPLIT(2, ${q.name})`});
+      const entityType = q.customerType ? normTypeName(q.customerType) : custs[0];
+      [2,3,5].forEach(n=>{
+        opts.push({label:`Split ${entityType} into ${n-1} clone(s) → ${queueDisplayName(q.name)}`,value:`SPLIT(${entityType}, ${n}, ${q.name})`});
+      });
     });
   }
   const ctNames = (containerTypes||[]).map(ct=>ct.id).filter(Boolean);
@@ -258,7 +279,7 @@ const DropField = ({value, onChange, options, color}) => {
 const categorizeEffect = (value) => {
   const v = String(value||"").trim();
   if (!v) return 'other';
-  if (/^ARRIVE\s*\(/i.test(v)||/^BATCH\s*\(/i.test(v)||/^UNBATCH\s*\(/i.test(v)||/^SPLIT\s*\(/i.test(v)||/^RENEGE/i.test(v)) return 'queue';
+  if (/^ARRIVE\s*\(/i.test(v)||/^BATCH\s*\(/i.test(v)||/^UNBATCH\s*\(/i.test(v)||/^SPLIT\s*\(/i.test(v)||/^MATCH\s*\(/i.test(v)||/^RENEGE/i.test(v)) return 'queue';
   if (/^(COMPLETE|RELEASE|ASSIGN)\s*\(/i.test(v)) return 'service';
   if (/^SET_ATTR\s*\(/i.test(v)||/^SET\s*\(/i.test(v)||/(\+\+|--|[+\-]=\s*\d|=\s*\d)/.test(v)) return 'state';
   if (/^COST\s*\(/i.test(v)) return 'cost';

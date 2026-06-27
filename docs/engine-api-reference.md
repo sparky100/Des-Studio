@@ -234,7 +234,12 @@ One-way ANOVA with F-test and Tukey HSD post-hoc comparison across multiple scen
 
 ## `fitDistribution(values)`
 
-Fits a theoretical distribution to empirical data. Returns best-fit `{ type, params }`.
+Fits a theoretical distribution to empirical data by scoring `fixed`, `exponential`, `normal`,
+`lognormal`, `uniform`, and `triangular` candidates (KS-statistic) and returning the best-fit
+`{ type, params, score }`. `lognormal` params map directly onto the engine's `Lognormal`
+distribution (`{ logMean, logStdDev }`) — every type `fitDistribution` can return is sampleable
+by `sample()`/`DISTRIBUTIONS`, so a fit result can always be applied directly to a model's
+`dist`/`distParams` without translation.
 
 ---
 
@@ -324,10 +329,10 @@ rng(); // → number in [0, 1)
 | `PREEMPT(Server)` | Interrupt mid-service; entity re-queues with remaining service |
 | `FAIL(Server)` | Mark Server as failed; interrupt any in-progress service |
 | `REPAIR(Server)` | Restore failed Server to idle; trigger C-scan |
-| `SPLIT(Type, N, Queue)` | Clone context entity N-1 times; place clones in Queue |
+| `SPLIT(Type, N, Queue)` | Clone context entity N-1 times; place clones in Queue. Requires exactly 3 args — a 2-arg `SPLIT(N, Queue)` is invalid and silently does nothing. Trigger from a one-shot context (a cSchedule-fired B-event), never a recurring C-event condition on the entity's own queue: SPLIT doesn't change the context entity's status, so a condition that stays true refires it unboundedly. |
 | `BATCH(Queue[, Size\|Entity.attr])` | Accumulate N entities from Queue into one batch entity |
 | `UNBATCH(Queue)` | Release batch members back as individual entities |
-| `MATCH(TypeA, QueueA, TypeB, QueueB, Target)` | Pair one entity from each queue into a batch |
+| `MATCH(TypeA, QueueA, TypeB, QueueB, Target)` | Pair one entity from each queue into a batch. Merged attrs = `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — QueueB's value wins on any name collision with QueueA. |
 | `COSEIZE(Queue, Srv1[, Srv2, ...])` | Atomically seize one customer and multiple server types |
 | `SET(varName, expr)` | Set state variable to arithmetic expression result |
 | `SET_ATTR(attr, expr)` | Set context entity attribute to expression result |
@@ -339,6 +344,15 @@ rng(); // → number in [0, 1)
 - Clock: `clock`
 - Operators: `+`, `-`, `*`, `/`, `()`
 - Functions: `min(a,b)`, `max(a,b)`, `abs(a)`, `round(a)`, `floor(a)`, `ceil(a)`
+
+**C-event/B-event `condition` string syntax** — `queue(Name).length`, `idle(Type).count`,
+`busy(Type).count`, `state.varName`, combined with `AND`/`OR`/`NOT` and a comparison operator.
+Every clause compares one dynamic token against a **literal constant only** — the right-hand side
+is parsed once at model-load time and never re-resolved as another dynamic token. A clause such as
+`queue(Q).length > someStateVar` treats `someStateVar` as a literal (NaN) and is always false, with
+no error. To gate on a dynamic quantity, add a dedicated state variable and compare it to a literal
+in its own `AND` clause (e.g. `queue(Q).length > 0 AND someStateVar == 0`), never to another
+queue/idle/busy/state token directly.
 
 ---
 

@@ -4,7 +4,7 @@ export const DIST_GROUPS = [
   {
     id: "parametric",
     label: "Parametric",
-    dists: ["Fixed", "Exponential", "Uniform", "Normal", "Triangular", "Erlang"],
+    dists: ["Fixed", "Exponential", "Uniform", "Normal", "Triangular", "Erlang", "Lognormal"],
   },
   {
     id: "timevarying",
@@ -58,6 +58,13 @@ export const DIST_HELP = {
     params: {
       k:    "Number of phases (positive integer). Higher k = narrower distribution.",
       mean: "Overall mean duration across all k phases. Must be > 0.",
+    },
+  },
+  Lognormal: {
+    summary: "Right-skewed, naturally positive (exp of a Normal). Use for service/repair times that have a long tail of unusually slow cases.",
+    params: {
+      logMean:    "Mean of the underlying Normal in log-space. Sampled value = exp(logMean + logStdDev × z).",
+      logStdDev:  "Spread of the underlying Normal in log-space. Must be > 0; larger values produce a longer right tail.",
     },
   },
   Empirical: {
@@ -130,6 +137,10 @@ export function validateDistParams(dist, params = {}) {
       }
       if (params.mean !== "" && params.mean != null && !(p("mean") > 0))
         errs.push({ param: "mean", message: "Must be > 0" });
+      break;
+    case "Lognormal":
+      if (params.logStdDev !== "" && params.logStdDev != null && !(p("logStdDev") > 0))
+        errs.push({ param: "logStdDev", message: "Must be > 0" });
       break;
     default:
       break;

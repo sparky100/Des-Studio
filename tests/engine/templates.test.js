@@ -90,11 +90,11 @@ describe('Specific template properties', () => {
     expect(srv.count).toBe(1);
   });
 
-  it('Call Center has RENEGE macro for abandonment', () => {
+  it('Call Center has queue-level renegeDist for abandonment', () => {
     const t = TEMPLATES.find(t => t.id === 'call-center');
-    const effectText = (e) => Array.isArray(e) ? e.join(';') : (e || '');
-    const renege = t.bEvents.find(b => effectText(b.effect).includes('RENEGE'));
-    expect(renege).toBeDefined();
+    const renegeQueue = t.queues.find(q => q.renegeDist);
+    expect(renegeQueue).toBeDefined();
+    expect(renegeQueue.renegeDistParams).toBeDefined();
   });
 
   it('Factory uses BATCH macro', () => {
