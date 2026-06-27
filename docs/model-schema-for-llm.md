@@ -883,7 +883,7 @@ Continuous-level resources (tanks, buffers, stock).
 
 > **Container vs state variable — when to use each:** Use a `containerType` when the resource has a physical level that is bounded, shared across entity interactions, and must be tracked continuously (e.g. a fuel tank, a blood inventory, a buffer). Use a **state variable** when you need a simple scalar counter or flag that is set/incremented by events and read in C-event conditions (e.g. a shift active flag, an entity count, a mode toggle). Containers expose `FILL`/`DRAIN` semantics with capacity clamping; state variables expose `SET()` arithmetic with no bounds enforcement.
 
-> **UI note:** Container types are fully editable in the UI via the "Containers" tab — users can add, edit, and remove containers (`id`, `capacity`, `initialLevel`) after import.
+> **UI note:** Container types are fully editable in the UI via the "Containers" tab (Define sub-nav) — users can add, edit, and remove containers (`id`, `capacity`, `initialLevel`) after import. Containers can also be added and deleted as standalone nodes on the Draw canvas (they don't connect to other nodes, since they don't participate in entity flow). Simulation results carry per-container `containerLevels[id] = {min, avg, max, final}`, surfaced in the Overview tab, the Results tab, and all generated reports (Model Definition, Markdown/HTML results). The AI-facing KPI payload additionally includes `capacity`/`initialLevel` alongside the level stats, so analysis prompts can reason about utilization and overflow/stockout risk.
 
 ```json
 {
