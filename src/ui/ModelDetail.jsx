@@ -479,6 +479,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [exportMenuOpen,setExportMenuOpen]=useState(false);
   const [showResultsSnapshot,setShowResultsSnapshot]=useState(false);
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
+  const [notesEditing,setNotesEditing]=useState(false);
   const runWithPatchRef = useRef(null);
   const fitAllRef = useRef(null);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
@@ -1189,18 +1190,28 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             {/* Notes — internal/explanatory context, not shown in the Model Library */}
             {(canEdit || model.notes) && (
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                <div style={{fontSize:11,fontWeight:700,color:C.muted,fontFamily:FONT,letterSpacing:"1px",textTransform:"uppercase"}}>Notes</div>
-                {canEdit
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.muted,fontFamily:FONT,letterSpacing:"1px",textTransform:"uppercase"}}>Notes</div>
+                  {canEdit && model.notes && (
+                    <Btn small variant="ghost" onClick={()=>setNotesEditing(v=>!v)}>
+                      {notesEditing ? "Preview" : "Edit"}
+                    </Btn>
+                  )}
+                </div>
+                {canEdit && (notesEditing || !model.notes)
                   ? <textarea
                       value={model.notes||""}
                       onChange={e=>setField("notes",e.target.value)}
-                      placeholder="Internal notes — assumptions, caveats, context for collaborators. Not shown in the Model Library."
+                      placeholder="Internal notes — assumptions, caveats, context for collaborators. Markdown supported (#, **bold**, *italic*, lists, `code`, tables). Not shown in the Model Library."
                       rows={4}
+                      autoFocus
                       style={{background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,borderRadius:0,color:C.muted,fontFamily:SANS,fontSize:14,lineHeight:1.8,padding:"8px 0",outline:"none",width:"100%",resize:"vertical"}}
                       onFocus={e=>e.target.style.borderBottomColor=C.accent}
                       onBlur={e=>e.target.style.borderBottomColor=C.border}
                     />
-                  : <MarkdownContent text={model.notes} style={{fontSize:14,color:C.muted,fontFamily:SANS}}/>
+                  : <div onClick={canEdit ? ()=>setNotesEditing(true) : undefined} style={canEdit ? {cursor:"text"} : undefined}>
+                      <MarkdownContent text={model.notes} style={{fontSize:14,color:C.muted,fontFamily:SANS}}/>
+                    </div>
                 }
               </div>
             )}
