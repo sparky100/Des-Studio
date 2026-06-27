@@ -337,6 +337,23 @@ function replaceContainerName(text = "", oldName, newName) {
     .replace(new RegExp(`container\\(${esc}\\)`, "gi"), `container(${newName})`);
 }
 
+// Format B predicate objects ({variable, operator, value} or {operator: "AND"/"OR", clauses: [...]})
+// can also embed a renamed container via a `container(Id).property` token in `variable` —
+// used by bEvents[].routing[].condition, cEvents[].cSchedules[].when, and queues[].balkCondition.
+function renameContainerInPredicate(predicate, oldName, newName) {
+  if (!predicate || typeof predicate !== "object" || !oldName || !newName) return predicate;
+  if (predicate.operator === "AND" || predicate.operator === "OR") {
+    return {
+      ...predicate,
+      clauses: (predicate.clauses || []).map(clause => renameContainerInPredicate(clause, oldName, newName)),
+    };
+  }
+  if (typeof predicate.variable === "string") {
+    return { ...predicate, variable: replaceContainerName(predicate.variable, oldName, newName) };
+  }
+  return predicate;
+}
+
 function findNode(graph, id) {
   return (graph.nodes || []).find(node => node.id === id);
 }
@@ -1378,12 +1395,28 @@ export function updateVisualNode(model, node, patch = {}) {
       next.bEvents = (next.bEvents || []).map(event => ({
         ...event,
         effect: replaceContainerName(event.effect, oldId, nextId),
+        ...(Array.isArray(event.routing) ? {
+          routing: event.routing.map(branch => ({
+            ...branch,
+            condition: renameContainerInPredicate(branch.condition, oldId, nextId),
+          })),
+        } : {}),
       }));
       next.cEvents = (next.cEvents || []).map(event => ({
         ...event,
         condition: replaceContainerName(event.condition, oldId, nextId),
         effect: replaceContainerName(event.effect, oldId, nextId),
+        ...(Array.isArray(event.cSchedules) ? {
+          cSchedules: event.cSchedules.map(schedule => (
+            schedule.when ? { ...schedule, when: renameContainerInPredicate(schedule.when, oldId, nextId) } : schedule
+          )),
+        } : {}),
       }));
+      next.queues = (next.queues || []).map(queue => (
+        queue.balkCondition
+          ? { ...queue, balkCondition: renameContainerInPredicate(queue.balkCondition, oldId, nextId) }
+          : queue
+      ));
     }
   }
   if (patch.sectionId !== undefined) {
