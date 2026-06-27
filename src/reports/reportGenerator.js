@@ -8,6 +8,7 @@ import {
   buildGoalGaps,
 } from '../llm/prompts.js';
 import { simToWall, formatWallTime } from '../engine/clockUtils.js';
+import { extractServerTypes } from '../ui/execute/activityLiveData.js';
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
 
@@ -1528,7 +1529,7 @@ export function buildModelDefinitionHtml(model = {}) {
         .join(', ');
       return [
         esc(ev.name),
-        esc(ev.serverType || ev.resourceType || '—'),
+        esc(extractServerTypes(ev.effect).join(', ') || '—'),
         sched ? `${sched} ${timeUnit}` : '—',
         scheduledEvents || '—',
         formatCondition(ev.condition),

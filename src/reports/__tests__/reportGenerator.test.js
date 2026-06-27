@@ -4,7 +4,7 @@ vi.mock('../../llm/apiClient.js', () => ({
   callLLMOnce: vi.fn(),
 }));
 
-import { generateReport } from '../reportGenerator.js';
+import { generateReport, buildModelDefinitionHtml } from '../reportGenerator.js';
 import { callLLMOnce } from '../../llm/apiClient.js';
 
 const minimalModel = {
@@ -244,5 +244,53 @@ describe('generateReport', () => {
 
     expect(html).toContain('85%');
     expect(html).not.toMatch(/85\.\d%/);
+  });
+});
+
+function cEventRowCells(html, eventName) {
+  const rowMatch = html.match(new RegExp(`<tr><td>${eventName}</td>([\\s\\S]*?)</tr>`));
+  if (!rowMatch) return null;
+  return [...rowMatch[1].matchAll(/<td>(.*?)<\/td>/g)].map(m => m[1]);
+}
+
+describe('buildModelDefinitionHtml — C-Events Server column', () => {
+  test('shows the single server type for an ASSIGN c-event', () => {
+    const model = {
+      ...minimalModel,
+      cEvents: [
+        { id: 'c1', name: 'Start Service', priority: 1, effect: ['ASSIGN(Waiting Room, Doctor)'], cSchedules: [] },
+      ],
+    };
+    const html = buildModelDefinitionHtml(model);
+    const cells = cEventRowCells(html, 'Start Service');
+    expect(cells[0]).toBe('Doctor');
+  });
+
+  test('shows all resource types, comma-separated, for a COSEIZE c-event', () => {
+    const model = {
+      ...minimalModel,
+      entityTypes: [
+        ...minimalModel.entityTypes,
+        { id: 'e3', name: 'Anesthetist', role: 'server', count: 2 },
+      ],
+      cEvents: [
+        { id: 'c1', name: 'Perform Surgery', priority: 1, effect: ['COSEIZE(Waiting Room, Doctor, Anesthetist)'], cSchedules: [] },
+      ],
+    };
+    const html = buildModelDefinitionHtml(model);
+    const cells = cEventRowCells(html, 'Perform Surgery');
+    expect(cells[0]).toBe('Doctor, Anesthetist');
+  });
+
+  test('shows a dash for a server-less DELAY c-event', () => {
+    const model = {
+      ...minimalModel,
+      cEvents: [
+        { id: 'c1', name: 'Wait Period', priority: 1, effect: ['DELAY(Waiting Room)'], cSchedules: [] },
+      ],
+    };
+    const html = buildModelDefinitionHtml(model);
+    const cells = cEventRowCells(html, 'Wait Period');
+    expect(cells[0]).toBe('—');
   });
 });
