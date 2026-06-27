@@ -255,6 +255,7 @@ export function ExperimentControls({
                 entityTypes={model.entityTypes}
                 stateVariables={model.stateVariables}
                 queues={model.queues}
+                containers={model.containerTypes}
                 onChange={condition => {
                   setTerminationCondition(condition);
                   persistExperimentDefaults({ terminationCondition: condition, terminationMode: "condition" });

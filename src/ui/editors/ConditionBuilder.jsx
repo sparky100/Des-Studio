@@ -38,9 +38,9 @@ const sameConditionRows = (a = [], b = []) => {
   });
 };
 
-const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], queues=[]}) => {
+const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], queues=[], containers=[]}) => {
   const { C, FONT } = useTheme();
-  // useMemo ensures dropdown rebuilds whenever entityTypes, stateVariables, or queues change (C8 fix)
+  // useMemo ensures dropdown rebuilds whenever entityTypes, stateVariables, queues, or containers change (C8 fix)
   const tokens = useMemo(() => {
     // Named queue tokens — "Number of Patients in Triage Queue"
     const queueTokens = (queues||[]).map(q => ({
@@ -78,8 +78,13 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
       value: sv.name,
       valueType: 'number',
     }));
-    return [...queueTokens, ...entityTypeTokens, ...serverTokens, ...builtInTokens, ...stateVarTokens];
-  }, [entityTypes, stateVariables, queues]);
+    // Container tokens — "Tank — current level", "Tank — capacity"
+    const containerTokens = (containers||[]).filter(ct=>ct.id).flatMap(ct=>([
+      { label: `${ct.id} — current level`, value: `container(${ct.id}).level`, valueType: 'number' },
+      { label: `${ct.id} — capacity`,      value: `container(${ct.id}).capacity`, valueType: 'number' },
+    ]));
+    return [...queueTokens, ...entityTypeTokens, ...serverTokens, ...builtInTokens, ...stateVarTokens, ...containerTokens];
+  }, [entityTypes, stateVariables, queues, containers]);
 
   // Filter operators by valueType
   const getOperatorsForType = (valueType) => {

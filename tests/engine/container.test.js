@@ -277,3 +277,90 @@ describe('FILL then DRAIN — level accounting', () => {
     expect(levels?.final).toBeLessThanOrEqual(700);
   });
 });
+
+// ── Expression-based FILL/DRAIN amounts (Item 2) ──────────────────────────────
+
+describe('FILL/DRAIN — expression amounts', () => {
+  test('FILL amount can be a plain state variable reference', () => {
+    const model = makeContainerModel({
+      containers: [{ id: 'Tank', capacity: '1000', initialLevel: '500' }],
+      bEffects: [
+        { id: 'fill', name: 'Fill', scheduledTime: '2', effect: 'FILL(Tank, RefillRate)', schedules: [] },
+      ],
+    });
+    model.stateVariables = [{ name: 'RefillRate', initialValue: '75' }];
+    const engine = buildEngine(model, 42, 0, 10);
+    const result = engine.runAll();
+    expect(result.summary.containerLevels?.Tank?.final).toBe(575);
+  });
+
+  test('FILL amount can be an arithmetic expression', () => {
+    const model = makeContainerModel({
+      containers: [{ id: 'Tank', capacity: '1000', initialLevel: '500' }],
+      bEffects: [
+        { id: 'fill', name: 'Fill', scheduledTime: '2', effect: 'FILL(Tank, RefillRate * 2)', schedules: [] },
+      ],
+    });
+    model.stateVariables = [{ name: 'RefillRate', initialValue: '30' }];
+    const engine = buildEngine(model, 42, 0, 10);
+    const result = engine.runAll();
+    expect(result.summary.containerLevels?.Tank?.final).toBe(560);
+  });
+
+  test('DRAIN amount can be an arithmetic expression', () => {
+    // initialLevel (450) is set just above one drain (400) so the guard blocks any
+    // further repeat firing once the level drops below the amount — keeping this
+    // test's expected final value unambiguous regardless of how many C-event passes
+    // the condition stays true for (it's the same caveat noted on the sibling
+    // "subtracts amount from container" test above).
+    const model = makeContainerModel({
+      containers: [{ id: 'Buffer', capacity: '1000', initialLevel: '450' }],
+      cEvents: [
+        {
+          id: 'drain', name: 'Drain', priority: 2,
+          condition: 'idle(Server).count > 0',
+          effect: 'DRAIN(Buffer, DrainRate + 50)',
+          cSchedules: [],
+        },
+      ],
+    });
+    model.stateVariables = [{ name: 'DrainRate', initialValue: '350' }];
+    const engine = buildEngine(model, 42, 0, 10);
+    const result = engine.runAll();
+    // DRAIN(Buffer, 400) fires once guard passes: 450 - 400 = 50. Level (50) < amount
+    // (400) afterward, so the guard blocks any repeat firing.
+    expect(result.summary.containerLevels?.Buffer?.final).toBe(50);
+  });
+
+  test('FILL amount expression that resolves to a non-numeric value is a no-op', () => {
+    const model = makeContainerModel({
+      containers: [{ id: 'Tank', capacity: '1000', initialLevel: '500' }],
+      bEffects: [
+        { id: 'fill', name: 'Fill', scheduledTime: '2', effect: 'FILL(Tank, Unresolved)', schedules: [] },
+      ],
+    });
+    const engine = buildEngine(model, 42, 0, 10);
+    expect(() => engine.runAll()).not.toThrow();
+    const result = buildEngine(model, 42, 0, 10).runAll();
+    expect(result.summary.containerLevels?.Tank?.final).toBe(500);
+  });
+});
+
+// ── Multi-replication reset (state isolation across buildEngine() calls) ─────
+
+describe('container state resets cleanly across replications', () => {
+  test('two independent buildEngine() runs of the same model do not leak container state', () => {
+    const model = makeContainerModel({
+      containers: [{ id: 'Tank', capacity: '1000', initialLevel: '500' }],
+      bEffects: [
+        { id: 'fill', name: 'Fill', scheduledTime: '2', effect: 'FILL(Tank, 100)', schedules: [] },
+      ],
+    });
+    const rep1 = buildEngine(model, 1, 0, 10).runAll();
+    const rep2 = buildEngine(model, 2, 0, 10).runAll();
+    expect(rep1.summary.containerLevels?.Tank?.final).toBe(600);
+    expect(rep2.summary.containerLevels?.Tank?.final).toBe(600);
+    expect(rep1.summary.containerLevels?.Tank?.min).toBe(500);
+    expect(rep2.summary.containerLevels?.Tank?.min).toBe(500);
+  });
+});

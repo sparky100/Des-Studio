@@ -968,7 +968,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
   const contextualTabs = useMemo(() => {
     if (activeMode?.id === "overview") return ["overview"];
-    if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "sections", "schedules", "goals", "state", "validate"];
+    if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "containers", "bevents", "cevents", "sections", "schedules", "goals", "state", "validate"];
     if (activeMode?.id === "execute") return ["execute"];
     if (activeMode?.id === "results") return ["results"];
     if (activeMode?.id === "access") return ["access"];

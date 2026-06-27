@@ -20,15 +20,15 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 import { SectionPanelNode } from "./SectionPanelNode.jsx";
 
 function colorForNodeType(type, C) {
-  return { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red }[type] || C.accent;
+  return { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red, container: C.amber }[type] || C.accent;
 }
 
 function DesNode({ data, selected }) {
   const { C, FONT } = useTheme();
   const [hovered, setHovered] = useState(false);
   const color = colorForNodeType(data.type, C);
-  const hasTarget = data.type !== "source";
-  const hasSource = data.type !== "sink";
+  const hasTarget = data.type !== "source" && data.type !== "container";
+  const hasSource = data.type !== "sink" && data.type !== "container";
   const hasError = !!data.hasError;
   return (
     <div

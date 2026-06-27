@@ -18,6 +18,7 @@ export const VISUAL_NODE_TYPES = {
   QUEUE: "queue",
   ACTIVITY: "activity",
   SINK: "sink",
+  CONTAINER: "container",
 };
 
 function norm(value = "") {
@@ -111,6 +112,7 @@ export function deriveGraphFromModel(model = {}) {
   const bEvents = model.bEvents || [];
   const cEvents = model.cEvents || [];
   const queues = model.queues || [];
+  const containerTypes = model.containerTypes || [];
   const dataSources = model.dataSources || [];
   const sections = model.sections || [];
   const graph = model.graph || {};
@@ -361,6 +363,19 @@ export function deriveGraphFromModel(model = {}) {
           if (sinkId) edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-dc`), from: id, to: sinkId, source: "terminal" });
         }
       }
+    });
+  });
+
+  containerTypes.forEach(ct => {
+    const id = ct.id?.trim();
+    if (!id) return;
+    nodes.push({
+      id: nodeId(VISUAL_NODE_TYPES.CONTAINER, id),
+      type: VISUAL_NODE_TYPES.CONTAINER,
+      refId: id,
+      label: id,
+      sublabel: ct.capacity != null && ct.capacity !== "" ? `cap ${ct.capacity}` : "unbounded",
+      ...sectionByElemId.get(id),
     });
   });
 

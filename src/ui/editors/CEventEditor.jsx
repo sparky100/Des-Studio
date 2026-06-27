@@ -216,6 +216,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                   entityTypes={entityTypes}
                   stateVariables={stateVariables}
                   queues={queues}
+                  containers={containerTypes}
                 />
               </div>
 

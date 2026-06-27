@@ -237,6 +237,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     { type: VISUAL_NODE_TYPES.QUEUE,    label: "Add Queue",    icon: "Q", color: C.cEvent },
     { type: VISUAL_NODE_TYPES.ACTIVITY, label: "Add Activity", icon: "A", color: C.purple },
     { type: VISUAL_NODE_TYPES.SINK,     label: "Add Sink",     icon: "✕", color: C.red },
+    { type: VISUAL_NODE_TYPES.CONTAINER, label: "Add Container", icon: "C", color: C.amber },
   ];
   const ICON_BTN_BASE = {
     background: "transparent", border: "none", borderRadius: 3,

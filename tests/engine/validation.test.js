@@ -886,6 +886,74 @@ describe("V27 — FILL/DRAIN must reference declared container", () => {
   });
 });
 
+describe("V27 — FILL/DRAIN amount shape (expression support)", () => {
+  it("errors when a bare numeric amount is zero", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "Fuel", capacity: "500", initialLevel: "0" }],
+      bEvents: [{ id: "f1", name: "Fill", effect: "FILL(Fuel, 0)", schedules: [] }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V27")).toBe(true);
+  });
+
+  it("errors when a bare numeric amount is negative", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "Fuel", capacity: "500", initialLevel: "200" }],
+      cEvents: [{ id: "d1", name: "Drain", condition: "true", effect: "DRAIN(Fuel, -5)", cSchedules: [] }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V27" && e.severity !== "warning")).toBe(true);
+  });
+
+  it("passes (no error/warning) for a positive bare numeric amount", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "Fuel", capacity: "500", initialLevel: "0" }],
+      bEvents: [{ id: "f1", name: "Fill", effect: "FILL(Fuel, 50)", schedules: [] }],
+    };
+    const { errors, warnings } = validateModel(model);
+    expect(errors.filter(e => e.code === "V27")).toHaveLength(0);
+    expect((warnings || []).filter(w => w.code === "V27")).toHaveLength(0);
+  });
+
+  it("warns when amount is a bare non-numeric identifier with no matching state variable", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "Fuel", capacity: "500", initialLevel: "0" }],
+      bEvents: [{ id: "f1", name: "Fill", effect: "FILL(Fuel, abc)", schedules: [] }],
+    };
+    const { errors, warnings } = validateModel(model);
+    expect(errors.filter(e => e.code === "V27")).toHaveLength(0);
+    expect((warnings || []).some(w => w.code === "V27")).toBe(true);
+  });
+
+  it("does not warn when the bare amount matches a declared state variable", () => {
+    const model = {
+      ...baseModel,
+      stateVariables: [{ name: "RefillRate", initialValue: "10" }],
+      containerTypes: [{ id: "Fuel", capacity: "500", initialLevel: "0" }],
+      bEvents: [{ id: "f1", name: "Fill", effect: "FILL(Fuel, RefillRate)", schedules: [] }],
+    };
+    const { errors, warnings } = validateModel(model);
+    expect(errors.filter(e => e.code === "V27")).toHaveLength(0);
+    expect((warnings || []).filter(w => w.code === "V27")).toHaveLength(0);
+  });
+
+  it("does not warn when the amount is an arithmetic expression", () => {
+    const model = {
+      ...baseModel,
+      stateVariables: [{ name: "RefillRate", initialValue: "10" }],
+      containerTypes: [{ id: "Fuel", capacity: "500", initialLevel: "0" }],
+      bEvents: [{ id: "f1", name: "Fill", effect: "FILL(Fuel, RefillRate * 2)", schedules: [] }],
+    };
+    const { errors, warnings } = validateModel(model);
+    expect(errors.filter(e => e.code === "V27")).toHaveLength(0);
+    expect((warnings || []).filter(w => w.code === "V27")).toHaveLength(0);
+  });
+});
+
 describe("V47 — DELAY queue reference and useEntityCtx nudge", () => {
   it("passes when DELAY references a declared queue and useEntityCtx is set", () => {
     const model = {

@@ -394,11 +394,11 @@ When a B-Event with `loopConfig` fires and routes an entity, the engine incremen
 | **Category** | B-Event or C-Event action |
 | **Purpose** | Adds a specified amount to a named container's current level. Used for tank-filling, inventory restocking, and buffer-replenishment patterns. |
 | **Called by** | Any B-Event or C-Event effect sequence. |
-| **Inputs** | `containerName: string` — must reference a declared container in `model.containerTypes`. `amount: number` — must be a positive finite number. |
-| **Syntax** | `FILL(ContainerName, amount)` |
-| **Preconditions** | Container must be declared in `containerTypes`. `amount` must be > 0. |
+| **Inputs** | `containerName: string` — must reference a declared container in `model.containerTypes`. `amount: expression` — a numeric literal, a state variable reference, or an arithmetic combination, evaluated with the same expression engine as `SET`/`SET_ATTR` (`evalEntityExpr`). The result must be a positive finite number. |
+| **Syntax** | `FILL(ContainerName, amount)` — e.g. `FILL(raw_tank, 50)` or `FILL(raw_tank, RefillRate * 2)`. |
+| **Preconditions** | Container must be declared in `containerTypes`. The evaluated `amount` must be > 0. |
 | **State changes** | 1. Flushes the time-integral (`level × Δt`) before changing level. 2. New level = `min(current + amount, capacity)`. 3. Updates `__containerMin_<id>` and `__containerMax_<id>`. 4. If new level reaches capacity, a `[at capacity]` note is appended to the log. |
-| **Error conditions** | Referencing an undeclared container is a model error (V27). Non-positive amount is logged as an error and the macro is a no-op. |
+| **Error conditions** | Referencing an undeclared container is a model error (V27). An `amount` that evaluates to a non-positive or non-finite number is logged as an error and the macro is a no-op. `amount` cannot reference another container's level (e.g. `container(Other).level`) — `evalEntityExpr` excludes internal `__`-prefixed state keys from substitution as a safety boundary; only plain state variables and literals are supported. |
 
 ---
 
@@ -531,7 +531,28 @@ For every declared container, the engine automatically maintains:
 | `__containerMax_<id>` | number | Maximum level observed since simulation start. |
 | `__containerIntegral_<id>` | number | Cumulative level × time (used for average level statistics). |
 
-Container levels are accessible in Predicate Builder conditions via user-defined state variable references (the `__container_<id>` key).
+### Reading Container Levels in Conditions
+
+Container state is read in any C-Event condition, routing condition, or balk condition with the `container()` token — the only supported way to read a container's level, alongside `queue()`, `idle()`, `busy()`, and `attr()`:
+
+| Token | Resolves to |
+|---|---|
+| `container(Id).level` | Current level (`__container_<id>`). |
+| `container(Id).capacity` | Maximum capacity, or `Infinity` if uncapped. |
+| `container(Id).min` | Minimum level observed since simulation start. |
+| `container(Id).max` | Maximum level observed since simulation start. |
+
+These tokens also appear in the Condition Builder's autocomplete for every declared container, and are tracked as dependencies so the engine knows which C-Events to re-evaluate when a container changes.
+
+**Blocking example.** A DRAIN that should only fire once a tank has accumulated enough volume needs no special syntax — the Three-Phase engine re-scans C-Event conditions every cycle, so a condition referencing a container blocks naturally until it becomes true:
+
+```json
+{
+  "id": "drain_when_full",
+  "condition": "container(raw_tank).level >= 10",
+  "effect": "DRAIN(raw_tank, 10)"
+}
+```
 
 ### Example Container JSON
 
@@ -543,6 +564,10 @@ Container levels are accessible in Predicate Builder conditions via user-defined
   ]
 }
 ```
+
+### Visual Designer Representation
+
+Containers appear on the Draw canvas as a distinct node type (amber, labeled with the container's `id`). They have no connection handles and participate in no entity-flow edges — a container is state, not a flow stage. Add one via the **Add Container** palette button; the inspector exposes `id`, `capacity` (blank = unbounded), and `initialLevel`. Renaming a container's `id` in the inspector automatically rewrites every `FILL(...)`, `DRAIN(...)`, and `container(...)` reference to that id across all B-Events and C-Events.
 
 ---
 
@@ -701,7 +726,7 @@ The engine must validate the complete model before `buildEngine()` proceeds. Any
 | V24 | Loop guard `maxLoopCount` must be an integer ≥ 1. `exitQueueName` must reference a defined queue when set. | Blocking | `Loop guard maxLoopCount must be integer >= 1.` / `Loop guard exitQueueName 'X' does not match any defined queue.` |
 | V25 | `RENEGE(arg)` — the argument must be `ctx`. `RENEGE(TypeName)` silently fails because the type name is not a numeric entity ID. | Warning only | `B-Event 'X' uses RENEGE('Y') which will silently fail. Use RENEGE(ctx) to reference the current entity instead.` |
 | V26 | Every container in `containerTypes` must have a non-empty unique `id`. `capacity` must be > 0 when set. `initialLevel` must be ≥ 0 and ≤ `capacity`. | Blocking | `Container at position N has an empty id.` / `Duplicate container id: 'X'.` / `Container 'X': capacity must be > 0.` / `Container 'X': initialLevel must be >= 0.` / `Container 'X': initialLevel (N) exceeds capacity (M).` |
-| V27 | FILL and DRAIN macros must reference a container declared in `containerTypes`. | Blocking | `B-Event 'X' FILL references undeclared container 'Y'.` / similar for DRAIN and C-Events. |
+| V27 | FILL and DRAIN macros must reference a container declared in `containerTypes`. The `amount` argument, if a bare numeric literal, must be positive (error); if neither numeric nor a declared state variable nor an expression (no operators/parens), it's flagged as likely-wrong (warning) — expressions (`RefillRate * 2`) and known state variable names are accepted without complaint. | Blocking (undeclared container or non-positive literal) / Warning (suspicious bare amount) | `B-Event 'X' FILL references undeclared container 'Y'.` / `C-Event 'X' DRAIN amount (-5) must be a positive number.` / `B-Event 'X' FILL amount 'abc' is not a number and not a declared state variable reference — verify this is intentional.` |
 | V28 | `model.epoch`, when set, must be a valid ISO 8601 datetime string. | Blocking | `Model epoch 'X' is not a valid ISO 8601 datetime. Use the Settings tab to correct it.` |
 | V29 | A C-event with `cSchedules` entries that all have a `when` condition must also have a fallback entry (one without `when`). Without a fallback, entities that match no condition receive no service. | Warning only | `C-event 'X' has attribute-conditional cSchedules but no fallback entry (one without a 'when' condition). Entities that don't match any condition will receive no service.` |
 | V30 | A B-event with `probabilisticRouting` that includes a null-destination branch must have `COMPLETE()` or `RENEGE()` in its effect list. | Blocking | `B-Event 'X' has a null probabilistic routing branch but no terminal lifecycle macro (COMPLETE/RENEGE).` |
@@ -778,7 +803,7 @@ The following must be added to `CLAUDE.md` before Sprint 1 begins. Copy this sec
 - V24 (loop guard): maxLoopCount must be integer >= 1; exitQueueName must exist when set
 - V25 (RENEGE argument): RENEGE(ctx) is correct; RENEGE(TypeName) silently fails — warning
 - V26 (container types): id non-empty and unique; capacity > 0; initialLevel >= 0 and <= capacity
-- V27 (FILL/DRAIN): referenced container must be declared in containerTypes
+- V27 (FILL/DRAIN): referenced container must be declared in containerTypes; bare numeric amounts must be positive (error); bare non-numeric amounts that aren't a declared state variable are warned on
 - V28 (epoch): model.epoch must be valid ISO 8601 when set
 - V29 (cSchedule fallback): all-conditional cSchedules without a fallback entry — warning
 - Validation errors must identify the specific node/event/attribute by name

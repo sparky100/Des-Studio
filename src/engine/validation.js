@@ -854,19 +854,32 @@ export function validateModel(model) {
     }
   });
 
-  // ── V27: FILL/DRAIN must reference a declared container ──────────────────
+  // ── V27: FILL/DRAIN must reference a declared container, with a sane amount ─
   const containerIdsLower = new Set([...containerIds]);
+  const stateVarNamesLower = new Set((model.stateVariables || []).map(sv => String(sv.name || '').trim().toLowerCase()).filter(Boolean));
   const checkContainerRefs = (events, tab) => {
     events.forEach(ev => {
       const text = effectText(ev.effect);
       const hits = text.match(/\b(FILL|DRAIN)\([^)]+\)/gi) || [];
       hits.forEach(hit => {
-        const inner = hit.match(/\b(FILL|DRAIN)\(([^,)]+)/i);
+        const inner = hit.match(/\b(FILL|DRAIN)\(([^,)]+)\s*,\s*([^)]+)\)/i);
         if (!inner) return;
         const macro = inner[1].toUpperCase();
         const name  = inner[2].trim();
+        const amountRaw = inner[3].trim();
         if (!containerIdsLower.has(name.toLowerCase())) {
           err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ${macro} references undeclared container '${name}'.`, tab,
+            { eventIds: [ev.id] });
+        }
+        const isBareNumeric = /^-?\d+(\.\d+)?$/.test(amountRaw);
+        const looksLikeExpression = /[\s+\-*/()]/.test(amountRaw);
+        if (isBareNumeric) {
+          if (parseFloat(amountRaw) <= 0) {
+            err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ${macro} amount (${amountRaw}) must be a positive number.`, tab,
+              { eventIds: [ev.id] });
+          }
+        } else if (!looksLikeExpression && !stateVarNamesLower.has(amountRaw.toLowerCase())) {
+          warn('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ${macro} amount '${amountRaw}' is not a number and not a declared state variable reference — verify this is intentional.`, tab,
             { eventIds: [ev.id] });
         }
       });

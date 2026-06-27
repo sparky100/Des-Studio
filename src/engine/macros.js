@@ -730,9 +730,11 @@ export const MACROS = [
     name:    "FILL",
     pattern: /^FILL\(([^,)]+)\s*,\s*([^)]+)\)$/i,
     apply(match, ctx) {
-      const cName  = match[1].trim();
-      const amount = parseFloat(match[2].trim());
+      const cName     = match[1].trim();
+      const rawAmount = match[2].trim();
       const { state, clock, msgs } = ctx;
+      const entity = resolveContextEntity(ctx);
+      const amount = evalEntityExpr(rawAmount, { state, clock, entity });
       const key    = `__container_${cName}`;
       const capKey = `__containerCap_${cName}`;
       if (!(key in state)) {
@@ -740,7 +742,7 @@ export const MACROS = [
         return;
       }
       if (isNaN(amount) || amount <= 0) {
-        msgs.push(`FILL(${cName},${match[2].trim()}): amount must be a positive number`);
+        msgs.push(`FILL(${cName},${rawAmount}): amount must be a positive number`);
         return;
       }
       flushContainerIntegral(state, clock, cName);
@@ -759,16 +761,18 @@ export const MACROS = [
     name:    "DRAIN",
     pattern: /^DRAIN\(([^,)]+)\s*,\s*([^)]+)\)$/i,
     apply(match, ctx) {
-      const cName  = match[1].trim();
-      const amount = parseFloat(match[2].trim());
+      const cName     = match[1].trim();
+      const rawAmount = match[2].trim();
       const { state, clock, msgs } = ctx;
+      const entity = resolveContextEntity(ctx);
+      const amount = evalEntityExpr(rawAmount, { state, clock, entity });
       const key = `__container_${cName}`;
       if (!(key in state)) {
         msgs.push(`DRAIN(${cName}): container '${cName}' not declared in containerTypes`);
         return;
       }
       if (isNaN(amount) || amount <= 0) {
-        msgs.push(`DRAIN(${cName},${match[2].trim()}): amount must be a positive number`);
+        msgs.push(`DRAIN(${cName},${rawAmount}): amount must be a positive number`);
         return;
       }
       if (state[key] < amount) {

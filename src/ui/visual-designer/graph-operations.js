@@ -328,6 +328,15 @@ function replaceServerName(text = "", oldName, newName) {
     .replace(new RegExp(`ASSIGN\\(([^,)]+),\\s*${esc}\\)`, "gi"), `ASSIGN($1, ${newName})`);
 }
 
+function replaceContainerName(text = "", oldName, newName) {
+  if (!oldName || !newName) return text;
+  const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return String(text || "")
+    .replace(new RegExp(`FILL\\(${esc}\\s*,`, "gi"), `FILL(${newName},`)
+    .replace(new RegExp(`DRAIN\\(${esc}\\s*,`, "gi"), `DRAIN(${newName},`)
+    .replace(new RegExp(`container\\(${esc}\\)`, "gi"), `container(${newName})`);
+}
+
 function findNode(graph, id) {
   return (graph.nodes || []).find(node => node.id === id);
 }
@@ -356,6 +365,9 @@ export function validateVisualConnection(graph, from, to) {
   const target = findNode(graph, to);
   if (!source || !target) return { ok: false, message: "Select two existing nodes." };
   if (source.id === target.id) return { ok: false, message: "A node cannot connect to itself." };
+  if (source.type === VISUAL_NODE_TYPES.CONTAINER || target.type === VISUAL_NODE_TYPES.CONTAINER) {
+    return { ok: false, message: "Container nodes do not participate in entity flow and cannot be connected." };
+  }
   if (source.type === VISUAL_NODE_TYPES.SINK) return { ok: false, message: "Sink nodes are terminal." };
   if (target.type === VISUAL_NODE_TYPES.SOURCE) return { ok: false, message: "Source nodes cannot have incoming connections." };
   if (source.type === VISUAL_NODE_TYPES.SOURCE && target.type !== VISUAL_NODE_TYPES.QUEUE) {
@@ -409,7 +421,8 @@ export function addVisualNode(model, type, position = null) {
   const bEvents = [...(withEntities.bEvents || [])];
   const cEvents = [...(withEntities.cEvents || [])];
   const queues = [...(withEntities.queues || [])];
-  const allIds = new Set([...bEvents, ...cEvents, ...queues, ...(withEntities.entityTypes || [])].map(item => item.id || item.name));
+  const containerTypes = [...(withEntities.containerTypes || [])];
+  const allIds = new Set([...bEvents, ...cEvents, ...queues, ...containerTypes, ...(withEntities.entityTypes || [])].map(item => item.id || item.name));
   const customer = firstCustomerType(withEntities);
   const server = firstServerType(withEntities);
 
@@ -455,7 +468,12 @@ export function addVisualNode(model, type, position = null) {
     bEvents.push({ id, name: `Completion ${bEvents.length + 1}`, scheduledTime: "9999", effect: "COMPLETE()", schedules: [] });
   }
 
-  const next = { ...withEntities, bEvents, cEvents, queues };
+  if (type === VISUAL_NODE_TYPES.CONTAINER) {
+    const id = makeId("container", allIds);
+    containerTypes.push({ id, capacity: null, initialLevel: 0 });
+  }
+
+  const next = { ...withEntities, bEvents, cEvents, queues, containerTypes };
   const derived = deriveGraphFromModel(next);
   if (!position) return updateGraphLayout(next, derived);
   const newest = [...derived.nodes].reverse().find(node => node.type === type);
@@ -1345,6 +1363,28 @@ export function updateVisualNode(model, node, patch = {}) {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.terminalMacro !== undefined ? { effect: `${patch.terminalMacro}()` } : {}),
     }));
+  }
+  if (node.type === VISUAL_NODE_TYPES.CONTAINER) {
+    const currentContainer = (model.containerTypes || []).find(ct => ct.id === node.refId);
+    const oldId = currentContainer?.id;
+    const nextId = patch.id;
+    next.containerTypes = updateByRef(next.containerTypes, node.refId, ct => ({
+      ...ct,
+      ...(patch.id           !== undefined ? { id: patch.id }                   : {}),
+      ...(patch.capacity     !== undefined ? { capacity: patch.capacity }       : {}),
+      ...(patch.initialLevel !== undefined ? { initialLevel: patch.initialLevel } : {}),
+    }));
+    if (nextId !== undefined && oldId && nextId && oldId !== nextId) {
+      next.bEvents = (next.bEvents || []).map(event => ({
+        ...event,
+        effect: replaceContainerName(event.effect, oldId, nextId),
+      }));
+      next.cEvents = (next.cEvents || []).map(event => ({
+        ...event,
+        condition: replaceContainerName(event.condition, oldId, nextId),
+        effect: replaceContainerName(event.effect, oldId, nextId),
+      }));
+    }
   }
   if (patch.sectionId !== undefined) {
     // Sections key membership by the underlying entity's id (queue/bEvent/cEvent),
