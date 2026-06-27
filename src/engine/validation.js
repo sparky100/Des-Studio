@@ -9,6 +9,7 @@
 // tab maps to ModelDetail tab IDs: 'entities' | 'state' | 'bevents' | 'cevents' | 'queues' | 'execute'
 
 import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
+import { extractQueueNamesFromCondition } from "../model/conditionFormat.js";
 
 export const DEFAULT_MAX_SIM_TIME = 500;
 
@@ -470,29 +471,16 @@ export function validateModel(model) {
     }
   });
 
-  const queueRefsFromCondition = (condition) => {
-    if (!condition) return [];
-    if (typeof condition === 'string') {
-      return [...condition.matchAll(/queue\(([^)]+)\)/gi)].map(m => m[1].trim().toLowerCase());
-    }
-    if (typeof condition !== 'object' || Array.isArray(condition)) return [];
-    if (Array.isArray(condition.clauses)) {
-      return condition.clauses.flatMap(queueRefsFromCondition);
-    }
-    const variable = String(condition.variable || condition.token || condition.left || '');
-    const queueMatch = variable.match(/^Queue\.([^.]+)\./i);
-    return queueMatch ? [queueMatch[1].trim().toLowerCase()] : [];
-  };
-
   // ── V9: C-Event conditions must reference defined queues ────────────────────
   const queueNamesLower = new Set(
     queues.map(q => (q.name || '').trim().toLowerCase()).filter(Boolean)
   );
   cEvents.forEach(c => {
     if (!c.condition) return;
-    const queueRefs = queueRefsFromCondition(c.condition);
+    const queueRefs = extractQueueNamesFromCondition(c.condition);
     queueRefs.forEach(ref => {
-      if (!queueNamesLower.has(ref)) {
+      const lref = ref.trim().toLowerCase();
+      if (!queueNamesLower.has(lref)) {
         err('V9',
           `C-Event '${c.name || c.id}' condition references unknown queue '${ref}'.`,
           'cevents',

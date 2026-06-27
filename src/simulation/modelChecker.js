@@ -1,6 +1,8 @@
 // src/simulation/modelChecker.js — F69.2: Pre-run structural model checker
 // Pure function — no side effects, no API calls.
 
+import { extractQueueNamesFromCondition } from "../model/conditionFormat.js";
+
 /**
  * @typedef {{ severity: "error"|"warning"|"info", code: string, message: string, nodeId: string|null, nodeName: string|null }} Issue
  */
@@ -175,7 +177,7 @@ function chk003(model) {
       }
     }
 
-    const referencedQueues = extractQueueRefsFromCondition(cEvent.condition);
+    const referencedQueues = extractQueueNamesFromCondition(cEvent.condition);
     for (const qRef of referencedQueues) {
       if (!queueNames.has(qRef.toLowerCase()) && !queueIds.has(qRef.toLowerCase())) {
         issues.push(makeIssue(
@@ -317,6 +319,13 @@ function chk008(model) {
     for (const m of effectString(cEvent).matchAll(/ASSIGN\s*\([^,)]+,\s*([^)]+)\)/gi)) {
       usedServers.add(m[1].trim().toLowerCase());
     }
+    // COSEIZE(queue, type1, type2, ...) — every arg after the queue is a server type
+    for (const m of effectString(cEvent).matchAll(/COSEIZE\s*\(([^)]+)\)/gi)) {
+      const args = m[1].split(",").map(a => a.trim()).filter(Boolean);
+      for (const serverType of args.slice(1)) {
+        usedServers.add(serverType.toLowerCase());
+      }
+    }
   }
 
   for (const et of model.entityTypes || []) {
@@ -359,18 +368,6 @@ function chk009(model) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function extractQueueRefsFromCondition(condition) {
-  if (!condition) return [];
-  const refs = [];
-  const clauses = condition.clauses || [];
-  for (const clause of clauses) {
-    const variable = clause.variable || "";
-    const match = variable.match(/^Queue\.(.+?)\.length$/i);
-    if (match) refs.push(match[1]);
-  }
-  return refs;
-}
 
 function getFollowOnId(bEvent) {
   for (const schedule of bEvent.schedules || []) {

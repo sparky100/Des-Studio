@@ -216,6 +216,31 @@ describe("CHK-008 Server defined but never used in C-event", () => {
     expect(chk[0].nodeName).toBe("UnusedServer");
     expect(chk[0].severity).toBe("warning");
   });
+
+  test("does not trigger for server types seized via COSEIZE", () => {
+    const model = {
+      ...wellFormedModel,
+      entityTypes: [
+        ...wellFormedModel.entityTypes,
+        { id: "et3", name: "Surgeon", role: "server", count: "2", attrDefs: [] },
+        { id: "et4", name: "Anesthetist", role: "server", count: "2", attrDefs: [] },
+      ],
+      cEvents: [
+        ...wellFormedModel.cEvents,
+        {
+          id: "surgery1",
+          name: "Perform Surgery",
+          priority: 1,
+          condition: { clauses: [{ variable: "Queue.ServiceQueue.length", operator: ">", value: 0 }], logic: "AND" },
+          effect: ["COSEIZE(ServiceQueue, Surgeon, Anesthetist)"],
+          cSchedules: [],
+        },
+      ],
+    };
+    const issues = checkModel(model);
+    const chk = issues.filter(i => i.code === "CHK-008");
+    expect(chk).toHaveLength(0);
+  });
 });
 
 describe("CHK-009 Schedule dist with no rows or times", () => {

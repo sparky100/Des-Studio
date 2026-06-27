@@ -125,6 +125,22 @@ export function parseConditionString(condition = "") {
   return rows;
 }
 
+export function extractQueueNamesFromCondition(condition) {
+  if (!condition) return [];
+  if (typeof condition === "string") {
+    return [...condition.matchAll(/queue\(([^)]+)\)/gi)].map(m => m[1].trim());
+  }
+  if (typeof condition !== "object" || Array.isArray(condition)) return [];
+  if (Array.isArray(condition.clauses)) {
+    return condition.clauses.flatMap(extractQueueNamesFromCondition);
+  }
+  const variable = String(condition.variable || condition.token || condition.left || "");
+  const legacyMatch = variable.match(/^Queue\.([^.]+)\./i);
+  if (legacyMatch) return [legacyMatch[1].trim()];
+  const currentMatch = variable.match(/^queue\(([^)]+)\)/i);
+  return currentMatch ? [currentMatch[1].trim()] : [];
+}
+
 export function variableToLegacyToken(variable = "") {
   const text = String(variable || "").trim();
   const queueMatch = text.match(/^Queue\.([^.]+)\.(length|count|size)$/i);

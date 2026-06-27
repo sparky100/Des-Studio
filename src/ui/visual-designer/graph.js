@@ -5,6 +5,7 @@
 
 import dagre from "@dagrejs/dagre";
 import { clean, macroCalls } from "../../model/macroParser.js";
+import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 
 const NODE_WIDTH = 142;
 const NODE_HEIGHT = 68;
@@ -22,18 +23,6 @@ export const VISUAL_NODE_TYPES = {
 
 function norm(value = "") {
   return clean(value).toLowerCase();
-}
-
-function queueRefsFromCondition(condition) {
-  if (!condition) return [];
-  if (typeof condition === "string") {
-    return [...condition.matchAll(/queue\(([^)]+)\)/gi)].map(match => clean(match[1]));
-  }
-  if (typeof condition !== "object" || Array.isArray(condition)) return [];
-  if (Array.isArray(condition.clauses)) return condition.clauses.flatMap(queueRefsFromCondition);
-  const variable = clean(condition.variable || condition.token || condition.left);
-  const queueMatch = variable.match(/^Queue\.([^.]+)\./i);
-  return queueMatch ? [clean(queueMatch[1])] : [];
 }
 
 function nodeId(type, refId) {
@@ -202,7 +191,7 @@ export function deriveGraphFromModel(model = {}) {
     const effectCalls = macroCalls(event.effect);
     const isDelay = effectCalls.some(c => c.macro === "DELAY");
     const queueRefs = [
-      ...queueRefsFromCondition(event.condition),
+      ...extractQueueNamesFromCondition(event.condition),
       // Both ASSIGN(Queue, Server) and DELAY(Queue) carry the source queue as args[0]
       ...effectCalls
         .filter(call => call.macro === "ASSIGN" || call.macro === "DELAY")
