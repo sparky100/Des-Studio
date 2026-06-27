@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { buildEngine } from '../../src/engine/index.js';
 import { resetSeq } from '../../src/engine/entities.js';
-import { evaluatePredicate, buildConditionTokens } from '../../src/engine/conditions.js';
+import { evaluatePredicate } from '../../src/engine/conditions.js';
 
 beforeEach(() => {
   resetSeq();
@@ -28,15 +28,6 @@ describe('Entity.loopCount', () => {
     });
   });
 
-  test('loopCount can be read as a condition token', () => {
-    const tokens = buildConditionTokens(
-      [{ id: "c", name: "Customer", role: "customer", attrDefs: [] }],
-      []
-    );
-    const loopToken = tokens.find(t => t.value === "loopCount");
-    expect(loopToken).toBeDefined();
-    expect(loopToken.valueType).toBe("number");
-  });
 });
 
 describe('Loop guard (loopConfig)', () => {

@@ -9,9 +9,10 @@
 // add hook functions to the options object passed to runPhases().
 
 import { MACROS, applyScalar, buildStageRecord } from "./macros.js";
-import { evalCondition, evaluatePredicate } from "./conditions.js";
+import { evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
 import { clearWaitingState, attemptQueueJoin, preemptCustomer, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById } from "./entities.js";
+import { hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
 
 function completeEntity(cust, ev, clock, state, index = null) {
   const previousQueue = cust.queue ?? cust.lastQueue ?? null;
@@ -28,20 +29,6 @@ function completeEntity(cust, ev, clock, state, index = null) {
     ...(ev.id   ? { sourceEventId:   ev.id   } : {}),
     ...(ev.name ? { sourceEventName: ev.name } : {}),
   };
-}
-
-function hasConditionDefinition(condition) {
-  if (!condition) return false;
-  if (typeof condition === "string") return condition.trim() !== "";
-  if (Array.isArray(condition)) return condition.some(hasConditionDefinition);
-  if (typeof condition !== "object") return false;
-  if (Array.isArray(condition.clauses)) return condition.clauses.some(hasConditionDefinition);
-  return String(condition.variable || condition.token || condition.left || "").trim() !== "";
-}
-
-function isMeaningfulRoutingBranch(branch) {
-  if (!branch || typeof branch !== "object") return false;
-  return hasConditionDefinition(branch.condition);
 }
 
 function applyShiftChange(ev, ctx) {

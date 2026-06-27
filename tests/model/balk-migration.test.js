@@ -1,6 +1,7 @@
 // tests/model/balk-migration.test.js — migrateBalkingToQueues() (F11.2 queue-scoped balking)
 import { describe, test, expect } from "vitest";
 import { migrateBalkingToQueues } from "../../src/model/balkMigration.js";
+import { normalizeModelConditions } from "../../src/model/conditionFormat.js";
 
 function makeModel({ balkProbability, balkCondition, queueBalkProbability, queueBalkCondition } = {}) {
   return {
@@ -73,5 +74,16 @@ describe("migrateBalkingToQueues", () => {
   test("no queues or no bEvents — returns model unchanged", () => {
     expect(migrateBalkingToQueues({ bEvents: [], queues: [] })).toEqual({ bEvents: [], queues: [] });
     expect(migrateBalkingToQueues({})).toEqual({});
+  });
+
+  // B3 regression: db/models.js's norm() composes migrateBalkingToQueues(normalizeModelConditions(...)) —
+  // normalize runs BEFORE migrate, so a string balkCondition copied from the B-event during migration
+  // would bypass normalization entirely unless the copy site itself normalizes the value.
+  test("a not-yet-migrated string balkCondition on the B-event is normalized to a predicate object when copied to the queue, through the full norm() pipeline order", () => {
+    const model = makeModel({ balkCondition: "queue(Main Queue).length >= 2" });
+    const result = migrateBalkingToQueues(normalizeModelConditions(model));
+    expect(result.queues[0].balkCondition).toEqual({
+      variable: "queue(Main Queue).length", operator: ">=", value: 2,
+    });
   });
 });

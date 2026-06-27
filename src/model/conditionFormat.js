@@ -66,9 +66,9 @@ export function predicateToRows(predicate) {
 
   return [{
     id: "r0",
-    token: predicate.variable || predicate.token || predicate.left || "",
+    token: predicate.variable || "",
     operator: predicate.operator || "==",
-    value: formatScalarValue(predicate.value ?? predicate.right),
+    value: formatScalarValue(predicate.value),
     join: "AND",
   }];
 }
@@ -165,10 +165,10 @@ export function predicateToLegacyString(condition) {
       .join(` ${op} `);
   }
 
-  const variable = variableToLegacyToken(condition.variable || condition.token || condition.left);
+  const variable = variableToLegacyToken(condition.variable);
   const operator = condition.operator || "==";
   if (!variable || !operator) return "";
-  return `${variable} ${operator} ${formatScalarValue(condition.value ?? condition.right)}`;
+  return `${variable} ${operator} ${formatScalarValue(condition.value)}`;
 }
 
 export function conditionToLegacyString(condition) {
@@ -191,9 +191,9 @@ export function migrateLegacyCondition(condition) {
     };
   }
   if (isLeafCondition(condition)) {
-    const rawValue = condition.value ?? condition.right;
+    const rawValue = condition.value;
     return {
-      variable: condition.variable || condition.token || condition.left || "",
+      variable: condition.variable || "",
       operator: condition.operator || "==",
       value: parseScalarValue(String(rawValue ?? "")),
     };
@@ -213,7 +213,7 @@ export function mapConditionVariables(condition, mapper = value => value) {
     };
   }
   if (isLeafCondition(condition)) {
-    const variable = condition.variable || condition.token || condition.left || "";
+    const variable = condition.variable || "";
     return {
       ...condition,
       variable: mapper(variable),
@@ -234,14 +234,67 @@ function normalizeEventConditions(events = []) {
   });
 }
 
+function normalizeQueueBalkConditions(queues = []) {
+  return queues.map(queue => {
+    if (queue.balkCondition == null) return queue;
+    return { ...queue, balkCondition: normalizeConditionShape(queue.balkCondition) };
+  });
+}
+
+function normalizeBEventRouting(bEvents = []) {
+  return bEvents.map(event => {
+    if (!Array.isArray(event.routing) || !event.routing.length) return event;
+    return {
+      ...event,
+      routing: event.routing.map(branch => {
+        if (branch?.condition == null) return branch;
+        return { ...branch, condition: normalizeConditionShape(branch.condition) };
+      }),
+    };
+  });
+}
+
+function normalizeCScheduleWhen(cEvents = []) {
+  return cEvents.map(event => {
+    if (!Array.isArray(event.cSchedules) || !event.cSchedules.length) return event;
+    return {
+      ...event,
+      cSchedules: event.cSchedules.map(sched => {
+        if (sched?.when == null) return sched;
+        return { ...sched, when: normalizeConditionShape(sched.when) };
+      }),
+    };
+  });
+}
+
 export function normalizeModelConditions(model = {}) {
   if (!model || typeof model !== "object") return model;
   const next = { ...model };
   if (Array.isArray(model.cEvents)) {
-    next.cEvents = normalizeEventConditions(model.cEvents);
+    next.cEvents = normalizeCScheduleWhen(normalizeEventConditions(model.cEvents));
+  }
+  if (Array.isArray(model.queues)) {
+    next.queues = normalizeQueueBalkConditions(model.queues);
+  }
+  if (Array.isArray(model.bEvents)) {
+    next.bEvents = normalizeBEventRouting(model.bEvents);
   }
   if (model.modelJson && typeof model.modelJson === "object") {
     next.modelJson = normalizeModelConditions(model.modelJson);
   }
   return next;
+}
+
+export function hasConditionDefinition(condition) {
+  if (!condition) return false;
+  if (typeof condition === "string") return condition.trim() !== "";
+  if (Array.isArray(condition)) return condition.some(hasConditionDefinition);
+  if (typeof condition !== "object") return false;
+  if (Array.isArray(condition.clauses)) return condition.clauses.some(hasConditionDefinition);
+  return String(condition.variable || "").trim() !== "";
+}
+
+export function isMeaningfulRoutingBranch(branch) {
+  if (!branch || typeof branch !== "object") return false;
+  return hasConditionDefinition(branch.condition);
 }

@@ -87,11 +87,11 @@ function conditionLabel(c, depth = 0) {
     const parts = c.clauses.map(cl => conditionLabel(cl, 1)).filter(p => p !== "condition");
     return parts.length ? parts.join(` ${c.operator} `) : "condition";
   }
-  const rawVar  = clean(c.variable || c.left || c.token || "");
+  const rawVar  = clean(c.variable || "");
   // Strip "Entity." / "entity." prefix so "Entity.severity" → "severity"
   const variable = rawVar.replace(/^entity\./i, "");
   const op       = clean(c.operator || c.op || "");
-  const value    = c.value !== undefined ? c.value : c.right;
+  const value    = c.value;
   return variable && op && value !== undefined ? `${variable} ${op} ${value}`
        : variable && value !== undefined       ? `${variable} = ${value}`
        : "condition";

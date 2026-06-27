@@ -1,7 +1,7 @@
 // src/simulation/modelChecker.js — F69.2: Pre-run structural model checker
 // Pure function — no side effects, no API calls.
 
-import { extractQueueNamesFromCondition } from "../model/conditionFormat.js";
+import { extractQueueNamesFromCondition, migrateLegacyCondition } from "../model/conditionFormat.js";
 
 /**
  * @typedef {{ severity: "error"|"warning"|"info", code: string, message: string, nodeId: string|null, nodeName: string|null }} Issue
@@ -398,7 +398,33 @@ function chk010(model) {
 }
 
 /**
- * CHK-011: balkCondition is a string — must be a predicate object.
+ * Condition strings are accepted as an authoring convenience and parsed into the
+ * canonical predicate object at save time (see normalizeModelConditions()). This
+ * only flags strings that fail to parse into a usable predicate — well-formed
+ * strings are not an error.
+ */
+function isUsablePredicate(c) {
+  return !!(c && typeof c === "object" &&
+    (((c.operator === "AND" || c.operator === "OR") && Array.isArray(c.clauses) && c.clauses.length > 0) ||
+     (typeof c.variable === "string" && c.variable.trim() !== "")));
+}
+
+function chkMalformedConditionString(raw, kind, name, nodeId, code, issues) {
+  if (typeof raw !== "string") return;
+  const trimmed = raw.trim();
+  if (!trimmed) return;
+  const parsed = migrateLegacyCondition(raw);
+  if (!isUsablePredicate(parsed)) {
+    issues.push(makeIssue(
+      "error", code,
+      `${kind} '${name}' has a condition string that could not be parsed: "${raw}". Check operator/parenthesis syntax.`,
+      nodeId, name
+    ));
+  }
+}
+
+/**
+ * CHK-011: balkCondition is a string that fails to parse into a usable predicate.
  * Balking is configured on the Queue (F11.2); the B-event check is kept for
  * legacy-field hygiene on models authored before balking moved to the queue.
  */
@@ -406,23 +432,11 @@ function chk011(model) {
   const issues = [];
   for (const queue of model.queues || []) {
     const name = queue.name || queue.id || "?";
-    if (typeof queue.balkCondition === 'string') {
-      issues.push(makeIssue(
-        "error", "CHK-011",
-        `Queue '${name}' has a string balkCondition — must be a predicate object { variable, operator, value }.`,
-        queue.id || null, name
-      ));
-    }
+    chkMalformedConditionString(queue.balkCondition, "Queue", name, queue.id || null, "CHK-011", issues);
   }
   for (const bEvent of model.bEvents || []) {
     const name = bEvent.name || bEvent.id || "?";
-    if (typeof bEvent.balkCondition === 'string') {
-      issues.push(makeIssue(
-        "error", "CHK-011",
-        `B-event '${name}' has a string balkCondition — must be a predicate object { variable, operator, value }.`,
-        bEvent.id || null, name
-      ));
-    }
+    chkMalformedConditionString(bEvent.balkCondition, "B-event", name, bEvent.id || null, "CHK-011", issues);
   }
   return issues;
 }
@@ -449,21 +463,29 @@ function chk013(model) {
 }
 
 /**
- * CHK-012: B-event routing condition is a string — must be a predicate object.
+ * CHK-012: B-event routing condition is a string that fails to parse into a usable predicate.
  */
 function chk012(model) {
   const issues = [];
   for (const bEvent of model.bEvents || []) {
     const name = bEvent.name || bEvent.id || "?";
     for (const branch of bEvent.routing || []) {
-      if (typeof branch.condition === 'string') {
-        issues.push(makeIssue(
-          "error", "CHK-012",
-          `B-event '${name}' has a string routing condition — must be a predicate object { variable, operator, value }.`,
-          bEvent.id || null, name
-        ));
-        break;
-      }
+      chkMalformedConditionString(branch.condition, "B-event", name, bEvent.id || null, "CHK-012", issues);
+    }
+  }
+  return issues;
+}
+
+/**
+ * CHK-014: C-event cSchedules[].when condition is a string that fails to parse
+ * into a usable predicate.
+ */
+function chk014(model) {
+  const issues = [];
+  for (const cEvent of model.cEvents || []) {
+    const name = cEvent.name || cEvent.id || "?";
+    for (const sched of cEvent.cSchedules || []) {
+      chkMalformedConditionString(sched.when, "C-event", name, cEvent.id || null, "CHK-014", issues);
     }
   }
   return issues;
@@ -494,6 +516,7 @@ export function checkModel(model) {
     ...chk011(model),
     ...chk012(model),
     ...chk013(model),
+    ...chk014(model),
   ];
 
   return all.sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99));

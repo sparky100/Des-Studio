@@ -151,19 +151,20 @@ function modelJsonFromModel(model = {}) {
 
 // ── Model to row (for save/update) ────────────────────────────────────────────
 function toRow(model, userId) {
+  const normalized = normalizeModelConditions(model);
   return {
-    name:            model.name,
-    description:     model.description    || "",
-    visibility:      model.visibility     || "private",
-    access:          model.access         || {},
-    entity_types:    model.entityTypes    || [],
-    state_variables: model.stateVariables || [],
-    b_events:        model.bEvents        || [],
-    c_events:        model.cEvents        || [],
-    queues:          model.queues         || [],
-    goals:           model.goals          || [],
-    tags:            model.tags           || [],
-    model_json:      modelJsonFromModel(model),
+    name:            normalized.name,
+    description:     normalized.description    || "",
+    visibility:      normalized.visibility     || "private",
+    access:          normalized.access         || {},
+    entity_types:    normalized.entityTypes    || [],
+    state_variables: normalized.stateVariables || [],
+    b_events:        normalized.bEvents        || [],
+    c_events:        normalized.cEvents        || [],
+    queues:          normalized.queues         || [],
+    goals:           normalized.goals          || [],
+    tags:            normalized.tags           || [],
+    model_json:      modelJsonFromModel(normalized),
     owner_id:        userId,
   };
 }

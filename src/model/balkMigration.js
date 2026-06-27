@@ -5,6 +5,12 @@
 // joins (ARRIVE, RELEASE, routing, batch/split). This is a pure, idempotent, load-time
 // transform: it copies legacy fields onto the matching queue only if the queue doesn't
 // already define its own (never clobbers), and leaves the B-event's fields in place.
+//
+// migrateBalkingToQueues() runs before normalizeModelConditions() in db/models.js's norm()
+// pipeline, so a string b.balkCondition copied here would bypass normalization entirely —
+// normalize it at the copy site instead of relying on composition order.
+
+import { migrateLegacyCondition } from "./conditionFormat.js";
 
 function parseArriveTarget(effect) {
   const text = Array.isArray(effect) ? effect.join(";") : String(effect || "");
@@ -32,7 +38,7 @@ export function migrateBalkingToQueues(model = {}) {
       changed = true;
     }
     if (!q.balkCondition && b.balkCondition) {
-      q.balkCondition = b.balkCondition;
+      q.balkCondition = migrateLegacyCondition(b.balkCondition);
       changed = true;
     }
   }
