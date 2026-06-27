@@ -27,6 +27,7 @@ import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
 import { ContainerGaugeStrip } from "./ContainerGaugeStrip.jsx";
+import { buildServerTypeIndex, deriveActivityLiveData } from "./activityLiveData.js";
 export { DEFAULT_KPI_SLOTS };
 
 // ── Configurable KPI bar (F9C.7) ─────────────────────────────────────────────
@@ -215,37 +216,6 @@ function parseArriveCustomerType(bEvent) {
   }
   const match = text.match(/ARRIVE\s*\(\s*([^,)]+)/i);
   return match ? match[1].trim() : null;
-}
-
-// Parse the server type (second ASSIGN arg) from a c-event's effect field.
-// Handles string, array-of-strings, array-of-objects, and plain-object formats.
-function extractServerType(effect) {
-  if (!effect) return null;
-  let text = "";
-  if (typeof effect === "string") {
-    text = effect;
-  } else if (Array.isArray(effect)) {
-    text = effect.map(e => {
-      if (typeof e === "string") return e;
-      if (e && typeof e === "object") {
-        const macro = String(e.macro || e.type || "").toUpperCase();
-        const args = Array.isArray(e.args) ? e.args.join(",") : "";
-        return `${macro}(${args})`;
-      }
-      return "";
-    }).join(";");
-  } else if (typeof effect === "object") {
-    const macro = String(effect.macro || effect.type || "").toUpperCase();
-    const args = Array.isArray(effect.args) ? effect.args.join(",") : "";
-    text = `${macro}(${args})`;
-  }
-  // ASSIGN(Queue, ServerType) — extract second argument
-  const assignMatch = text.match(/ASSIGN\s*\(\s*[^,)]+,\s*([^),]+)\)/i);
-  if (assignMatch) return assignMatch[1].trim();
-  // COSEIZE(Queue, ServerType1, ServerType2[, ...]) — extract first server type
-  const coseizeMatch = text.match(/COSEIZE\s*\(\s*[^,]+,\s*([^,]+)/i);
-  if (coseizeMatch) return coseizeMatch[1].trim();
-  return null;
 }
 
 function LiveBadge({ value, label, color }) {
@@ -476,21 +446,11 @@ export function ExecuteCanvas({
     dragStateRef.current = { startY: event.clientY, startHeight: canvasHeight };
   };
 
-  // Build c-event id → { serverType, capacity } for activity node enrichment.
-  // capacity comes from model.entityTypes[role=server].count (defaults to 1).
-  const serverTypeIndex = useMemo(() => {
-    const index = new Map();
-    for (const ce of model.cEvents || []) {
-      const serverType = extractServerType(ce.effect);
-      if (!serverType) continue;
-      const et = (model.entityTypes || []).find(
-        e => e.role === "server" && e.name?.trim().toLowerCase() === serverType.trim().toLowerCase()
-      );
-      const capacity = parseInt(et?.count ?? "1", 10) || 1;
-      index.set(ce.id, { serverType, capacity, ceventName: ce.name });
-    }
-    return index;
-  }, [model.cEvents, model.entityTypes]);
+  // Build c-event id → { serverTypes, capacities, ceventName } for activity node enrichment.
+  const serverTypeIndex = useMemo(
+    () => buildServerTypeIndex(model.cEvents, model.entityTypes),
+    [model.cEvents, model.entityTypes]
+  );
 
   // Build source node id → { bEvent, customerType, interArrivalLabel } for source enrichment
   const sourceIndex = useMemo(() => {
@@ -582,7 +542,6 @@ export function ExecuteCanvas({
   const flowNodes = useMemo(() => {
     const entities = snap?.entities || [];
     const waiting = entities.filter(e => e.status === "waiting");
-    const servers = entities.filter(e => e.role === "server");
 
     const mapped = layoutedNodes.map(node => {
       let liveData = null;
@@ -599,49 +558,7 @@ export function ExecuteCanvas({
             clock: snap.clock,
           };
         } else if (node.type === "activity") {
-          const meta = serverTypeIndex.get(node.refId);
-          const serverType = meta?.serverType;
-          const relevant   = serverType
-            ? servers.filter(e => e.type.trim().toLowerCase() === serverType.trim().toLowerCase())
-            : servers;
-          const busyCount = relevant.filter(e => e.status === "busy").length;
-          const idleCount = relevant.filter(e => e.status === "idle").length;
-          const failedCount = relevant.filter(e => e.status === "failed").length;
-          const actualCapacity = relevant.length;
-          const customers = entities.filter(e => e.role !== "server");
-          const serverDetails = relevant.map(srv => {
-            const cust = srv.currentCustId != null
-              ? customers.find(c => c.id === srv.currentCustId)
-              : null;
-            return {
-              id: srv.id,
-              status: srv.status,
-              busyTime: srv._busyTime ?? 0,
-              starvationTime: srv._starvationTime ?? 0,
-              downtime: srv._downtime ?? 0,
-              scheduledDuration: srv._scheduledDuration ?? null,
-              serviceStart: srv._busyStart ?? null,
-              customerId: srv.currentCustId ?? null,
-              customerType: cust?.type ?? null,
-              customerArrivalTime: cust?.arrivalTime ?? null,
-              ceventName: cust?.ceventName ?? null,
-            };
-          });
-          const activityBusyCount = meta?.ceventName
-            ? serverDetails.filter(s => s.ceventName === meta.ceventName).length
-            : 0;
-          liveData = {
-            serverTypeName:    serverType ?? null,
-            capacity:          actualCapacity,
-            busyCount,
-            activityBusyCount,
-            idleCount,
-            failedCount,
-            utilisation:       actualCapacity > 0 ? (busyCount / actualCapacity) * 100 : 0,
-            completionSignal:  snap.served,
-            servers:           serverDetails,
-            clock:             snap.clock,
-          };
+          liveData = deriveActivityLiveData(snap, node.refId, serverTypeIndex, model);
         } else if (node.type === "sink") {
           const customers = entities.filter(e => e.role !== "server");
           const withSojourn = customers.filter(e => e.sojournTime != null);

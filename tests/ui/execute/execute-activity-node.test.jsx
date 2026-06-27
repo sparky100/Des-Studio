@@ -30,4 +30,32 @@ describe("ExecuteActivityNode", () => {
 
     expect(screen.getByText("⚠ 1 failed")).toBeInTheDocument();
   });
+
+  test("renders one row per server type for multi-resource (COSEIZE) activities", () => {
+    render(
+      <ExecuteActivityNode
+        data={{
+          label: "Surgery",
+          liveData: {
+            serverTypeName: "Surgeon",
+            capacity: 2,
+            busyCount: 1,
+            activityBusyCount: 1,
+            failedCount: 0,
+            utilisation: 50,
+            completionSignal: 0,
+            perType: [
+              { serverTypeName: "Surgeon", capacity: 2, busyCount: 1, activityBusyCount: 1, failedCount: 0, utilisation: 50 },
+              { serverTypeName: "Anesthetist", capacity: 1, busyCount: 1, activityBusyCount: 1, failedCount: 0, utilisation: 100 },
+            ],
+          },
+        }}
+      />
+    );
+
+    expect(screen.getByText("Surgeon")).toBeInTheDocument();
+    expect(screen.getByText("Anesthetist")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument();
+  });
 });

@@ -62,7 +62,11 @@ const mockModel = {
 };
 
 const mockServerTypeIndex = new Map([
-  ["ce-1", { serverType: "Server", capacity: 3 }],
+  ["ce-1", { serverTypes: ["Server"], capacities: [3] }],
+]);
+
+const mockCoseizeServerTypeIndex = new Map([
+  ["ce-2", { serverTypes: ["Surgeon", "Anesthetist"], capacities: [2, 1] }],
 ]);
 
 describe("NodeDetailSidebar", () => {
@@ -356,6 +360,30 @@ describe("NodeDetailSidebar", () => {
     const entityRow = screen.getByTitle("Click to inspect entity #1");
     fireEvent.click(entityRow);
     expect(onEntitySelect).toHaveBeenCalledWith(1);
+  });
+
+  test("renders a separate resource row per server type for COSEIZE activities", () => {
+    const entities = [
+      { id: 1, type: "Surgeon", role: "server", status: "busy", currentCustId: 100, _busyTime: 5 },
+      { id: 2, type: "Surgeon", role: "server", status: "idle", _busyTime: 2 },
+      { id: 3, type: "Anesthetist", role: "server", status: "busy", currentCustId: 100, _busyTime: 5 },
+      { id: 100, type: "Patient", role: "customer", status: "busy", arrivalTime: 3.0 },
+    ];
+    const snap = makeSnap({ clock: 15.0, entities });
+    renderWithTheme(
+      <NodeDetailSidebar
+        selectedNode={{ nodeType: "activityNode", label: "Surgery", refId: "ce-2" }}
+        onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={mockCoseizeServerTypeIndex}
+        model={{ ...mockModel, cEvents: [{ id: "ce-2", effect: [{ macro: "COSEIZE", args: ["SurgeryQueue", "Surgeon", "Anesthetist"] }] }] }}
+      />
+    );
+    expect(screen.getByText("Surgery")).toBeInTheDocument();
+    expect(screen.getByText("Surgeon")).toBeInTheDocument();
+    expect(screen.getByText("Anesthetist")).toBeInTheDocument();
+    expect(screen.getAllByText("Server #1").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Server #3").length).toBeGreaterThanOrEqual(1);
   });
 
   test("calls onEntitySelect when customer clicked in activity", () => {
