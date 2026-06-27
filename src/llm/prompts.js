@@ -355,7 +355,15 @@ export function buildKpis(model = {}, results = {}) {
   if (summary.perResource) kpis.resourceUtilisation = Object.fromEntries(
     Object.entries(summary.perResource).map(([name, r]) => [name, finiteOrNull(r.utilisation)])
   );
-  if (summary.containerLevels) kpis.containerLevels = summary.containerLevels;
+  if (summary.containerLevels) {
+    const containerMeta = Object.fromEntries((model.containerTypes || []).map(ct => [ct.id, ct]));
+    kpis.containerLevels = Object.fromEntries(
+      Object.entries(summary.containerLevels).map(([id, lvl]) => [
+        id,
+        { ...lvl, capacity: containerMeta[id]?.capacity ?? null, initialLevel: containerMeta[id]?.initialLevel ?? null },
+      ])
+    );
+  }
   if (summary.phaseCTruncated) kpis.warning_phaseCTruncated = true;
   if (summary.warnings?.length) kpis.warnings = summary.warnings;
   if (summary.terminatingState) {
@@ -399,7 +407,7 @@ function makeMessages(system, payload, instruction) {
 }
 
 export function buildNarrativePrompt(model = {}, experimentConfig = {}, results = {}) {
-  const system = "You are an expert simulation analyst. Interpret the following discrete-event simulation results for a non-specialist audience. Be concise: 150-200 words. Use plain English. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, per-queue blocking/balking counters, cost metrics, WIP, and container levels where applicable.";
+  const system = "You are an expert simulation analyst. Interpret the following discrete-event simulation results for a non-specialist audience. Be concise: 150-200 words. Use plain English. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, per-queue blocking/balking counters, cost metrics, WIP, and container levels where applicable. Container levels include capacity and initialLevel — when capacity is present, reason about utilization (level/capacity) and flag overflow or stockout risk where relevant.";
   const waitDist = results.waitDist || {};
   const waitDistForPrompt = Object.keys(waitDist).length
     ? Object.fromEntries(Object.entries(waitDist).map(([q, w]) => [q, { n: w.n, mean: w.mean, p50: w.p50, p90: w.p90, p95: w.p95, p99: w.p99 }]))
@@ -823,7 +831,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "You have access to: per-queue wait percentiles (p50/p90/p95/p99), per-resource utilisation with failure/repair distributions,",
     "replication confidence intervals (CI 95%), per-queue blocking and balking counts,",
     "model event structure (B-event/C-event digest with routing types, loop guards, balking modes, arrival streams),",
-    "state variables, cost metrics, WIP (Little's Law), container levels, entity anomaly counts,",
+    "state variables, cost metrics, WIP (Little's Law), container levels (with capacity/initialLevel — reason about utilization and overflow/stockout risk when capacity is present), entity anomaly counts,",
     "and when set, performance goals with their current gaps.",
     "Timetable schedules (Schedule distribution) are stored as named records in model_schedules — referenced via scheduleRef UUID on bEvents.",
     "When a bEvent shows externalSchedule:true, arrivals follow the named timetable rows loaded at run time.",

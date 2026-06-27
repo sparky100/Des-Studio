@@ -980,6 +980,11 @@ export function findNodeDependents(model, node) {
     });
   }
 
+  // Containers don't participate in entity flow, so they have no dependents.
+  if (node.type === VISUAL_NODE_TYPES.CONTAINER) {
+    return deps;
+  }
+
   return deps;
 }
 
@@ -1277,6 +1282,10 @@ export function deleteVisualNode(model, node) {
       ...ce,
       cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== node.refId),
     }));
+  }
+
+  if (node.type === VISUAL_NODE_TYPES.CONTAINER) {
+    next.containerTypes = (model.containerTypes || []).filter(ct => ct.id !== node.refId);
   }
 
   return updateGraphLayout(next, deriveGraphFromModel(next));

@@ -1212,11 +1212,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               const s = res?.summary;
               if (!s) return null;
               const repCount = lastRow.replications > 0 ? lastRow.replications : 1;
+              const containerEntries = Object.entries(s.containerLevels || {});
               const metrics = [
                 s.served != null && { label: "Served", value: s.served / repCount, fmt: v => Math.round(v).toLocaleString() },
                 s.avgWait != null && { label: "Avg wait", value: s.avgWait, fmt: v => `${v.toFixed(1)} ${model.timeUnit||"min"}` },
                 s.avgSojourn != null && { label: "Avg time in system", value: s.avgSojourn, fmt: v => `${v.toFixed(1)} ${model.timeUnit||"min"}` },
                 s.servedRatio != null && { label: "Completion rate", value: s.servedRatio, fmt: v => `${(v*100).toFixed(1)}%` },
+                containerEntries.length > 0 && { label: "Containers", value: containerEntries.length, fmt: v => `${v} tracked` },
               ].filter(Boolean);
               if (!metrics.length) return null;
               return (

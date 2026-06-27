@@ -333,7 +333,17 @@ describe("LLM prompt builders", () => {
         { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2, containerLevels: { Tank: { min: 0, max: 100, avg: 42, final: 60 } } } }
       );
       const payload = JSON.parse(prompt.messages[1].content);
-      expect(payload.kpis.containerLevels).toEqual({ Tank: { min: 0, max: 100, avg: 42, final: 60 } });
+      expect(payload.kpis.containerLevels).toEqual({ Tank: { min: 0, max: 100, avg: 42, final: 60, capacity: null, initialLevel: null } });
+    });
+
+    it("enriches containerLevels with capacity and initialLevel from model.containerTypes", () => {
+      const modelWithContainer = { ...model, containerTypes: [{ id: "Tank", capacity: 200, initialLevel: 50 }] };
+      const prompt = buildSuggestionPrompt(
+        modelWithContainer, {},
+        { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2, containerLevels: { Tank: { min: 0, max: 100, avg: 42, final: 60 } } } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.kpis.containerLevels).toEqual({ Tank: { min: 0, max: 100, avg: 42, final: 60, capacity: 200, initialLevel: 50 } });
     });
 
     it("includes warnings and phaseCTruncated in kpis when set", () => {

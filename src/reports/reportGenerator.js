@@ -795,6 +795,20 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     ${htmlTable(['Resource type', 'Capacity', 'Utilisation'], utilRows)}`;
   }
 
+  // Container levels table
+  let containerHtml = '';
+  const containerLevelEntries = Object.entries(summary.containerLevels || {});
+  if (containerLevelEntries.length) {
+    const containerRows = containerLevelEntries.map(([id, lvl]) => [
+      id,
+      fin(lvl.min) ?? '—',
+      fin(lvl.avg) ?? '—',
+      fin(lvl.max) ?? '—',
+      fin(lvl.final) ?? '—',
+    ]);
+    containerHtml = `<h3>Container levels</h3>${htmlTable(['Container', 'Min', 'Avg', 'Max', 'Final'], containerRows)}`;
+  }
+
   const outcomeHasTimings = outcomes.some(r => r.avgWait != null || r.avgSojourn != null);
   const outcomesHtml = outcomes.length
     ? `<h3>Journey outcomes</h3>
@@ -881,6 +895,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     ${waitChartHtml || waitTableHtml ? `<h3>Queue wait-time distributions</h3>${waitChartHtml}${waitTableHtml}` : ''}
     ${outcomesHtml}
     ${utilChartHtml || utilTableHtml ? `<h3>Resource utilisation</h3>${utilChartHtml}${utilTableHtml}` : ''}
+    ${containerHtml}
     ${timeSeriesHtml}
     ${planVsActualHtml}
     ${goalHtml}
@@ -1161,6 +1176,22 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
       return [t, countCell, pct];
     });
     lines.push(mdTable(['Resource', 'Capacity', '% Busy'], utilRows));
+    lines.push('');
+  }
+
+  // Container levels
+  const containerLevelEntries = Object.entries(summary.containerLevels || {});
+  if (containerLevelEntries.length) {
+    lines.push('### Container Levels');
+    lines.push('');
+    const containerRows = containerLevelEntries.map(([id, lvl]) => [
+      id,
+      formatN(lvl.min) ?? '—',
+      formatN(lvl.avg) ?? '—',
+      formatN(lvl.max) ?? '—',
+      formatN(lvl.final) ?? '—',
+    ]);
+    lines.push(mdTable(['Container', 'Min', 'Avg', 'Max', 'Final'], containerRows));
     lines.push('');
   }
 
@@ -1494,9 +1525,9 @@ export function buildModelDefinitionHtml(model = {}) {
   // ── Condition formatting (handles string or structured object) ────────────
   function formatConditionClause(c) {
     if (!c || typeof c !== 'object') return '';
-    const variable = (c.variable || c.left || c.token || '').replace(/^entity\./i, '');
+    const variable = (c.variable || '').replace(/^entity\./i, '');
     const op = c.operator || c.op || '';
-    const value = c.value !== undefined ? c.value : c.right;
+    const value = c.value;
     if (variable && op && value !== undefined) return `${variable} ${op} ${value}`;
     if (variable && value !== undefined) return `${variable} = ${value}`;
     return '';
@@ -1537,6 +1568,17 @@ export function buildModelDefinitionHtml(model = {}) {
     })
   ] : [];
 
+  // ── Containers ─────────────────────────────────────────────────────────────
+  const containerTypes = model.containerTypes || [];
+  const containerRows = containerTypes.length ? [
+    ['Name', 'Capacity', 'Initial level'],
+    ...containerTypes.map(ct => [
+      esc(ct.id),
+      ct.capacity != null ? esc(String(ct.capacity)) : 'Unlimited',
+      esc(String(ct.initialLevel ?? 0)),
+    ])
+  ] : [];
+
   // ── Goals ──────────────────────────────────────────────────────────────────
   const goalRows = goals.length ? [
     ['Goal', 'Target'],
@@ -1549,6 +1591,7 @@ export function buildModelDefinitionHtml(model = {}) {
     servers.length ? printSection('Server types (resources)', serverRows) : '',
     stateVars.length ? printSection('State variables', stateVarRows) : '',
     queues.length ? printSection('Queues', queueRows) : '',
+    containerTypes.length ? printSection('Containers', containerRows) : '',
     bEvents.length ? printSection('B Events (Arrivals & routing)', bEventRows) : '',
     cEvents.length ? printSection('C Events (Activities)', cEventRows) : '',
     goals.length ? printSection('Performance goals', goalRows) : '',
