@@ -107,12 +107,13 @@ pattern, consult §10 directly.`,
 
 6. balkProbability and balkCondition are fields on the Queue object, not the ARRIVE B-event —
    they apply uniformly no matter how an entity reaches the queue (ARRIVE, RELEASE, routing,
-   batch/split). balkCondition and routing[].condition MUST be predicate objects, never strings.
-   The variable field uses dot notation — NOT the parenthesis form used in C-event conditions.
+   batch/split). Prefer balkCondition and routing[].condition as predicate objects — a string
+   shorthand is accepted and silently parsed into the object form at save time, but a string
+   that fails to parse is blocked by CHK-011/CHK-012.
 
    ✓ CORRECT: queue object: {"name": "Triage Queue", ..., "balkCondition": {"variable": "Queue.Triage Queue.length", "operator": ">", "value": 10}}
-   ✗ WRONG:   "balkCondition": "queue(Triage Queue).length > 10"  — string form, CHK-011 error
-   ✗ WRONG:   "balkCondition": {"variable": "queue(Triage Queue).length", ...}  — parenthesis form invalid in predicate objects
+   ✓ ALSO ACCEPTED (parsed to the object form on save): "balkCondition": "queue(Triage Queue).length > 10"
+   ✗ WRONG:   "balkCondition": "queue(Triage Queue).length >>> 10"  — malformed string, CHK-011 error
    ✗ WRONG:   placing balkProbability/balkCondition on the ARRIVE B-event — legacy location, still migrated automatically but not how new models should be authored
 
 7. RELEASE() followed immediately by COMPLETE() in the same effect is always broken.

@@ -214,9 +214,9 @@ function predicateToExpr(condition) {
     return sub.length ? `(${sub.join(op)})` : 'True';
   }
 
-  const variable = String(condition.variable || condition.left || condition.token || '');
+  const variable = String(condition.variable || '');
   const opStr = String(condition.op || condition.operator || '==');
-  const value = condition.value ?? condition.right ?? 0;
+  const value = condition.value ?? 0;
   const opMap = {
     '==': '==', 'eq': '==', 'neq': '!=', '!=': '!=',
     '>': '>', 'gt': '>', '>=': '>=', 'gte': '>=',

@@ -1,11 +1,12 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 2.3.0
+**Version:** 2.4.0
 **Date:** 2026-06-27
 **Sprint baseline:** Sprint 88
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
+| v2.4.0 | 2026-06-27 | Unified condition storage format | Rewrote §6.1: the predicate object is now the single canonical *stored* representation for all four condition-bearing fields (`cEvents[].condition`, `queues[].balkCondition`, `bEvents[].routing[].condition`, `cEvents[].cSchedules[].when`); the old "two incompatible formats" framing is removed — a string shorthand is accepted on all four fields and parsed into the object form at save time, never persisted as a string. CHK-011/CHK-012 no longer error on every string — only on a string that fails to parse; added CHK-014 for `cSchedules[].when` string-shape symmetry. Updated TOP LLM MISTAKES #4/#5 and §13.13 to match. |
 | v2.3.0 | 2026-06-27 | Container conditions & expression amounts | Added `container(Id).level/.capacity/.min/.max` predicates to the §6.1 Format A table — container levels can now be read directly in `cEvents[].condition` strings (e.g. `"container(Tank).level >= 10"`), enabling DRAIN-blocking conditions. Updated `FILL`/`DRAIN` macro rows in §5 and §6 effect-macro tables: `amount` now accepts an expression (state variable or arithmetic combination, same evaluator as `SET`), not just a numeric literal. Updated V27 in §10 to document the new amount-shape checks: a bare numeric `amount` ≤ 0 is now a blocking error; a bare non-numeric `amount` that doesn't match a declared state variable name is a warning. Added a "Reading container levels in conditions" note to §8. |
 | v2.2.3 | 2026-06-22 | overflowDestination id/name clarification | **Fixed a bug in §13's Complete Reference Model itself:** the "ED Wait Queue" overflow example used `"overflowDestination": "q_ed_overflow"` (the target queue's `id`) instead of `"ED Overflow Queue"` (its `name`) — LLMs copying this example verbatim would reproduce a V20 validation error. Corrected the example and added TOP LLM MISTAKES #20 (`overflowDestination` set to a queue's `id` instead of its `name`) — it is a name-style reference like `ARRIVE`/`RELEASE`/`ASSIGN` macro arguments, not an id-style one. Strengthened the §16 naming-rules cross-reference line to call out the id-vs-name contrast explicitly. |
 | v2.2.2 | 2026-06-20 | DELAY completion resolution options (COMPLETE/routing/RELEASE) | Rewrote §6.2 Rules' "completion B-event" bullet into three explicit, mutually-exclusive options: (1) `COMPLETE()` — safe with no server, engine checks `_isDelay`; (2) a routing table (`routing[]`/`probabilisticRouting[]`) with no effect macro at all — the correct choice for "delay then continue to another queue, no server involved," since the engine's routing logic explicitly accepts a delay-held entity the same as a waiting one; (3) `RELEASE(ServerType[, TargetQueue])` — only valid when a server was genuinely seized earlier in the same entity's journey and held through the delay; `RELEASE` has no `_isDelay` awareness and will either no-op or act on an unrelated customer's claim if invented for a chain where nothing was ever seized. |
@@ -51,7 +52,7 @@ Read every row in the TOP LLM MISTAKES table. For each one, confirm your model d
 
 ### Step 4 — Validate before output
 Before returning any JSON, check every blocking rule in §10 programmatically or by inspection.
-A model with any blocking error (V1–V47, CHK-001 to CHK-013) must not be returned to the user.
+A model with any blocking error (V1–V47, CHK-001 to CHK-014) must not be returned to the user.
 Fix all errors first.
 
 ### Step 5 — Planned arrivals: check row count
@@ -75,8 +76,8 @@ Read this before writing any model JSON.
 | 2 | `"effect": ["RELEASE(Server)", "COMPLETE()"]` | `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped. Use `"effect": ["COMPLETE()"]` alone — COMPLETE releases the server automatically. Warning V38. |
 | 2b | `"effect": ["COMPLETE()", "RELEASE(Server)"]` | `COMPLETE` marks entity `"done"` and releases the server. The `RELEASE` that follows re-queues the completed entity, causing an **infinite loop**. Use `"effect": ["COMPLETE()"]` alone. Warning V38b. |
 | 3 | Missing `useEntityCtx: true` on cSchedules | Without this, the target B-event can't identify the entity. Always add `"useEntityCtx": true` to every `cSchedules[]` entry. |
-| 4 | `balkCondition` as a string, or placed on the B-event | Must be a predicate object on the Queue itself: `{ "variable": "Queue.Name.length", "operator": ">", "value": 5 }`. Never a string expression, and never nested under a B-event. Blocked by CHK-011. |
-| 5 | `routing[].condition` as a string | Same as #4 — must be a predicate object, never a string. Blocked by CHK-012. |
+| 4 | `balkCondition` placed on the B-event instead of the Queue | Belongs on the Queue itself: `{ "variable": "Queue.Name.length", "operator": ">", "value": 5 }`, never nested under a B-event. A string shorthand like `"queue(Name).length > 5"` is parsed into this object form at save time and is fine to emit — but a malformed string is blocked by CHK-011. Prefer the object form. |
+| 5 | `routing[].condition` with malformed string syntax | A string shorthand is accepted and parsed into a predicate object at save time, but one that fails to parse (bad operator, unbalanced parens) is blocked by CHK-012. Prefer the object form: `{ "variable", "operator", "value" }`. |
 | 6 | `"effect"` as a bare string | Must be an array: `"effect": ["ARRIVE(Customer)"]` — never `"effect": "ARRIVE(Customer)"`. |
 | 7 | `scheduledTime` as a number | Must be a string: `"scheduledTime": "0"` — never `"scheduledTime": 0`. Blocked by V26. |
 | 8 | Distribution params as numbers | Must be strings: `"distParams": { "mean": "5" }` — never `{ "mean": 5 }`. Blocked by V5. |
@@ -297,7 +298,7 @@ Queues are waiting areas for customers.
   - `EDD` (Earliest Due Date) — selects the entity with the smallest `dueDate` attribute value. The customer entity type **must** define an attribute named `dueDate` of type `number`; without it, discipline order is undefined. FIFO tiebreaker.
 - `overflowDestination` (optional): name of another queue to receive overflow entities when this queue is full. UI-editable (appears when capacity is set). When the overflow destination is itself full, the engine recursively checks the next hop (and the one after that), exiting the system only if a cycle or dead end is reached — overflow chains (A→B→C) are checked at every hop, not just the first.
 - `balkProbability` (optional, number 0–1): the probability an entity declines to join this queue, checked **every time** an entity attempts to join it — via `ARRIVE`, `RELEASE`, conditional/probabilistic routing, batch/split, or preemption re-queue — not just on arrival. V21 validates the range.
-- `balkCondition` (optional): a **predicate object** `{ "variable", "operator", "value" }`, evaluated on every join attempt (same scope as `balkProbability` above). Use `"variable": "Queue.<queueName>.length"` to test queue occupancy. **Never a string** (CHK-011). Mutually combinable with `balkProbability` (both are checked if both are set).
+- `balkCondition` (optional): a **predicate object** `{ "variable", "operator", "value" }`, evaluated on every join attempt (same scope as `balkProbability` above). Use `"variable": "Queue.<queueName>.length"` to test queue occupancy. A string shorthand (e.g. `"queue(Name).length > 5"`) is accepted and parsed into this object form at save time — prefer the object form, but a well-formed string is not an error; a string that fails to parse is blocked by CHK-011. Mutually combinable with `balkProbability` (both are checked if both are set).
 - `renegeDist` / `renegeDistParams` (optional): when set, the engine automatically schedules a patience timer the moment an entity successfully joins this queue, sampled from the named distribution — no `RENEGE(ctx)` B-event needs to be authored. If the entity is still waiting when the timer fires, it abandons the queue exactly as a manually-wired renege would; if it has already been served, the timer is a no-op. This can be combined with the manual `schedules[{isRenege:true}]` B-event mechanism on the same model without conflict.
 
 **Note:** Balking, capacity, and reneging are all properties of the Queue object — they apply uniformly no matter how an entity reaches the queue. Older models may have `balkProbability`/`balkCondition` on the ARRIVE B-event instead; these are migrated onto the matching queue automatically at load time (non-destructively — the legacy fields are left in place), so hand-written JSON should always place these fields on the queue, not the B-event.
@@ -474,7 +475,7 @@ The companion CSV is returned in the `companionCsv` field of the response envelo
 - `schedules[].eventId` **is required** — must reference a valid B-event `id`. An entry without `eventId` is silently skipped by the engine and the event will never re-fire (CHK-010 error).
 - `schedules[].isRenege` (boolean, optional): when `true`, this schedule entry is an abandonment timer. If the entity is still waiting when this fires, it reneges. Pair with a B-event whose `effect` is `["RENEGE(ctx)"]`. Only one `isRenege` entry per B-event is meaningful.
 - `balkCondition`/`balkProbability` are **not** B-event fields — they belong on the Queue object (see §3 Queues) and are checked on every join attempt, not just at arrival.
-- `routing[].condition` **must be a predicate object** — never a string (CHK-012 error). See §5 Conditional Routing Table.
+- `routing[].condition` should be a **predicate object** `{ "variable", "operator", "value" }`; a string shorthand is accepted and parsed into this form at save time, but a string that fails to parse is blocked by CHK-012. See §5 Conditional Routing Table.
 - `defaultQueueName` (optional): fallback queue used when no routing condition matches. Must reference a valid queue name. Required when using `routing` without a guaranteed catch-all condition.
 
 ### Effect Macros for B-Events
@@ -769,62 +770,19 @@ Rules:
 - `DELAY(QueueName)` counts as a valid consumer of `QueueName` for CHK-013 — do not add a redundant `ASSIGN`/`BATCH` just to silence that check.
 - `QueueName` must reference a defined queue (V47, parity with the `BATCH`/`FILL`/`DRAIN` queue checks).
 
-### 6.1 Condition Formats — Two Different Systems
+### 6.1 Condition Formats
 
-**There are two condition formats in simmodlr. They are NOT interchangeable.**
+All four condition-bearing fields — `cEvents[].condition`, `queues[].balkCondition`,
+`bEvents[].routing[].condition`, `cEvents[].cSchedules[].when` — share **one canonical
+stored representation**: a predicate object (leaf or compound). A string shorthand is
+also accepted as an authoring convenience on **all four fields** and is parsed into the
+canonical object automatically the moment the model is saved — it is never persisted as
+a string. Both forms below are equally valid input; prefer the object form when
+generating JSON directly, since it's unambiguous and never needs parsing.
 
-#### Format A — C-event `condition` string (global state predicate)
+#### Canonical form — predicate object
 
-Used **only** in `cEvents[].condition`. Written as a string expression.
-
-| Predicate | Meaning |
-|-----------|---------|
-| `queue(QueueName).length > 0` | Queue has ≥ 1 entity waiting |
-| `queue(QueueName).length >= N` | Queue has ≥ N entities waiting |
-| `idle(ServerType).count > 0` | At least one server of type `ServerType` is idle |
-| `busy(ServerType).count > 0` | At least one server of type `ServerType` is busy |
-| `idle(ServerType).count >= N` | At least N servers are idle |
-| `state.variableName > N` | User-defined state variable exceeds threshold. `variableName` must match a `stateVariables[].name`. Supports all comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`. |
-| `state.variableName == 1` | User-defined state variable equals a value. Useful for shift/mode flags set via `SET(variableName, ...)`. |
-| `container(ContainerId).level > N` | Current level of a declared container. `ContainerId` must match a `containerTypes[].id`. |
-| `container(ContainerId).capacity > N` | Declared capacity of a container (`Infinity` if unbounded). |
-| `container(ContainerId).min > N` / `container(ContainerId).max > N` | Minimum / maximum level observed for that container so far this run. |
-
-Combine with `AND`, `OR`, `NOT`. Queue and server names must match exactly (case-sensitive).
-
-```json
-"condition": "queue(Triage Queue).length > 0 AND idle(Nurse).count > 0"
-```
-
-```json
-"condition": "queue(Batch Queue).length >= 5 AND state.batchingEnabled == 1"
-```
-
-```json
-"condition": "container(Tank).level >= 10"
-```
-DRAIN-blocking is an emergent property of this: a C-event with this condition and effect `["DRAIN(Tank, 10)"]` is re-scanned every cycle and simply won't fire until the level reaches 10 — no special "blocking" syntax is needed.
-
-> **This string format is valid ONLY for `cEvents[].condition`.** Do not use it anywhere else.
-
-> **Comparisons are variable-vs-literal only — NEVER variable-vs-variable.** The right-hand side of
-> every clause is parsed as a fixed literal at model-load time (`migrateLegacyCondition`); it is
-> never resolved as a queue length, server count, or state variable. A condition like
-> `"queue(TraumaQueue).length > traumaInService"` parses the right side as a non-numeric literal
-> (`NaN`) and silently evaluates to `false` forever — no error, no warning, the C-event simply
-> never fires. To gate logic on a dynamic threshold, compare each dynamic token against its own
-> literal constant in a separate `AND` clause instead of comparing two dynamic tokens to each other:
->
-> ✓ `"queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"`
-> ✗ `"queue(TraumaQueue).length > traumaInService"` — right side is a literal, not the state variable
-
----
-
-#### Format B — Predicate object (entity attribute or queue test)
-
-Used for: `queues[].balkCondition`, `bEvents[].routing[].condition`, `cEvents[].cSchedules[].when`.
-
-Always a JSON object — never a string:
+A leaf predicate:
 
 ```json
 { "variable": "Entity.priority", "operator": "<", "value": 2 }
@@ -832,17 +790,68 @@ Always a JSON object — never a string:
 
 | Field | Type | Description |
 |---|---|---|
-| `variable` | string | `Entity.<attrName>` for entity attributes; `Queue.<queueName>.length` for queue length |
+| `variable` | string | See variable vocabulary below |
 | `operator` | string | `==`, `!=`, `<`, `>`, `<=`, `>=` |
 | `value` | string \| number \| boolean | Comparison value matching the attribute's `valueType` |
 
-Variable name prefixes:
-- `Entity.flight_id` — reads the `flight_id` attribute of the current entity
-- `Entity.route_type` — reads the `route_type` attribute of the current entity
-- `Queue.Arrival Holding Queue.length` — reads the current length of that queue
-- `container(ContainerId).level` / `.capacity` / `.min` / `.max` — same parenthesis-form tokens as Format A §6.1, also valid as a `variable` value here (e.g. `{ "variable": "container(Tank).level", "operator": ">=", "value": 10 }` as a `balkCondition` or `routing[].condition`)
+A compound predicate combines leaves with `AND`/`OR`:
 
-> **Do not use the string format (Format A) for balkCondition, routing conditions, or when predicates.** The engine calls a different evaluator for these fields; a string value will produce a pre-run error (CHK-011 or CHK-012). This restriction is about the *outer* shape — the whole condition must be a JSON object, not a string with `AND`/`OR`. A single token like `container(Tank).level` or `queue(X).length` is still valid as the *value* of the `variable` field inside that object.
+```json
+{
+  "operator": "AND",
+  "clauses": [
+    { "variable": "Queue.Triage Queue.length", "operator": ">", "value": 0 },
+    { "variable": "idle(Nurse).count", "operator": ">", "value": 0 }
+  ]
+}
+```
+
+Variable vocabulary (valid as `variable` on any of the four fields):
+- `Entity.flight_id` / `Entity.route_type` — reads an attribute of the current entity
+- `Queue.Arrival Holding Queue.length` — reads the current length of a queue
+- `queue(QueueName).length` — equivalent string-token form of the same queue-length test
+- `idle(ServerType).count` / `busy(ServerType).count` — idle/busy server counts
+- `state.variableName` — a user-defined state variable (must match `stateVariables[].name`)
+- `container(ContainerId).level` / `.capacity` / `.min` / `.max` — container level/bounds; `ContainerId` must match a `containerTypes[].id`
+- `clock` — current simulation time
+- `served` / `reneged` / `loopCount` — built-in counters
+
+#### String shorthand (accepted everywhere, parsed on save)
+
+The same vocabulary above can be written as a string expression, combined with
+`AND`/`OR`:
+
+```json
+"condition": "queue(Triage Queue).length > 0 AND idle(Nurse).count > 0"
+```
+
+```json
+"balkCondition": "queue(Waiting Room).length > 5"
+```
+
+```json
+"condition": "container(Tank).level >= 10"
+```
+DRAIN-blocking is an emergent property of this: a C-event with this condition and effect `["DRAIN(Tank, 10)"]` is re-scanned every cycle and simply won't fire until the level reaches 10 — no special "blocking" syntax is needed.
+
+A string that fails to parse (bad operator, unbalanced parens, unknown token) is blocked
+at validation time: CHK-011 for `balkCondition`, CHK-012 for `routing[].condition`,
+CHK-014 for `cSchedules[].when` (there is no equivalent check for `cEvents[].condition`
+strings — malformed syntax there throws at evaluation time instead). A string that
+parses successfully is silently converted to the canonical object form the next time the
+model is saved — nothing further to do.
+
+> **Comparisons are variable-vs-literal only — NEVER variable-vs-variable.** The right-hand side of
+> every clause in the string shorthand is parsed as a fixed literal at save time
+> (`migrateLegacyCondition`); it is never resolved as a queue length, server count, or state
+> variable. A condition like `"queue(TraumaQueue).length > traumaInService"` parses the right side
+> as a non-numeric literal (`NaN`) and silently evaluates to `false` forever — no error, no
+> warning, the C-event simply never fires. To gate logic on a dynamic threshold, compare each
+> dynamic token against its own literal constant in a separate `AND` clause instead of comparing
+> two dynamic tokens to each other:
+>
+> ✓ `"queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"`
+> ✗ `"queue(TraumaQueue).length > traumaInService"` — right side is a literal, not the state variable
 
 ---
 
@@ -1032,8 +1041,9 @@ All generated model JSON MUST pass every blocking rule below.
 | V19 | Server entity type `count` must be an integer ≥ 1 |
 | V20 | Queue `capacity`, when set, must be an integer ≥ 1. `overflowDestination`, when set, must reference a defined queue. |
 | V21 | Queue `balkProbability` must be a finite number in [0, 1] |
-| CHK-011 | Queue (and, for legacy hygiene, B-event) `balkCondition` **must be a predicate object** `{ variable, operator, value }` — never a string |
-| CHK-012 | `routing[].condition` **must be a predicate object** `{ variable, operator, value }` — never a string |
+| CHK-011 | Queue (and, for legacy hygiene, B-event) `balkCondition`, if a string, must parse into a usable predicate — well-formed strings and predicate objects both pass |
+| CHK-012 | `routing[].condition`, if a string, must parse into a usable predicate — well-formed strings and predicate objects both pass |
+| CHK-014 | `cSchedules[].when`, if a string, must parse into a usable predicate — well-formed strings and predicate objects both pass |
 | V22 | `BATCH` size must be an integer ≥ 2 and the referenced queue must exist |
 | V23 | `UNBATCH` target queue must reference a defined queue |
 | V24 | `loopConfig.maxLoopCount` must be an integer ≥ 1. `loopConfig.exitQueueName`, when set, must reference a defined queue. |
@@ -1814,12 +1824,12 @@ For steady-state runs, set `warmupPeriod` to approximately the time it takes the
 
 | Pattern | When to Use | Example |
 |---|---|---|
-| **✓ Predicate objects** | Always encode conditions as JSON predicate objects using dot-notation variables | `"balkCondition": { "variable": "Queue.Waiting Room.length", "operator": ">", "value": 5 }` |
-| **✗ String expressions** | (Invalid CHK-011, CHK-012) Strings are not parsed as conditions — silently ignored or crash | `"balkCondition": "queue(Waiting Room).length > 5"` |
-| **✗ Parenthesis variable syntax** | (Invalid) `queue(Name).length` is the C-event string format — invalid in predicate objects | `{ "variable": "queue(Waiting Room).length", ... }` — must be `"Queue.Waiting Room.length"` |
+| **✓ Predicate objects** | Preferred — encode conditions as JSON predicate objects using dot-notation variables | `"balkCondition": { "variable": "Queue.Waiting Room.length", "operator": ">", "value": 5 }` |
+| **✓ String shorthand** | Accepted as an authoring convenience; parsed into the predicate object form at save time | `"balkCondition": "queue(Waiting Room).length > 5"` |
+| **✗ Malformed string** | (Invalid CHK-011, CHK-012, CHK-014) A string that fails to parse — bad operator, unbalanced parens, unknown token | `"balkCondition": "queue(Waiting Room).length >>> 5"` |
 
-**Rule:** `balkCondition` and `routing[].condition` must be predicate objects `{ "variable": "...", "operator": "...", "value": ... }`, never string expressions. The `variable` field uses **dot notation only**:
-- `Queue.QueueName.length` — current queue length (not `queue(Name).length`)
+**Rule:** prefer predicate objects `{ "variable": "...", "operator": "...", "value": ... }` for `balkCondition`, `routing[].condition`, and `cSchedules[].when` — they're unambiguous and never need parsing. A string is accepted on all three fields and is silently converted to the object form on save; only a string that fails to parse is blocked. The `variable` field accepts either vocabulary interchangeably:
+- `Queue.QueueName.length` or `queue(QueueName).length` — current queue length
 - `Entity.attrName` — entity attribute value
 - `Resource.ServerType.status` — server status (`"IDLE"` or `"BUSY"`)
 

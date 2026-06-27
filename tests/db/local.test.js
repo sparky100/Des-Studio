@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { fetchLocalRunHistory, saveLocalRun } from "../../src/db/local.js";
+import { fetchLocalModels, fetchLocalRunHistory, saveLocalModel, saveLocalRun } from "../../src/db/local.js";
 
 function createLocalStorageMock() {
   let store = {};
@@ -81,5 +81,62 @@ describe("local DB run history", () => {
     expect(run.results_json.entitySummaryCompact).toBeUndefined();
     expect(run.results_json.trace).toBeUndefined();
     expect(run.results_json.timeSeries).toHaveLength(200);
+  });
+});
+
+describe("local DB model conditions — unified storage format (Part B)", () => {
+  beforeEach(() => {
+    globalThis.localStorage = createLocalStorageMock();
+    globalThis.localStorage.clear();
+  });
+
+  function makeStringConditionModel() {
+    return {
+      queues: [{ id: "q1", name: "Main Queue", balkCondition: "queue(Main Queue).length > 5" }],
+      bEvents: [{ id: "b1", name: "Arrival", routing: [{ queueName: "Main Queue", condition: "idle(Clerk).count > 0" }] }],
+      cEvents: [{
+        id: "c1", name: "Serve",
+        condition: "queue(Main Queue).length > 0",
+        cSchedules: [{ eventId: "b1", when: "clock > 5" }],
+      }],
+    };
+  }
+
+  it("saveLocalModel normalizes all four string-shaped condition fields to predicate objects", () => {
+    const saved = saveLocalModel(makeStringConditionModel());
+
+    expect(saved.queues[0].balkCondition).toEqual({
+      variable: "queue(Main Queue).length", operator: ">", value: 5,
+    });
+    expect(saved.bEvents[0].routing[0].condition).toEqual({
+      variable: "idle(Clerk).count", operator: ">", value: 0,
+    });
+    expect(saved.cEvents[0].condition).toEqual({
+      variable: "queue(Main Queue).length", operator: ">", value: 0,
+    });
+    expect(saved.cEvents[0].cSchedules[0].when).toEqual({
+      variable: "clock", operator: ">", value: 5,
+    });
+  });
+
+  it("fetchLocalModels normalizes string-shaped conditions for models already in storage", () => {
+    globalThis.localStorage.setItem("simmodlr_models", JSON.stringify([
+      { id: "local_1", ...makeStringConditionModel() },
+    ]));
+
+    const [model] = fetchLocalModels();
+
+    expect(model.queues[0].balkCondition).toEqual({
+      variable: "queue(Main Queue).length", operator: ">", value: 5,
+    });
+    expect(model.bEvents[0].routing[0].condition).toEqual({
+      variable: "idle(Clerk).count", operator: ">", value: 0,
+    });
+    expect(model.cEvents[0].condition).toEqual({
+      variable: "queue(Main Queue).length", operator: ">", value: 0,
+    });
+    expect(model.cEvents[0].cSchedules[0].when).toEqual({
+      variable: "clock", operator: ">", value: 5,
+    });
   });
 });

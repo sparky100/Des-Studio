@@ -9,7 +9,7 @@
 // tab maps to ModelDetail tab IDs: 'entities' | 'state' | 'bevents' | 'cevents' | 'queues' | 'execute'
 
 import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
-import { extractQueueNamesFromCondition } from "../model/conditionFormat.js";
+import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
 
 export const DEFAULT_MAX_SIM_TIME = 500;
 
@@ -35,18 +35,6 @@ export function validateModel(model) {
       return `${macro}(${args.join(',')})`;
     }
     return String(effect || '');
-  };
-  const hasConditionDefinition = condition => {
-    if (!condition) return false;
-    if (typeof condition === 'string') return condition.trim() !== '';
-    if (Array.isArray(condition)) return condition.some(hasConditionDefinition);
-    if (typeof condition !== 'object') return false;
-    if (Array.isArray(condition.clauses)) return condition.clauses.some(hasConditionDefinition);
-    return String(condition.variable || condition.token || condition.left || '').trim() !== '';
-  };
-  const isMeaningfulRoutingBranch = branch => {
-    if (!branch || typeof branch !== 'object') return false;
-    return hasConditionDefinition(branch.condition);
   };
   const hasCompleteEffect = text => /COMPLETE\s*\(/i.test(text);
   const hasAnyRenegeEffect = text => /\bRENEGE\(\s*([^)]+)\s*\)/i.test(text);

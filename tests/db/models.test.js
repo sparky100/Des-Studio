@@ -1542,6 +1542,105 @@ describe('Sprint 71 — persistence layer', () => {
     });
   });
 
+  // ── round-trip: unified condition storage format (Part B) ─────────────────
+  // toRow()/saveModel() now normalize string-shaped conditions into the canonical
+  // predicate-object form before writing — these fields must never persist as strings.
+  describe('round-trip — string-shaped conditions are normalized to predicate objects on save', () => {
+    it('a string queues[].balkCondition is normalized to a predicate object in the insert payload', async () => {
+      const model = {
+        name: 'Balk String RT Model',
+        entityTypes: [], stateVariables: [], bEvents: [], cEvents: [],
+        queues: [
+          { id: 'q-rt', name: 'Main Queue', customerType: 'Customer', discipline: 'FIFO',
+            balkCondition: 'queue(Main Queue).length >= 3' },
+        ],
+      };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.queues[0].balkCondition).toEqual({
+        variable: 'queue(Main Queue).length', operator: '>=', value: 3,
+      });
+      expect(insertArg.model_json.queues[0].balkCondition).toEqual({
+        variable: 'queue(Main Queue).length', operator: '>=', value: 3,
+      });
+    });
+
+    it('a string bEvents[].routing[].condition is normalized to a predicate object in the insert payload', async () => {
+      const model = {
+        name: 'Routing String RT Model',
+        entityTypes: [], stateVariables: [], cEvents: [],
+        queues: [{ id: 'q-rt', name: 'Main Queue', customerType: 'Customer', discipline: 'FIFO' }],
+        bEvents: [
+          { id: 'be-rt', name: 'Arrival', scheduledTime: '0', effect: 'ARRIVE(Customer, Main Queue)', schedules: [],
+            routing: [{ queueName: 'Main Queue', condition: 'idle(Clerk).count > 0' }] },
+        ],
+      };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.b_events[0].routing[0].condition).toEqual({
+        variable: 'idle(Clerk).count', operator: '>', value: 0,
+      });
+    });
+
+    it('a string cEvents[].cSchedules[].when is normalized to a predicate object in the insert payload', async () => {
+      const model = {
+        name: 'When String RT Model',
+        entityTypes: [], stateVariables: [], bEvents: [],
+        queues: [{ id: 'q-rt', name: 'Main Queue', customerType: 'Customer', discipline: 'FIFO' }],
+        cEvents: [
+          { id: 'ce-rt', name: 'Drain', priority: 1, condition: '', effect: 'DRAIN(Tank, 10)',
+            cSchedules: [{ eventId: 'ce-rt', when: 'clock > 5' }] },
+        ],
+      };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.c_events[0].cSchedules[0].when).toEqual({
+        variable: 'clock', operator: '>', value: 5,
+      });
+    });
+
+    it('a string cEvents[].condition is normalized to a predicate object via norm() on a DB row', () => {
+      const result = norm({
+        id: 'm-rt', name: 'Condition String RT Model',
+        entity_types: [], b_events: [],
+        c_events: [{ id: 'ce-rt', name: 'Serve', priority: 1, condition: 'queue(Main Queue).length > 0', cSchedules: [] }],
+        queues: [{ id: 'q-rt', name: 'Main Queue', customerType: 'Customer', discipline: 'FIFO' }],
+        model_json: {},
+      });
+
+      expect(result.cEvents[0].condition).toEqual({
+        variable: 'queue(Main Queue).length', operator: '>', value: 0,
+      });
+    });
+  });
+
   // ── 71.1.4  Round-trip: model_json.sections survives saveModel insert ────
   describe('round-trip — model_json.sections survives saveModel insert', () => {
     it('the insert payload model_json contains sections from the input object', async () => {

@@ -306,6 +306,121 @@ describe("CHK-009 Schedule dist with no rows or times", () => {
   });
 });
 
+describe("CHK-011 balkCondition string-shape check (Part B — parse-failure only)", () => {
+  test("does not trigger for a well-formed string balkCondition on a queue", () => {
+    const model = {
+      ...wellFormedModel,
+      queues: [{ id: "q1", name: "ServiceQueue", balkCondition: "queue(ServiceQueue).length > 5" }],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-011")).toHaveLength(0);
+  });
+
+  test("triggers for a malformed string balkCondition on a queue", () => {
+    const model = {
+      ...wellFormedModel,
+      queues: [{ id: "q1", name: "ServiceQueue", balkCondition: "this is not a parseable condition" }],
+    };
+    const issues = checkModel(model);
+    const chk = issues.filter(i => i.code === "CHK-011");
+    expect(chk).toHaveLength(1);
+    expect(chk[0].severity).toBe("error");
+    expect(chk[0].nodeName).toBe("ServiceQueue");
+  });
+
+  test("does not trigger for an already-canonical predicate-object balkCondition", () => {
+    const model = {
+      ...wellFormedModel,
+      queues: [{ id: "q1", name: "ServiceQueue", balkCondition: { variable: "Queue.ServiceQueue.length", operator: ">", value: 5 } }],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-011")).toHaveLength(0);
+  });
+
+  test("triggers for a malformed string balkCondition on a B-event (legacy hygiene)", () => {
+    const model = {
+      ...wellFormedModel,
+      bEvents: [
+        { ...wellFormedModel.bEvents[0], balkCondition: "this is not a parseable condition" },
+        wellFormedModel.bEvents[1],
+      ],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-011")).toHaveLength(1);
+  });
+});
+
+describe("CHK-012 routing condition string-shape check (Part B — parse-failure only)", () => {
+  test("does not trigger for a well-formed string routing condition", () => {
+    const model = {
+      ...wellFormedModel,
+      bEvents: [
+        { ...wellFormedModel.bEvents[0], routing: [{ queueName: "ServiceQueue", condition: "idle(Clerk).count > 0" }] },
+        wellFormedModel.bEvents[1],
+      ],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-012")).toHaveLength(0);
+  });
+
+  test("triggers for a malformed string routing condition", () => {
+    const model = {
+      ...wellFormedModel,
+      bEvents: [
+        { ...wellFormedModel.bEvents[0], routing: [{ queueName: "ServiceQueue", condition: "this is not a parseable condition" }] },
+        wellFormedModel.bEvents[1],
+      ],
+    };
+    const issues = checkModel(model);
+    const chk = issues.filter(i => i.code === "CHK-012");
+    expect(chk).toHaveLength(1);
+    expect(chk[0].severity).toBe("error");
+  });
+
+  test("does not trigger for an already-canonical predicate-object routing condition", () => {
+    const model = {
+      ...wellFormedModel,
+      bEvents: [
+        { ...wellFormedModel.bEvents[0], routing: [{ queueName: "ServiceQueue", condition: { variable: "idle(Clerk).count", operator: ">", value: 0 } }] },
+        wellFormedModel.bEvents[1],
+      ],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-012")).toHaveLength(0);
+  });
+});
+
+describe("CHK-014 cSchedules[].when string-shape check (new — Part B symmetry)", () => {
+  test("does not trigger for a well-formed string when condition", () => {
+    const model = {
+      ...wellFormedModel,
+      cEvents: [{ ...wellFormedModel.cEvents[0], cSchedules: [{ ...wellFormedModel.cEvents[0].cSchedules[0], when: "clock > 5" }] }],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-014")).toHaveLength(0);
+  });
+
+  test("triggers for a malformed string when condition", () => {
+    const model = {
+      ...wellFormedModel,
+      cEvents: [{ ...wellFormedModel.cEvents[0], cSchedules: [{ ...wellFormedModel.cEvents[0].cSchedules[0], when: "this is not a parseable condition" }] }],
+    };
+    const issues = checkModel(model);
+    const chk = issues.filter(i => i.code === "CHK-014");
+    expect(chk).toHaveLength(1);
+    expect(chk[0].severity).toBe("error");
+  });
+
+  test("does not trigger for an already-canonical predicate-object when condition", () => {
+    const model = {
+      ...wellFormedModel,
+      cEvents: [{ ...wellFormedModel.cEvents[0], cSchedules: [{ ...wellFormedModel.cEvents[0].cSchedules[0], when: { variable: "clock", operator: ">", value: 5 } }] }],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-014")).toHaveLength(0);
+  });
+});
+
 describe("checkModel well-formed model", () => {
   test("returns no issues for a structurally valid model", () => {
     const issues = checkModel(wellFormedModel);

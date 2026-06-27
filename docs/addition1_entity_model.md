@@ -206,7 +206,7 @@ When an Activity uses Filtered Entity Selection, a separate entity-level predica
 }
 ```
 
-> **Implementation rule:** The Predicate Builder must never emit a raw string that is passed to `eval()`, `new Function()`, or any dynamic code execution mechanism. The predicate is always serialised as a JSON structure and evaluated by the engine's safe condition evaluator.
+> **Implementation rule:** The Predicate Builder must never emit a raw string that is passed to `eval()`, `new Function()`, or any dynamic code execution mechanism. The predicate is always serialised as a JSON structure and evaluated by the engine's safe condition evaluator. String input (e.g. `"queue(X).length > 0"`) is still accepted as an authoring/AI-generation convenience and is parsed into the canonical predicate-object form before storage — the prohibition above is on dynamic code execution, not on accepting string syntax as input.
 
 ---
 

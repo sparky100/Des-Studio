@@ -4,6 +4,7 @@ import pkg from '../../package.json';
 import { RADIUS, Z, alpha } from "./shared/tokens.js";
 import { csvEscape, downloadTextFile, downloadJsonFile, buildRunHistoryExportPayload, buildRunHistoryCsv } from "./shared/utils.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
+import { MarkdownContent } from "./shared/MarkdownContent.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { useViewport } from "./shared/hooks.js";
 import { SkeletonPanel } from "./shared/SkeletonPanel.jsx";
@@ -1199,7 +1200,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                       onFocus={e=>e.target.style.borderBottomColor=C.accent}
                       onBlur={e=>e.target.style.borderBottomColor=C.border}
                     />
-                  : <div style={{fontSize:14,color:C.muted,fontFamily:SANS,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{model.notes}</div>
+                  : <MarkdownContent text={model.notes} style={{fontSize:14,color:C.muted,fontFamily:SANS}}/>
                 }
               </div>
             )}

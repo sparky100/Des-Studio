@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
-import { evalCondition, evaluatePredicate, buildConditionTokens, compilePredicate, getPredicateDependencies } from '../../src/engine/conditions.js';
+import { evaluatePredicate, compilePredicate, getPredicateDependencies } from '../../src/engine/conditions.js';
 import { buildEngine } from '../../src/engine/index.js';
 
 // Tests for the safe JSON predicate evaluator (Addition 1 §4).
@@ -434,53 +434,6 @@ describe('compilePredicate — reusable predicate evaluators', () => {
   });
 });
 
-describe('evalCondition — legacy condition string evaluator', () => {
-  test('supports queue names with spaces in queue length conditions', () => {
-    const helpers = {
-      entities: [{ id: 1, queue: 'Main Queue', status: 'waiting' }],
-      waitingOf: vi.fn(() => []),
-      idleOf: vi.fn(() => [{ id: 2 }]),
-      busyOf: vi.fn(() => []),
-    };
-
-    expect(evalCondition(
-      'queue(Main Queue).length > 0 AND idle(Clerk).count > 0',
-      helpers,
-      {},
-      0
-    )).toBe(true);
-  });
-});
-
-describe('buildConditionTokens — token list for Condition Builder UI', () => {
-  test('includes clock token for simulation time conditions', () => {
-    const tokens = buildConditionTokens([], []);
-    const clockToken = tokens.find(t => t.value === 'clock');
-    expect(clockToken).toBeDefined();
-    expect(clockToken.valueType).toBe('number');
-    expect(clockToken.label).toContain('simulation time');
-  });
-
-  test('clock token appears before served/reneged tokens', () => {
-    const tokens = buildConditionTokens([], []);
-    const clockIdx = tokens.findIndex(t => t.value === 'clock');
-    const servedIdx = tokens.findIndex(t => t.value === 'served');
-    expect(clockIdx).toBeLessThan(servedIdx);
-  });
-
-  test('does not throw when containers param is omitted', () => {
-    expect(() => buildConditionTokens([], [], [])).not.toThrow();
-  });
-
-  test('emits container(Id).level and .capacity tokens for each declared container', () => {
-    const tokens = buildConditionTokens([], [], [], [{ id: 'Tank' }, { id: 'Buffer' }]);
-    expect(tokens.some(t => t.value === 'container(Tank).level')).toBe(true);
-    expect(tokens.some(t => t.value === 'container(Tank).capacity')).toBe(true);
-    expect(tokens.some(t => t.value === 'container(Buffer).level')).toBe(true);
-    expect(tokens.some(t => t.value === 'container(Buffer).capacity')).toBe(true);
-  });
-});
-
 describe('container(Id).level — end-to-end blocking C-event', () => {
   test('DRAIN only fires once a condition referencing container(Tank).level is satisfied', () => {
     const model = {
@@ -526,85 +479,63 @@ describe('container(Id).level — end-to-end blocking C-event', () => {
   });
 });
 
-// ── S39.2 — M5: evalCondition as backward-compat adapter ─────────────────────
-// Documents that string conditions produce the same boolean result as equivalent
-// JSON predicates. Mixed-precedence behaviour is explicitly noted.
+// ── M5 — legacy string conditions evaluate identically to their predicate-object form ──
+// migrateLegacyCondition() converts string syntax into the canonical predicate object before
+// evaluation; these tests confirm evaluatePredicate produces the same result for both shapes.
 
-const mockHelpers = {
-  entities: [],
-  model: { queues: [] },
-  waitingOf: (type) => [],
-  idleOf:    (type) => [],
-  busyOf:    (type) => [],
-};
-
-describe('M5 — evalCondition adapter parity with evaluatePredicate', () => {
-
+describe('M5 — string vs. predicate-object parity via evaluatePredicate', () => {
   test('simple > comparison: string and JSON predicate agree (true)', () => {
-    const state = { __served: 5 };
-    // String: "served > 3"
-    const strResult = evalCondition('served > 3', mockHelpers, state, 0);
-    // JSON predicate: state variable "served" mapped through __served
-    // evaluatePredicate uses resolveVariable which reads plain state vars directly.
-    // For served we use __served via the string evaluator substitution.
-    // The string evaluator replaces "served" with "5", then evaluates "5 > 3".
-    expect(strResult).toBe(true);
+    const state = { served: 5 };
+    expect(evaluatePredicate('served > 3', state)).toBe(true);
+    expect(evaluatePredicate({ variable: 'served', operator: '>', value: 3 }, state)).toBe(true);
   });
 
   test('simple > comparison: string and JSON predicate agree (false)', () => {
-    const state = { __served: 1 };
-    const strResult = evalCondition('served > 3', mockHelpers, state, 0);
-    expect(strResult).toBe(false);
+    const state = { served: 1 };
+    expect(evaluatePredicate('served > 3', state)).toBe(false);
+    expect(evaluatePredicate({ variable: 'served', operator: '>', value: 3 }, state)).toBe(false);
   });
 
-  test('clock token evaluates correctly in string adapter', () => {
-    const state = { __served: 0 };
-    expect(evalCondition('clock > 5', mockHelpers, state, 10)).toBe(true);
-    expect(evalCondition('clock > 5', mockHelpers, state, 3)).toBe(false);
+  test('clock token evaluates identically for string and object form', () => {
+    expect(evaluatePredicate('clock > 5', { clock: 10 })).toBe(true);
+    expect(evaluatePredicate({ variable: 'clock', operator: '>', value: 5 }, { clock: 3 })).toBe(false);
   });
 
-  test('AND of two clauses — both true → true', () => {
-    const state = { __served: 5, __reneged: 2 };
-    expect(evalCondition('served > 0 AND reneged > 0', mockHelpers, state, 0)).toBe(true);
+  test('AND of two clauses — both true → true (string and object agree)', () => {
+    const state = { served: 5, reneged: 2 };
+    expect(evaluatePredicate('served > 0 AND reneged > 0', state)).toBe(true);
+    expect(evaluatePredicate({
+      operator: 'AND',
+      clauses: [
+        { variable: 'served', operator: '>', value: 0 },
+        { variable: 'reneged', operator: '>', value: 0 },
+      ],
+    }, state)).toBe(true);
   });
 
   test('AND of two clauses — one false → false', () => {
-    const state = { __served: 5, __reneged: 0 };
-    expect(evalCondition('served > 0 AND reneged > 0', mockHelpers, state, 0)).toBe(false);
+    const state = { served: 5, reneged: 0 };
+    expect(evaluatePredicate('served > 0 AND reneged > 0', state)).toBe(false);
   });
 
   test('OR of two clauses — one true → true', () => {
-    const state = { __served: 0, __reneged: 2 };
-    expect(evalCondition('served > 0 OR reneged > 0', mockHelpers, state, 0)).toBe(true);
+    const state = { served: 0, reneged: 2 };
+    expect(evaluatePredicate('served > 0 OR reneged > 0', state)).toBe(true);
   });
 
   test('OR of two clauses — both false → false', () => {
-    const state = { __served: 0, __reneged: 0 };
-    expect(evalCondition('served > 0 OR reneged > 0', mockHelpers, state, 0)).toBe(false);
+    const state = { served: 0, reneged: 0 };
+    expect(evaluatePredicate('served > 0 OR reneged > 0', state)).toBe(false);
   });
 
-  // Documents left-to-right AND/OR semantics (no grouping)
-  test('mixed AND/OR — left-to-right evaluation (documented behaviour)', () => {
-    // "A AND B OR C" with A=false, B=false, C=true
-    // Left-to-right: (false AND false) OR true = false OR true = true
-    // This matches the current evalCondition behaviour. JSON predicates with explicit
-    // nesting would differ: AND(false,false) = false; OR(false, true) = true (same here)
-    // but grouping matters in other combinations — left-to-right is authoritative for strings.
-    const state = { __served: 0, __reneged: 0, __loopCount: 1 };
-    // "served > 0 AND reneged > 0 OR loopCount > 0"
-    // = (0 > 0 && 0 > 0) || 1 > 0 = (false && false) || true = true
-    expect(evalCondition('served > 0 AND reneged > 0 OR loopCount > 0', mockHelpers, state, 0)).toBe(true);
+  test('custom state variable substitution works for string form', () => {
+    const state = { myCounter: 7 };
+    expect(evaluatePredicate('myCounter > 5', state)).toBe(true);
+    expect(evaluatePredicate('myCounter > 10', state)).toBe(false);
   });
 
-  test('custom state variable substitution works in adapter', () => {
-    const state = { __served: 0, myCounter: 7 };
-    expect(evalCondition('myCounter > 5', mockHelpers, state, 0)).toBe(true);
-    expect(evalCondition('myCounter > 10', mockHelpers, state, 0)).toBe(false);
-  });
-
-  test('empty condition returns false (adapter boundary case)', () => {
-    const state = {};
-    expect(evalCondition('', mockHelpers, state, 0)).toBe(false);
-    expect(evalCondition('   ', mockHelpers, state, 0)).toBe(false);
+  test('empty condition string evaluates to false', () => {
+    expect(evaluatePredicate('', {})).toBe(false);
+    expect(evaluatePredicate('   ', {})).toBe(false);
   });
 });
