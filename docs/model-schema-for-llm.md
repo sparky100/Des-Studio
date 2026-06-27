@@ -2188,7 +2188,7 @@ An `actualsStream` source receives actual start-time updates from an external sy
 
 `actualTime` may be a plain simulation time number, an `HH:MM` string, or a full ISO 8601 datetime. ISO/HH:MM values require `model.epoch` to be set.
 
-The adapter calls `engine.updateScheduledTime(entityId, newSimTime)` for each update, rescheduling the matching pre-scheduled arrival in the FEL while preserving the original `_plannedTime` on the entity for deviation reporting.
+The adapter calls `engine.updateScheduledTime(entityId, newSimTime)` for each update, rescheduling the matching pre-scheduled arrival in the FEL while preserving the original `_plannedTime` on the entity for deviation reporting. `updateScheduledTime()` enforces the FEL's monotonicity invariant: a correction earlier than the current simulation clock is rejected (returns `false`, no FEL mutation) rather than allowing an event to fire in the past.
 
 **`getSummary().avgPlanDeviation`**: when entities have both `_plannedTime` (from rows[]) and `arrivalTime` (actual), the engine reports the average deviation (actual minus planned). Positive = late; negative = early; null = no planned data. The report includes a "Plan vs Actual" section when this metric is present.
 

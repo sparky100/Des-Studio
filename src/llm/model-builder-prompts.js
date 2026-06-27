@@ -237,10 +237,15 @@ pattern, consult §10 directly.`,
     manual macros only when failures must be conditional on something the auto-schedule can't
     express (e.g. only fail a server while it is serving a specific entity type).
 
-18. MATCH(QueueA, QueueB, TargetQueue) merges the matched pair's attrs as
-    {...entityFromQueueA.attrs, ...entityFromQueueB.attrs} — QueueB's attributes overwrite QueueA's
-    on any name collision. Order the two source queues deliberately when both sides define an
-    attribute with the same name; the one named second always wins.
+18. MATCH takes exactly FIVE arguments: MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue) — the
+    entity type and source queue for each side of the pair, then the destination queue. It merges
+    the matched pair's attrs as {...entityFromQueueA.attrs, ...entityFromQueueB.attrs} — QueueB's
+    attributes overwrite QueueA's on any name collision. Order the two source queues deliberately
+    when both sides define an attribute with the same name; the one named second always wins.
+
+    ✓ CORRECT: "effect": ["MATCH(Driver, Driver Queue, Rider, Rider Queue, Matched Queue)"]
+    ✗ WRONG:   "effect": ["MATCH(Driver Queue, Rider Queue, Matched Queue)"]  — missing both
+               EntityType arguments, non-functional
 
 19. SPLIT takes exactly THREE arguments: SPLIT(EntityType, N, QueueName) — entity type to spawn,
     clone count, and the destination queue. A 2-arg form (SPLIT(N, QueueName)) is invalid and will

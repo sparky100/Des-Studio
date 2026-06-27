@@ -236,7 +236,7 @@ All 6 queue disciplines.
 
 **Behaviour:** At warmup boundary, statistical accumulators reset (_wipIntegral, per-entity wait/service accumulation). FEL events pruned at warmup boundary.
 
-**Detection:** Welch's method automatically detects warmup from cumulative mean chart stabilisation point.
+**Detection:** Welch's method automatically detects warmup from cumulative mean chart stabilisation point. (This is Welch's *graphical warm-up detection* method only — scenario-comparison confidence intervals use a separate, standard equal-variance paired t-test, not a Welch unequal-variance correction.)
 
 ### Replications
 

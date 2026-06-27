@@ -1588,7 +1588,7 @@ See `docs/simmodlr_Build_Plan.md` for the full sprint-by-sprint roadmap. Latest 
 - Saved experiment configurations (named snapshots of run parameters, storable and restorable from Execute panel)
 - CI precision display at a glance — half-width and sample-size indicators on all confidence interval cards
 - Warm-up transient diagnostics — batch-means chart with warm-up boundary marker, Welch's graphical test visualisation
-- Anomalous replication flagging — outlier detection (IQR/z-score) with per-replication badges in run history
+- Anomalous replication flagging — outlier detection (IQR, Tukey 1.5×IQR fences) with per-replication badges in run history
 - Run organisation — archiving, tagging, and filter controls in the run history panel
 - Sprint 28 introduced the "Experiments" tab (saved experiment configs) ahead of the existing "Studies" (parametric sweep) tab in ExecutePanel
 - `tests/engine/replication-runner.test.js`, `tests/engine/statistics.test.js`, and all UI Execute tests updated

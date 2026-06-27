@@ -1225,13 +1225,18 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
               </div>
               <MetricStrip
                 items={[
-                  { label: "n", value: batchResult.n },
+                  { label: "n used", value: batchResult.nUsed ?? batchResult.n },
                   { label: "mean", value: formatNumber(batchResult.mean), color: C.accent },
                   { label: "lower bound", value: formatNumber(batchResult.lower) },
                   { label: "upper bound", value: formatNumber(batchResult.upper) },
                   { label: "lag-1 rho", value: formatNumber(batchResult.lag1Rho), color: C.amber },
                 ]}
               />
+              {batchResult.discarded > 0 && (
+                <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, marginTop: 6 }}>
+                  {batchResult.discarded} of {batchResult.n} repeated-run result(s) didn't fill a complete group of {batchResult.batchSize} and were left out of this estimate.
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>

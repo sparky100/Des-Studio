@@ -923,6 +923,49 @@ describe('MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)', () => {
   });
 });
 
+// ── COSEIZE ───────────────────────────────────────────────────────────────────
+describe('COSEIZE(QueueName, ServerType1, ServerType2[, ...])', () => {
+  const coseizeModel = {
+    entityTypes: [
+      { name: 'Patient',  role: 'customer', attrDefs: [] },
+      { name: 'Surgeon',  role: 'server',   attrDefs: [] },
+      { name: 'Nurse',    role: 'server',   attrDefs: [] },
+    ],
+    queues: [{ name: 'ORQueue', discipline: 'FIFO' }],
+    bEvents: [], cEvents: [],
+  };
+
+  function makeEntities() {
+    const patient = { id: 1, type: 'Patient', role: 'customer', status: 'waiting', queue: 'ORQueue', arrivalTime: 0, attrs: {}, stages: [] };
+    const surgeon = { id: 2, type: 'Surgeon', role: 'server',   status: 'idle',    arrivalTime: 0, stages: [] };
+    const nurse   = { id: 3, type: 'Nurse',   role: 'server',   status: 'idle',    arrivalTime: 0, stages: [] };
+    return { patient, surgeon, nurse, entities: [patient, surgeon, nurse] };
+  }
+
+  test('seizes one server of each distinct type and sets customer to serving', () => {
+    const { patient, surgeon, nurse, entities } = makeEntities();
+    const ctx = makeCtx(entities, {}, coseizeModel, 5);
+    applyEffect('COSEIZE(ORQueue, Surgeon, Nurse)', ctx);
+
+    expect(patient.status).toBe('serving');
+    expect(surgeon.status).toBe('busy');
+    expect(nurse.status).toBe('busy');
+    expect(surgeon.currentCustId).toBe(patient.id);
+    expect(nurse.currentCustId).toBe(patient.id);
+  });
+
+  test('rejects a duplicate server type without claiming any server', () => {
+    const { patient, surgeon, nurse, entities } = makeEntities();
+    const ctx = makeCtx(entities, {}, coseizeModel, 5);
+    const { msgs } = applyEffect('COSEIZE(ORQueue, Surgeon, Surgeon)', ctx);
+
+    expect(msgs.join(' ')).toMatch(/duplicate server type/);
+    expect(patient.status).toBe('waiting');
+    expect(surgeon.status).toBe('idle');
+    expect(nurse.status).toBe('idle');
+  });
+});
+
 // ── applyScalar ───────────────────────────────────────────────────────────────
 describe('applyScalar', () => {
   test('VAR++ increments by 1', () => {

@@ -117,7 +117,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | Warm-up period / transient removal | ⚠️ manual | ✅ | ✅ | ✅ WARMUP event | — |
 | Batch-means CI estimator | ❌ | ✅ | ✅ | ✅ batchMeansCI | — |
 | Welch's graphical warm-up test | ❌ | ⚠️ | ❌ | ✅ WelchChart | — |
-| Outlier / anomalous rep flagging | ❌ | ❌ | ❌ | ✅ IQR+z-score | — |
+| Outlier / anomalous rep flagging | ❌ | ❌ | ❌ | ✅ IQR (Tukey 1.5×IQR fences) | — |
 | Paired t-test (scenario comparison) | ⚠️ manual | ✅ | ⚠️ | ✅ pairedTCI | — |
 | 1D parametric sweep | ❌ | ✅ Experiment | ✅ | ✅ with CI ribbon | — |
 | 2D parametric sweep | ❌ | ✅ | ⚠️ | ✅ heatmap grid | — |
@@ -192,7 +192,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | Calibrated batch mode (pre-fetch live params, freeze for run) | ❌ | ❌ | ❌ | ✅ prefetchAll() before buildEngine() | — |
 | Rolling run mode (re-sample params on each FEL event) | ❌ | ❌ | ❌ | ✅ registry.resolve() per sample site | — |
 | Warm-start from live system snapshot | ❌ | ❌ | ❌ | ✅ injectState(); SnapshotAdapter | — |
-| FEL reschedule during run (dynamic rescheduling) | ❌ | ❌ | ❌ | ✅ engine.updateScheduledTime() | — |
+| FEL reschedule during run (dynamic rescheduling) | ❌ | ❌ | ❌ | ✅ engine.updateScheduledTime() (rejects backwards/past-clock corrections — Sprint 87) | — |
 | Model version milestones (named snapshots) | ❌ | ⚠️ branching | ❌ | ✅ model_versions table; CreateVersionModal | — |
 | Structural vs parameter change detection | ❌ | ❌ | ❌ | ✅ detectStructuralChanges() in validation.js | — |
 | Run records linked to version snapshots | ❌ | ❌ | ❌ | ✅ version_id on run records | — |
@@ -211,10 +211,10 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | G04 | **Resource breakdowns / failures** | B | **High** | ✅ Complete | `FAIL` and `REPAIR` macros for explicit/conditional outages; `mtbfDist`/`mttrDist` on a server entityType is a genuine engine-automatic feature (`makeFailureEvents()`, `src/engine/index.js`) — the engine internally generates FAILURE/REPAIR pseudo-events from those declarative fields with zero B-event/C-event authoring required. Sprint 32. **Test coverage (Sprint 86):** direct `apply()` unit tests in `src/engine/__tests__/macros.test.js` (downtime accounting precision, starvation-interval flushing, repair-of-non-failed-server no-op, pool vs. unit scope) plus integration coverage in `tests/engine/per-server-failure.test.js`; Machine Shop with Failures template demonstrates the MTBF/MTTR pattern. |
 | G05 | ~~**Clock value in conditions**~~ | F | ~~Low~~ | ✅ Resolved | `clock` token in `buildConditionTokens()`. Sprint 31. |
 | G06 | ~~**Entity splitting / cloning**~~ | A | ~~Med~~ | ✅ Resolved | `SPLIT` macro with parent-child tracking. Sprint 33. **Test coverage (Sprint 86):** direct `apply()` unit tests in `src/engine/__tests__/macros.test.js` (partial balking, `_splitParent`/`_splitChildren` metadata, renege-from-clone-queue). Fixed a UI bug (B1) where the B-event effect picker generated an invalid 2-arg `SPLIT(N, Queue)` call instead of the required 3-arg `SPLIT(EntityType, N, Queue)` form. |
-| G07 | ~~**Multiple resource types per task (co-seize)**~~ | B | ~~Med~~ | ✅ Resolved | `COSEIZE` macro with atomic all-or-nothing seizing. Sprint 33. |
+| G07 | ~~**Multiple resource types per task (co-seize)**~~ | B | ~~Med~~ | ✅ Resolved | `COSEIZE` macro with atomic all-or-nothing seizing. Sprint 33. **Sprint 87 follow-up:** the engine-level macro was correct, but `COSEIZE` was unreachable from either effect picker (raw JSON/AI generation only) — added to the C-event picker. Also fixed a dedup bug where `COSEIZE(Q, TypeA, TypeA)` silently collapsed to a single server claim instead of warning; it now rejects duplicate server-type arguments with a clear message. |
 | G08 | ~~**Custom / SPT queue comparator**~~ | C | ~~Med~~ | ✅ Resolved | SPT, EDD, PRIORITY(attrName) disciplines. Sprint 33. |
 | G09 | ~~**Batch size by condition / attribute**~~ | C | ~~Med~~ | ✅ Resolved | `BATCH(Queue, Entity.attrName)`. Sprint 33. |
-| G10 | ~~**Entity matching / synchronisation**~~ | C | ~~Med~~ | ✅ Resolved | `MATCH` macro. Sprint 33. **Test coverage (Sprint 86):** direct `apply()` unit tests in `src/engine/__tests__/macros.test.js` (attribute-merge collision order — QueueB overwrites QueueA on name clash — and discipline-respecting candidate selection). Fixed a UI gap (B2) where `MATCH` was not offered in the C-event effect picker at all (raw text entry only). |
+| G10 | ~~**Entity matching / synchronisation**~~ | C | ~~Med~~ | ✅ Resolved | `MATCH` macro. Sprint 33. **Test coverage (Sprint 86):** direct `apply()` unit tests in `src/engine/__tests__/macros.test.js` (attribute-merge collision order — QueueB overwrites QueueA on name clash — and discipline-respecting candidate selection). Fixed a UI gap (B2) where `MATCH` was not offered in the C-event effect picker at all (raw text entry only). **Sprint 87 follow-up:** the AI model-builder prompt (`model-builder-prompts.js` rule #18) documented the wrong, contradictory 3-arg signature (`MATCH(QueueA, QueueB, TargetQueue)`) — risked the AI emitting broken `MATCH` calls. Corrected to the real 5-arg form. |
 | G11 | ~~**WIP (work-in-progress) metric**~~ | D | ~~Med~~ | ✅ Resolved | `avgWIP` time-integral. Sprint 31. |
 | G12 | ~~**Histogram output**~~ | D | ~~Med~~ | ✅ Resolved | `buildHistogram` + `buildHistogramFD`. Sprint 33. |
 | G13 | ~~**ANOVA / ranking-and-selection**~~ | D | ~~Med~~ | ✅ Resolved | `oneWayANOVA` + `tukeyHSD`. Sprint 33. |
@@ -274,7 +274,7 @@ This is simmodlr's newest and most distinctive capability dimension — entirely
 - **Calibrated batch mode:** live parameter values pre-fetched once at run start and frozen for all replications, enabling reproducible multi-replication studies calibrated to current real-world conditions.
 - **Rolling single-run mode:** parameters re-resolved on each FEL scheduling event, enabling digital twin and real-time operations dashboards.
 - **Warm-start from system snapshot:** `injectState()` and `SnapshotAdapter` seed a run from a live queue state, enabling "what happens if I add a server right now?" decision support.
-- **FEL rescheduling:** `engine.updateScheduledTime()` re-anchors a planned FEL event to a new sim time, supporting actuals-driven run correction.
+- **FEL rescheduling:** `engine.updateScheduledTime()` re-anchors a planned FEL event to a new sim time, supporting actuals-driven run correction. As of Sprint 87, it enforces the FEL's monotonicity invariant — a correction that would move a planned event earlier than the current sim clock is rejected (`false`, no FEL mutation) rather than silently allowing an event to fire "in the past".
 - **Model versioning:** named version milestones with structural-vs-parameter classification, version history UI, and optional run–version linkage for human navigation.
 
 ---
@@ -352,7 +352,7 @@ The following capabilities are simmodlr-exclusive among the compared tools:
 | AI model generation from natural language | ✅ | ❌ | ❌ | ❌ |
 | Goal-driven sweep with AI narrative | ✅ | ❌ | ❌ | ❌ |
 | Welch's graphical warm-up test | ✅ | ❌ | ⚠️ | ❌ |
-| Anomalous replication flagging (IQR+z) | ✅ | ❌ | ❌ | ❌ |
+| Anomalous replication flagging (IQR, Tukey fences) | ✅ | ❌ | ❌ | ❌ |
 | Safe execution (no code injection) | ✅ | ❌ | ❌ | ❌ |
 | Real-time parameter feeds (REST/WebSocket) | ✅ | ⚠️ | ✅ | ❌ |
 | Calibrated batch + rolling run modes | ✅ | ❌ | ❌ | ❌ |

@@ -83,6 +83,18 @@ describe('statistics helpers', () => {
     expect(ci.meanDiff).toBeCloseTo(-3, 4);
   });
 
+  test('pairedTConfidenceInterval flags truncation when arrays have unequal length', () => {
+    const ci = pairedTConfidenceInterval([1, 2, 3], [4, 5]);
+    expect(ci.truncated).toBe(true);
+    expect(ci.droppedCount).toBe(1);
+  });
+
+  test('pairedTConfidenceInterval reports no truncation for equal-length arrays', () => {
+    const ci = pairedTConfidenceInterval([1, 2, 3], [4, 5, 6]);
+    expect(ci.truncated).toBe(false);
+    expect(ci.droppedCount).toBe(0);
+  });
+
   test('summarizeReplicationResults extracts nested metric paths', () => {
     const summary = summarizeReplicationResults([
       { result: { summary: { avgWait: 8, served: 20 } } },
@@ -178,6 +190,22 @@ describe('batchMeansCI', () => {
     const ci = batchMeansCI(values, 10);
     expect(ci.batchCount).toBe(0);
     expect(ci.mean).not.toBeNull();
+  });
+
+  test('reports nUsed and discarded when the data does not divide evenly into batches', () => {
+    const values = Array.from({ length: 1001 }, (_, i) => i % 7); // 1001 values, batchSize 100 -> 10 batches, 1 discarded
+    const ci = batchMeansCI(values, 100);
+    expect(ci.n).toBe(1001);
+    expect(ci.batchCount).toBe(10);
+    expect(ci.nUsed).toBe(1000);
+    expect(ci.discarded).toBe(1);
+  });
+
+  test('discarded is 0 when n divides evenly into batches', () => {
+    const values = Array.from({ length: 1000 }, (_, i) => i % 7);
+    const ci = batchMeansCI(values, 100);
+    expect(ci.nUsed).toBe(1000);
+    expect(ci.discarded).toBe(0);
   });
 
   test('produces wider CI than standard for autocorrelated data', () => {

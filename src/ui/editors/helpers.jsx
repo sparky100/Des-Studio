@@ -143,6 +143,22 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       }
     }
   }
+  // COSEIZE(QueueName, ServerType1, ServerType2[, ...]) — atomically seizes one
+  // customer and multiple server types together; fails cleanly if any is unavailable.
+  if(queues.length>0&&servers.length>=2){
+    opts.push({label:'── COSEIZE (seize entity + 2 server types at once) ──',value:'',disabled:true});
+    queues.forEach(q=>{
+      const entityLabel = q.customerType ? normTypeName(q.customerType) : 'entity';
+      for(let i=0;i<servers.length;i++){
+        for(let j=i+1;j<servers.length;j++){
+          opts.push({
+            label: `Seize ${servers[i]} + ${servers[j]} for ${entityLabel} from ${queueDisplayName(q.name)}`,
+            value: `COSEIZE(${q.name}, ${servers[i]}, ${servers[j]})`,
+          });
+        }
+      }
+    });
+  }
   return opts;
 };
 
@@ -280,7 +296,7 @@ const categorizeEffect = (value) => {
   const v = String(value||"").trim();
   if (!v) return 'other';
   if (/^ARRIVE\s*\(/i.test(v)||/^BATCH\s*\(/i.test(v)||/^UNBATCH\s*\(/i.test(v)||/^SPLIT\s*\(/i.test(v)||/^MATCH\s*\(/i.test(v)||/^RENEGE/i.test(v)) return 'queue';
-  if (/^(COMPLETE|RELEASE|ASSIGN)\s*\(/i.test(v)) return 'service';
+  if (/^(COMPLETE|RELEASE|ASSIGN|COSEIZE)\s*\(/i.test(v)) return 'service';
   if (/^SET_ATTR\s*\(/i.test(v)||/^SET\s*\(/i.test(v)||/(\+\+|--|[+\-]=\s*\d|=\s*\d)/.test(v)) return 'state';
   if (/^COST\s*\(/i.test(v)) return 'cost';
   if (/^(PREEMPT|FAIL|REPAIR)\s*\(/i.test(v)) return 'server';
