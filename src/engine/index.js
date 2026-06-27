@@ -1876,6 +1876,7 @@ const cycleLog = [];
    */
   function updateScheduledTime(entityId, newSimTime) {
     if (!entityId || !Number.isFinite(newSimTime)) return false;
+    if (newSimTime < clock) return false; // never reschedule an event before the current clock — violates FEL monotonicity
     let updated = false;
     for (const entry of fel) {
       const scheduledEntityId = entry._scheduleRowAttrs?.entityId;

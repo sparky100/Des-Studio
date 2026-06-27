@@ -115,8 +115,10 @@ export function summarizeReplicationResults(results = [], metricPaths = []) {
 }
 
 export function pairedTConfidenceInterval(a = [], b = []) {
+  const droppedCount = Math.abs(a.length - b.length);
+  const truncated = droppedCount > 0;
   const n = Math.min(a.length, b.length);
-  if (n < 2) return { n, meanDiff: null, lower: null, upper: null, halfWidth: null };
+  if (n < 2) return { n, meanDiff: null, lower: null, upper: null, halfWidth: null, truncated, droppedCount };
   const diffs = [];
   for (let i = 0; i < n; i++) {
     if (Number.isFinite(a[i]) && Number.isFinite(b[i])) {
@@ -124,7 +126,7 @@ export function pairedTConfidenceInterval(a = [], b = []) {
     }
   }
   const m = diffs.length;
-  if (m < 2) return { n: m, meanDiff: null, lower: null, upper: null, halfWidth: null };
+  if (m < 2) return { n: m, meanDiff: null, lower: null, upper: null, halfWidth: null, truncated, droppedCount };
   const diffMean = diffs.reduce((s, d) => s + d, 0) / m;
   const variance = diffs.reduce((s, d) => s + (d - diffMean) ** 2, 0) / (m - 1);
   const halfWidth = tCritical95(m - 1) * Math.sqrt(variance) / Math.sqrt(m);
@@ -135,6 +137,8 @@ export function pairedTConfidenceInterval(a = [], b = []) {
     upper: diffMean + halfWidth,
     halfWidth,
     pValue: null, // could add t-distribution CDF lookup if needed
+    truncated, // true when scenarioA/scenarioB had unequal replication counts — droppedCount pairs from the longer array were excluded
+    droppedCount,
   };
 }
 
@@ -671,7 +675,7 @@ export function batchMeansCI(values = [], batchSize = null) {
   if (k < 2) {
     // Fall back to standard CI if we can't form at least 2 batches
     const ci = confidenceInterval95(finite);
-    return { ...ci, batchSize: m, batchCount: k, lag1Rho: null };
+    return { ...ci, batchSize: m, batchCount: k, lag1Rho: null, nUsed: n, discarded: 0 };
   }
 
   // Compute batch means
@@ -681,6 +685,8 @@ export function batchMeansCI(values = [], batchSize = null) {
   const avg = mean(batchMeans);
   const halfWidth = tCritical95(k - 1) * sampleStdDev(batchMeans) / Math.sqrt(k);
   const lag1Rho = lag1Autocorrelation(batchMeans);
+  const nUsed = k * m; // observations beyond k*m don't fill a complete batch and are excluded below
+  const discarded = n - nUsed;
 
   return {
     n,
@@ -691,6 +697,8 @@ export function batchMeansCI(values = [], batchSize = null) {
     upper: avg + halfWidth,
     halfWidth,
     lag1Rho,
+    nUsed, // actual observation count used to form the k batches (n - discarded)
+    discarded, // observations dropped because they didn't fill a complete batch
   };
 }
 

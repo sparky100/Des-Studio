@@ -136,7 +136,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing | N/A Not applicable
 | Warm-up period / transient removal | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ WARMUP event | — |
 | Batch-means CI estimator | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ batchMeansCI | — |
 | Welch's graphical warm-up test | ❌ | ❌ | ❌ | ✅ | ⚠️ | ❌ | ❌ | ❌ | ✅ WelchChart | **Ahead** |
-| Outlier / anomalous rep flagging | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ IQR+z-score | **Ahead** |
+| Outlier / anomalous rep flagging | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ IQR (Tukey fences) | **Ahead** |
 | Paired t-test (scenario comparison) | ⚠️ | ❌ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ pairedTCI | — |
 | 1D parametric sweep | ❌ | ❌ | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ with CI ribbon | — |
 | 2D parametric sweep | ❌ | ❌ | ⚠️ | ❌ | ✅ | ✅ | ⚠️ | ✅ | ✅ heatmap grid | — |

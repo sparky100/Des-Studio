@@ -81,7 +81,7 @@ This limits the range of systems that can be modelled naturally without engine-s
 
 ~~Established tools tend to support stronger post-run confidence~~ — **Gap substantially closed (2026-05-16).**
 
-simmodlr now implements: batch-means CI, Welch's graphical warm-up detection with apply-suggestion UI, paired t-test for scenario comparison, ANOVA with Tukey HSD post-hoc, anomalous replication flagging (IQR + z-score), M/M/1 and M/M/c analytical benchmark validation. These capabilities match or exceed SimPy and JaamSim; AnyLogic remains roughly comparable via its Experiments framework.
+simmodlr now implements: batch-means CI, Welch's graphical warm-up detection with apply-suggestion UI, paired t-test for scenario comparison, ANOVA with Tukey HSD post-hoc, anomalous replication flagging (IQR, Tukey 1.5×IQR fences), M/M/1 and M/M/c analytical benchmark validation. These capabilities match or exceed SimPy and JaamSim; AnyLogic remains roughly comparable via its Experiments framework.
 
 The remaining analytical trust gap is **AI-explained optimisation for non-experts** — already a simmodlr strength — and **benchmark credibility at scale** (entity counts above 10K not validated).
 

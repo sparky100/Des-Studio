@@ -13,6 +13,7 @@ export function ScenarioComparisonTable({ comparison }) {
   if (!comparison) return null;
   const labelA = comparison.labels?.a;
   const labelB = comparison.labels?.b;
+  const anyTruncated = (comparison.comparisons || []).some(c => c.truncated);
   return (
     <div>
       {(labelA || labelB) && (
@@ -39,7 +40,13 @@ export function ScenarioComparisonTable({ comparison }) {
               const meanB = comparison.meansB?.[c.metric];
               return (
                 <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
+                  <td style={{ padding: "6px 8px", color: C.accent }}>
+                    {METRIC_LABELS[c.metric] || c.metric}
+                    {c.truncated && (
+                      <span title={`Cell A and Cell B had different replication counts — ${c.droppedCount} unpaired run(s) were dropped from this comparison.`}
+                        style={{ marginLeft: 4, color: C.amber, fontWeight: 700, fontSize: 11, cursor: "help" }}>*</span>
+                    )}
+                  </td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanA != null ? fmtMetric(c.metric, meanA) : "—"}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanB != null ? fmtMetric(c.metric, meanB) : "—"}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
@@ -61,6 +68,11 @@ export function ScenarioComparisonTable({ comparison }) {
           </tbody>
         </table>
       </div>
+      {anyTruncated && (
+        <div style={{ fontSize: 11, color: C.amber, marginTop: 6 }}>
+          * Cell A and Cell B had different replication counts for this metric — unpaired runs were dropped to compute the paired comparison.
+        </div>
+      )}
     </div>
   );
 }

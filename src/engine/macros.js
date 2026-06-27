@@ -964,6 +964,12 @@ export const MACROS = [
       const serverTypes = match[2].split(",").map(s => s.trim());
       const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
 
+      const dupType = serverTypes.find((t, i) => serverTypes.indexOf(t) !== i);
+      if (dupType) {
+        msgs.push(`COSEIZE(${queueName}, ${serverTypes.join(', ')}): duplicate server type "${dupType}" — each server type must appear once; COSEIZE seizes one server per listed type, not one per occurrence`);
+        return;
+      }
+
       const discipline = helpers.findQueueConfig?.(queueName)?.discipline || "FIFO";
       const queueCandidates = helpers.waitingInQueue?.(queueName, discipline) || [];
       const cust = queueCandidates[0];

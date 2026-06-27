@@ -107,6 +107,20 @@ describe('updateScheduledTime', () => {
     expect(engine.updateScheduledTime('patient_1', NaN)).toBe(false);
     expect(engine.updateScheduledTime('patient_1', null)).toBe(false);
   });
+
+  test('rejects a reschedule before the current clock (monotonicity guard)', () => {
+    const model = makeScheduleModel([10, 20, 30]);
+    const engine = buildEngine(model, 42, 0, 50);
+    engine.step(); // t=0: initial fire, schedules patient_1 at t=10
+    engine.step(); // t=10: patient_1 arrives, schedules patient_2 at t=20 (clock now 10)
+    // Attempting to move patient_2's FEL entry to a time before the current clock (10)
+    // must be rejected outright — accepting it would let an event fire "in the past".
+    const result = engine.updateScheduledTime('patient_2', 5);
+    expect(result).toBe(false);
+    // The FEL entry must be left untouched — a later, valid update should still see t=20.
+    const validUpdate = engine.updateScheduledTime('patient_2', 22);
+    expect(validUpdate).toBe(true);
+  });
 });
 
 describe('getSummary avgPlanDeviation', () => {
