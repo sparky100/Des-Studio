@@ -1886,6 +1886,9 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                       {serverSection.series.map((series, idx) => {
                         const color = CHART_COLORS[(idx + 3) % CHART_COLORS.length];
                         const fmtPct = v => `${Math.round(v ?? 0)}%`;
+                        const et = (model?.entityTypes || []).find(e => e.name === series.label);
+                        const resourceCount = et ? Math.max(1, parseInt(et.count || "1", 10) || 1) : null;
+                        const hasVariation = seriesHasVariation(series.capacitySeries);
                         return (
                           <ChartCard
                             key={series.id}
@@ -1896,8 +1899,12 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                             dataPreview={<SeriesDataPreview series={series} />}
                           >
                             <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="% busy" formatY={fmtPct} />
-                            {seriesHasVariation(series.capacitySeries) && (
+                            {hasVariation ? (
                               <MiniLineChart title="Resources available over time" ariaTitle={`${series.label} capacity`} points={series.capacitySeries} color={C.muted} yLabel="servers" />
+                            ) : resourceCount != null && (
+                              <div style={{ fontSize: 11, color: C.text, fontFamily: FONT }}>
+                                <strong>{resourceCount}</strong> resource{resourceCount !== 1 ? "s" : ""}
+                              </div>
                             )}
                           </ChartCard>
                         );
