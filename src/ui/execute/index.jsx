@@ -185,6 +185,81 @@ async function doCloudSave(saveFn, {
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
+/** Editable run-settings inputs for the saved-experiment New/Edit forms — reuses the same
+ * shared state setters as ExperimentControls.jsx's "Edit setup" panel so saving an
+ * experiment captures whatever is set here, not whatever the global Run Setup happens to be. */
+function ExperimentRunSettingsFields({
+  warmupPeriod, setWarmupPeriod,
+  replications, setReplications,
+  seed, setSeed,
+  terminationMode, setTerminationMode,
+  maxSimTime, setMaxSimTime,
+  terminationCondition, setTerminationCondition,
+  model,
+}) {
+  const { C, FONT } = useTheme();
+  const fieldStyle = { width: 90, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" };
+  const labelStyle = { fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={labelStyle}>WARM-UP</span>
+          <input aria-label="Warm-up period" type="number" value={warmupPeriod}
+            onChange={e => setWarmupPeriod(parseFloat(e.target.value) || 0)}
+            style={fieldStyle} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={labelStyle}>REPLICATIONS</span>
+          <input aria-label="Replication count" type="number" value={replications}
+            onChange={e => setReplications(parseInt(e.target.value, 10) || 0)}
+            style={fieldStyle} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={labelStyle}>SEED</span>
+          <input aria-label="Simulation seed" type="number" value={seed}
+            onChange={e => setSeed(parseInt(e.target.value) || 0)}
+            style={fieldStyle} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={labelStyle}>STOP CONDITION</span>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", height: 30 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 11, color: C.text, fontFamily: FONT }}>
+              <input type="radio" name="expTerminationMode" checked={terminationMode === "time"} onChange={() => setTerminationMode("time")} />
+              Fixed duration
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 11, color: C.text, fontFamily: FONT }}>
+              <input type="radio" name="expTerminationMode" checked={terminationMode === "condition"} onChange={() => setTerminationMode("condition")} />
+              Rule-based
+            </label>
+          </div>
+        </div>
+        {terminationMode === "time" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={labelStyle}>DURATION</span>
+            <input aria-label="Run duration" type="number" value={maxSimTime}
+              onChange={e => setMaxSimTime(parseFloat(e.target.value) || 0)}
+              style={fieldStyle} />
+          </div>
+        )}
+      </div>
+      {terminationMode === "condition" && (
+        <div>
+          <span style={{ ...labelStyle, display: "block", marginBottom: 6 }}>STOP WHEN THIS BECOMES TRUE</span>
+          <ConditionBuilder
+            condition={terminationCondition}
+            entityTypes={model.entityTypes}
+            stateVariables={model.stateVariables}
+            queues={model.queues}
+            containers={model.containerTypes}
+            onChange={condition => setTerminationCondition(condition)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true }) => {
   const { C, FONT } = useTheme();
   const experimentDefaults = model?.experimentDefaults || {};
@@ -668,6 +743,16 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       };
       // aggregateStats assigned after object is created to avoid self-reference
       fullResult.aggregateStats = summarizeReplicationResults([fullResult], CI_METRICS);
+      // Attach the run's actual config immediately so consumers (e.g. the Simulation
+      // Assistant) don't have to wait for the async DB round-trip to know what was run.
+      fullResult._experiment_config = {
+        maxSimTime: terminationMode === 'time' ? maxSimTime : null,
+        warmupPeriod,
+        replications: 1,
+        terminationMode,
+        terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+        seed: runSeedRef.current,
+      };
       setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, fullResult.runtimeMetrics));
       setResults(fullResult);
       onResultsReady?.(fullResult);
@@ -864,6 +949,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               ...(chartDataAutoDisabled ? { _requested_collect_time_series: true, _effective_collect_time_series: false } : {}),
             };
 
+            batchResult._experiment_config = {
+              maxSimTime: maxTimeForRun,
+              warmupPeriod,
+              replications,
+              terminationMode,
+              terminationCondition: stopConditionForRun,
+              seed: runSeed,
+            };
             setBatchStatus("complete");
             setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, batchResult.runtimeMetrics));
             setResults(batchResult);
@@ -1008,6 +1101,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         replications: 1,
       },
       ...(chartDataAutoDisabled ? { _requested_collect_time_series: true, _effective_collect_time_series: false } : {}),
+    };
+    result._experiment_config = {
+      maxSimTime: maxTimeForRun,
+      warmupPeriod,
+      replications: 1,
+      terminationMode,
+      terminationCondition: stopConditionForRun,
+      seed: runSeed,
     };
 
     setCurrentSnap(result.snap);
@@ -1740,9 +1841,15 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               <input aria-label="Experiment description" type="text" value={expFormDesc} onChange={e => setExpFormDesc(e.target.value)} placeholder="Optional notes"
                 style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }} />
             </div>
-            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
-              Captures current settings: {replications} repl · seed {seed} · warm-up {warmupPeriod} · {terminationMode === "time" ? `duration ${maxSimTime}` : "condition stop"}
-            </div>
+            <ExperimentRunSettingsFields
+              warmupPeriod={warmupPeriod} setWarmupPeriod={setWarmupPeriod}
+              replications={replications} setReplications={setReplications}
+              seed={seed} setSeed={setSeed}
+              terminationMode={terminationMode} setTerminationMode={setTerminationMode}
+              maxSimTime={maxSimTime} setMaxSimTime={setMaxSimTime}
+              terminationCondition={terminationCondition} setTerminationCondition={setTerminationCondition}
+              model={model}
+            />
             {/* Parameter overrides */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1893,9 +2000,15 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                             <input aria-label="Experiment description" type="text" value={expFormDesc} onChange={e => setExpFormDesc(e.target.value)} placeholder="Optional notes"
                               style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }} />
                           </div>
-                          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
-                            Will capture current run settings: {replications} repl · seed {seed} · warm-up {warmupPeriod} · {terminationMode === "time" ? `duration ${maxSimTime}` : "condition stop"}
-                          </div>
+                          <ExperimentRunSettingsFields
+                            warmupPeriod={warmupPeriod} setWarmupPeriod={setWarmupPeriod}
+                            replications={replications} setReplications={setReplications}
+                            seed={seed} setSeed={setSeed}
+                            terminationMode={terminationMode} setTerminationMode={setTerminationMode}
+                            maxSimTime={maxSimTime} setMaxSimTime={setMaxSimTime}
+                            terminationCondition={terminationCondition} setTerminationCondition={setTerminationCondition}
+                            model={model}
+                          />
                           {/* Parameter overrides */}
                           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

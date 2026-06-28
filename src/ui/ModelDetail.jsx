@@ -1829,15 +1829,22 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           activeTab={tab}
           model={model}
           results={latestResults}
-          exportConfig={{
-            modelId,
-            runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
-            replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications || latestResults?.replications || 1,
-            warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
-            maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
-            terminationMode: "time",
-            terminationCondition: null,
-          }}
+          exportConfig={(() => {
+            // Prefer the config actually used to produce these results — attached in-memory
+            // immediately on fresh runs, or restored from results_json for historical runs —
+            // over the historyRows lookup, which races the async history refetch on fresh runs.
+            const activeExpCfg = latestResults?._experiment_config || null;
+            const histRow = historyRows.find(row => row.id === selectedResultsRunId);
+            return {
+              modelId,
+              runLabel: histRow?.run_label || latestResults?.runLabel || null,
+              replications: activeExpCfg?.replications ?? histRow?.replications ?? latestResults?.replications ?? 1,
+              warmupPeriod: activeExpCfg?.warmupPeriod ?? histRow?.warmup_period ?? null,
+              maxSimTime: activeExpCfg?.maxSimTime ?? histRow?.max_simulation_time ?? null,
+              terminationMode: activeExpCfg?.terminationMode ?? "time",
+              terminationCondition: activeExpCfg?.terminationCondition ?? null,
+            };
+          })()}
           aggregateStats={aggregateStatsForPanel}
           comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
             id: `saved-${row.id}`,
