@@ -1620,7 +1620,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     return next;
   });
 
-  const chartModel = useMemo(() => buildResultsViewModel(results, model, { activeSectionIds }), [results, model, activeSectionIds]);
+  const chartModel = useMemo(() => buildResultsViewModel(results, results?._model_snapshot ?? model, { activeSectionIds }), [results, model, activeSectionIds]);
   const healthFlags = useMemo(() => evaluateResultsHealth(results, model), [results, model]);
 
   const handleExportLLMBundle = useCallback(() => {
@@ -1886,7 +1886,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                       {serverSection.series.map((series, idx) => {
                         const color = CHART_COLORS[(idx + 3) % CHART_COLORS.length];
                         const fmtPct = v => `${Math.round(v ?? 0)}%`;
-                        const et = (model?.entityTypes || []).find(e => e.name === series.label);
+                        const et = ((results?._model_snapshot ?? model)?.entityTypes || []).find(e => e.name === series.label);
                         const resourceCount = et ? Math.max(1, parseInt(et.count || "1", 10) || 1) : null;
                         const hasVariation = seriesHasVariation(series.capacitySeries);
                         return (
