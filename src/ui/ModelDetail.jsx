@@ -1454,7 +1454,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 // doesn't point at an old run while the new results are displayed.
                 // handleRunSaved will assign the correct ID once the run is saved.
                 setSelectedResultsRunId("");
-                setLatestResults(results);
+                // Attach the model that was actually simulated so AiAssistantPanel/
+                // ResultsWorkspace resolve `results._model_snapshot ?? model` correctly
+                // even before this run is persisted (persistence attaches its own
+                // snapshot later, asynchronously).
+                setLatestResults(results?._model_snapshot ? results : { ...results, _model_snapshot: model });
                 setLatestReplicationResults(replicationResults || []);
                 setLatestWarmupDetection(warmupDetection || null);
                 setLatestLog(log || []);
