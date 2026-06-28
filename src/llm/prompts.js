@@ -1252,49 +1252,45 @@ export function promptWordEstimate(prompt) {
 export function buildResultsQueryPrompt(question, model = {}, results = {}, conversationHistory = [], options = {}) {
   const system = "You are a simulation results analyst. Answer questions about the simulation run using only the provided KPI data. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, and per-queue blocking/balking counters. Be concise and specific — always cite exact KPI values. If the data does not contain the answer, say so clearly. Never invent numbers. " + NOTES_PRIORITY_GUARDRAIL;
 
-  // On the first turn send the full data context; follow-up turns send the question only.
-  // The conversation history gives the LLM sufficient context without repeating the payload.
-  const isFirstTurn = conversationHistory.length === 0 || options.forceModelContext === true;
-
-  let userContent;
-  if (isFirstTurn) {
-    const summary = getSummary(results);
-    const kpis = buildKpis(model, results);
-    const entityTypes = (model.entityTypes || []).map(e => ({ name: e.name, role: e.role }));
-    const queues = (model.queues || []).map(q => ({
-      name: q.name,
-      discipline: q.discipline,
-      capacity: q.capacity,
-      customerType: q.customerType,
-    }));
-    const perQueue = results.perQueue || {};
-    const dataPayload = {
-      model: {
-        name: model.name || DEFAULT_MODEL_NAME,
-        description: model.description || "",
-        notes: model.notes || "",
-        entityTypes,
-        queues,
-        stateVariables: (model.stateVariables || []).map(v => ({ name: v.name, initialValue: v.initialValue })),
-      },
-      kpis,
-      summary: {
-        warmupPeriod: summary.warmupPeriod,
-        maxSimTime: summary.maxSimTime,
-        totalEntities: summary.total,
-        served: summary.served,
-        reneged: summary.reneged,
-        avgWait: summary.avgWait,
-        avgService: summary.avgSvc,
-        avgSojourn: summary.avgSojourn,
-      },
-      perQueue: Object.keys(perQueue).length ? perQueue : null,
-      timeSeriesAvailable: !!(Array.isArray(results.timeSeries) && results.timeSeries.length > 0),
-    };
-    userContent = truncateWords(JSON.stringify({ question, data: dataPayload }));
-  } else {
-    userContent = question;
-  }
+  // Resend the full data context on every turn, not just the first — a follow-up
+  // question may ask about a fact (e.g. a resource count) that the LLM's own prior
+  // answer never restated, and conversation history alone is not a reliable source
+  // of truth for numeric data. The payload is small enough that resending it each
+  // turn is cheap and removes the risk of the model fabricating an unsupported number.
+  const summary = getSummary(results);
+  const kpis = buildKpis(model, results);
+  const entityTypes = (model.entityTypes || []).map(e => ({ name: e.name, role: e.role }));
+  const queues = (model.queues || []).map(q => ({
+    name: q.name,
+    discipline: q.discipline,
+    capacity: q.capacity,
+    customerType: q.customerType,
+  }));
+  const perQueue = results.perQueue || {};
+  const dataPayload = {
+    model: {
+      name: model.name || DEFAULT_MODEL_NAME,
+      description: model.description || "",
+      notes: model.notes || "",
+      entityTypes,
+      queues,
+      stateVariables: (model.stateVariables || []).map(v => ({ name: v.name, initialValue: v.initialValue })),
+    },
+    kpis,
+    summary: {
+      warmupPeriod: summary.warmupPeriod,
+      maxSimTime: summary.maxSimTime,
+      totalEntities: summary.total,
+      served: summary.served,
+      reneged: summary.reneged,
+      avgWait: summary.avgWait,
+      avgService: summary.avgSvc,
+      avgSojourn: summary.avgSojourn,
+    },
+    perQueue: Object.keys(perQueue).length ? perQueue : null,
+    timeSeriesAvailable: !!(Array.isArray(results.timeSeries) && results.timeSeries.length > 0),
+  };
+  const userContent = truncateWords(JSON.stringify({ question, data: dataPayload }));
 
   const messages = [
     { role: "system", content: system },
@@ -1639,8 +1635,12 @@ export function parseReportRecommendations(text) {
 export function buildModelQueryPrompt(question, model = {}, history = [], context = {}) {
   const isFirstTurn = history.length === 0 || context.forceModelContext === true;
 
+  // Resend the full model digest on every turn, not just the first — a follow-up
+  // question may ask about a fact (e.g. an entity count) that the LLM's own prior
+  // answer never restated, and conversation history alone is not a reliable source
+  // of truth for numeric data.
   let userContent;
-  if (isFirstTurn) {
+  {
     const entityTypes = (model.entityTypes || []).map(et => {
       const entry = { name: et.name || et.id, role: et.role || 'customer' };
       if (et.role === 'server') entry.count = et.count ?? 1;
@@ -1718,8 +1718,6 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
     ].join('\n\n');
 
     userContent = truncateWords(JSON.stringify({ question, model: modelDigest }, null, 2));
-  } else {
-    userContent = question;
   }
 
   const messages = [
