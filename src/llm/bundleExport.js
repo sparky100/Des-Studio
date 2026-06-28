@@ -73,7 +73,6 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   lines.push('');
   lines.push(`**Name:** ${model.name || 'Untitled model'}`);
   if (model.description) lines.push(`**Description:** ${model.description}`);
-  if (model.notes) lines.push(`**Notes:** ${model.notes}`);
   if (model.timeUnit) lines.push(`**Time unit:** ${model.timeUnit}`);
   lines.push('');
 

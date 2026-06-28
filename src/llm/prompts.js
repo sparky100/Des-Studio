@@ -1,5 +1,6 @@
 const DEFAULT_MODEL_NAME = "Untitled model";
 const MAX_PROMPT_WORDS = 2000;
+const NOTES_PRIORITY_GUARDRAIL = "Notes and description are free-text context written by the modeller and may be outdated or describe a different scenario than the model's current definition. If notes/description conflict with structured fields (entityTypes[].count, queues[].capacity, etc.), the structured fields are always authoritative — never cite a count or value from notes/description that disagrees with the structured data.";
 
 function finiteOrNull(value) {
   const number = Number(value);
@@ -407,7 +408,7 @@ function makeMessages(system, payload, instruction) {
 }
 
 export function buildNarrativePrompt(model = {}, experimentConfig = {}, results = {}) {
-  const system = "You are an expert simulation analyst. Interpret the following discrete-event simulation results for a non-specialist audience. Be concise: 150-200 words. Use plain English. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, per-queue blocking/balking counters, cost metrics, WIP, and container levels where applicable. Container levels include capacity and initialLevel — when capacity is present, reason about utilization (level/capacity) and flag overflow or stockout risk where relevant.";
+  const system = "You are an expert simulation analyst. Interpret the following discrete-event simulation results for a non-specialist audience. Be concise: 150-200 words. Use plain English. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, per-queue blocking/balking counters, cost metrics, WIP, and container levels where applicable. Container levels include capacity and initialLevel — when capacity is present, reason about utilization (level/capacity) and flag overflow or stockout risk where relevant. " + NOTES_PRIORITY_GUARDRAIL;
   const waitDist = results.waitDist || {};
   const waitDistForPrompt = Object.keys(waitDist).length
     ? Object.fromEntries(Object.entries(waitDist).map(([q, w]) => [q, { n: w.n, mean: w.mean, p50: w.p50, p90: w.p90, p95: w.p95, p99: w.p99 }]))
@@ -844,6 +845,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "When state variables are present, they may represent conditions that affect routing or service rates.",
     "A cEvent with activityType:'delay' uses the DELAY macro — the entity is held for a sampled duration but NO server is claimed.",
     "Delay activities have no resource utilisation to report; focus on queue wait time and delay duration distribution when analysing them.",
+    NOTES_PRIORITY_GUARDRAIL,
   ].join(" ");
 
   const entityTypes = (model.entityTypes || []).map(e => {
@@ -972,6 +974,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "The response must be a single JSON block — no narrative text outside the JSON.",
     "The 'analysis' field contains a brief plain-English markdown narrative (under 200 words). The 'suggestions' array contains specific, actionable improvement recommendations.",
     "Use plain English in the analysis. Technical terms should appear only after a plain-English explanation.",
+    NOTES_PRIORITY_GUARDRAIL,
   ].join(" ");
 
   const perQueue = results.perQueue || {};
@@ -1247,7 +1250,7 @@ export function promptWordEstimate(prompt) {
 }
 
 export function buildResultsQueryPrompt(question, model = {}, results = {}, conversationHistory = [], options = {}) {
-  const system = "You are a simulation results analyst. Answer questions about the simulation run using only the provided KPI data. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, and per-queue blocking/balking counters. Be concise and specific — always cite exact KPI values. If the data does not contain the answer, say so clearly. Never invent numbers.";
+  const system = "You are a simulation results analyst. Answer questions about the simulation run using only the provided KPI data. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, and per-queue blocking/balking counters. Be concise and specific — always cite exact KPI values. If the data does not contain the answer, say so clearly. Never invent numbers. " + NOTES_PRIORITY_GUARDRAIL;
 
   // On the first turn send the full data context; follow-up turns send the question only.
   // The conversation history gives the LLM sufficient context without repeating the payload.
@@ -1371,6 +1374,7 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
     "Treat resource counts and shift windows as hard constraints.",
     "When the scheduleDigest contains arrivalTimetable entries, the plan is a fixed arrival timetable — recommend timing adjustments to smooth demand rather than adding capacity.",
     "Distinguish clearly between recommendations that are within current capacity and any constraints that make full goal attainment infeasible.",
+    NOTES_PRIORITY_GUARDRAIL,
   ].join(" ");
 
   const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
@@ -1710,6 +1714,7 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
       "If the model has performance goals, you can assess whether the model structure is sufficient to measure them.",
       "If a question requires running the simulation to answer definitively (e.g. 'what is the average wait?'), say so — you can only reason about the model definition, not predict results.",
       "Do not invent data not present in the model context above.",
+      NOTES_PRIORITY_GUARDRAIL,
     ].join('\n\n');
 
     userContent = truncateWords(JSON.stringify({ question, model: modelDigest }, null, 2));
@@ -1718,7 +1723,7 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
   }
 
   const messages = [
-    ...(isFirstTurn ? [{ role: 'system', content: 'You are assisting a simulation modeller in simmodlr. You have detailed knowledge of the model. Answer concisely and precisely. Do not invent data.' }] : [{ role: 'system', content: 'Continue assisting the modeller about the model described earlier. Be concise and precise. Do not invent data.' }]),
+    ...(isFirstTurn ? [{ role: 'system', content: `You are assisting a simulation modeller in simmodlr. You have detailed knowledge of the model. Answer concisely and precisely. Do not invent data. ${NOTES_PRIORITY_GUARDRAIL}` }] : [{ role: 'system', content: `Continue assisting the modeller about the model described earlier. Be concise and precise. Do not invent data. ${NOTES_PRIORITY_GUARDRAIL}` }]),
     ...history.slice(-8),
     { role: 'user', content: userContent },
   ];
@@ -1744,7 +1749,8 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     "You are an expert discrete-event simulation analyst. You have been given statistically " +
     "validated batch simulation results. Identify improvement opportunities in a structured format. " +
     "Be specific: cite queue names, utilisation percentages, and CI ranges from aggregateStats. " +
-    "Keep each point to one sentence. Use only the data provided — do not invent figures.";
+    "Keep each point to one sentence. Use only the data provided — do not invent figures. " +
+    NOTES_PRIORITY_GUARDRAIL;
 
   const kpis = buildKpis(model, combinedResult);
   const goals = goalsToPrompt(model);
