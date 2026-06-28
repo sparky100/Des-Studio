@@ -1,7 +1,7 @@
 const DEFAULT_MODEL_NAME = "Untitled model";
 const MAX_PROMPT_WORDS = 2000;
 const NOTES_PRIORITY_GUARDRAIL = "Notes and description are free-text context written by the modeller and may be outdated or describe a different scenario than the model's current definition. If notes/description conflict with structured fields (entityTypes[].count, queues[].capacity, etc.), the structured fields are always authoritative — never cite a count or value from notes/description that disagrees with the structured data.";
-const NO_INVENTED_METRICS_GUARDRAIL = "Every current-state KPI value (utilisation, wait time, throughput, etc.) you state MUST be the exact figure from the data provided in this prompt — never recompute, estimate, or apply queueing-theory formulas (Little's Law, M/M/c, etc.) to produce a different 'current' value. Theoretical/formula-based reasoning is permitted only when projecting the predicted effect of a proposed change, never when stating a current or actual value. Resource utilisation appears in this payload in two equivalent forms — kpis.resources[].utilisation as a 0-100 integer percent, and kpis.resourceUtilisation / goalGaps[].current (for resource.utilisation goals) as the identical value expressed as a 0-1 fraction — these are the SAME measurement, not two different readings to reconcile; convert between them with simple multiplication/division by 100, never by re-deriving a new value.";
+const NO_INVENTED_METRICS_GUARDRAIL = "Every current-state KPI value (utilisation, wait time, throughput, etc.) you state MUST be the exact figure from the data provided in this prompt — never recompute, estimate, or apply queueing-theory formulas (Little's Law, M/M/c, etc.) to produce a different 'current' value. Theoretical/formula-based reasoning is permitted only when projecting the predicted effect of a proposed change, never when stating a current or actual value. Resource utilisation appears in this payload as kpis.resources[].utilisation (0-100 integer percent). Goal evaluation data is in goalGaps[].current — this is the identical utilisation expressed as a 0-1 fraction; convert between them by multiplying/dividing by 100, never by re-deriving a new value.";
 
 function finiteOrNull(value) {
   const number = Number(value);
@@ -380,9 +380,6 @@ export function buildKpis(model = {}, results = {}) {
   if (summary.totalCost) kpis.totalCost = finiteOrNull(summary.totalCost);
   if (summary.costPerServed) kpis.costPerServed = finiteOrNull(summary.costPerServed);
   if (summary.maxWIP) kpis.maxWIP = finiteOrNull(summary.maxWIP);
-  if (summary.perResource) kpis.resourceUtilisation = Object.fromEntries(
-    Object.entries(summary.perResource).map(([name, r]) => [name, finiteOrNull(r.utilisation)])
-  );
   if (summary.containerLevels) {
     const containerMeta = Object.fromEntries((model.containerTypes || []).map(ct => [ct.id, ct]));
     kpis.containerLevels = Object.fromEntries(
@@ -1018,6 +1015,10 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
   }));
   const bEvents = extractBEvents(model, results);
   const cEvents = extractCEvents(model);
+  // Strip distribution params from Explain prompt — the LLM must read KPI values
+  // from kpis and goalGaps, not recompute them from raw arrival/service distributions.
+  if (bEvents) for (const ev of bEvents) { delete ev.dist; delete ev.distParams; }
+  if (cEvents) for (const ev of cEvents) { delete ev.dist; delete ev.distParams; }
 
   const agg = results.aggregateStats || {};
   const confidenceIntervals = Object.entries(agg)
