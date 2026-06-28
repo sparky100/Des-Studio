@@ -11,6 +11,8 @@ import {
   buildResultsQueryPrompt,
   buildSensitivityPrompt,
   buildSuggestionPrompt,
+  buildUtilisationMap,
+  correctUtilisationFigures,
   parsePlanRefinementResponse,
   parseSuggestionResponse,
   promptWordEstimate,
@@ -1191,6 +1193,40 @@ describe("ADR-016 plan awareness — extractScheduleDigest and buildPlanRefineme
     const payload = JSON.parse(prompt.messages[1].content);
     const timetableEntries = payload.scheduleDigest.filter(e => e.type === "arrivalTimetable");
     expect(timetableEntries).toHaveLength(0);
+  });
+});
+
+describe("correctUtilisationFigures / buildUtilisationMap", () => {
+  it("buildUtilisationMap maps resource name to utilisation percent, skipping nulls", () => {
+    const map = buildUtilisationMap([
+      { name: "DNO Field Crew", utilisation: 66 },
+      { name: "Heat Pump Installer", utilisation: null },
+      { name: "DNO Officer", utilisation: 70 },
+    ]);
+    expect(map).toEqual({ "DNO Field Crew": 66, "DNO Officer": 70 });
+  });
+
+  it("correctUtilisationFigures overwrites a fabricated current-state percentage with the verified value", () => {
+    const text = "DNO Field Crew utilisation reaches 91.2%, well above target.";
+    const corrected = correctUtilisationFigures(text, { "DNO Field Crew": 66 });
+    expect(corrected).toBe("DNO Field Crew utilisation reaches 66%, well above target.");
+  });
+
+  it("correctUtilisationFigures leaves text alone when the resource name isn't mentioned", () => {
+    const text = "Heat Pump Installer utilisation is 24%.";
+    const corrected = correctUtilisationFigures(text, { "DNO Field Crew": 66 });
+    expect(corrected).toBe(text);
+  });
+
+  it("correctUtilisationFigures handles multiple resources in the same string independently", () => {
+    const text = "DNO Field Crew utilisation = 91.2%; DNO Officer utilisation is 76.5%.";
+    const corrected = correctUtilisationFigures(text, { "DNO Field Crew": 66, "DNO Officer": 70 });
+    expect(corrected).toBe("DNO Field Crew utilisation = 66%; DNO Officer utilisation is 70%.");
+  });
+
+  it("correctUtilisationFigures returns non-string input unchanged", () => {
+    expect(correctUtilisationFigures(null, { X: 1 })).toBe(null);
+    expect(correctUtilisationFigures(undefined, { X: 1 })).toBe(undefined);
   });
 });
 

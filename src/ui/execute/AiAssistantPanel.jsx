@@ -5,7 +5,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Btn, MicIcon, ArrowUpIcon, TypingIndicator } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
-import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt } from "../../llm/prompts.js";
+import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt, buildKpis, buildUtilisationMap, correctUtilisationFigures } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -458,6 +458,7 @@ export const AiAssistantPanel = ({
   const actionFnsRef = useRef({});
   const lastQueryModelRef = useRef(null);
   const lastQueryResultsModelRef = useRef(null);
+  const utilisationMapRef = useRef({});
   const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
   const sensitivityReady = ciResults.some(item => item.n >= 5);
   const isStreaming = status === "loading" || status === "streaming";
@@ -528,7 +529,20 @@ export const AiAssistantPanel = ({
             return;
           }
           setRetryLabel("");
-          setParsedSuggestion(parsed);
+          const utilMap = utilisationMapRef.current;
+          const corrected = (Object.keys(utilMap).length)
+            ? {
+                analysis: correctUtilisationFigures(parsed.analysis, utilMap),
+                suggestions: parsed.suggestions.map(s => ({
+                  ...s,
+                  constraint: correctUtilisationFigures(s.constraint, utilMap),
+                  cause: correctUtilisationFigures(s.cause, utilMap),
+                  predicted: correctUtilisationFigures(s.predicted, utilMap),
+                  goalImpact: correctUtilisationFigures(s.goalImpact, utilMap),
+                })),
+              }
+            : parsed;
+          setParsedSuggestion(corrected);
           setResponse("");
           setStatus("complete");
         } else {
@@ -693,10 +707,12 @@ export const AiAssistantPanel = ({
     // Analyse the model that actually produced these results, not whatever
     // the live model looks like now — it may have been edited since the run.
     const analysisModel = results?._model_snapshot ?? model;
-    runPrompt(buildExplainResultsPrompt(analysisModel, exportConfig, {
-      ...results,
-      aggregateStats,
-    }, ciResults), "explainResults");
+    const mergedResults = { ...results, aggregateStats };
+    // The LLM is given the real per-resource utilisation but sometimes recomputes
+    // its own via queueing-theory reasoning instead of citing it verbatim — keep
+    // the verified figures so the response can be corrected after parsing.
+    utilisationMapRef.current = buildUtilisationMap(buildKpis(analysisModel, mergedResults).resources);
+    runPrompt(buildExplainResultsPrompt(analysisModel, exportConfig, mergedResults, ciResults), "explainResults");
   };
 
   const compareRuns = () => {
