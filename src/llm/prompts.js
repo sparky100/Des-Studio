@@ -1015,6 +1015,10 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
   }));
   const bEvents = extractBEvents(model, results);
   const cEvents = extractCEvents(model);
+  // Strip distribution params from Explain prompt — the LLM must read KPI values
+  // from kpis and goalGaps, not recompute them from raw arrival/service distributions.
+  if (bEvents) for (const ev of bEvents) { delete ev.dist; delete ev.distParams; }
+  if (cEvents) for (const ev of cEvents) { delete ev.dist; delete ev.distParams; }
 
   const agg = results.aggregateStats || {};
   const confidenceIntervals = Object.entries(agg)
