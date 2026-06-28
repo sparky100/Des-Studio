@@ -98,6 +98,32 @@ function extractResources(model = {}, summary = {}) {
   });
 }
 
+// Builds a { resourceName: utilisationPercent } map from buildKpis().resources, for use
+// with correctUtilisationFigures() — the LLM is told the real numbers but sometimes
+// recomputes its own (via queueing-theory reasoning) instead of citing them verbatim.
+export function buildUtilisationMap(kpisResources = []) {
+  const map = {};
+  for (const r of kpisResources) {
+    if (r?.name && r.utilisation != null) map[r.name] = r.utilisation;
+  }
+  return map;
+}
+
+// Deterministically overwrites any "<resource name> ... utilisation ... NN%" figure
+// in LLM-generated text with the verified value from utilisationMap, since prose
+// guardrails alone don't reliably stop the model from restating a recomputed number.
+export function correctUtilisationFigures(text, utilisationMap = {}) {
+  if (typeof text !== "string" || !text) return text;
+  let corrected = text;
+  for (const [name, pct] of Object.entries(utilisationMap)) {
+    if (!name || pct == null) continue;
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(${escapedName}[^%]{0,40}?utilisation[^%]{0,20}?)(\\d{1,3}(?:\\.\\d+)?)%`, "gi");
+    corrected = corrected.replace(re, (_match, prefix) => `${prefix}${Math.round(pct)}%`);
+  }
+  return corrected;
+}
+
 function extractOutcomes(summary = {}) {
   const outcomes = summary.outcomes && typeof summary.outcomes === "object"
     ? summary.outcomes
