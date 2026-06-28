@@ -592,7 +592,10 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
         </>
       )}
       {perResourceEntries.length > 0 && (() => {
-        const serverTypes = (model?.entityTypes || []).filter(et => et.role === "server");
+        // Resource counts must reflect the model that actually produced these
+        // results, not the live model — it may have been edited since the run.
+        const snapshotModel = results?._model_snapshot ?? model;
+        const serverTypes = (snapshotModel?.entityTypes || []).filter(et => et.role === "server");
         const serverTypeMap = {};
         serverTypes.forEach(et => {
           serverTypeMap[et.name] = {
