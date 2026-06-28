@@ -681,7 +681,10 @@ export const AiAssistantPanel = ({
   }, [model, conversationHistory, isStreaming]);
 
   const explainResults = () => {
-    runPrompt(buildExplainResultsPrompt(model, exportConfig, {
+    // Analyse the model that actually produced these results, not whatever
+    // the live model looks like now — it may have been edited since the run.
+    const analysisModel = results?._model_snapshot ?? model;
+    runPrompt(buildExplainResultsPrompt(analysisModel, exportConfig, {
       ...results,
       aggregateStats,
     }, ciResults), "explainResults");
@@ -757,7 +760,8 @@ export const AiAssistantPanel = ({
     setRefineParsed(null);
     setRefineCardStatus({});
     setRefineCardResults({});
-    const prompt = buildPlanRefinementPrompt(model, exportConfig, { ...results, aggregateStats });
+    const refinementModel = results?._model_snapshot ?? model;
+    const prompt = buildPlanRefinementPrompt(refinementModel, exportConfig, { ...results, aggregateStats });
     let accumulated = "";
     streamNarrative(prompt, {
       onToken: token => { accumulated += token; },
