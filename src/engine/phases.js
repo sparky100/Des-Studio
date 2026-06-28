@@ -31,7 +31,13 @@ function completeEntity(cust, ev, clock, state, index = null) {
   };
 }
 
-function applyShiftChange(ev, ctx) {
+// Utilisation/available-time tracking for servers (busyTime, starvationTime, etc.)
+// only begins once capacity actually changes here — newly added servers start with
+// a fresh _starvationStart at ctx.clock (see createServerEntity), and removed idle
+// servers simply stop being tracked entities. No separate "start tracking" step is
+// needed; this is already correct, called from both time-based (SHIFT_CHANGE FEL
+// event) and condition-based (`when`) shift triggers.
+export function applyShiftChange(ev, ctx) {
   const serverTypeName = ev.serverTypeName || ev.payload?.serverTypeName;
   const target = parseInt(ev.newCapacity ?? ev.payload?.newCapacity, 10);
   if (!serverTypeName || !Number.isInteger(target) || target < 1) {

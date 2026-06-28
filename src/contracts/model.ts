@@ -43,9 +43,22 @@ export interface EntityTypeDefinition {
   description?: string;
 }
 
+// `time` and `when` are mutually exclusive — enforced by validator rule V48
+// (not the type system; this codebase uses plain interfaces, no XOR tricks).
 export interface ShiftSchedulePeriod {
-  time: number | string;
+  time?: number | string;
   capacity: number | string;
+  when?: ShiftWhenPredicate;
+}
+
+// Predicate shape for condition-triggered shiftSchedule entries. Only
+// "state.*" and "Queue.*" variables are supported for shift `when` clauses
+// (enforced by validator rule V48); see src/engine/conditions.js
+// resolveVariable/getPredicateDependencies for the shared predicate evaluator.
+export interface ShiftWhenPredicate {
+  variable: string;
+  operator: "==" | "!=" | "<" | ">" | "<=" | ">=";
+  value: string | number | boolean;
 }
 
 export interface StateVariableDefinition {

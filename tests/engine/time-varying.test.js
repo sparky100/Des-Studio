@@ -160,6 +160,86 @@ describe('time-varying model validation', () => {
     expect(validation.warnings.some(warning => warning.code === 'V15')).toBe(true);
   });
 
+  test('V48: blocks shift entry with both time and when', () => {
+    const model = {
+      ...base,
+      entityTypes: [{
+        id: 'srv',
+        name: 'Server',
+        role: 'server',
+        count: '1',
+        attrDefs: [],
+        shiftSchedule: [
+          { time: '0', capacity: '1' },
+          { time: '5', when: { variable: 'state.x', operator: '>=', value: 1 }, capacity: '2' },
+        ],
+      }],
+      stateVariables: [{ name: 'x', initialValue: '0' }],
+    };
+    const errors = validateModel(model).errors.map(error => error.code);
+    expect(errors).toContain('V48');
+  });
+
+  test('V48: blocks shift `when` referencing Entity.* (only state.*/Queue.* allowed)', () => {
+    const model = {
+      ...base,
+      entityTypes: [{
+        id: 'srv',
+        name: 'Server',
+        role: 'server',
+        count: '1',
+        attrDefs: [],
+        shiftSchedule: [
+          { time: '0', capacity: '1' },
+          { when: { variable: 'Entity.priority', operator: '>=', value: 1 }, capacity: '2' },
+        ],
+      }],
+    };
+    const errors = validateModel(model).errors.map(error => error.code);
+    expect(errors).toContain('V48');
+  });
+
+  test('V49: warns (non-blocking) when shift `when` references an undefined state variable', () => {
+    const model = {
+      ...base,
+      entityTypes: [{
+        id: 'srv',
+        name: 'Server',
+        role: 'server',
+        count: '1',
+        attrDefs: [],
+        shiftSchedule: [
+          { time: '0', capacity: '1' },
+          { when: { variable: 'state.nonExistent', operator: '>=', value: 1 }, capacity: '2' },
+        ],
+      }],
+      stateVariables: [],
+    };
+    const validation = validateModel(model);
+    expect(validation.errors.some(e => e.code === 'V48')).toBe(false);
+    expect(validation.warnings.some(w => w.code === 'V49')).toBe(true);
+  });
+
+  test('existing time-only shift schedule passes unchanged — no V48/V49', () => {
+    const model = {
+      ...base,
+      entityTypes: [{
+        id: 'srv',
+        name: 'Server',
+        role: 'server',
+        count: '1',
+        attrDefs: [],
+        shiftSchedule: [
+          { time: '0', capacity: '1' },
+          { time: '50', capacity: '2' },
+        ],
+      }],
+    };
+    const validation = validateModel(model);
+    expect(validation.errors.some(e => e.code === 'V48')).toBe(false);
+    expect(validation.warnings.some(w => w.code === 'V49')).toBe(false);
+  });
+
   test('accepts a valid piecewise schedule with a server shift schedule', () => {
     const model = {
       ...base,

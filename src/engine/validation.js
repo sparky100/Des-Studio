@@ -277,13 +277,47 @@ export function validateModel(model) {
     err('V35', 'Warm-up time must be shorter than the run duration.', 'execute');
   }
 
+  const VALID_PREDICATE_OPERATORS = new Set(['==', '!=', '<', '>', '<=', '>=']);
+  const stateVarNamesForShift = new Set((model.stateVariables || []).map(sv => String(sv.name || '').trim()).filter(Boolean));
   entityTypes.forEach(et => {
     if (et.role !== 'server' || !Array.isArray(et.shiftSchedule) || et.shiftSchedule.length === 0) return;
     let previous = -Infinity;
     et.shiftSchedule.forEach((period, idx) => {
+      const hasWhen = !!period.when;
       const time = parseFloat(period.time ?? period.startTime);
       const capacity = Number(period.capacity);
-      if (!Number.isFinite(time)) {
+
+      // ── V48: condition-triggered (`when`) shift entries ────────────────────
+      if (hasWhen) {
+        if (period.time !== undefined && period.time !== null && period.time !== '') {
+          err('V48', `shiftSchedule entry on '${et.name || '?'}' has both 'time' and 'when' — use one or the other.`, 'entities',
+            { entityTypeIds: [et.id] });
+        }
+        const variable = period.when.variable;
+        const isValidVariable = typeof variable === 'string' && variable.trim().length > 0
+          && (variable.startsWith('state.') || variable.startsWith('Queue.'));
+        if (!isValidVariable) {
+          err('V48', `shiftSchedule 'when' on '${et.name || '?'}' uses variable '${variable}' — only 'state.*' and 'Queue.*' variables are supported.`, 'entities',
+            { entityTypeIds: [et.id] });
+        }
+        if (!VALID_PREDICATE_OPERATORS.has(period.when.operator)) {
+          err('V48', `shiftSchedule 'when' on '${et.name || '?'}' has invalid operator '${period.when.operator}'.`, 'entities',
+            { entityTypeIds: [et.id] });
+        }
+        if (period.when.value === undefined) {
+          err('V48', `shiftSchedule 'when' on '${et.name || '?'}' is missing a 'value'.`, 'entities',
+            { entityTypeIds: [et.id] });
+        }
+
+        // ── V49: `state.X` references a state variable not defined in the model ──
+        if (isValidVariable && variable.startsWith('state.')) {
+          const name = variable.slice('state.'.length);
+          if (!stateVarNamesForShift.has(name)) {
+            warn('V49', `shiftSchedule 'when' on '${et.name || '?'}' references state variable '${name}' which is not defined in this model. The condition will never become true.`, 'entities',
+              { entityTypeIds: [et.id] });
+          }
+        }
+      } else if (!Number.isFinite(time)) {
         err('V14', `Server '${et.name || '?'}' shift period ${idx + 1} requires a numeric time.`, 'entities',
           { entityTypeIds: [et.id] });
       } else {

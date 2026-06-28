@@ -7,7 +7,36 @@ import { AttrEditor } from "./AttrEditor.jsx";
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,onChange})=>{
+// Operator display mapping for shift `when` rows — mirrors ConditionBuilder's
+// stored-operator convention (>=, >, ==, !=, <, <=) with friendlier glyphs.
+const SHIFT_OP_DISPLAY = [
+  { stored: '>=', label: '≥' },
+  { stored: '>',  label: '>' },
+  { stored: '==', label: '=' },
+  { stored: '!=', label: '≠' },
+  { stored: '<',  label: '<' },
+  { stored: '<=', label: '≤' },
+];
+
+// Reverse-map a stored shiftSchedule `when.variable` to a dropdown value:
+// "state.X" -> "state.X" (display: X), "Queue.Y.length" -> as-is (display: "Queue length: Y").
+// Unknown/missing variables still render — caller surfaces the not-found warning.
+const shiftWhenVariableLabel=(variable,stateVariables,queues)=>{
+  if(!variable)return"";
+  if(variable.startsWith("state.")){
+    const name=variable.slice(6);
+    const exists=(stateVariables||[]).some(sv=>sv.name===name);
+    return exists?name:`${name} (not found)`;
+  }
+  if(variable.startsWith("Queue.")&&variable.endsWith(".length")){
+    const name=variable.slice(6,-7);
+    const exists=(queues||[]).some(q=>q.name===name);
+    return exists?`Queue length: ${name}`:`Queue length: ${name} (not found)`;
+  }
+  return variable;
+};
+
+const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],errorFilter=null,onClearErrorFilter,onChange})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -45,17 +74,42 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
     n[i]={...n[i],shiftSchedule:schedule};
     onChange(n);
   };
-  const addShift=(i)=>{
+  const addShift=(i,kind="time")=>{
     const n=[...types];
     const schedule=[...(n[i].shiftSchedule||[])];
     const last=schedule[schedule.length-1];
-    schedule.push({time:last?String((parseFloat(last.time)||0)+60):"0",capacity:last?.capacity||n[i].count||"1"});
+    if(kind==="when"){
+      const defaultVar=(stateVariables[0]&&`state.${stateVariables[0].name}`)||(queues[0]&&`Queue.${queues[0].name}.length`)||"";
+      schedule.push({when:{variable:defaultVar,operator:">=",value:""},capacity:last?.capacity||n[i].count||"1"});
+    } else {
+      schedule.push({time:last?String((parseFloat(last.time)||0)+60):"0",capacity:last?.capacity||n[i].count||"1"});
+    }
     n[i]={...n[i],shiftSchedule:schedule};
     onChange(n);
   };
   const remShift=(i,j)=>{
     const n=[...types];
     n[i]={...n[i],shiftSchedule:(n[i].shiftSchedule||[]).filter((_,idx)=>idx!==j)};
+    onChange(n);
+  };
+  const setShiftRowKind=(i,j,kind)=>{
+    const n=[...types];
+    const schedule=[...(n[i].shiftSchedule||[])];
+    const step=schedule[j];
+    if(kind==="when"){
+      const defaultVar=(stateVariables[0]&&`state.${stateVariables[0].name}`)||(queues[0]&&`Queue.${queues[0].name}.length`)||"";
+      schedule[j]={capacity:step.capacity,when:{variable:defaultVar,operator:">=",value:""}};
+    } else {
+      schedule[j]={capacity:step.capacity,time:"0"};
+    }
+    n[i]={...n[i],shiftSchedule:schedule};
+    onChange(n);
+  };
+  const updShiftWhen=(i,j,patch)=>{
+    const n=[...types];
+    const schedule=[...(n[i].shiftSchedule||[])];
+    schedule[j]={...schedule[j],when:{...schedule[j].when,...patch}};
+    n[i]={...n[i],shiftSchedule:schedule};
     onChange(n);
   };
 
@@ -189,26 +243,97 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
                       </select>
                     </div>
                     {(et.shiftSchedule||[]).map((step,j)=>{
+                      const isWhen=!!step.when;
+                      const capacity=Number(step.capacity);
+                      const invalidCapacity=!Number.isInteger(capacity)||capacity<1;
+
+                      if(isWhen){
+                        const variable=step.when?.variable||"";
+                        const operator=step.when?.operator||">=";
+                        const whenValue=step.when?.value;
+                        const varOptions=[
+                          ...stateVariables.map(sv=>({value:`state.${sv.name}`,label:sv.name})),
+                          ...queues.map(q=>({value:`Queue.${q.name}.length`,label:`Queue length: ${q.name}`})),
+                        ];
+                        const noVarsAvailable=varOptions.length===0;
+                        const referencesMissingStateVar=variable.startsWith("state.")&&!stateVariables.some(sv=>`state.${sv.name}`===variable);
+                        const errors=[];
+                        if(!variable)errors.push("Select a variable");
+                        if(whenValue===undefined||whenValue===null||whenValue==="")errors.push("Enter a value");
+                        if(invalidCapacity)errors.push("Enter a whole number");
+                        const warnings=[];
+                        if(variable&&referencesMissingStateVar){
+                          warnings.push(`State variable '${variable.slice(6)}' not found — this condition will never fire`);
+                        }
+                        return (
+                          <div key={j} style={{display:"flex",flexDirection:"column",gap:4}}>
+                            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                              <Btn small variant="ghost" onClick={()=>setShiftRowKind(i,j,"time")}>At time</Btn>
+                              <Btn small variant="primary">When condition</Btn>
+                              <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>when:</span>
+                              <select value={variable} disabled={noVarsAvailable} onChange={e=>updShiftWhen(i,j,{variable:e.target.value})}
+                                style={{minWidth:160,background:C.bg,border:`1px solid ${errors.includes("Select a variable")?C.red:C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}>
+                                {noVarsAvailable&&<option value="">No state variables defined — add one first</option>}
+                                {!noVarsAvailable&&!varOptions.some(o=>o.value===variable)&&variable&&(
+                                  <option value={variable}>{shiftWhenVariableLabel(variable,stateVariables,queues)}</option>
+                                )}
+                                {varOptions.map(o=>(<option key={o.value} value={o.value}>{o.label}</option>))}
+                              </select>
+                              <select value={operator} onChange={e=>updShiftWhen(i,j,{operator:e.target.value})}
+                                style={{width:50,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}>
+                                {SHIFT_OP_DISPLAY.map(o=>(<option key={o.stored} value={o.stored}>{o.label}</option>))}
+                              </select>
+                              <input type="number" value={whenValue??""} placeholder="value" onChange={e=>updShiftWhen(i,j,{value:e.target.value})}
+                                style={{width:72,background:"transparent",border:`1px solid ${errors.includes("Enter a value")?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}/>
+                              <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>capacity:</span>
+                              <input type="number" value={step.capacity??""} onChange={e=>updShift(i,j,{capacity:e.target.value})}
+                                style={{width:72,background:"transparent",border:`1px solid ${invalidCapacity?C.red:C.border}`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}/>
+                              <Btn small variant="danger" ariaLabel={`Remove shift period ${j+1}`} onClick={()=>remShift(i,j)}>x</Btn>
+                            </div>
+                            {(errors.length>0||warnings.length>0)&&(
+                              <div style={{display:"flex",flexDirection:"column",gap:2,paddingLeft:8}}>
+                                {errors.map((msg,ei)=>(<span key={ei} style={{fontSize:10,color:C.red,fontFamily:FONT}}>{msg}</span>))}
+                                {warnings.map((msg,wi)=>(<span key={wi} style={{fontSize:10,color:C.amber,fontFamily:FONT}}>{msg}</span>))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
                       const time=parseFloat(step.time);
                       const prev=j>0?parseFloat(et.shiftSchedule[j-1].time):null;
-                      const capacity=Number(step.capacity);
                       const invalidTime=!Number.isFinite(time)||(j===0&&time!==0)||(j>0&&Number.isFinite(prev)&&time<prev);
-                      const invalidCapacity=!Number.isInteger(capacity)||capacity<1;
+                      const incomplete=(step.time===undefined||step.time===null||step.time==="")&&!step.when;
                       return (
-                        <div key={j} style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                          <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from t:</span>
-                          <input type="number" value={step.time??""} disabled={j===0} onChange={e=>updShift(i,j,{time:e.target.value})}
-                            style={{width:72,background:"transparent",border:`1px solid ${invalidTime?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none",opacity:j===0?0.7:1}}/>
-                          <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>capacity:</span>
-                          <input type="number" value={step.capacity??""} onChange={e=>updShift(i,j,{capacity:e.target.value})}
-                            style={{width:72,background:"transparent",border:`1px solid ${invalidCapacity?C.red:C.border}`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}/>
-                          <Btn small variant="danger" ariaLabel={`Remove shift period ${j+1}`} onClick={()=>remShift(i,j)}>x</Btn>
+                        <div key={j} style={{display:"flex",flexDirection:"column",gap:4}}>
+                          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                            {j>0&&<>
+                              <Btn small variant="primary">At time</Btn>
+                              <Btn small variant="ghost" onClick={()=>setShiftRowKind(i,j,"when")}>When condition</Btn>
+                            </>}
+                            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from t:</span>
+                            <input type="number" value={step.time??""} disabled={j===0} onChange={e=>updShift(i,j,{time:e.target.value})}
+                              style={{width:72,background:"transparent",border:`1px solid ${invalidTime?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none",opacity:j===0?0.7:1}}/>
+                            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>capacity:</span>
+                            <input type="number" value={step.capacity??""} onChange={e=>updShift(i,j,{capacity:e.target.value})}
+                              style={{width:72,background:"transparent",border:`1px solid ${invalidCapacity?C.red:C.border}`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}/>
+                            <Btn small variant="danger" ariaLabel={`Remove shift period ${j+1}`} onClick={()=>remShift(i,j)}>x</Btn>
+                          </div>
+                          {(invalidCapacity||incomplete)&&(
+                            <div style={{display:"flex",flexDirection:"column",gap:2,paddingLeft:8}}>
+                              {invalidCapacity&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>Enter a whole number</span>}
+                              {incomplete&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>Incomplete entry</span>}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
-                    <Btn small variant="ghost" onClick={()=>addShift(i)} style={{alignSelf:"flex-start"}}>+ Add Shift Period</Btn>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <Btn small variant="ghost" onClick={()=>addShift(i,"time")}>+ Add Shift</Btn>
+                      <Btn small variant="ghost" onClick={()=>addShift(i,"when")}>+ Add Shift (when condition)</Btn>
+                    </div>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
-                      The first shift period sets the initial pool size; the static count is ignored while shifts are in use. Shift changes add or remove idle servers at the scheduled times.
+                      The first shift period sets the initial pool size; the static count is ignored while shifts are in use. Shift changes add or remove idle servers at the scheduled times or when their condition first becomes true.
                     </span>
                   </>)}
                 </SectionPanel>
