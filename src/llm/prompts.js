@@ -1,6 +1,7 @@
 const DEFAULT_MODEL_NAME = "Untitled model";
 const MAX_PROMPT_WORDS = 2000;
 const NOTES_PRIORITY_GUARDRAIL = "Notes and description are free-text context written by the modeller and may be outdated or describe a different scenario than the model's current definition. If notes/description conflict with structured fields (entityTypes[].count, queues[].capacity, etc.), the structured fields are always authoritative — never cite a count or value from notes/description that disagrees with the structured data.";
+const NO_INVENTED_METRICS_GUARDRAIL = "Every current-state KPI value (utilisation, wait time, throughput, etc.) you state MUST be the exact figure from the data provided in this prompt — never recompute, estimate, or apply queueing-theory formulas (Little's Law, M/M/c, etc.) to produce a different 'current' value. Theoretical/formula-based reasoning is permitted only when projecting the predicted effect of a proposed change, never when stating a current or actual value.";
 
 function finiteOrNull(value) {
   const number = Number(value);
@@ -408,7 +409,7 @@ function makeMessages(system, payload, instruction) {
 }
 
 export function buildNarrativePrompt(model = {}, experimentConfig = {}, results = {}) {
-  const system = "You are an expert simulation analyst. Interpret the following discrete-event simulation results for a non-specialist audience. Be concise: 150-200 words. Use plain English. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, per-queue blocking/balking counters, cost metrics, WIP, and container levels where applicable. Container levels include capacity and initialLevel — when capacity is present, reason about utilization (level/capacity) and flag overflow or stockout risk where relevant. " + NOTES_PRIORITY_GUARDRAIL;
+  const system = "You are an expert simulation analyst. Interpret the following discrete-event simulation results for a non-specialist audience. Be concise: 150-200 words. Use plain English. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, per-queue blocking/balking counters, cost metrics, WIP, and container levels where applicable. Container levels include capacity and initialLevel — when capacity is present, reason about utilization (level/capacity) and flag overflow or stockout risk where relevant. " + NOTES_PRIORITY_GUARDRAIL + " " + NO_INVENTED_METRICS_GUARDRAIL;
   const waitDist = results.waitDist || {};
   const waitDistForPrompt = Object.keys(waitDist).length
     ? Object.fromEntries(Object.entries(waitDist).map(([q, w]) => [q, { n: w.n, mean: w.mean, p50: w.p50, p90: w.p90, p95: w.p95, p99: w.p99 }]))
@@ -846,6 +847,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "A cEvent with activityType:'delay' uses the DELAY macro — the entity is held for a sampled duration but NO server is claimed.",
     "Delay activities have no resource utilisation to report; focus on queue wait time and delay duration distribution when analysing them.",
     NOTES_PRIORITY_GUARDRAIL,
+    NO_INVENTED_METRICS_GUARDRAIL,
   ].join(" ");
 
   const entityTypes = (model.entityTypes || []).map(e => {
@@ -975,6 +977,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "The 'analysis' field contains a brief plain-English markdown narrative (under 200 words). The 'suggestions' array contains specific, actionable improvement recommendations.",
     "Use plain English in the analysis. Technical terms should appear only after a plain-English explanation.",
     NOTES_PRIORITY_GUARDRAIL,
+    NO_INVENTED_METRICS_GUARDRAIL,
   ].join(" ");
 
   const perQueue = results.perQueue || {};
@@ -1375,6 +1378,7 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
     "When the scheduleDigest contains arrivalTimetable entries, the plan is a fixed arrival timetable — recommend timing adjustments to smooth demand rather than adding capacity.",
     "Distinguish clearly between recommendations that are within current capacity and any constraints that make full goal attainment infeasible.",
     NOTES_PRIORITY_GUARDRAIL,
+    NO_INVENTED_METRICS_GUARDRAIL,
   ].join(" ");
 
   const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
