@@ -947,6 +947,8 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     : " No performance goals are set — prioritise reducing the most extreme waiting time or highest-utilisation bottleneck.";
 
   const instruction = [
+    "Current-state KPI values (utilisation, wait times, throughput) MUST be read from the kpis.* data provided — these are the measured simulation results. bEvents/cEvents distribution data is provided ONLY for formulating param-change suggestions (bEventDistParam/cEventDistParam). Never re-derive current utilisation or other KPIs from distribution data.",
+    "",
     "Apply this 6-step framework for EVERY suggestion:",
     "1. BINDING CONSTRAINT: State which metric is farthest from its goal (or most critical). Give exact current value and target.",
     "2. CAUSE: Trace to root cause using utilisation, arrival rate, service time, percentile data, and blocking/balking counts. Name the specific resource or queue.",
