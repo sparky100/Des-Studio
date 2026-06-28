@@ -120,6 +120,9 @@ export function correctUtilisationFigures(text, utilisationMap = {}) {
     const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`(${escapedName}[^%]{0,40}?utilisation[^%]{0,20}?)(\\d{1,3}(?:\\.\\d+)?)%`, "gi");
     corrected = corrected.replace(re, (_match, prefix) => `${prefix}${Math.round(pct)}%`);
+    // Fix Goal Status lines: "DNO Field Crew utilisation < 80%: current = 89%"
+    const currentRe = new RegExp(`(${escapedName}[^=]{0,80}?current\\s*=\\s*)(\\d{1,3}(?:\\.\\d+)?)%`, "gi");
+    corrected = corrected.replace(currentRe, (_match, prefix) => `${prefix}${Math.round(pct)}%`);
   }
   return corrected;
 }
