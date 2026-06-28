@@ -1827,7 +1827,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           overlay={isCompactLayout && !isMobileLayout}
           mobileFullscreen={isMobileLayout}
           activeTab={tab}
-          model={model}
+          model={latestResults?._model_snapshot || model}
           results={latestResults}
           exportConfig={(() => {
             // Prefer the config actually used to produce these results — attached in-memory
