@@ -1246,12 +1246,12 @@ export function promptWordEstimate(prompt) {
   return Math.ceil(text.split(/\s+/).filter(Boolean).length * 1.3);
 }
 
-export function buildResultsQueryPrompt(question, model = {}, results = {}, conversationHistory = []) {
+export function buildResultsQueryPrompt(question, model = {}, results = {}, conversationHistory = [], options = {}) {
   const system = "You are a simulation results analyst. Answer questions about the simulation run using only the provided KPI data. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, and per-queue blocking/balking counters. Be concise and specific — always cite exact KPI values. If the data does not contain the answer, say so clearly. Never invent numbers.";
 
   // On the first turn send the full data context; follow-up turns send the question only.
   // The conversation history gives the LLM sufficient context without repeating the payload.
-  const isFirstTurn = conversationHistory.length === 0;
+  const isFirstTurn = conversationHistory.length === 0 || options.forceModelContext === true;
 
   let userContent;
   if (isFirstTurn) {
@@ -1633,7 +1633,7 @@ export function parseReportRecommendations(text) {
 // ── AI Sidebar: design-context model Q&A ──────────────────────────────────────
 
 export function buildModelQueryPrompt(question, model = {}, history = [], context = {}) {
-  const isFirstTurn = history.length === 0;
+  const isFirstTurn = history.length === 0 || context.forceModelContext === true;
 
   let userContent;
   if (isFirstTurn) {

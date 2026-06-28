@@ -456,6 +456,8 @@ export const AiAssistantPanel = ({
   const abortRef = useRef(null);
   const responseAreaRef = useRef(null);
   const actionFnsRef = useRef({});
+  const lastQueryModelRef = useRef(null);
+  const lastQueryResultsModelRef = useRef(null);
   const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
   const sensitivityReady = ciResults.some(item => item.n >= 5);
   const isStreaming = status === "loading" || status === "streaming";
@@ -560,11 +562,16 @@ export const AiAssistantPanel = ({
     setConversationHistory(prev => [...prev, userEntry]);
     setQueryText("");
 
+    const analysisModel = results?._model_snapshot ?? model;
+    const modelChanged = lastQueryResultsModelRef.current !== analysisModel;
+    lastQueryResultsModelRef.current = analysisModel;
+
     const prompt = buildResultsQueryPrompt(
       question,
-      model,
+      analysisModel,
       { ...results, aggregateStats },
-      conversationHistory
+      conversationHistory,
+      { forceModelContext: modelChanged }
     );
 
     let accumulated = "";
@@ -653,7 +660,9 @@ export const AiAssistantPanel = ({
     const controller = new AbortController();
     abortRef.current = controller;
     const workflowMode = isRunContext ? 'Running' : isResultsContext ? 'Analyzing' : 'Designing';
-    const messages = buildModelQueryPrompt(question, model, conversationHistory, { currentTab: activeTab, workflowMode });
+    const modelChanged = lastQueryModelRef.current !== model;
+    lastQueryModelRef.current = model;
+    const messages = buildModelQueryPrompt(question, model, conversationHistory, { currentTab: activeTab, workflowMode, forceModelContext: modelChanged });
     setConversationHistory(prev => [...prev, { role: "user", content: question }]);
     setModelQueryText("");
     setResponse("");
