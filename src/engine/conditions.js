@@ -142,6 +142,14 @@ function resolveVariable(ref, state) {
     // Queue.<id>.<property>
     return resolveQueueValue(parts[1], parts[2], state);
   }
+  if (parts[0] === 'state') {
+    // state.<name> — resolves the same way a bare state-var name resolves below.
+    const stateVarName = parts.slice(1).join('.');
+    if (state.scalars && Object.prototype.hasOwnProperty.call(state.scalars, stateVarName)) {
+      return state.scalars[stateVarName];
+    }
+    return state[stateVarName];
+  }
   if (parts.length === 1) {
     // Plain user-defined state variable
     if (state.scalars && Object.prototype.hasOwnProperty.call(state.scalars, ref)) {
@@ -219,6 +227,8 @@ export function getPredicateDependencies(predicate) {
     } else if (variable.startsWith("Resource.")) {
       const parts = variable.split(".");
       deps.resources.add(normalizeDependencyName(parts[1]));
+    } else if (variable.startsWith("state.")) {
+      deps.stateVars.add(variable.slice("state.".length));
     } else if (variable && !variable.includes(".")) {
       deps.stateVars.add(variable);
     } else {

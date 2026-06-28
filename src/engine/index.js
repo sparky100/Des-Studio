@@ -13,7 +13,7 @@ import { buildWaitDistEntry, finalizeWeightedStats, summarizeEntitySummary } fro
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
 import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById } from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
-import { fireBEvent, fireCEvent }              from "./phases.js";
+import { fireBEvent, fireCEvent, applyShiftChange } from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
 import { nullRegistry }                        from "./adapters/index.js";
 
@@ -262,12 +262,29 @@ function deriveDirtyFromTemplate(template, event, ctx) {
 function getValidShiftSchedule(entityType) {
   if (!Array.isArray(entityType.shiftSchedule) || entityType.shiftSchedule.length === 0) return [];
   return entityType.shiftSchedule
+    .filter(step => !step.when) // `when` entries are handled separately (see getShiftWhenEntries) — never time-anchored
     .map(step => ({
       time: parseFloat(step.time ?? step.startTime ?? 0),
       capacity: parseInt(step.capacity, 10),
     }))
     .filter(step => Number.isFinite(step.time) && Number.isInteger(step.capacity) && step.capacity > 0)
     .sort((a, b) => a.time - b.time);
+}
+
+// Condition-triggered shift entries — `{ when: <predicate>, capacity: N }`.
+// Index 0 is always time-anchored by construction/validation (V14/V48), so it's
+// never a `when` entry — no special-casing needed here beyond the `step.when` filter.
+// Preserves original array index for stable id/priority assignment.
+function getShiftWhenEntries(entityType) {
+  if (!Array.isArray(entityType.shiftSchedule) || entityType.shiftSchedule.length === 0) return [];
+  const entries = [];
+  entityType.shiftSchedule.forEach((step, index) => {
+    if (!step.when) return;
+    const capacity = parseInt(step.capacity, 10);
+    if (!Number.isInteger(capacity) || capacity <= 0) return;
+    entries.push({ index, when: step.when, capacity });
+  });
+  return entries;
 }
 
 function modelWithShiftInitialCapacity(model) {
@@ -293,6 +310,33 @@ function makeShiftChangeEvents(model) {
       serverTypeName: entityType.name,
       newCapacity: step.capacity,
     })));
+}
+
+// Synthetic conditional-event-like objects for condition-triggered shift entries.
+// These are merged into sortedCEvents (see buildEngine) so they go through the
+// exact same Phase C scan/restart/dirty-filter loop as real C-events. `priority`
+// is the entry's array index (ascending — lower index fires first when multiple
+// become true at the same event, matching the existing "lower priority value
+// fires first" convention used by real C-events: `ev.priority ?? 9999`, sorted
+// ascending).
+function makeShiftWhenEvents(model) {
+  const events = [];
+  for (const entityType of model.entityTypes || []) {
+    if (entityType.role !== "server") continue;
+    for (const entry of getShiftWhenEntries(entityType)) {
+      events.push({
+        id: `shift:${entityType.id || entityType.name}:${entry.index}`,
+        name: `Shift change (when): ${entityType.name} #${entry.index}`,
+        priority: entry.index,
+        condition: entry.when,
+        _isShiftWhen: true,
+        _fired: false,
+        entityTypeName: entityType.name,
+        capacity: entry.capacity,
+      });
+    }
+  }
+  return events;
 }
 
 function makeRateChangeEvents(model) {
@@ -618,14 +662,22 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     noteEntityCreated(created);
     return created;
   };
+  // sortedCEvents is built once per buildEngine() call (i.e. once per run, not
+  // rebuilt per step()) — so `_fired` flags stored directly on synthetic shift-when
+  // event objects persist correctly across the whole run.
   const sortedCEvents = (runtimeModel.cEvents || []).slice()
+    .concat(makeShiftWhenEvents(runtimeModel))
     .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999))
-    .map(event => ({
+    .map(event => event._isShiftWhen ? {
+      ...event,
+      _compiledCondition: compilePredicate(event.condition),
+      _conditionDeps: getPredicateDependencies(event.condition),
+    } : {
       ...event,
       _compiledCondition: compilePredicate(event.condition),
       _conditionDeps: getPredicateDependencies(event.condition),
       _effectImpactTemplate: compileEventImpactTemplate(event),
-    }));
+    });
   const enableFilteredPhaseC = sortedCEvents.length >= 8;
   const bEventImpactTemplates = enableFilteredPhaseC
     ? new Map((runtimeModel.bEvents || []).map(event => [event.id, compileEventImpactTemplate(event)]))
@@ -1124,7 +1176,10 @@ const cycleLog = [];
           continue;
         }
         _runtimeMetrics.cEventScans++;
-        const condTrue = ev._compiledCondition(predicateCtx);
+        // A fired shift-`when` event is permanently false — it fires at most once per run.
+        const condTrue = ev._isShiftWhen
+          ? (!ev._fired && ev._compiledCondition(predicateCtx))
+          : ev._compiledCondition(predicateCtx);
         if (!condTrue) {
           if (collectTrace) {
             const falseEntry = makeTraceEntry("C", {
@@ -1147,15 +1202,25 @@ const cycleLog = [];
         for (const k in _arbitration) delete _arbitration[k];
         const ctx = makeCtx(null);
         ctx.clock = clock;
-        const { msgs, felEntries } = fireCEvent(ev, ctx);
+        let msgs, felEntries;
+        if (ev._isShiftWhen) {
+          ev._fired = true;
+          const fakeEv = { serverTypeName: ev.entityTypeName, newCapacity: ev.capacity };
+          msgs = applyShiftChange(fakeEv, ctx);
+          felEntries = [];
+        } else {
+          ({ msgs, felEntries } = fireCEvent(ev, ctx));
+        }
         if (enableFilteredPhaseC) {
           mergeDirtyInto(
             phaseCDirty,
-            deriveDirtyFromTemplate(
-              ev._effectImpactTemplate,
-              { ...ev, _contextCustId: ctx._lastCustId ?? ev._contextCustId, _contextSrvId: ctx._lastSrvId ?? ev._contextSrvId },
-              ctx
-            )
+            ev._isShiftWhen
+              ? (() => { const d = createDirtySet(); markDirtyResource(d, ev.entityTypeName); return d; })()
+              : deriveDirtyFromTemplate(
+                  ev._effectImpactTemplate,
+                  { ...ev, _contextCustId: ctx._lastCustId ?? ev._contextCustId, _contextSrvId: ctx._lastSrvId ?? ev._contextSrvId },
+                  ctx
+                )
           );
         }
         for (const entry of felEntries) fel.push(entry);

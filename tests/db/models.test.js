@@ -1492,6 +1492,49 @@ describe('Sprint 71 — persistence layer', () => {
     });
   });
 
+  // ── round-trip: shiftSchedule `when` (condition-triggered) entries ────────
+  describe('round-trip — entityTypes[].shiftSchedule `when` entries survive saveModel + norm()', () => {
+    const entityTypes = [
+      {
+        id: 'srv-rt', name: 'Installer', role: 'server', count: '6', attrDefs: [],
+        shiftSchedule: [
+          { time: 0, capacity: 6 },
+          { when: { variable: 'state.traineesQualified', operator: '>=', value: 20 }, capacity: 8 },
+          { when: { variable: 'state.traineesQualified', operator: '>=', value: 40 }, capacity: 10 },
+        ],
+      },
+    ];
+
+    it('the insert payload preserves shiftSchedule `when` entries', async () => {
+      const model = {
+        name: 'Shift When RT Model',
+        entityTypes, stateVariables: [], bEvents: [], cEvents: [], queues: [],
+      };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.entity_types).toEqual(entityTypes);
+    });
+
+    it('norm() preserves shiftSchedule `when` entries from a DB row', () => {
+      const result = norm({
+        id: 'm-rt', name: 'Shift When RT Model',
+        entity_types: entityTypes, b_events: [], c_events: [], queues: [],
+        model_json: {},
+      });
+
+      expect(result.entityTypes).toEqual(entityTypes);
+    });
+  });
+
   // ── round-trip: Lognormal dist/distParams on B-event/C-event schedules (Sprint 86 — F86.5) ──
   describe('round-trip — Lognormal dist/distParams on schedules survive saveModel + norm()', () => {
     const bEvents = [

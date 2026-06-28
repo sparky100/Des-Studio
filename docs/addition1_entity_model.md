@@ -57,6 +57,29 @@ Server shift periods use this schema:
 
 `shiftSchedule` is implemented by scheduling `SHIFT_CHANGE` B-Events during engine initialisation. Capacity maps to server entity instances: increases create idle server instances; decreases retire idle excess only. Busy excess servers complete naturally and produce a warning in run results.
 
+#### Condition-triggered shifts (`when`)
+
+A shift entry may use `when` instead of `time` to trigger the capacity change the first time a condition becomes true, rather than at a fixed clock time:
+
+```json
+{
+  "shiftSchedule": [
+    { "time": 0, "capacity": 6 },
+    { "when": { "variable": "state.traineesQualified", "operator": ">=", "value": 20 }, "capacity": 8 },
+    { "when": { "variable": "state.traineesQualified", "operator": ">=", "value": 40 }, "capacity": 10 }
+  ]
+}
+```
+
+`when` follows the same predicate shape used elsewhere (`{ variable, operator, value }`, operators `==`, `!=`, `<`, `>`, `<=`, `>=`). Only `state.<name>` and `Queue.<name>.length` variables are supported for shift `when` — `Entity.*` is not valid here since capacity changes are server-pool-level, not entity-scoped.
+
+Rules:
+- `time` and `when` are mutually exclusive on a single entry (enforced by validator rule V48, not the type system).
+- The first entry (index 0) must always be `time`-anchored at `time: 0` — `when` is not valid there.
+- A `when` entry fires at most once: the first time its condition becomes true (checked after every event, alongside other condition-based triggers in the engine). It is never re-evaluated after firing, even if the condition becomes false and true again.
+- If multiple `when` entries become true at the same event, they fire in array order (lowest index first).
+- `when` referencing an undefined `state.*` variable raises a non-blocking warning (V49) — the condition will simply never become true, but the model still runs.
+
 ### 2.2 Attribute Definition
 
 Each attribute in an Entity Class has the following fields:
@@ -739,6 +762,8 @@ The engine must validate the complete model before `buildEngine()` proceeds. Any
 | V35 | `experimentDefaults.warmupPeriod` must be less than `experimentDefaults.maxSimTime`. | Blocking | `Warm-up period (X) must be shorter than run duration (Y).` |
 | V36 | Server failure distribution fields (`mtbfDist`, `mttrDist`, `mtbfDistParams`, `mttrDistParams`) are only valid on entity types with `role: "server"`. `failureScope` must be `"unit"` or `"pool"` if set. | Blocking | `Entity type 'X' is not a server — failure settings are not applicable.` |
 | V37 | When either `mtbfDist` or `mttrDist` is set, both must be present and point to valid distributions. | Blocking | `Server 'X': both MTBF and MTTR distributions must be set together.` |
+| V48 | A shiftSchedule entry with `when` must not also have `time`; `when.variable` must be a non-empty `state.*` or `Queue.*` string; `when.operator` must be one of `==,!=,<,>,<=,>=`; `when.value` must be present. | Blocking | `shiftSchedule entry on 'X' has both 'time' and 'when' — use one or the other.` (and variants for variable/operator/value) |
+| V49 | A shiftSchedule `when.variable` of the form `state.X` must reference a defined `stateVariables[].name`. | Warning only | `shiftSchedule 'when' on 'X' references state variable 'Y' which is not defined in this model. The condition will never become true.` |
 | W-FAIL-01 | Server with `failureScope: "pool"` and `count > 1`. | Warning | `Server 'X' uses pool failure scope — a single failure will take the entire pool offline.` |
 
 > **Note:** V7 is intentionally skipped (reserved for future activity-edge validation).

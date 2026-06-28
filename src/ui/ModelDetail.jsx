@@ -1290,7 +1290,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 <Btn small variant="ghost" onClick={()=>setShowCsvImport(true)}>Import from CSV</Btn>
               </div>
             )}
-            <EntityTypeEditor types={model.entityTypes||[]} sections={model.sections||[]} errorFilter={errorFilter?.tab==="entities"?{filteredEntityTypeIds:errorFilter.affectedEntityTypeIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} onChange={canEdit?newTypes=>{
+            <EntityTypeEditor types={model.entityTypes||[]} sections={model.sections||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} errorFilter={errorFilter?.tab==="entities"?{filteredEntityTypeIds:errorFilter.affectedEntityTypeIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} onChange={canEdit?newTypes=>{
               const oldTypes = model.entityTypes || [];
               let updated = { ...model, entityTypes: newTypes };
               for (let i = 0; i < newTypes.length; i++) {
