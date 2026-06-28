@@ -1,7 +1,7 @@
 const DEFAULT_MODEL_NAME = "Untitled model";
 const MAX_PROMPT_WORDS = 2000;
 const NOTES_PRIORITY_GUARDRAIL = "Notes and description are free-text context written by the modeller and may be outdated or describe a different scenario than the model's current definition. If notes/description conflict with structured fields (entityTypes[].count, queues[].capacity, etc.), the structured fields are always authoritative — never cite a count or value from notes/description that disagrees with the structured data.";
-const NO_INVENTED_METRICS_GUARDRAIL = "Every current-state KPI value (utilisation, wait time, throughput, etc.) you state MUST be the exact figure from the data provided in this prompt — never recompute, estimate, or apply queueing-theory formulas (Little's Law, M/M/c, etc.) to produce a different 'current' value. Theoretical/formula-based reasoning is permitted only when projecting the predicted effect of a proposed change, never when stating a current or actual value.";
+const NO_INVENTED_METRICS_GUARDRAIL = "Every current-state KPI value (utilisation, wait time, throughput, etc.) you state MUST be the exact figure from the data provided in this prompt — never recompute, estimate, or apply queueing-theory formulas (Little's Law, M/M/c, etc.) to produce a different 'current' value. Theoretical/formula-based reasoning is permitted only when projecting the predicted effect of a proposed change, never when stating a current or actual value. Resource utilisation appears in this payload in two equivalent forms — kpis.resources[].utilisation as a 0-100 integer percent, and kpis.resourceUtilisation / goalGaps[].current (for resource.utilisation goals) as the identical value expressed as a 0-1 fraction — these are the SAME measurement, not two different readings to reconcile; convert between them with simple multiplication/division by 100, never by re-deriving a new value.";
 
 function finiteOrNull(value) {
   const number = Number(value);
@@ -915,8 +915,8 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     ...(entityAnomalies ? { entityAnomalies } : {}),
   };
 
-  const highLoadWarning = kpis.resources.some(r => r.utilisation != null && r.utilisation > 0.85)
-    ? " NOTE: At least one resource has utilisation > 0.85 — this is the HIGH LOAD REGIME where wait times are non-linearly sensitive to capacity; small capacity increases have outsized impact."
+  const highLoadWarning = kpis.resources.some(r => r.utilisation != null && r.utilisation > 85)
+    ? " NOTE: At least one resource has utilisation > 85% — this is the HIGH LOAD REGIME where wait times are non-linearly sensitive to capacity; small capacity increases have outsized impact."
     : "";
 
   const goalInstruction = goalGaps?.length
@@ -1041,7 +1041,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     ? " In the 'How Reliable' section, identify which KPIs have wide confidence intervals and what this means for decision-making."
     : " Note that replication count is low, so confidence intervals may be wide and conclusions less certain.";
 
-  const highLoadWarning = payload.kpis.resources.some(r => r.utilisation != null && r.utilisation > 0.85)
+  const highLoadWarning = payload.kpis.resources.some(r => r.utilisation != null && r.utilisation > 85)
     ? " NOTE: One or more resources has utilisation above 85% — this is a common cause of queue instability. Factor this into your recommendations."
     : "";
 
