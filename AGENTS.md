@@ -1527,6 +1527,7 @@ See `docs/simmodlr_Build_Plan.md` for the full sprint-by-sprint roadmap. Latest 
 | Sprint 82 | ⬜ Planned | — | Results API (read-only Edge Function, JWT + share-token auth, 3 routes) and LLM Export Bundle (`buildLLMBundle`, "LLM Bundle (.md)" in Export… popover) |
 | Sprint 83 | ✅ Complete | 2026-06-09 | Wait Time Accuracy & Transparency — RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, `waitSamplesBreakdown`, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), BottomPanel live metrics align with engine formula |
 | Sprint 84 | ✅ Complete | 2026-06-09 | Engine Fidelity — PRNG stream isolation per process (arrival/service/renege/mtbf/mttr), shift-change behavior toggle (delay/preempt/suspend), purge period option, starvation duration tracking per resource |
+| Sprint 86 | ✅ Complete | 2026-06-29 | Calendar-Aware Resource Scheduling — weekly schedule patterns with 24×7 grid editor, per-shift utilisation chart, schedule adherence badge, V50–V56 validation rules, LLM bundle schedule columns, UI tests, documentation |
 
 ---
 

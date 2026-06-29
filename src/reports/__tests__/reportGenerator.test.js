@@ -4,7 +4,7 @@ vi.mock('../../llm/apiClient.js', () => ({
   callLLMOnce: vi.fn(),
 }));
 
-import { generateReport } from '../reportGenerator.js';
+import { generateReport, buildModelDefinitionHtml } from '../reportGenerator.js';
 import { callLLMOnce } from '../../llm/apiClient.js';
 
 const minimalModel = {
@@ -244,5 +244,27 @@ describe('generateReport', () => {
 
     expect(html).toContain('85%');
     expect(html).not.toMatch(/85\.\d%/);
+  });
+});
+
+describe('buildModelDefinitionHtml', () => {
+  test('extracts server name from ASSIGN effect in C-event when serverType is not set', () => {
+    const model = {
+      name: 'Test',
+      entityTypes: [
+        { id: 'e1', name: 'Customer', role: 'customer' },
+        { id: 'e2', name: 'Engineer', role: 'server', count: 1 },
+      ],
+      queues: [{ id: 'q1', name: 'Service Queue', discipline: 'FIFO' }],
+      bEvents: [],
+      cEvents: [
+        { id: 'c1', name: 'Do Work', effect: ['ASSIGN(Service Queue, Engineer)'], priority: 1, cSchedules: [{ dist: 'Fixed', distParams: { value: '10' } }] },
+        { id: 'c2', name: 'Paperwork', effect: ['DELAY(Paperwork Queue)'], priority: 2, cSchedules: [{ dist: 'Fixed', distParams: { value: '5' } }] },
+      ],
+    };
+    const html = buildModelDefinitionHtml(model);
+    expect(html).toContain('Do Work');
+    expect(html).toContain('Engineer');
+    expect(html).toContain('Paperwork');
   });
 });

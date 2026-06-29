@@ -1,6 +1,7 @@
 // ui/editors/index.jsx — Barrel file, re-exports all editor components
 export { AttrEditor } from "./AttrEditor.jsx";
 export { EntityTypeEditor } from "./EntityTypeEditor.jsx";
+export { WeeklyPatternEditor } from "./WeeklyPatternEditor.jsx";
 export { StateVarEditor } from "./StateVarEditor.jsx";
 export { BEventEditor } from "./BEventEditor.jsx";
 export { ConditionBuilder, buildConditionStr, defaultConditionValueForType, rowsToCompoundPredicate, parseConditionStr, sameConditionRows } from "./ConditionBuilder.jsx";

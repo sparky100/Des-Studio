@@ -3,6 +3,7 @@ import { normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { AttrEditor } from "./AttrEditor.jsx";
+import { WeeklyPatternEditor } from "./WeeklyPatternEditor.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -36,7 +37,7 @@ const shiftWhenVariableLabel=(variable,stateVariables,queues)=>{
   return variable;
 };
 
-const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],errorFilter=null,onClearErrorFilter,onChange})=>{
+const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=null,timeUnit="minutes",errorFilter=null,onClearErrorFilter,onChange})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -110,6 +111,25 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],errorFilt
     const schedule=[...(n[i].shiftSchedule||[])];
     schedule[j]={...schedule[j],when:{...schedule[j].when,...patch}};
     n[i]={...n[i],shiftSchedule:schedule};
+    onChange(n);
+  };
+
+  const setPatternEnabled=(i,enabled)=>{
+    const n=[...types];
+    if(enabled){
+      if(!epoch){
+        alert("A weekly schedule pattern requires a Real-world start date (Epoch). Set one in Experiment Settings first.");
+        return;
+      }
+      n[i]={...n[i],schedulePattern:{type:"weekly",defaultCapacity:0,periods:[],exceptions:[]},shiftSchedule:undefined};
+    } else {
+      n[i]={...n[i],schedulePattern:undefined};
+    }
+    onChange(n);
+  };
+  const updPattern=(i,patch)=>{
+    const n=[...types];
+    n[i]={...n[i],schedulePattern:patch};
     onChange(n);
   };
 
@@ -226,8 +246,21 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],errorFilt
               {et.role==="server"&&(
                 <SectionPanel
                   label="Shift Schedule"
-                  status={Array.isArray(et.shiftSchedule)?`${et.shiftSchedule.length} shift${et.shiftSchedule.length!==1?"s":""}` :"off"}
+                  status={et.schedulePattern?"weekly pattern":Array.isArray(et.shiftSchedule)?`${et.shiftSchedule.length} shift${et.shiftSchedule.length!==1?"s":""}` :"off"}
                   color={C.server}>
+                  <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:FONT,fontSize:11,color:et.schedulePattern?C.server:Array.isArray(et.shiftSchedule)?C.server:C.muted}}>
+                    <input type="checkbox" checked={!!et.schedulePattern} onChange={e=>setPatternEnabled(i,e.target.checked)} style={{accentColor:C.server}} disabled={!epoch}/>
+                    Use recurring weekly schedule
+                    {!epoch&&<span style={{fontSize:9,color:C.amber,marginLeft:4}}>(requires epoch)</span>}
+                  </label>
+                  {et.schedulePattern&&(
+                    <WeeklyPatternEditor
+                      pattern={et.schedulePattern}
+                      epoch={epoch}
+                      onChange={v=>updPattern(i,v)}
+                    />
+                  )}
+                  {!et.schedulePattern&&<>
                   <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:FONT,fontSize:11,color:Array.isArray(et.shiftSchedule)?C.server:C.muted}}>
                     <input type="checkbox" checked={Array.isArray(et.shiftSchedule)} onChange={e=>setShiftEnabled(i,e.target.checked)} style={{accentColor:C.server}}/>
                     Use shift schedule (overrides static pool size)
@@ -335,6 +368,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],errorFilt
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
                       The first shift period sets the initial pool size; the static count is ignored while shifts are in use. Shift changes add or remove idle servers at the scheduled times or when their condition first becomes true.
                     </span>
+                  </>)}
                   </>)}
                 </SectionPanel>
               )}

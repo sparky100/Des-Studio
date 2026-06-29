@@ -341,7 +341,7 @@ export function clearWaitingState(entity, index = null) {
   return true;
 }
 
-export function claimServerForEntity(customer, server, clock, index = null) {
+export function claimServerForEntity(customer, server, clock, index = null, ctx = null) {
   if (!customer || !server) return false;
   if (customer.status !== "waiting" || server.status !== "idle") return false;
 
@@ -360,6 +360,11 @@ export function claimServerForEntity(customer, server, clock, index = null) {
   server._busyStart = clock;
   server.currentCustId = customer.id;
   server.resourceClaim = claim;
+
+  // Tag with current shift label for per-shift utilisation tracking (F86.4)
+  if (ctx?.state?.__currentShiftLabel?.[server.type]) {
+    server._shiftLabel = ctx.state.__currentShiftLabel[server.type];
+  }
 
   // Flush starvation timer — server was idle and is now busy
   if (server._starvationStart != null) {

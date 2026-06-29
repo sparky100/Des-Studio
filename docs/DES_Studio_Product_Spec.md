@@ -76,7 +76,7 @@ These are non-negotiable. Removing any one of them makes simmodlr no longer a si
 | M4 | **Macro vocabulary** | 19 action macros: ARRIVE, ASSIGN, BATCH, COMPLETE, COSEIZE, COST, DRAIN, FAIL, FILL, MATCH, PREEMPT, RELEASE, RENEGE, RENEGE_OLDEST, REPAIR, SET, SET_ATTR, SPLIT, UNBATCH. |
 | M5 | **Predicate Builder** | Type-safe, point-and-click condition editor for C-Events. No free-text logic. Operator set constrained by attribute type. |
 | M6 | **Distribution library** | 12 distribution types: Exponential, Uniform, Normal, Triangular, Fixed, Lognormal, Erlang, Empirical, Piecewise, Attribute-based (ServerAttr, EntityAttr), Schedule. Lognormal is recommended for heavily right-skewed durations (repair times, long-tail task durations). Seeded PRNG (mulberry32). No `Math.random()` in engine. |
-| M7 | **Validation gates** | 38 validation rules (V1–V38). Blocking errors prevent run; warnings proceed with banner. Model Health panel shows live status. |
+| M7 | **Validation gates** | 55 validation rules (V1–V56). Blocking errors prevent run; warnings proceed with banner. Model Health panel shows live status. |
 | M8 | **Health flag system** | Deterministic post-run health evaluation across 13 codes (H1-H13) covering utilisation (80/90/95% thresholds), queue growth, starvation, completion rate, peak overflow, Little's Law validation, resource failure/downtime (H12), and engine cycle-limit truncation (H13). Flags carry severity (critical/warning), suggested actions, and resource attribution. Displayed as a "Key Findings" banner above all result summaries. |
 | M9 | **Multi-replication runner** | Parallel Web Worker pool. Configurable seed, warm-up period, termination condition, max sim time. |
 | M10 | **Confidence intervals** | 95% CI via batch means. Displayed on all KPI cards for multi-replication runs. |
@@ -104,6 +104,7 @@ High-value features that are complete but whose absence would degrade the platfo
 | S12 | **Template library** | 22 pre-built templates covering healthcare, logistics, transport, manufacturing, and service industries. Browsable by domain chip filter and text search. |
 | S13 | **Schedule Manager** | Named timetables (e.g. Weekday, Weekend) stored separately from `model_json` (ADR-016). CSV and Excel/XLSX import, multi-event import, and inline-row migration to named schedules. Schedule selector in Execute panel. |
 | S14 | **Resource failures and shift-change behavior** | FAIL/REPAIR macros with MTBF/MTTR distributions. V37 validation enforces paired configuration. Shift-change behavior configurable per server: **Delay** (finish current service before applying shift change), **Preempt** (interrupt immediately; entity re-queues with remaining service time), or **Suspend** (pause service at shift boundary; resume on next shift start). |
+| S24 | **Weekly schedule patterns** | Server entity types can define a repeating 24×7 capacity grid (hours × days of the week) via a visual grid editor. A linked shift schedule defines rostered staff. The engine tracks **per-shift utilisation** (horizontal bar chart in Results) and **schedule adherence** (colour-coded badge comparing actual vs. expected utilisation). 7 new validation rules (V50–V56) guard pattern consistency: epoch requirement, unscheduled hour gaps, capacity-vs-shift mismatch, overlapping shifts, and non-server schedule references. |
 | S15 | **Voice input** | Microphone button in AI chat dialogs. Uses the Web Speech API to transcribe spoken input into the prompt field. |
 | S16 | **Simulation Assistant / Optimise (AdaptiveBatchPanel)** | AI-driven bottleneck analysis, accessed via ⚡ Optimise in the Simulation Assistant sidebar. Runs adaptive replication stepping (increasing batch size until 95% CI is within ±5% of the mean), surfaces bottleneck resources and queues, and provides an Apply-to-model action. |
 | S17 | **Run admission tier system** | Per-user run tier (Free/Standard/Pro) gates replications, run duration, planned schedule rows, and estimated C-event scans before a run starts, derived from a pre-run complexity estimate (the **Workload Estimate** panel on the Execute screen: planned arrivals, expected entities, stage moves, C-event scans, confidence). The panel auto-expands whenever the estimate produces an actionable warning or confirmation (e.g. chart data or live trace will be auto-disabled for this run); it can still be manually collapsed afterwards. After a run completes, the panel also shows how the estimate compared to what actually happened (scans/entities ratio vs. estimate), so the estimator's accuracy can be tracked over time. Enforced before each run. |
@@ -201,6 +202,20 @@ Valuable additions already partially implemented or planned for near-term sprint
 
 ---
 
+### US-7 — Calendar-aware resource scheduling
+
+> *As a shift manager, I want to define a repeating weekly capacity pattern for each server type (e.g. 2 nurses on the early shift, 1 on late), run the simulation, and see whether actual utilisation matches what the schedule planned — so that I can tell whether my headcount matches the workload pattern.*
+
+**Acceptance criteria:**
+- Weekly schedule pattern is editable as a 24×7 grid in the Entity Types editor (toggle to enable).
+- Shift schedule rows define rostered staff (time windows with integer capacity).
+- Engine tags each service event with the shift label active at the start of service (tag-on-seize).
+- Results per-shift utilisation chart shows a horizontal bar for each shift (label, % busy, entities-per-capacity count).
+- Resource cards display a colour-coded schedule adherence badge (green/amber/red) against the planned capacity.
+- V50–V56 validation rules catch pattern/epoch/shift mismatches before the run.
+
+---
+
 ### US-6 — Export for Python practitioners
 
 > *As a simulation researcher or Python developer, I want to export a model I built in simmodlr as a runnable SimPy Python script, so that I can use it as the basis for more complex experiments in code — adding custom distributions, logging, or integration with real data pipelines — without having to translate the model by hand.*
@@ -257,7 +272,7 @@ This standard applies to all new UI text and to the AI-generated narrative in re
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Full multi-shift rostering | Deferred | Piecewise NHPP for time-varying arrivals is implemented; named shift patterns bound to resource capacity across a weekly cycle are not. |
+| Full multi-shift rostering | ✅ Delivered (Sprint 86) | Weekly schedule patterns with 24×7 grid editor, shift schedule rows, per-shift utilisation tracking, schedule adherence badge, and 7 validation rules (V50–V56). Shift-change behavior (Delay/Preempt/Suspend) was delivered in Sprint 84. |
 | Automated end-to-end tests | Not started | Manual smoke tests cover the golden path; no Playwright/Cypress suite exists. |
 | Offline-first operation | Deferred | Anonymous local-storage mode exists; full offline Supabase sync is out of scope. |
 | Dependency CVEs | Tracked | 4 moderate CVEs in Vite/Vitest; fix requires a Vite 8 breaking upgrade — deferred pending ecosystem readiness. |

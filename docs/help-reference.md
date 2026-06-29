@@ -30,6 +30,8 @@ Two roles. Defined in `entityTypes[]` array.
 | customer | Flows through system; arrives, waits, receives service, departs | Always 0 | ARRIVE macro creates instances |
 | server | Provides service capacity; customers compete for server units | Integer ≥ 1 | Present at simulation start |
 
+**Schedule patterns (Sprint 86):** Server entity types can optionally define a `schedulePattern` object with `type: "weekly"` and a 24×7 capacity grid (`grid: [[day][hour]]`). An associated shift schedule (`shiftScheduleId`) defines rostered staff availability. The grid is a 7×24 array of integers. The engine tracks per-shift utilisation and schedule adherence for weekly-pattern servers.
+
 **Attributes:** Customer entities carry named numeric attributes (priority, dueDate, etc.) set at arrival or updated mid-simulation via SET_ATTR.
 
 ### Queues
@@ -265,6 +267,22 @@ All 6 queue disciplines.
 
 **Behaviour:** Each generator process (arrival B-event, service C-event, shift schedule) gets an independent PRNG stream derived from `baseSeed + replicationIndex` via `deriveSubSeed(seed, processIndex)`. Modifying one process (e.g., adding a new arrival source) leaves all other streams unchanged — results remain reproducible and statistically comparable across model edits.
 
+### Weekly Schedule Pattern (Sprint 86)
+
+**Purpose:** Define a repeating weekly capacity plan for a server entity type.
+
+**Fields on `entityType`:**
+- `schedulePattern.type`: Must be `"weekly"` to enable.
+- `schedulePattern.grid`: 7×24 array of integers (7 days × 24 hours). `0` = server unavailable; positive integer = planned capacity for that hour.
+- `shiftScheduleId`: UUID referencing a schedule row in `model_schedules` that defines rostered staff time windows with integer capacities.
+- `startOfWeekDay`: Derives from the model's epoch — the epoch's day-of-week determines which Monday is the first day of the grid.
+
+**Per-shift utilisation:** Each service event is tagged with the shift label active at the time the server was seized (tag-on-seize). Results include `perShiftUtil[]` with one entry per encountered shift: `shiftLabel`, `utilPct`, `entitiesPerCap`, `totalUtilTime`, `shiftDuration`.
+
+**Schedule adherence:** `actualUtilisation / expectedUtilisation`. Expected utilisation is `totalExpectedBusyTime / (shiftDuration × capacity)` from the grid. Displayed as a colour-coded badge: green ≤ 10 % gap, amber ≤ 25 %, red > 25 %.
+
+**Validation:** Seven rules (V50–V56) guard pattern integrity — see the Warning-Level Rules table.
+
 ### Purge Period
 
 **Purpose:** Remove entities that have exceeded a maximum dwell age in a queue.
@@ -337,6 +355,8 @@ All 6 queue disciplines.
 | idleCount | Number of idle periods | Under-utilisation indicator |
 | starvationTime | Cumulative time server was starved (idle despite entities waiting in a downstream-fed queue) | Zero = fully fed; non-zero = scheduling gap or upstream bottleneck |
 | starvationPct | Fraction of post-warmup time server was starved | High value indicates upstream supply problem, not a capacity problem |
+| perShiftUtil[] | Per-shift utilisation breakdown for weekly-pattern servers | Array of `{ shiftLabel, utilPct, entitiesPerCap, totalUtilTime, shiftDuration }` — only present for server types with `schedulePattern.type === 'weekly'` |
+| scheduleAdherence | Ratio of actual utilisation to expected schedule utilisation (0–1+) for weekly-pattern servers | < 1.0 = actual below plan; > 1.0 = actual exceeds plan. Displayed as colour-coded badge: green ≤ 10 % deviation from 1.0, amber ≤ 25 %, red > 25 %. |
 
 ---
 
@@ -382,6 +402,13 @@ All 6 queue disciplines.
 | V45 | Queue is never used as a routing destination (disconnected fragment) | Wire the queue into routing, or remove it |
 | V46 | Queue overflow chain cycles back on itself | Break the cycle — overflow chains must terminate at a queue without a cycle |
 | V47 | DELAY references an unknown queue, or its completion B-event has only an ARRIVE effect (entity left stuck "serving" forever) | Correct the queue name; add COMPLETE(), RELEASE(), or routing to the completion B-event |
+| V50 | Weekly schedule pattern requires a startOfWeek epoch | Set a `startOfWeek` epoch in Model Data (only the day-of-week matters) |
+| V51 | Weekly schedule pattern has unscheduled hours with no active shift | Fill every 1-hour cell with a capacity ≥ 0, or add a shift schedule row covering the gap |
+| V52 | Set/Capacity schedule reference targets a non-schedule resource | Ensure the referenced entity type is a server with a schedule pattern |
+| V53 | Schedule pattern capacity exceeds shift capacity at [time] | Reduce grid capacity or increase shift capacity for the overlapping time window |
+| V54 | Shift schedule rows overlap and are not merged | Use the **Merge overlapping shifts** button in the shift schedule editor |
+| V55 | Per-shift utilisation chart is empty | Ensure at least one schedule-pattern cell has capacity > 0 and the run is long enough |
+| V56 | Schedule adherence is N/A | Only computed for server types with `schedulePattern.type === 'weekly'` |
 
 Gaps in the numbering (e.g. no V7) are intentional — codes were retired or renumbered during development and are not reused.
 
@@ -822,11 +849,11 @@ The LLM Bundle is a structured Markdown file that combines model definition and 
 | Section | Contents |
 |---------|---------|
 | Preamble | Three-Phase DES method explanation, how to interpret the results |
-| Model definition | Entity types and attributes, queues (discipline, capacity), B-Events and C-Events, performance goals |
+| Model definition | Entity types and attributes (including weekly schedule patterns), queues (discipline, capacity), B-Events and C-Events, performance goals |
 | Experiment config | Replications, warm-up period, max sim time, seed, schedule name |
 | Headline KPIs | avgWait, avgSvc, avgSojourn, served, reneged, utilisation |
 | Per-queue wait table | mean, p50, p90, p95, p99 for every queue (GitHub-Flavored Markdown pipe table) |
-| Per-resource utilisation | utilisation %, busyCount, idleCount per server |
+| Per-resource utilisation | utilisation %, busyCount, idleCount per server. For schedule-pattern resources: per-shift utilisation breakdown and schedule adherence. |
 | Confidence intervals | 95% CI per KPI — present only for runs with ≥ 2 replications |
 | Goals pass/fail | Each performance goal with target, actual, and PASS/FAIL |
 | Replication summary | seed, served, reneged, avgWait per replication (omitted for single-replication runs) |

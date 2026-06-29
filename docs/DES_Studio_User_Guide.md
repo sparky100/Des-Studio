@@ -194,7 +194,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
    | Define sub-section | What to do |
    |--------------------|-----------|
-   | **Entity Types** | Add one entity type per distinct object class (e.g. "Customer", "Train"). Set attribute names, types (`number / string / boolean`), and default values. |
+    | **Entity Types** | Add one entity type per distinct object class (e.g. "Customer", "Train"). Set attribute names, types (`number / string / boolean`), and default values. For server entity types you can also set a **Weekly Schedule Pattern** (a 24×7 grid editor for repeating capacity), a **Shift Schedule** (time-based or condition-triggered), and shift-change behavior (Delay / Preempt / Suspend). |
    | **Queues** | Add a queue for each waiting point. Set discipline (FIFO, LIFO, PRIORITY, SPT, EDD). Set capacity if finite. |
    | **B-Events** | Add arrival events (with a distribution) and service-completion events. Use the distribution picker to choose Exponential, Uniform, Triangular, Fixed, Erlang, Empirical, or other supported types. |
    | **C-Events** | Define the conditions under which service starts: entity waiting AND server idle. Use the Predicate Builder — a point-and-click condition builder that prevents type mismatches. Each C-Event has an **Activity Type** toggle: **Service (claim resource)** seizes a server entity; **Delay (no resource)** just holds the entity for a sampled time with no server involved (e.g. a recovery period, a fixed processing wait). Picking **Delay** swaps the Effects picker for a single **Source queue** select and auto-writes `DELAY(QueueName)` — see §5.4 for how to configure what happens when the delay ends. |
@@ -203,7 +203,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
    Goals (service-level targets, e.g. "95% of customers wait less than 5 minutes") are set on the **Overview** tab. Results will show green/red against these goals.
 
-4. The **Model Health** button in the Design toolbar lights up whenever there are validation issues. Click it to see all 38 validation rules and fix any blocking errors (red) before running; warnings (amber) let you proceed with a caution banner.
+4. The **Model Health** button in the Design toolbar lights up whenever there are validation issues. Click it to see all 55 validation rules and fix any blocking errors (red) before running; warnings (amber) let you proceed with a caution banner.
 5. Click **Save**.
 
 **Tips:**
@@ -231,7 +231,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
 **Tips:**
 - If the result is missing something, use the feedback loop: type what is wrong in the AI panel and click **Refine**. The AI patches the model rather than regenerating from scratch.
-- Generated models pass through the same 38 validation rules as manually built ones. Fix any errors shown in Model Health before running.
+- Generated models pass through the same 55 validation rules as manually built ones. Fix any errors shown in Model Health before running.
 
 ### 4.4 Run an experiment and read results
 
@@ -259,7 +259,9 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    | **Summary** | Entities arriving, served, and reneged. Average wait, service time, and utilisation. Goal pass/fail. |
    | **Bottlenecks** | Which queues have the longest average waits. Peak queue depth. |
    | **Analysis** | Confidence intervals, Welch warm-up diagnostic, replication-level variance. |
-   | **Starvation** | Per-resource time and percentage spent starved — server idle because its queue was empty, not because it was recently freed. High starvation means the server is capacity-constrained on the supply side; consider whether upstream stages need balancing. |
+    | **Utilisation (per-shift)** | For server entity types with a weekly schedule pattern, a collapsible **Per-Shift Utilisation** section shows a horizontal bar chart breaking down utilisation by shift (e.g. Mon 08:00–16:00, Tue 16:00–00:00). Each bar shows % busy alongside the number of entities claimed by capacity unit. |
+    | **Schedule Adherence** | Each resource card in the Results workspace shows a colour-coded adherence line: green if overall utilisation is within 10 % of the expected schedule utilisation, amber if within 25 %, red if the gap exceeds 25 %. Hover to see the actual utilisation vs. expected values. |
+    | **Starvation** | Per-resource time and percentage spent starved — server idle because its queue was empty, not because it was recently freed. High starvation means the server is capacity-constrained on the supply side; consider whether upstream stages need balancing. |
    | **Run Effort** | Replications completed, total sim time, wall-clock duration. |
 
 5. Open the **✦ AI** sidebar (Simulation Assistant) to explore the results:
@@ -333,7 +335,7 @@ Each flag includes an actionable suggestion: adding capacity, rebalancing upstre
 
 A dialog shows whether the script is **Category 1** (complete) or **Category 2** (partial). For Category 1 models you have two options:
 
-- **Run in Browser** — executes the SimPy script directly in your browser tab via Pyodide (Python compiled to WebAssembly). No Python installation required. A progress bar tracks each replication; when all replications finish the results are loaded into the app and available in the Results workspace alongside any JS-engine runs. The first run downloads Pyodide (~25 MB, cached afterwards); subsequent runs start immediately. Browser runs are saved to your run history with the label `SimPy  DD/MM/YYYY HH:mm` and appear in the history dropdown on the Execute tab. The Results workspace shows enriched KPI cards for SimPy runs: Arrived, Served, Completion Rate, average wait, wait percentiles, average service time, average sojourn, and per-resource utilisation.
+- **Run in Browser** — executes the SimPy script directly in your browser tab via Pyodide (Python compiled to WebAssembly). No Python installation required. A progress bar tracks each replication; when all replications finish the results are loaded into the app and available in the Results workspace alongside any JS-engine runs. The first run downloads Pyodide (~25 MB, cached afterwards); subsequent runs start immediately. Browser runs are saved to your run history with the label `SimPy  DD/MM/YYYY HH:mm` and appear in the history dropdown on the Execute tab. The Results workspace shows enriched KPI cards for SimPy runs: Arrived, Served, Completion Rate, average wait, wait percentiles, average service time, average sojourn, per-resource utilisation, and schedule adherence for weekly-pattern resources.
 - **Download .py** — saves the script as `<model-name>_simpy.py` to run locally with `python your_model_simpy.py` after `pip install simpy`.
 
 Category 2 scripts contain macros that need manual completion. The **Run in Browser** button is disabled for Category 2 models — download the script and complete the `# TODO` sections first.
@@ -370,11 +372,11 @@ The LLM Bundle is a single Markdown file that gives an LLM everything it needs t
 | Section | What it contains |
 |---------|-----------------|
 | Preamble | Plain-English description of the Three-Phase DES method and how to read the results |
-| Model definition | Entity types and attributes, queues and disciplines, B-Event and C-Event logic, performance goals |
+| Model definition | Entity types and attributes (including weekly schedule patterns), queues and disciplines, B-Event and C-Event logic, performance goals |
 | Experiment configuration | Replications, warm-up period, max sim time, seed, schedule |
 | Headline KPIs | Average wait, average service time, average sojourn, throughput, renege rate |
 | Per-queue wait table | mean, p50, p90, p95, p99 for every queue |
-| Per-resource utilisation | Utilisation percentage and busy/idle counts for every server |
+| Per-resource utilisation | Utilisation percentage and busy/idle counts for every server. For schedule-pattern resources: per-shift utilisation breakdown and schedule adherence. |
 | Confidence intervals | 95% CI per KPI (present only for multi-replication runs) |
 | Goals pass/fail | Each performance goal with its target, actual value, and PASS/FAIL status |
 | Replication summary | Seed, served, reneged, and avgWait per replication (for multi-replication runs) |
@@ -510,6 +512,13 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 | "Supabase auth failed" on load | `.env.local` credentials missing or expired | Regenerate the anon key in Supabase Dashboard and update `.env.local` |
 | LLM Bundle is missing confidence intervals | The run used only one replication | Run with ≥ 2 replications — the CI section is omitted for single-replication runs because there is no between-replication variance to report |
 | LLM Bundle option is greyed out in Export… | No run has been completed in the current session | Complete at least one run, then the option becomes available |
+| V50: "Weekly schedule pattern requires a startOfWeek epoch" on a server entity type | The entity type has a `schedulePattern.type === 'weekly'` but the model data does not set a `startOfWeek` epoch — the grid editor has no reference point to know which Monday to use | Go to **Model Data** in the Define sub-sections and set a `startOfWeek` epoch (any date works, only the day-of-week matters). The first day of the schedule pattern is the week that contains this epoch. |
+| V51: "Weekly schedule pattern has unscheduled hours with no active shift" | The 24×7 grid has cells that are neither off (0) nor covered by any shift schedule row, meaning the server type would have zero capacity for some hours on some days | Open the **Weekly Schedule Pattern** editor for that entity type. Either fill every 1-hour cell with a capacity ≥ 0, or add a shift schedule row that covers the gap. A gap is any hour where the grid is `null` rather than an integer — set it to 0 explicitly if the server should be unavailable then. |
+| V52: "Set/Capacity schedule reference targets a non-schedule resource" | A C-Event or effect macro references a schedule by name or ID but the referenced entity type is not a server (its `role !== 'server'`) — only server entity types have schedule patterns | Ensure the `SET` or macro call that references this schedule targets a server entity type. If the resource is not a server, remove the schedule reference. |
+| V53: "Schedule pattern capacity exceeds shift capacity at [time]" | A weekly grid cell has a capacity value that is larger than the shift schedule's capacity for the same time window — the grid defines how many *should* be available, the shift defines what staff are *actually* rostered, so grid > shift is a deployment mismatch | Either reduce the grid cell to ≤ the shift's capacity for that hour, or increase the shift's capacity (add more staff) to cover the planned level. |
+| V54: "Shift schedule rows overlap and are not merged" | Two shift rows in the same schedule have overlapping time windows — e.g. Row 1: 08:00–16:00 Mon–Fri, Row 2: 12:00–20:00 Mon–Fri — and the editor has not merged them (editor shows a yellow "overlap" badge) | Use the **Merge overlapping shifts** button in the shift schedule editor. The editor combines overlapping rows into a single row covering the union of their time windows with the max capacity. |
+| V55: "Per-shift utilisation chart is empty" | A weekly-pattern server entity type ran with zero capacity for all shifts, or the run ended before any shift could complete a service | Check that at least one schedule-pattern cell has capacity > 0 and that the run's `maxSimTime` is long enough for an entity to complete service. The per-shift chart appears only when `perShiftUtil[]` contains at least one entry. |
+| V56: "Schedule adherence is N/A" | The server entity type has no `schedulePattern` (it's not a weekly-pattern server) | Schedule adherence is only computed for server entity types with `schedulePattern.type === 'weekly'`. For all other resources the field is omitted. |
 
 ### 5.4 "What do I configure for a Delay (no resource) activity, and what happens when it ends?"
 
@@ -560,5 +569,8 @@ The link works the other way too: open a B-Event in the **B-Events** editor, and
 | **SimPy export — Category 2** | A generated `.py` script where one or more macros (RENEGE, BATCH, MATCH, FAIL, REPAIR, PREEMPT, or RENEGE_OLDEST) have been replaced with annotated `# TODO` stubs. The script runs without errors but the stub sections must be completed manually before results are meaningful. The Run in Browser button is disabled for Category 2 scripts. |
 | **Starvation** | The condition where a server is idle because its input queue is empty — demand is too low to keep the server busy, not because the server is busy with another entity. Reported per-resource in the Results workspace as starvation duration and percentage. High starvation indicates upstream bottlenecks or low arrival rates relative to capacity. |
 | **Purge period** | An optional run-down phase after the simulation's Max sim time. New arrivals are stopped but the simulation continues until all queued entities are served (or until a configurable extra time limit). Used to model end-of-day or shift-end drain-down. |
+| **Schedule Adherence** | A per-resource metric comparing actual utilisation to the expected utilisation implied by the weekly schedule pattern. Shown as a colour-coded badge in resource cards (green ≤ 10 % gap, amber ≤ 25 %, red > 25 %). Only computed for server entity types with `schedulePattern.type === 'weekly'`. |
+| **Schedule Pattern** | A repeating 24×7 grid (hours × days of the week) defining the expected capacity of a server entity type at every hour of the week. Set in the Entity Types editor via the **Weekly Schedule Pattern** toggle. The grid interacts with the shift schedule — the shift defines rostered staff, the pattern defines planned deployment. |
+| **Per-shift utilisation** | A breakdown of a server entity type's utilisation into separate bars per shift (e.g. Mon Early Shift, Tue Late Shift). Shown as a collapsible horizontal bar chart in the Results workspace. Each bar shows the % busy and the number of entities claimed per capacity unit within that shift's time window. Only available for weekly-pattern server types. |
 | **Shift-change behavior** | How a server handles in-progress service when its shift schedule reduces capacity: Delay (finish naturally), Preempt (interrupt and re-queue with remaining time), or Suspend (pause and resume). Set per server entity type in the Entity Types editor. |
 | **PRNG stream isolation** | Each stochastic process in the simulation (arrivals, service, reneging, MTBF, MTTR) has its own independent pseudo-random stream derived from the base seed. This means changing the distribution of one process does not alter the random sequence of any other process, making scenario comparisons more controlled. |

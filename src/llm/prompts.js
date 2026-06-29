@@ -94,6 +94,20 @@ function extractResources(model = {}, summary = {}) {
         capacity: parseInt(p.capacity, 10) || 1,
       }));
     }
+    if (server.schedulePattern?.type === "weekly") {
+      const days = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const periodSummaries = (server.schedulePattern.periods || []).map(p =>
+        `${days[p.dayOfWeek] || p.dayOfWeek} ${p.start}-${p.end} (cap ${p.capacity})`
+      );
+      result.schedulePattern = {
+        type: "weekly",
+        periodCount: (server.schedulePattern.periods || []).length,
+        summary: periodSummaries.length ? periodSummaries.join("; ") : "No periods defined",
+      };
+      if (pr?.scheduleAdherence != null) {
+        result.scheduleAdherence = Math.round(pr.scheduleAdherence * 100);
+      }
+    }
     return result;
   });
 }

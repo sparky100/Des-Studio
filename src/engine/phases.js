@@ -47,6 +47,19 @@ export function applyShiftChange(ev, ctx) {
   const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
   ctx.state.__desiredServerCapacity = ctx.state.__desiredServerCapacity || {};
   ctx.state.__desiredServerCapacity[String(serverTypeName).trim().toLowerCase()] = target;
+
+  // Track shift period intervals for per-shift utilisation (F86.4)
+  ctx.state.__shiftTimeline = ctx.state.__shiftTimeline || {};
+  ctx.state.__shiftTimeline[serverTypeName] = ctx.state.__shiftTimeline[serverTypeName] || [];
+  const timeline = ctx.state.__shiftTimeline[serverTypeName];
+  if (timeline.length > 0) {
+    const prev = timeline[timeline.length - 1];
+    prev.endTime = ctx.clock;
+    prev.elapsed = ctx.clock - prev.startTime;
+  }
+  timeline.push({ startTime: ctx.clock, endTime: null, capacity: target, elapsed: 0 });
+  ctx.state.__currentShiftLabel = ctx.state.__currentShiftLabel || {};
+  ctx.state.__currentShiftLabel[serverTypeName] = `shift_${ctx.clock}_cap${target}`;
   const servers = ctx.entities.filter(e => e.role === "server" && match(e.type, serverTypeName));
   const current = servers.length;
   const entityType = (ctx.model?.entityTypes || []).find(et => et.role === "server" && match(et.name, serverTypeName));

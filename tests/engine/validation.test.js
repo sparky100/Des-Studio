@@ -1537,4 +1537,218 @@ describe("V5 — EntityAttr skips dist validation", () => {
       expect(errors.filter(e => e.code === "V46")).toHaveLength(0);
     });
   });
+
+  // ── V50–V56: Weekly Schedule Pattern ─────────────────────────────────────
+
+  describe("V50–V56: Weekly Schedule Pattern validation", () => {
+    function baseModel(overrides) {
+      return {
+        entityTypes: [{
+          id: "srv",
+          name: "Server",
+          role: "server",
+          count: 2,
+          ...overrides,
+        }],
+        queues: [{ id: "q", name: "Queue", discipline: "FIFO" }],
+        bEvents: [{ id: "b_arr", name: "Arrival", effect: ["ARRIVE(Customer)"], schedules: [] }],
+        cEvents: [{ id: "c_assign", name: "Assign", condition: { variable: "Queue.Queue.length", operator: ">", value: 0 }, cSchedules: [{ eventId: "b_arr", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] }],
+        epoch: "2026-01-05T09:00:00Z",
+        timeUnit: "minutes",
+      };
+    }
+
+    it("V50: passes with valid weekly schedule pattern", () => {
+      const { errors, warnings } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          periods: [{ dayOfWeek: 1, start: "00:00", end: "23:59", capacity: 2 }],
+        },
+      }));
+      expect(errors.filter(e => e.code.startsWith("V5"))).toHaveLength(0);
+      expect(warnings.filter(e => e.code.startsWith("V5"))).toHaveLength(0);
+    });
+
+    it("V50: requires at least one period", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [] },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V50" }));
+    });
+
+    it("V50: rejects missing periods array", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly" },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V50" }));
+    });
+
+    it("V50: rejects concurrent schedulePattern and shiftSchedule", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 2 }] },
+        shiftSchedule: [{ time: 0, capacity: 2 }],
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V50" }));
+    });
+
+    it("V50: rejects missing start time", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: 1, end: "17:00", capacity: 2 }] },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V50" }));
+    });
+
+    it("V50: rejects invalid HH:MM format", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: 1, start: "9am", end: "5pm", capacity: 2 }] },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V50" }));
+    });
+
+    it("V50: rejects start >= end", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: 1, start: "17:00", end: "09:00", capacity: 2 }] },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V50" }));
+    });
+
+    it("V51: rejects overlapping periods on same day", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          periods: [
+            { dayOfWeek: 1, start: "09:00", end: "13:00", capacity: 2 },
+            { dayOfWeek: 1, start: "12:00", end: "17:00", capacity: 1 },
+          ],
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V51" }));
+    });
+
+    it("V51: allows non-overlapping periods on same day", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          periods: [
+            { dayOfWeek: 1, start: "09:00", end: "12:00", capacity: 2 },
+            { dayOfWeek: 1, start: "13:00", end: "17:00", capacity: 1 },
+          ],
+        },
+      }));
+      expect(errors.filter(e => e.code.startsWith("V5"))).toHaveLength(0);
+    });
+
+    it("V52: rejects non-integer capacity", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: "many" }] },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V52" }));
+    });
+
+    it("V52: rejects negative capacity", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: -1 }] },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V52" }));
+    });
+
+    it("V52: accepts zero capacity", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 0 }] },
+      }));
+      expect(errors.filter(e => e.code === "V52")).toHaveLength(0);
+    });
+
+    it("V53: rejects non-integer dayOfWeek", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: "mondays", start: "09:00", end: "17:00", capacity: 2 }] },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V53" }));
+    });
+
+    it("V53: rejects dayOfWeek out of range", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: 8, start: "09:00", end: "17:00", capacity: 2 }] },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V53" }));
+    });
+
+    it("V53: accepts dayOfWeek 1 through 7", () => {
+      for (const day of [1, 3, 7]) {
+        const { errors } = validateModel(baseModel({
+          schedulePattern: { type: "weekly", periods: [{ dayOfWeek: day, start: "09:00", end: "17:00", capacity: 2 }] },
+        }));
+        expect(errors.filter(e => e.code.startsWith("V5"))).toHaveLength(0);
+      }
+    });
+
+    it("V54: rejects invalid exception date", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 2 }],
+          exceptions: [{ date: "not-a-date" }],
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V54" }));
+    });
+
+    it("V54: accepts valid ISO exception date", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 2 }],
+          exceptions: [{ date: "2026-01-26", periods: [{ start: "10:00", end: "14:00", capacity: 1 }] }],
+        },
+      }));
+      expect(errors.filter(e => e.code.startsWith("V5"))).toHaveLength(0);
+    });
+
+    it("V54: rejects exception with invalid HH:MM in periods", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 2 }],
+          exceptions: [{ date: "2026-01-26", periods: [{ start: "bad", end: "14:00", capacity: 1 }] }],
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V50" }));
+    });
+
+    it("V55: rejects schedulePattern without epoch", () => {
+      const model = baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 2 }] },
+      });
+      model.epoch = "";
+      const { errors } = validateModel(model);
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V55" }));
+    });
+
+    it("V55: passes with epoch set", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: { type: "weekly", periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 2 }] },
+      }));
+      expect(errors.filter(e => e.code === "V55")).toHaveLength(0);
+    });
+
+    it("V56: warns when initial capacity is 0", () => {
+      const { warnings } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 0 }],
+        },
+      }));
+      expect(warnings).toContainEqual(expect.objectContaining({ code: "V56" }));
+    });
+
+    it("V56: no warning when initial capacity > 0", () => {
+      const { warnings } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          periods: [{ dayOfWeek: 1, start: "00:00", end: "23:59", capacity: 2 }],
+        },
+      }));
+      expect(warnings.filter(e => e.code === "V56")).toHaveLength(0);
+    });
+  });
 });

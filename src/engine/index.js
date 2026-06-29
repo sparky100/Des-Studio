@@ -16,6 +16,7 @@ import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent, applyShiftChange } from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
 import { nullRegistry }                        from "./adapters/index.js";
+import { expandWeeklyPatternToEvents, getPatternInitialCapacity, buildShiftPeriodLabels } from "./schedule-pattern.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
@@ -292,6 +293,10 @@ function modelWithShiftInitialCapacity(model) {
     ...model,
     entityTypes: (model.entityTypes || []).map(entityType => {
       if (entityType.role !== "server") return entityType;
+      const pattern = getPatternInitialCapacity(entityType.schedulePattern, model.epoch, model.timeUnit);
+      if (pattern != null) {
+        return { ...entityType, count: pattern };
+      }
       const schedule = getValidShiftSchedule(entityType);
       if (!schedule.length) return entityType;
       return { ...entityType, count: schedule[0].capacity };
@@ -853,7 +858,37 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       };
     });
 
-  fel.push(...makeRateChangeEvents(runtimeModel), ...makeShiftChangeEvents(runtimeModel), ...makeFailureEvents(runtimeModel, rng, streamRegistry));
+  // Inject FEL events from rate changes, shift changes (manual + weekly pattern),
+  // and server failure schedules.
+  const patternShiftEvents = [];
+  const patternServerNames = new Set();
+  for (const et of runtimeModel.entityTypes || []) {
+    if (et.role !== "server") continue;
+    if (!et.schedulePattern?.periods?.length) continue;
+    patternServerNames.add(et.name);
+    const { events, warnings: pw } = expandWeeklyPatternToEvents(
+      et.schedulePattern,
+      runtimeModel.epoch,
+      maxSimTime,
+      runtimeModel.timeUnit || "minutes"
+    );
+    for (const w of pw) warnings.push(w);
+    let idx = 0;
+    for (const ev of events) {
+      patternShiftEvents.push({
+        id: `pattern:${et.id || et.name}:${idx++}`,
+        type: "SHIFT_CHANGE",
+        name: `Shift change (pattern): ${et.name}`,
+        scheduledTime: ev.time,
+        serverTypeName: et.name,
+        newCapacity: ev.capacity,
+      });
+    }
+  }
+  // Filter manual shift changes for entity types that use schedulePattern
+  const manualShiftEvents = makeShiftChangeEvents(runtimeModel)
+    .filter(ev => !patternServerNames.has(ev.serverTypeName));
+  fel.push(...makeRateChangeEvents(runtimeModel), ...manualShiftEvents, ...patternShiftEvents, ...makeFailureEvents(runtimeModel, rng, streamRegistry));
 
   if (warmupPeriod > 0) {
     fel.push({ type: "WARMUP", name: "Warm-up complete", scheduledTime: warmupPeriod });
@@ -1327,8 +1362,21 @@ const cycleLog = [];
           if (depth > currentMax) _runtimeMetrics.maxQueueLengthByQueue[qName] = depth;
         }
       }
-      // Update utilisation streaks from this snapshot
+      // Schedule adherence sampling (F86.5) — compare actual count to desired capacity
       const byType = stepSnap?.byType ?? liteSnap?.byType;
+      if (byType && state.__desiredServerCapacity) {
+        state.__scheduleAdherenceSamples = state.__scheduleAdherenceSamples || {};
+        for (const [srvType, desired] of Object.entries(state.__desiredServerCapacity)) {
+          if (!state.__scheduleAdherenceSamples[srvType]) state.__scheduleAdherenceSamples[srvType] = { total: 0, matching: 0 };
+          state.__scheduleAdherenceSamples[srvType].total++;
+          const bt = byType[srvType];
+          if (bt && (bt.busy + bt.idle) === desired) {
+            state.__scheduleAdherenceSamples[srvType].matching++;
+          }
+        }
+      }
+
+      // Update utilisation streaks from this snapshot
       if (byType) {
         for (const [typeName, streak] of Object.entries(_utilStreaks)) {
           const bt = byType[typeName];
@@ -1724,6 +1772,7 @@ const cycleLog = [];
       : null;
 
     const perResource = {};
+    const perShiftBuckets = {}; // { type: { label: { busyTimeSum, completions } } }
     for (const srv of servers) {
       if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyTimeSum: 0, starvationTimeSum: 0, maxContStarvDur: 0, downtimeSum: 0, failureCount: 0 };
       perResource[srv.type].total++;
@@ -1735,6 +1784,15 @@ const cycleLog = [];
       perResource[srv.type].busyTimeSum += busyTime;
       perResource[srv.type].downtimeSum  += srv._totalDowntime || 0;
       perResource[srv.type].failureCount += srv._failureCount  || 0;
+
+      // Per-shift utilisation bucket (F86.4)
+      const srvLabel = srv._shiftLabel;
+      if (srvLabel) {
+        if (!perShiftBuckets[srv.type]) perShiftBuckets[srv.type] = {};
+        if (!perShiftBuckets[srv.type][srvLabel]) perShiftBuckets[srv.type][srvLabel] = { busyTimeSum: 0, completions: 0 };
+        perShiftBuckets[srv.type][srvLabel].busyTimeSum += busyTime;
+      }
+
       // Flush active starvation timer if running
       if (srv._starvationStart != null && srv.status === "idle") {
         const starvTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
@@ -1758,6 +1816,38 @@ const cycleLog = [];
       r.totalDowntime = +r.downtimeSum.toFixed(4);
       r.availability  = denominator > 0 ? +(1 - r.downtimeSum / denominator).toFixed(4) : 1;
       r.meanDowntimePerFailure = r.failureCount > 0 ? +(r.downtimeSum / r.failureCount).toFixed(4) : null;
+
+      // Per-shift utilisation (F86.4) — only for types with schedulePattern
+      const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+      const et = (runtimeModel.entityTypes || []).find(et => et.role === "server" && match(et.name, type));
+      if (et?.schedulePattern?.type === 'weekly') {
+        const timeline = state.__shiftTimeline?.[type] || [];
+        const buckets = perShiftBuckets[type] || {};
+        if (timeline.length > 0) {
+          r.perShiftUtil = timeline.map(period => {
+            const label = `shift_${period.startTime}_cap${period.capacity}`;
+            const bucket = buckets[label] || { busyTimeSum: 0 };
+            const pElapsed = (period.endTime ?? clock) - period.startTime;
+            const pDenom = pElapsed * period.capacity;
+            return {
+              label: `T=${period.startTime} cap=${period.capacity}`,
+              startTime: period.startTime,
+              endTime: period.endTime ?? clock,
+              plannedCapacity: period.capacity,
+              busyTimeSum: +bucket.busyTimeSum.toFixed(4),
+              elapsed: pElapsed,
+              utilisation: pDenom > 0 ? +(bucket.busyTimeSum / pDenom).toFixed(4) : 0,
+              completions: bucket.completions || 0,
+            };
+          });
+        }
+        // Schedule adherence (F86.5)
+        const adhSamples = state.__scheduleAdherenceSamples?.[type.toLowerCase()];
+        if (adhSamples && adhSamples.total > 0) {
+          r.scheduleAdherence = +(adhSamples.matching / adhSamples.total).toFixed(4);
+        }
+      }
+
       delete r.busyTimeSum;
       delete r.starvationTimeSum;
       delete r.maxContStarvDur;
