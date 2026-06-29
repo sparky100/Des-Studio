@@ -16,7 +16,7 @@ const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 140;
 
-const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, waitByArrival: true, serverUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true, systemTrends: true };
+const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, waitByArrival: true, serverUtil: true, shiftUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true, systemTrends: true };
 
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
   const { C, FONT } = useTheme();
@@ -628,6 +628,12 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                   <div style={{ fontSize: 11, color: r.availability < 0.9 ? C.red : C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
                     {Math.round((r.availability ?? 1) * 100)}% available · {r.failureCount} failure{r.failureCount !== 1 ? "s" : ""}
                     {r.totalDowntime ? ` · ${formatMetricValue(r.totalDowntime)} downtime` : ""}
+                  </div>
+                )}
+                {r.scheduleAdherence != null && (
+                  <div style={{ fontSize: 11, color: r.scheduleAdherence >= 0.9 ? C.green : C.amber, fontFamily: FONT, lineHeight: 1.5 }}>
+                    Schedule adherence: {Math.round(r.scheduleAdherence * 100)}%
+                    {r.scheduleAdherence >= 0.9 ? " ✓" : ""}
                   </div>
                 )}
               </div>
@@ -1904,6 +1910,70 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                             ) : resourceCount != null && (
                               <div style={{ fontSize: 11, color: C.text, fontFamily: FONT }}>
                                 <strong>{resourceCount}</strong> resource{resourceCount !== 1 ? "s" : ""}
+                              </div>
+                            )}
+                          </ChartCard>
+                        );
+                      })}
+                    </div>
+                  </ChartSectionShell>
+                </div>
+              </div>
+            )}
+
+            {/* 1b. Per-shift utilisation — for resource types with weekly schedule patterns */}
+            {chartModel.shiftUtilizationSeries?.length > 0 && sectionsOpen.shiftUtil && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <SectionHeader id="shiftUtil" label="Per-Shift Utilisation" isOpen={sectionsOpen.shiftUtil} onToggle={toggleSection} />
+                <div id="results-section-shiftUtil" style={{ display: sectionsOpen.shiftUtil ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+                  <ChartSectionShell section={{
+                    question: "How busy are resources during each shift?",
+                    title: "Per-shift utilisation breakdown",
+                    method: "Shows the proportion of each shift period during which servers were busy. Only available for resource types with a weekly schedule pattern.",
+                  }}>
+                    <div aria-label="Per-shift utilisation chart grid" style={CHART_GRID}>
+                      {chartModel.shiftUtilizationSeries.map((s, idx) => {
+                        const color = CHART_COLORS[(idx + 5) % CHART_COLORS.length];
+                        const shiftColors = [color, C.bEvent, C.purple, C.green, C.amber, C.server, C.reneged];
+                        return (
+                          <ChartCard
+                            key={s.resourceType}
+                            title={`${s.resourceType} — Per-shift utilisation`}
+                            color={color}
+                            sourceLabel={`Computed from server busy-time attributed to the shift active when service started.`}
+                          >
+                            {s.shifts.length > 0 ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {s.shifts.map((shift, si) => {
+                                  const utilPct = Math.round((shift.utilisation ?? 0) * 100);
+                                  const utilCol = utilPct > 90 ? C.red : utilPct > 70 ? C.amber : C.green;
+                                  const barW = Math.min(utilPct, 100);
+                                  return (
+                                    <div key={si} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontFamily: FONT }}>
+                                        <span style={{ color: C.text }}>{shift.label}</span>
+                                        <span style={{ color: utilCol, fontWeight: 700 }}>{utilPct}%</span>
+                                      </div>
+                                      <div style={{ height: 8, background: C.bg, borderRadius: 4, overflow: "hidden" }}>
+                                        <div style={{ height: "100%", width: `${barW}%`, background: utilCol, borderRadius: 4, transition: "width 0.2s" }} />
+                                      </div>
+                                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: C.muted, fontFamily: FONT }}>
+                                        <span>{shift.plannedCapacity} server{shift.plannedCapacity !== 1 ? "s" : ""} · {formatMetricValue(shift.elapsed)} {model.timeUnit || "min"}</span>
+                                        <span>{shift.completions} completed · {formatMetricValue(shift.busyTimeSum)} busy</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {s.adherence != null && (
+                                  <div style={{ fontSize: 11, color: s.adherence >= 0.9 ? C.green : C.amber, fontFamily: FONT, fontWeight: 600 }}>
+                                    Schedule adherence: {Math.round(s.adherence * 100)}%
+                                    {s.adherence >= 0.9 ? " ✓" : ""}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
+                                No per-shift data available for this resource type.
                               </div>
                             )}
                           </ChartCard>

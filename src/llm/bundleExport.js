@@ -288,11 +288,13 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (kpis.resources && kpis.resources.length) {
     lines.push('### Per-Resource Utilisation');
     lines.push('');
-    lines.push('| Resource | Count | Utilisation | Busy count | Idle count |');
-    lines.push('|----------|-------|-------------|-----------|-----------|');
+    lines.push('| Resource | Count | Utilisation | Busy count | Idle count | Schedule | Adherence |');
+    lines.push('|----------|-------|-------------|-----------|-----------|----------|-----------|');
     for (const r of kpis.resources) {
       const util = r.utilisation != null ? `${r.utilisation}%` : '—';
-      lines.push(`| ${r.name} | ${r.count ?? '—'} | ${util} | ${r.busyCount ?? '—'} | ${r.idleCount ?? '—'} |`);
+      const schedule = r.schedulePattern?.summary || '—';
+      const adherence = r.scheduleAdherence != null ? `${r.scheduleAdherence}%` : '—';
+      lines.push(`| ${r.name} | ${r.count ?? '—'} | ${util} | ${r.busyCount ?? '—'} | ${r.idleCount ?? '—'} | ${schedule} | ${adherence} |`);
     }
     lines.push('');
   }

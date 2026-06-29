@@ -210,6 +210,31 @@ Servers can have time-varying capacity:
 - Times must be strictly ascending.
 - `capacity` must be a positive integer.
 
+### Optional: Calendar-Aware Weekly Schedule (schedulePattern)
+
+Servers can have a weekly repeating schedule with named periods:
+
+```json
+"schedulePattern": {
+  "type": "weekly",
+  "periods": [
+    { "dayOfWeek": 1, "start": "09:00", "end": "17:00", "capacity": 3 },
+    { "dayOfWeek": 2, "start": "09:00", "end": "17:00", "capacity": 3 },
+    { "dayOfWeek": 3, "start": "09:00", "end": "17:00", "capacity": 2 },
+    { "dayOfWeek": 4, "start": "09:00", "end": "17:00", "capacity": 2 },
+    { "dayOfWeek": 5, "start": "09:00", "end": "17:00", "capacity": 1 }
+  ]
+}
+```
+
+- `type` must be `"weekly"`.
+- `periods[].dayOfWeek`: 1=Monday through 7=Sunday.
+- `start`/`end`: HH:MM format on a 24-hour clock.
+- `capacity` must be a positive integer.
+- The model must have an `epoch` (ISO 8601 datetime string on the model root) for the engine to resolve wall-clock times to simulation ticks.
+- Engine initialises the server pool from `entityTypes[].count` at time 0, then applies `applyShiftChange()` at each period boundary.
+- Schedule adherence is tracked per server type as the fraction of scheduled capacity-time that was actually available during the run.
+
 ### Optional: Server Failure Model
 
 Servers can have random failures (the engine auto-generates FAIL/REPAIR events):

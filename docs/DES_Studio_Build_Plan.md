@@ -1,6 +1,6 @@
 # simmodlr — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.84 | Created: 2026-04-30 | Updated: 2026-06-04 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.87 | Created: 2026-04-30 | Updated: 2026-06-29 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -134,6 +134,7 @@ flowchart LR
 | Wait time accuracy & transparency | ✅ Complete | Sprint 83: RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, per-queue `waitSamplesBreakdown`, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), live metrics align with engine formula. |
 | Engine fidelity — PRNG streams, shifts, purge, starvation | ✅ Complete | Sprint 84: PRNG stream isolation per process (`deriveSubSeed` + `StreamRegistry`), shift-change behavior toggle (delay/preempt/suspend), opt-in purge/run-down period, per-resource starvation duration tracking. 15 new tests. |
 | Sign-in welcome dialog & AI Prompt Pack | ✅ Complete | Sprint 85: sign-in welcome dialog with four option cards (Create a Model, Access the Model Library, Build with AI Tools, Get Help); `signedInThisSession` trigger in App.jsx with `didShowWelcome` ref guard in ModelLibrary; race-condition fix (`setLoading(true)` on SIGNED_IN before `setSession()`); `buildLLMSchemaPromptPack()` bundling `docs/model-schema-for-llm.md` verbatim; ↓ AI Prompt Pack button in Model Library header. |
+| Calendar-aware recurring resource scheduling | ⬜ Planned | Sprint 86: weekly repeating capacity patterns (`schedulePattern` on server entity types), engine expansion into `SHIFT_CHANGE` events, visual 24×7 grid editor, exception date overrides, per-shift utilisation tracking, schedule adherence metric, V50–V56 validation rules, LLM prompt updates, ADR-018. See `docs/reviews/sprint-86-plan.md`. |
 
 ### Key Issues and Watchpoints
 
@@ -214,6 +215,7 @@ flowchart LR
 | 1.84 | 2026-06-04 | Sprint 82 planned. Pre-sprint assessment completed for Results API (Option 2) and LLM Export Bundle (Option 3). Sprint plan, API design spec, and AGENTS.md tracking updated. |
 | 1.85 | 2026-06-09 | Sprint 83 completed. Wait time accuracy: RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, `waitSamplesBreakdown` with served/reneged/inProgress counts, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), BottomPanel live metrics align with engine formula. 10 new tests. User Guide, Engineering Spec, and Product Spec updated. |
 | 1.86 | 2026-06-14 | Sprint 85 completed. Sign-in welcome dialog (four option cards, `signedInThisSession` trigger, race-condition fix) and AI Prompt Pack export (`buildLLMSchemaPromptPack()`, ↓ AI Prompt Pack button in library header). User Guide, Product Spec, and Build Plan updated. |
+| 1.87 | 2026-06-29 | Sprint 86 planned. Calendar-aware recurring weekly resource scheduling — `schedulePattern` schema, engine expansion into SHIFT_CHANGE events, visual 24×7 grid editor, per-shift utilisation tracking, exception date overrides, LLM prompt updates, ADR-018. See `docs/reviews/sprint-86-plan.md`. |
 
 ---
 
@@ -457,6 +459,7 @@ ADR-007 establishes simmodlr's model-authoring architecture: one canonical `mode
 | Sprint 67 | Plain-English UX & Results Clarity | planned: wording simplification, Results information hierarchy, progressive disclosure of advanced detail |
 | Sprint 69 | AI Model Debugging | complete: F69.1 structured trace emission from engine, F69.2 pre-run structural model checker (CHK-001–CHK-008), F69.3 post-run AI diagnosis panel (Diagnostics tab, FindingCard list), F69.4 conversational debugging chat with full model+trace context |
 | Sprint 8C | AI Generator conversational quality | complete: improves elicitation depth and outcome clarity in the AI Generated Model authoring mode |
+| Sprint 86 | Calendar-Aware Resource Scheduling | planned: weekly repeating capacity patterns (`schedulePattern`), engine expansion, visual grid editor, exception overrides, per-shift utilisation, schedule adherence, V50–V56, ADR-018 |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
@@ -486,7 +489,7 @@ The existing Forms/Tabs editor remains the stable manual authoring mode througho
 | Waiting time distribution and percentiles | ✅ waitDist p50/p90/p95/p99 + 12-bin histogram in Charts tab | Sprint 10 |
 | Entity batching / assembly | ✅ BATCH (C-Event) + UNBATCH (B-Event) macros; queue-accumulation model | Sprint 12 |
 | Recirculation / rework loops | ✅ Controlled back-edges with loop:true flag; maxLoopCount guard | Sprint 12 |
-| Full staff rostering (resource shift schedules) | ~ Partial — piecewise NHPP implemented; full rostering incomplete | Sprint 13+ |
+| Full staff rostering (resource shift schedules) | ~ Partial — piecewise NHPP implemented; Sprint 86 adds weekly recurring patterns; full rostering (monthly/crew/roster entities) deferred | Sprint 86 |
 | AI natural language results queries | ✅ Free-form questions + answers with KPI citations and conversation history | Sprint 14 |
 | Shareable results dashboard | ✅ QR code generator; hash-route public DashboardView; share modal with widget picker and copy/revoke per link | Sprint 15 |
 | Parametric sweep and parameter exploration | ✅ Sweepable param discovery; range+step config; multi-point orchestration; SweepChart with CI polygon ribbon and results table | Sprint 16 |

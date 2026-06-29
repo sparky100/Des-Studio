@@ -10,6 +10,7 @@
 
 import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
 import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
+import { getPatternInitialCapacity } from "./schedule-pattern.js";
 
 export const DEFAULT_MAX_SIM_TIME = 500;
 
@@ -1083,6 +1084,115 @@ export function validateModel(model) {
         }
       });
     }
+  }
+
+  // ── V50–V56: Weekly Schedule Pattern validation ───────────────────────────
+  {
+    const parseHHMM = (str) => {
+      if (str == null) return NaN;
+      const parts = String(str).match(/^(\d{1,2}):(\d{2})$/);
+      if (!parts) return NaN;
+      return Number(parts[1]) * 60 + Number(parts[2]);
+    };
+    entityTypes.forEach(et => {
+      const pat = et.schedulePattern;
+      if (!pat) return;
+      // V55: schedulePattern requires epoch
+      if (!model.epoch || String(model.epoch).trim() === '') {
+        err('V55', `Entity class '${et.name}' defines a schedulePattern but no epoch is configured. Set a Real-world start date in experiment settings.`, 'entities',
+          { entityTypeIds: [et.id] });
+        return; // skip further checks — without epoch the pattern can't function
+      }
+      // V50: non-empty periods
+      if (!Array.isArray(pat.periods) || pat.periods.length === 0) {
+        err('V50', `Entity class '${et.name}' schedulePattern must have at least one period.`, 'entities',
+          { entityTypeIds: [et.id] });
+        return;
+      }
+      // schedulePattern and manual shiftSchedule are mutually exclusive
+      if (Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) {
+        err('V50', `Entity class '${et.name}' has both a weekly schedule pattern and a manual shift schedule — remove one.`, 'entities',
+          { entityTypeIds: [et.id] });
+      }
+      // Check each period
+      const periodsByDay = {};
+      pat.periods.forEach((period, pi) => {
+        const day = parseInt(period.dayOfWeek, 10);
+        // V53: dayOfWeek must be integer 1-7
+        if (!Number.isInteger(day) || day < 1 || day > 7) {
+          err('V53', `Entity class '${et.name}' period ${pi + 1}: dayOfWeek must be 1 (Mon) to 7 (Sun), got '${period.dayOfWeek}'.`, 'entities',
+            { entityTypeIds: [et.id] });
+          return;
+        }
+        if (!period.start || !period.end) {
+          err('V50', `Entity class '${et.name}' period ${pi + 1} (day ${day}): start and end times are required (HH:MM format).`, 'entities',
+            { entityTypeIds: [et.id] });
+          return;
+        }
+        const startMin = parseHHMM(period.start);
+        const endMin = parseHHMM(period.end);
+        if (isNaN(startMin) || isNaN(endMin)) {
+          err('V50', `Entity class '${et.name}' period ${pi + 1} (day ${day}): start '${period.start}' and/or end '${period.end}' are not valid HH:MM times.`, 'entities',
+            { entityTypeIds: [et.id] });
+          return;
+        }
+        if (startMin >= endMin) {
+          err('V50', `Entity class '${et.name}' period ${pi + 1} (day ${day}): start time ${period.start} must be before end time ${period.end}.`, 'entities',
+            { entityTypeIds: [et.id] });
+          return;
+        }
+        const cap = parseInt(period.capacity, 10);
+        // V52: capacity must be integer ≥ 0
+        if (!Number.isInteger(cap) || cap < 0) {
+          err('V52', `Entity class '${et.name}' period ${pi + 1} capacity must be integer ≥ 0, got '${period.capacity}'.`, 'entities',
+            { entityTypeIds: [et.id] });
+          return;
+        }
+        // V51: non-overlapping periods per day
+        if (!periodsByDay[day]) periodsByDay[day] = [];
+        periodsByDay[day].forEach(other => {
+          const oStart = parseHHMM(other.start);
+          const oEnd = parseHHMM(other.end);
+          if (isNaN(oStart) || isNaN(oEnd)) return;
+          if (startMin < oEnd && endMin > oStart) {
+            err('V51', `Entity class '${et.name}' has overlapping schedule periods on day ${day}: ${other.start}-${other.end} and ${period.start}-${period.end}.`, 'entities',
+              { entityTypeIds: [et.id] });
+          }
+        });
+        periodsByDay[day].push(period);
+      });
+      // V54: exception dates must be valid ISO dates
+      if (Array.isArray(pat.exceptions)) {
+        pat.exceptions.forEach((exc, ei) => {
+          if (!exc.date || isNaN(new Date(exc.date).getTime())) {
+            err('V54', `Entity class '${et.name}' exception date '${exc.date}' is not a valid ISO date.`, 'entities',
+              { entityTypeIds: [et.id] });
+          }
+          if (Array.isArray(exc.periods)) {
+            exc.periods.forEach((ep, epi) => {
+              const eStart = parseHHMM(ep.start);
+              const eEnd = parseHHMM(ep.end);
+              if (isNaN(eStart) || isNaN(eEnd)) {
+                err('V50', `Entity class '${et.name}' exception ${ei + 1} period ${epi + 1}: start '${ep.start}' and/or end '${ep.end}' are not valid HH:MM times.`, 'entities',
+                  { entityTypeIds: [et.id] });
+                return;
+              }
+              const eCap = parseInt(ep.capacity, 10);
+              if (!Number.isInteger(eCap) || eCap < 0) {
+                err('V52', `Entity class '${et.name}' exception ${ei + 1} period ${epi + 1}: capacity must be ≥ 0.`, 'entities',
+                  { entityTypeIds: [et.id] });
+              }
+            });
+          }
+        });
+      }
+      // V56: initial capacity is 0 warning
+      const initialCap = getPatternInitialCapacity(pat, model.epoch, model.timeUnit || 'minutes');
+      if (initialCap === 0) {
+        warn('V56', `Entity class '${et.name}' has a schedule pattern with initial capacity 0. No servers will exist at time 0. Use shiftBehavior 'preempt' or 'suspend' to handle work starting on shift arrival.`, 'entities',
+          { entityTypeIds: [et.id] });
+      }
+    });
   }
 
   // ── V46: Detect overflowDestination cycles (F11.3) ────────────────────────

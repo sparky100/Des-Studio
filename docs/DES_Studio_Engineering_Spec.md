@@ -101,7 +101,8 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 | `entities.js` | Entity lifecycle, queue discipline sort functions, server pool management, `_busyStart`/`_busyTime` utilisation tracking. `attemptQueueJoin(entity, queueName, clock, ctx, opts)` is the single centralized join function — called from every queue-join site (ARRIVE, RELEASE, BATCH/UNBATCH/SPLIT, conditional/probabilistic routing, loop-guard exit, preemption re-queue) and enforces balking (F11.2), capacity/overflow (F11.1/F11.3, recursing through `overflowDestination` chains with a `visitedQueues` cycle guard), and queue-level auto-reneging (`renegeDist`) uniformly regardless of how the entity reaches the queue. |
 | `distributions.js` | Sampler registry, seeded RNG (mulberry32), all 12 distribution types |
 | `conditions.js` | Safe predicate evaluator — no `eval`, no `new Function` |
-| `validation.js` | V1–V39 (V7 unused); 38 distinct rules, pre-run gate |
+| `validation.js` | V1–V56 (V7 unused); 55 distinct rules, pre-run gate |
+| `schedule-pattern.js` | `expandWeeklyPatternToEvents()`, `getPatternInitialCapacity()`, `parseHHMM()`, `timeToSimMin()`, `periodLabel()` weekly schedule pattern engine (Sprint 86) |
 | `statistics.js` | CI, batch means, ANOVA, Tukey HSD, Welch test; exports `summarizeEntitySummary` used by engine and persistence |
 | `replication-runner.js` | Persistent worker pool (`createReplicationPool`), INIT_RUN protocol, compact per-rep payload |
 | `worker.js` | Web Worker entry point — receives INIT_RUN once, then RUN_REPLICATION per rep |
@@ -217,8 +218,17 @@ interface EntityType {
   id: string;                           // UUID
   name: string;                         // must be unique (V1)
   role: "customer" | "resource" | "document" | string;
+  count?: number;                       // server only; static capacity (V19), overridden by shiftSchedule
   arrivalSource?: string;               // B-Event id that creates this entity
   attributes: Attribute[];
+  shiftSchedule?: ShiftPeriod[];        // time-varying capacity (V14–V15)
+  shiftBehavior?: "delay" | "preempt" | "suspend";  // shift-change handling (Sprint 84)
+  schedulePattern?: SchedulePattern;    // weekly repeating capacity pattern (Sprint 86)
+  mtbfDist?: string;                    // failure distribution name (V36–V37)
+  mtbfDistParams?: Record<string, string>;
+  mttrDist?: string;
+  mttrDistParams?: Record<string, string>;
+  failureScope?: "unit" | "pool";
 }
 
 interface Attribute {
@@ -226,6 +236,32 @@ interface Attribute {
   valueType: "number" | "string" | "boolean";
   defaultValue: number | string | boolean;  // must match valueType (V3)
   mutable: boolean;
+}
+
+interface ShiftPeriod {
+  time?: string | number;               // clock time for time-based shifts
+  capacity: number | string;
+  when?: PredicateNode;                 // condition-triggered shift (alternative to time)
+}
+
+interface SchedulePattern {
+  type: "weekly";
+  defaultCapacity: number;              // off-shift capacity
+  periods: WeeklyPeriod[];              // repeating weekly periods
+  exceptions?: DateException[];         // date-specific overrides
+}
+
+interface WeeklyPeriod {
+  dayOfWeek: number;                    // 1=Mon … 7=Sun
+  start: string;                        // "HH:mm" (24h)
+  end: string;                          // "HH:mm" (24h)
+  capacity: number;
+}
+
+interface DateException {
+  date: string;                         // ISO date "YYYY-MM-DD"
+  label?: string;                       // optional human-readable label
+  periods: WeeklyPeriod[];              // same shape as WeeklyPeriod
 }
 ```
 
@@ -306,6 +342,15 @@ The `summary.perResource[name]` object, returned by `getSummary()`, includes the
 | `maxStarvationDuration` | `number \| null` | Longest continuous idle period for any server of this type (Sprint 88) |
 | `maxSustainedHighUtil` | `number \| null` | Longest continuous period where utilisation ≥ 90% (Sprint 88) |
 | `maxSustainedZeroUtil` | `number \| null` | Longest continuous period where utilisation was 0% while system was active (Sprint 88) |
+
+For server types with a `schedulePattern`, `getSummary()` additionally emits:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `perShiftUtil` | `PerShiftUtil[]` | Per-shift utilisation breakdown for each distinct (label, capacity) segment active in the run |
+| `scheduleAdherence` | `number \| null` | Fraction of shift-change events that fired within tolerance of their scheduled time (0–1); null when no weekly pattern is configured |
+
+Where `PerShiftUtil` has shape `{ label, capacity, elapsed, completions, busyTime, utilisation }`.
 
 These fields are used by H1 (utilisation thresholds), H5 (starvation), and H9 (continuous starvation exceeding 2× mean service time) health flag codes, as well as L1/L2/L5 live flags.
 
@@ -527,6 +572,21 @@ for (const srv of entities) {
 ```
 
 Updated at each timeSeries snapshot (`index.js:1039–1059`). Streaks are flushed in `getSummary()` and exposed as `perResource[name].maxSustainedHighUtil` and `perResource[name].maxSustainedZeroUtil` (`index.js:1400–1412`).
+
+#### 3.1.4 Weekly schedule pattern expansion (Sprint 86)
+
+`expandWeeklyPatternToEvents(pattern, epoch, maxTime, timeUnit)` (`src/engine/schedule-pattern.js`) is a pure function that converts a `SchedulePattern` (weekly repeating periods with date exceptions) into a flat array of `{ time, capacity }` shift-change events aligned to the model's `epoch`.
+
+**Algorithm:**
+1. Compute `dayOfWeek` for `epoch` to anchor the weekly cycle.
+2. For each week up to the run horizon, emit `SHIFT_CHANGE` events at pattern boundaries (period start/end times converted to simulation time).
+3. Apply date exceptions: if a date falls within the run horizon, override that day's shifts with the exception's periods.
+4. `getPatternInitialCapacity()` returns the capacity in effect at time 0 by checking which weekly period (or exception) covers the epoch's time-of-day.
+
+**Per-shift tracking (`applyShiftChange()` in `phases.js`):**
+- Maintains `state.__shiftTimeline` — array of `{ startTime, endTime, capacity, elapsed }` segments.
+- Tags each server instance with `_shiftLabel` at seizure time (`claimServerForEntity()` in `entities.js`) for per-shift attribution.
+- `getSummary()` aggregates per-shift utilisation (`perShiftUtil[]`) and schedule adherence (fraction of shift changes that fired on schedule).
 
 ### 3.2 Visual Designer interaction contract
 
@@ -785,7 +845,7 @@ DES Studio `DRAIN` fails immediately if container level < amount (guard). SimPy 
 | 30 replications, 100,000 events each | < 60 seconds | Persistent worker pool, `hardwareConcurrency − 1` workers |
 | M/M/1 analytical accuracy | Within 5% of formula | Benchmark gate in CI (`mm1_benchmark.js`) |
 | M/M/c analytical accuracy | Within 5% of formula | Benchmark gate in CI (`mmc_benchmark.js`) |
-| model_json parse + validate | < 100 ms | V1–V39 (V7 unused); 38 distinct rules |
+| model_json parse + validate | < 100 ms | V1–V56 (V7 unused); 55 distinct rules |
 | Visual Designer canvas: 50 nodes | 60 fps | @xyflow/react default render loop |
 
 Worker pool size defaults to `navigator.hardwareConcurrency - 1` (minimum 1, no upper cap). Workers are **persistent** — spawned once per batch run via `createReplicationPool()` and reused across all rounds (adaptive batch, sweep points). The model and run configuration are sent to each worker exactly once via an `INIT_RUN` message; subsequent `RUN_REPLICATION` messages carry only `{ replicationIndex, seed, entityDetail }`, avoiding a `structuredClone` of the full model per job.
@@ -934,10 +994,12 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
 |---------|--------|
 | Preamble (~150 words) | Hardcoded DES + Three-Phase context |
 | Model definition | `model.entityTypes`, `model.queues`, `model.bEvents`, `model.cEvents`, `model.performanceGoals` |
+| Model definition (schedule-aware) | `extractResources()` includes `schedulePattern` summary for server types with weekly patterns |
 | Experiment configuration | `config` parameter |
 | Headline KPIs | `buildKpis(results.summary)` |
 | Per-queue wait table | `results.summary.waitDist` (percentile summary) |
 | Per-resource utilisation | `results.summary.perResource` |
+| Schedule adherence | `results.summary.perResource[name].scheduleAdherence` for weekly-pattern servers |
 | Confidence intervals | `results.aggregateStats` (omitted when absent — single-replication runs) |
 | Goals pass/fail | `goalsToPrompt()` + `buildGoalGaps()` |
 | Replication summary | `results.replications` (omitted when `replications.length === 1`) |
@@ -1051,6 +1113,7 @@ Full records in `docs/decisions/`. Key decisions affecting day-to-day developmen
 | ADR-015 | Explicit version milestones — user-initiated snapshots, not auto-versioning | `model_versions` table. Structural change detection flags when a version is stale. |
 | ADR-016 | Schedule data separation — timetable rows extracted to `model_schedules` | `model_json` holds `scheduleRef` UUIDs. `resolveInlineSchedules()` merges before engine call. |
 | ADR-017 | Health flag architecture and live warning system | Deterministic post-run evaluation (11 codes: H1–H11) + lightweight per-step live evaluation (8 codes: L1–L6). Both use engine summary data already available — no new engine state required for post-run. Live evaluation piggybacks on existing timeSeries snapshots with zero overhead when disabled. Accepted Sprint 88. Since extended to 13 post-run codes (H1–H13, adding resource-failure and cycle-limit flags) and 7 live codes (L1–L7); see §1.3 and §4.4a. |
+| ADR-018 | Calendar-aware resource scheduling — weekly repeating capacity patterns on server entity types | `schedulePattern` field on EntityType. `expandWeeklyPatternToEvents()` pure engine function. `WeeklyPatternEditor.jsx` 24x7 grid UI. Per-shift utilisation and schedule adherence in results. V50–V56 validation rules. See `docs/decisions/ADR-018-calendar-scheduling.md`. |
 
 ---
 

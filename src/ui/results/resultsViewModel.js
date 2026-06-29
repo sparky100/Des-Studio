@@ -429,6 +429,29 @@ export function resolveSectionFilter(model, sectionIds) {
   };
 }
 
+export function buildShiftUtilizationSeries(summary = {}) {
+  const perResource = summary.perResource || {};
+  const series = [];
+  for (const [resourceType, data] of Object.entries(perResource)) {
+    if (!data.perShiftUtil?.length && data.scheduleAdherence == null) continue;
+    series.push({
+      resourceType,
+      shifts: (data.perShiftUtil || []).map(s => ({
+        label: s.label,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        plannedCapacity: s.plannedCapacity,
+        utilisation: s.utilisation,
+        busyTimeSum: s.busyTimeSum,
+        elapsed: s.elapsed,
+        completions: s.completions,
+      })),
+      adherence: data.scheduleAdherence,
+    });
+  }
+  return series;
+}
+
 export function buildResultsViewModel(results = {}, model = {}, options = {}) {
   const { activeSectionIds } = options;
   const sectionFilter = resolveSectionFilter(model, activeSectionIds);
@@ -441,6 +464,7 @@ export function buildResultsViewModel(results = {}, model = {}, options = {}) {
     serverUtilizationSeries: chartSections.find(s => s.id === "server-utilization")?.series || [],
     waitDistributions: chartSections.find(s => s.id === "wait-distribution")?.distributions || [],
     waitTimeSeries: chartSections.find(s => s.id === "wait-over-time")?.series || [],
+    shiftUtilizationSeries: buildShiftUtilizationSeries(results.summary || {}),
     chartSections,
     runtimeMetrics,
   };

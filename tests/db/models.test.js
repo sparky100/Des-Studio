@@ -2026,4 +2026,59 @@ describe('Sprint 71 — persistence layer', () => {
       await expect(fetchModels('prod-user')).resolves.not.toThrow();
     });
   });
+
+  // ── round-trip: schedulePattern on entityTypes (Sprint 86 — F86.13) ──────
+  describe('round-trip — entityTypes[].schedulePattern survives saveModel + norm()', () => {
+    const schedulePattern = {
+      type: "weekly",
+      periods: [
+        { dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 3 },
+        { dayOfWeek: 2, start: "09:00", end: "17:00", capacity: 3 },
+      ],
+      exceptions: [{ date: "2026-12-25", periods: [{ start: "10:00", end: "14:00", capacity: 1 }] }],
+    };
+
+    it('preserves schedulePattern in the insert payload', async () => {
+      const model = {
+        name: 'Schedule Pattern RT Model',
+        entityTypes: [
+          { id: 'srv', name: 'Server', role: 'server', count: 3, schedulePattern },
+        ],
+        queues: [{ id: 'q', name: 'Queue', discipline: 'FIFO' }],
+        bEvents: [{ id: 'b-rt', name: 'Arrive', effect: ['ARRIVE(Customer)'], schedules: [] }],
+        cEvents: [{ id: 'c-rt', name: 'Serve', effect: 'ASSIGN(Customer, Server)', cSchedules: [{ eventId: 'b-rt', useEntityCtx: true }] }],
+        epoch: '2026-01-05T09:00:00Z',
+      };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'sp-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      const entityType = insertArg.entity_types.find(et => et.id === 'srv');
+      expect(entityType.schedulePattern).toEqual(schedulePattern);
+    });
+
+    it('norm() preserves schedulePattern from a DB row', () => {
+      // entity_types column stores camelCase keys (toRow passes entityTypes directly)
+      const result = norm({
+        id: 'm-sp', name: 'Schedule Pattern RT Model',
+        entity_types: [
+          { id: 'srv', name: 'Server', role: 'server', count: 3, schedulePattern },
+        ],
+        queues: [{ id: 'q', name: 'Queue', discipline: 'FIFO' }],
+        b_events: [{ id: 'b-rt', name: 'Arrive', effect: ['ARRIVE(Customer)'], schedules: [] }],
+        c_events: [{ id: 'c-rt', name: 'Serve', effect: 'ASSIGN(Customer, Server)', cSchedules: [{ eventId: 'b-rt', useEntityCtx: true }] }],
+        model_json: {},
+      });
+
+      const entityType = result.entityTypes.find(et => et.id === 'srv');
+      expect(entityType.schedulePattern).toEqual(schedulePattern);
+    });
+  });
 });

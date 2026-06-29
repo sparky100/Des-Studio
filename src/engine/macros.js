@@ -322,7 +322,7 @@ export const MACROS = [
 
       if (cust && srv) {
         const queuedAt = cust.queue;
-        if (!claimServerForEntity(cust, srv, clock, ctx.index)) {
+        if (!claimServerForEntity(cust, srv, clock, ctx.index, ctx)) {
           msgs.push(`ASSIGN(${cType},${sType}): claim failed`);
           return;
         }
@@ -997,7 +997,7 @@ export const MACROS = [
       // subsequent servers get auxiliary claims without re-checking customer status.
       const serverEntries = Object.entries(idleServersByType);
       const primarySrv = serverEntries[0][1];
-      if (!claimServerForEntity(cust, primarySrv, clock, ctx.index)) {
+      if (!claimServerForEntity(cust, primarySrv, clock, ctx.index, ctx)) {
         msgs.push(`COSEIZE: claim failed for ${serverEntries[0][0]} #${primarySrv.id}`);
         return;
       }
