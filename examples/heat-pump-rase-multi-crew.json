@@ -1,0 +1,2450 @@
+{
+  "name": "Heat pump v3 — RASE with 3-route DNO resolution",
+  "model_json": {
+    "schemaVersion": 1,
+    "entityTypes": [
+      {
+        "id": "et_urban_hh",
+        "name": "Urban Household",
+        "role": "customer",
+        "count": 0,
+        "attrDefs": [
+          {
+            "name": "priority",
+            "mutable": true,
+            "valueType": "number",
+            "defaultValue": 3
+          },
+          {
+            "name": "dno_risk",
+            "mutable": false,
+            "valueType": "number",
+            "defaultValue": 1
+          }
+        ]
+      },
+      {
+        "id": "et_suburban_hh",
+        "name": "Suburban Household",
+        "role": "customer",
+        "count": 0,
+        "attrDefs": [
+          {
+            "name": "priority",
+            "mutable": true,
+            "valueType": "number",
+            "defaultValue": 2
+          },
+          {
+            "name": "dno_risk",
+            "mutable": false,
+            "valueType": "number",
+            "defaultValue": 2
+          }
+        ]
+      },
+      {
+        "id": "et_rural_hh",
+        "name": "Rural Household",
+        "role": "customer",
+        "count": 0,
+        "attrDefs": [
+          {
+            "name": "priority",
+            "mutable": true,
+            "valueType": "number",
+            "defaultValue": 1
+          },
+          {
+            "name": "dno_risk",
+            "mutable": false,
+            "valueType": "number",
+            "defaultValue": 3
+          }
+        ]
+      },
+      {
+        "id": "et_surveyor",
+        "name": "MCS Surveyor",
+        "role": "server",
+        "count": 4,
+        "attrDefs": [],
+        "shiftSchedule": [
+          {
+            "time": 0,
+            "capacity": 4
+          },
+          {
+            "time": 86,
+            "capacity": 5
+          },
+          {
+            "time": 171,
+            "capacity": 6
+          }
+        ]
+      },
+      {
+        "id": "et_fuse",
+        "name": "Fuse Engineer",
+        "role": "server",
+        "count": 8,
+        "attrDefs": []
+      },
+      {
+        "id": "et_unloop",
+        "name": "Unlooping Team",
+        "role": "server",
+        "count": 3,
+        "attrDefs": []
+      },
+      {
+        "id": "et_transformer",
+        "name": "Transformer Crew",
+        "role": "server",
+        "count": 2,
+        "attrDefs": []
+      },
+      {
+        "id": "et_installer",
+        "name": "Heat Pump Installer",
+        "role": "server",
+        "count": 6,
+        "attrDefs": [],
+        "shiftSchedule": [
+          {
+            "time": 0,
+            "capacity": 6
+          },
+          {
+            "time": 129,
+            "capacity": 8
+          },
+          {
+            "time": 214,
+            "capacity": 10
+          }
+        ]
+      },
+      {
+        "id": "et_commissioning",
+        "name": "Commissioning Engineer",
+        "role": "server",
+        "count": 4,
+        "attrDefs": []
+      },
+      {
+        "id": "et_training",
+        "name": "Training Capacity",
+        "role": "server",
+        "count": 8,
+        "attrDefs": []
+      },
+      {
+        "id": "et_trainee",
+        "name": "Installer Trainee",
+        "role": "customer",
+        "count": 0,
+        "attrDefs": [
+          {
+            "name": "priority",
+            "mutable": false,
+            "valueType": "number",
+            "defaultValue": 1
+          }
+        ]
+      }
+    ],
+    "stateVariables": [
+      {
+        "id": "sv_rural_blocked",
+        "name": "ruralBlocked",
+        "valueType": "number",
+        "initialValue": 0,
+        "resetOnWarmup": true
+      },
+      {
+        "id": "sv_trainees_qualified",
+        "name": "traineesQualified",
+        "valueType": "number",
+        "initialValue": 0,
+        "resetOnWarmup": true
+      }
+    ],
+    "bEvents": [
+      {
+        "id": "b_urban_arrives",
+        "name": "Urban Household Applies",
+        "effect": [
+          "ARRIVE(Urban Household, Urban Assessment Queue)"
+        ],
+        "schedules": [
+          {
+            "dist": "Piecewise",
+            "eventId": "b_urban_arrives",
+            "distParams": {
+              "periods": [
+                {
+                  "dist": "Exponential",
+                  "startTime": "0",
+                  "distParams": {
+                    "mean": "1.78"
+                  }
+                },
+                {
+                  "dist": "Exponential",
+                  "startTime": "260",
+                  "distParams": {
+                    "mean": "99999"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_urban_assessed",
+        "name": "Urban Assessment Complete",
+        "effect": [
+          "RELEASE(MCS Surveyor)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Urban ATC Queue",
+            "probability": 0.15
+          },
+          {
+            "queueName": "Urban Install Schedule Queue",
+            "probability": 0.85
+          }
+        ]
+      },
+      {
+        "id": "b_urban_atc_complete",
+        "name": "Urban ATC Complete",
+        "effect": [],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Urban Fuse Queue",
+            "probability": 0.6
+          },
+          {
+            "queueName": "Urban Unloop Queue",
+            "probability": 0.3
+          },
+          {
+            "queueName": "Urban Transformer Plan Queue",
+            "probability": 0.1
+          }
+        ]
+      },
+      {
+        "id": "b_urban_fuse_complete",
+        "name": "Urban Fuse Complete",
+        "effect": [
+          "RELEASE(Fuse Engineer, Urban Install Schedule Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_urban_unloop_complete",
+        "name": "Urban Unloop Complete",
+        "effect": [
+          "RELEASE(Unlooping Team, Urban Install Schedule Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_urban_transform_planned",
+        "name": "Urban Transformer Planned",
+        "effect": [],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Urban Transformer Work Queue",
+            "probability": 1
+          }
+        ]
+      },
+      {
+        "id": "b_urban_transform_complete",
+        "name": "Urban Transformer Complete",
+        "effect": [
+          "RELEASE(Transformer Crew, Urban Install Schedule Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_urban_install_scheduled",
+        "name": "Urban Install Scheduled",
+        "effect": [],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Urban Installation Queue",
+            "probability": 1
+          }
+        ]
+      },
+      {
+        "id": "b_urban_installed",
+        "name": "Urban Installation Complete",
+        "effect": [
+          "RELEASE(Heat Pump Installer, Urban Commissioning Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_urban_commissioned",
+        "name": "Urban Commissioned",
+        "effect": [
+          "COMPLETE()"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_suburban_arrives",
+        "name": "Suburban Household Applies",
+        "effect": [
+          "ARRIVE(Suburban Household, Suburban Assessment Queue)"
+        ],
+        "schedules": [
+          {
+            "dist": "Piecewise",
+            "eventId": "b_suburban_arrives",
+            "distParams": {
+              "periods": [
+                {
+                  "dist": "Exponential",
+                  "startTime": "0",
+                  "distParams": {
+                    "mean": "1.78"
+                  }
+                },
+                {
+                  "dist": "Exponential",
+                  "startTime": "260",
+                  "distParams": {
+                    "mean": "99999"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_suburban_assessed",
+        "name": "Suburban Assessment Complete",
+        "effect": [
+          "RELEASE(MCS Surveyor)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Suburban ATC Queue",
+            "probability": 0.35
+          },
+          {
+            "queueName": "Suburban Install Schedule Queue",
+            "probability": 0.65
+          }
+        ]
+      },
+      {
+        "id": "b_suburban_atc_complete",
+        "name": "Suburban ATC Complete",
+        "effect": [],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Suburban Fuse Queue",
+            "probability": 0.35
+          },
+          {
+            "queueName": "Suburban Unloop Queue",
+            "probability": 0.4
+          },
+          {
+            "queueName": "Suburban Transformer Plan Queue",
+            "probability": 0.25
+          }
+        ]
+      },
+      {
+        "id": "b_suburban_fuse_complete",
+        "name": "Suburban Fuse Complete",
+        "effect": [
+          "RELEASE(Fuse Engineer, Suburban Install Schedule Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_suburban_unloop_complete",
+        "name": "Suburban Unloop Complete",
+        "effect": [
+          "RELEASE(Unlooping Team, Suburban Install Schedule Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_suburban_transform_planned",
+        "name": "Suburban Transformer Planned",
+        "effect": [],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Suburban Transformer Work Queue",
+            "probability": 1
+          }
+        ]
+      },
+      {
+        "id": "b_suburban_transform_complete",
+        "name": "Suburban Transformer Complete",
+        "effect": [
+          "RELEASE(Transformer Crew, Suburban Install Schedule Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_suburban_install_scheduled",
+        "name": "Suburban Install Scheduled",
+        "effect": [],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Suburban Installation Queue",
+            "probability": 1
+          }
+        ]
+      },
+      {
+        "id": "b_suburban_installed",
+        "name": "Suburban Installation Complete",
+        "effect": [
+          "RELEASE(Heat Pump Installer, Suburban Commissioning Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_suburban_commissioned",
+        "name": "Suburban Commissioned",
+        "effect": [
+          "COMPLETE()"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_rural_arrives",
+        "name": "Rural Household Applies",
+        "effect": [
+          "ARRIVE(Rural Household, Rural Assessment Queue)"
+        ],
+        "schedules": [
+          {
+            "dist": "Piecewise",
+            "eventId": "b_rural_arrives",
+            "distParams": {
+              "periods": [
+                {
+                  "dist": "Exponential",
+                  "startTime": "0",
+                  "distParams": {
+                    "mean": "3.56"
+                  }
+                },
+                {
+                  "dist": "Exponential",
+                  "startTime": "260",
+                  "distParams": {
+                    "mean": "99999"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_rural_assessed",
+        "name": "Rural Assessment Complete",
+        "effect": [
+          "RELEASE(MCS Surveyor)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Rural ATC Queue",
+            "probability": 0.7
+          },
+          {
+            "queueName": "Rural Install Schedule Queue",
+            "probability": 0.3
+          }
+        ]
+      },
+      {
+        "id": "b_rural_atc_complete",
+        "name": "Rural ATC Complete",
+        "effect": [],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Rural Fuse Queue",
+            "probability": 0.15
+          },
+          {
+            "queueName": "Rural Unloop Queue",
+            "probability": 0.35
+          },
+          {
+            "queueName": "Rural Transformer Plan Queue",
+            "probability": 0.5
+          }
+        ]
+      },
+      {
+        "id": "b_rural_fuse_complete",
+        "name": "Rural Fuse Complete",
+        "effect": [
+          "RELEASE(Fuse Engineer, Rural Install Schedule Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_rural_unloop_complete",
+        "name": "Rural Unloop Complete",
+        "effect": [
+          "RELEASE(Unlooping Team, Rural Install Schedule Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_rural_transform_planned",
+        "name": "Rural Transformer Planned",
+        "effect": [],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Rural Transformer Work Queue",
+            "probability": 1
+          }
+        ]
+      },
+      {
+        "id": "b_rural_transform_complete",
+        "name": "Rural Transformer Complete",
+        "effect": [
+          "RELEASE(Transformer Crew, Rural Install Schedule Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_rural_install_scheduled",
+        "name": "Rural Install Scheduled",
+        "effect": [],
+        "schedules": [],
+        "scheduledTime": "9999",
+        "probabilisticRouting": [
+          {
+            "queueName": "Rural Installation Queue",
+            "probability": 1
+          }
+        ]
+      },
+      {
+        "id": "b_rural_installed",
+        "name": "Rural Installation Complete",
+        "effect": [
+          "RELEASE(Heat Pump Installer, Rural Commissioning Queue)"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_rural_commissioned",
+        "name": "Rural Commissioned",
+        "effect": [
+          "COMPLETE()"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_trainee_arrives",
+        "name": "Trainee Intake",
+        "effect": [
+          "ARRIVE(Installer Trainee, Installer Training Queue)"
+        ],
+        "schedules": [
+          {
+            "dist": "Piecewise",
+            "eventId": "b_trainee_arrives",
+            "distParams": {
+              "periods": [
+                {
+                  "dist": "Exponential",
+                  "startTime": "0",
+                  "distParams": {
+                    "mean": "10.0"
+                  }
+                },
+                {
+                  "dist": "Exponential",
+                  "startTime": "260",
+                  "distParams": {
+                    "mean": "99999"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_trainee_qualified",
+        "name": "Trainee Qualifies",
+        "effect": [
+          "COMPLETE()"
+        ],
+        "schedules": [],
+        "scheduledTime": "9999"
+      }
+    ],
+    "cEvents": [
+      {
+        "id": "c_assess_urban",
+        "name": "Assess Urban",
+        "priority": 1,
+        "effect": [
+          "ASSIGN(Urban Assessment Queue, MCS Surveyor)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Urban Assessment Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(MCS Surveyor).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_urban_assessed",
+            "distParams": {
+              "max": "2.0",
+              "min": "0.5",
+              "mode": "1.0"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_atc_urban",
+        "name": "Apply to Connect Urban",
+        "priority": 4,
+        "effect": [
+          "DELAY(Urban ATC Queue)"
+        ],
+        "condition": {
+          "variable": "queue(Urban ATC Queue).length",
+          "operator": ">",
+          "value": 0
+        },
+        "cSchedules": [
+          {
+            "dist": "Fixed",
+            "eventId": "b_urban_atc_complete",
+            "distParams": {
+              "value": "10"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_fuse_urban",
+        "name": "Urban Fuse Work",
+        "priority": 2,
+        "effect": [
+          "ASSIGN(Urban Fuse Queue, Fuse Engineer)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Urban Fuse Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Fuse Engineer).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_urban_fuse_complete",
+            "distParams": {
+              "max": "2",
+              "min": "0.5",
+              "mode": "1"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_unloop_urban",
+        "name": "Urban Unloop Work",
+        "priority": 2,
+        "effect": [
+          "ASSIGN(Urban Unloop Queue, Unlooping Team)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Urban Unloop Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Unlooping Team).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_urban_unloop_complete",
+            "distParams": {
+              "max": "14",
+              "min": "3",
+              "mode": "7"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_plan_transform_urban",
+        "name": "Urban Transformer Plan",
+        "priority": 4,
+        "effect": [
+          "DELAY(Urban Transformer Plan Queue)"
+        ],
+        "condition": {
+          "variable": "queue(Urban Transformer Plan Queue).length",
+          "operator": ">",
+          "value": 0
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_urban_transform_planned",
+            "distParams": {
+              "max": "200",
+              "min": "25",
+              "mode": "75"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_transform_urban",
+        "name": "Urban Transformer Work",
+        "priority": 2,
+        "effect": [
+          "ASSIGN(Urban Transformer Work Queue, Transformer Crew)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Urban Transformer Work Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Transformer Crew).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_urban_transform_complete",
+            "distParams": {
+              "max": "28",
+              "min": "5",
+              "mode": "14"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_install_schedule_urban",
+        "name": "Urban Install Schedule",
+        "priority": 6,
+        "effect": [
+          "DELAY(Urban Install Schedule Queue)"
+        ],
+        "condition": {
+          "variable": "queue(Urban Install Schedule Queue).length",
+          "operator": ">",
+          "value": 0
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_urban_install_scheduled",
+            "distParams": {
+              "max": "15",
+              "min": "5",
+              "mode": "10"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_install_urban",
+        "name": "Install Urban",
+        "priority": 3,
+        "effect": [
+          "ASSIGN(Urban Installation Queue, Heat Pump Installer)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Urban Installation Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Heat Pump Installer).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_urban_installed",
+            "distParams": {
+              "max": "2.0",
+              "min": "0.75",
+              "mode": "1.0"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_commission_urban",
+        "name": "Commission Urban",
+        "priority": 0,
+        "effect": [
+          "ASSIGN(Urban Commissioning Queue, Commissioning Engineer)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Urban Commissioning Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Commissioning Engineer).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_urban_commissioned",
+            "distParams": {
+              "max": "1.0",
+              "min": "0.25",
+              "mode": "0.5"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_assess_suburban",
+        "name": "Assess Suburban",
+        "priority": 1,
+        "effect": [
+          "ASSIGN(Suburban Assessment Queue, MCS Surveyor)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Suburban Assessment Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(MCS Surveyor).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_suburban_assessed",
+            "distParams": {
+              "max": "3.0",
+              "min": "0.5",
+              "mode": "1.5"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_atc_suburban",
+        "name": "Apply to Connect Suburban",
+        "priority": 4,
+        "effect": [
+          "DELAY(Suburban ATC Queue)"
+        ],
+        "condition": {
+          "variable": "queue(Suburban ATC Queue).length",
+          "operator": ">",
+          "value": 0
+        },
+        "cSchedules": [
+          {
+            "dist": "Fixed",
+            "eventId": "b_suburban_atc_complete",
+            "distParams": {
+              "value": "10"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_fuse_suburban",
+        "name": "Suburban Fuse Work",
+        "priority": 2,
+        "effect": [
+          "ASSIGN(Suburban Fuse Queue, Fuse Engineer)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Suburban Fuse Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Fuse Engineer).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_suburban_fuse_complete",
+            "distParams": {
+              "max": "2",
+              "min": "0.5",
+              "mode": "1"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_unloop_suburban",
+        "name": "Suburban Unloop Work",
+        "priority": 2,
+        "effect": [
+          "ASSIGN(Suburban Unloop Queue, Unlooping Team)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Suburban Unloop Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Unlooping Team).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_suburban_unloop_complete",
+            "distParams": {
+              "max": "14",
+              "min": "3",
+              "mode": "7"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_plan_transform_suburban",
+        "name": "Suburban Transformer Plan",
+        "priority": 4,
+        "effect": [
+          "DELAY(Suburban Transformer Plan Queue)"
+        ],
+        "condition": {
+          "variable": "queue(Suburban Transformer Plan Queue).length",
+          "operator": ">",
+          "value": 0
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_suburban_transform_planned",
+            "distParams": {
+              "max": "200",
+              "min": "25",
+              "mode": "75"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_transform_suburban",
+        "name": "Suburban Transformer Work",
+        "priority": 2,
+        "effect": [
+          "ASSIGN(Suburban Transformer Work Queue, Transformer Crew)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Suburban Transformer Work Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Transformer Crew).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_suburban_transform_complete",
+            "distParams": {
+              "max": "28",
+              "min": "5",
+              "mode": "14"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_install_schedule_suburban",
+        "name": "Suburban Install Schedule",
+        "priority": 6,
+        "effect": [
+          "DELAY(Suburban Install Schedule Queue)"
+        ],
+        "condition": {
+          "variable": "queue(Suburban Install Schedule Queue).length",
+          "operator": ">",
+          "value": 0
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_suburban_install_scheduled",
+            "distParams": {
+              "max": "15",
+              "min": "5",
+              "mode": "10"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_install_suburban",
+        "name": "Install Suburban",
+        "priority": 3,
+        "effect": [
+          "ASSIGN(Suburban Installation Queue, Heat Pump Installer)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Suburban Installation Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Heat Pump Installer).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_suburban_installed",
+            "distParams": {
+              "max": "3",
+              "min": "0.75",
+              "mode": "1.5"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_commission_suburban",
+        "name": "Commission Suburban",
+        "priority": 0,
+        "effect": [
+          "ASSIGN(Suburban Commissioning Queue, Commissioning Engineer)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Suburban Commissioning Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Commissioning Engineer).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_suburban_commissioned",
+            "distParams": {
+              "max": "1.0",
+              "min": "0.25",
+              "mode": "0.5"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_assess_rural",
+        "name": "Assess Rural",
+        "priority": 1,
+        "effect": [
+          "ASSIGN(Rural Assessment Queue, MCS Surveyor)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Rural Assessment Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(MCS Surveyor).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_rural_assessed",
+            "distParams": {
+              "max": "3.0",
+              "min": "0.75",
+              "mode": "1.5"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_atc_rural",
+        "name": "Apply to Connect Rural",
+        "priority": 4,
+        "effect": [
+          "DELAY(Rural ATC Queue)"
+        ],
+        "condition": {
+          "variable": "queue(Rural ATC Queue).length",
+          "operator": ">",
+          "value": 0
+        },
+        "cSchedules": [
+          {
+            "dist": "Fixed",
+            "eventId": "b_rural_atc_complete",
+            "distParams": {
+              "value": "10"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_fuse_rural",
+        "name": "Rural Fuse Work",
+        "priority": 2,
+        "effect": [
+          "ASSIGN(Rural Fuse Queue, Fuse Engineer)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Rural Fuse Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Fuse Engineer).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_rural_fuse_complete",
+            "distParams": {
+              "max": "2",
+              "min": "0.5",
+              "mode": "1"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_unloop_rural",
+        "name": "Rural Unloop Work",
+        "priority": 2,
+        "effect": [
+          "ASSIGN(Rural Unloop Queue, Unlooping Team)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Rural Unloop Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Unlooping Team).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_rural_unloop_complete",
+            "distParams": {
+              "max": "14",
+              "min": "3",
+              "mode": "7"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_plan_transform_rural",
+        "name": "Rural Transformer Plan",
+        "priority": 4,
+        "effect": [
+          "DELAY(Rural Transformer Plan Queue)"
+        ],
+        "condition": {
+          "variable": "queue(Rural Transformer Plan Queue).length",
+          "operator": ">",
+          "value": 0
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_rural_transform_planned",
+            "distParams": {
+              "max": "200",
+              "min": "25",
+              "mode": "75"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_transform_rural",
+        "name": "Rural Transformer Work",
+        "priority": 2,
+        "effect": [
+          "ASSIGN(Rural Transformer Work Queue, Transformer Crew)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Rural Transformer Work Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Transformer Crew).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_rural_transform_complete",
+            "distParams": {
+              "max": "28",
+              "min": "5",
+              "mode": "14"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_install_schedule_rural",
+        "name": "Rural Install Schedule",
+        "priority": 6,
+        "effect": [
+          "DELAY(Rural Install Schedule Queue)"
+        ],
+        "condition": {
+          "variable": "queue(Rural Install Schedule Queue).length",
+          "operator": ">",
+          "value": 0
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_rural_install_scheduled",
+            "distParams": {
+              "max": "15",
+              "min": "5",
+              "mode": "10"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_install_rural",
+        "name": "Install Rural",
+        "priority": 3,
+        "effect": [
+          "ASSIGN(Rural Installation Queue, Heat Pump Installer)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Rural Installation Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Heat Pump Installer).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_rural_installed",
+            "distParams": {
+              "max": "4",
+              "min": "1.5",
+              "mode": "2"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_commission_rural",
+        "name": "Commission Rural",
+        "priority": 0,
+        "effect": [
+          "ASSIGN(Rural Commissioning Queue, Commissioning Engineer)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Rural Commissioning Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Commissioning Engineer).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_rural_commissioned",
+            "distParams": {
+              "max": "1.5",
+              "min": "0.25",
+              "mode": "0.75"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "c_train_installer",
+        "name": "Train Installer",
+        "priority": 1,
+        "effect": [
+          "ASSIGN(Installer Training Queue, Training Capacity)"
+        ],
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Installer Training Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Training Capacity).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_trainee_qualified",
+            "distParams": {
+              "max": "64",
+              "min": "29",
+              "mode": "50"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      }
+    ],
+    "queues": [
+      {
+        "id": "q_urban_assess",
+        "name": "Urban Assessment Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Urban Household"
+      },
+      {
+        "id": "q_urban_atc",
+        "name": "Urban ATC Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Urban Household"
+      },
+      {
+        "id": "q_urban_fuse",
+        "name": "Urban Fuse Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Urban Household"
+      },
+      {
+        "id": "q_urban_unloop",
+        "name": "Urban Unloop Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Urban Household"
+      },
+      {
+        "id": "q_urban_trans_plan",
+        "name": "Urban Transformer Plan Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Urban Household"
+      },
+      {
+        "id": "q_urban_transform",
+        "name": "Urban Transformer Work Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Urban Household"
+      },
+      {
+        "id": "q_urban_install_sched",
+        "name": "Urban Install Schedule Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Urban Household"
+      },
+      {
+        "id": "q_urban_install",
+        "name": "Urban Installation Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Urban Household"
+      },
+      {
+        "id": "q_urban_commission",
+        "name": "Urban Commissioning Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Urban Household"
+      },
+      {
+        "id": "q_suburban_assess",
+        "name": "Suburban Assessment Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Suburban Household"
+      },
+      {
+        "id": "q_suburban_atc",
+        "name": "Suburban ATC Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Suburban Household"
+      },
+      {
+        "id": "q_suburban_fuse",
+        "name": "Suburban Fuse Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Suburban Household"
+      },
+      {
+        "id": "q_suburban_unloop",
+        "name": "Suburban Unloop Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Suburban Household"
+      },
+      {
+        "id": "q_suburban_trans_plan",
+        "name": "Suburban Transformer Plan Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Suburban Household"
+      },
+      {
+        "id": "q_suburban_transform",
+        "name": "Suburban Transformer Work Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Suburban Household"
+      },
+      {
+        "id": "q_suburban_install_sched",
+        "name": "Suburban Install Schedule Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Suburban Household"
+      },
+      {
+        "id": "q_suburban_install",
+        "name": "Suburban Installation Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Suburban Household"
+      },
+      {
+        "id": "q_suburban_commission",
+        "name": "Suburban Commissioning Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Suburban Household"
+      },
+      {
+        "id": "q_rural_assess",
+        "name": "Rural Assessment Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Rural Household"
+      },
+      {
+        "id": "q_rural_atc",
+        "name": "Rural ATC Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Rural Household"
+      },
+      {
+        "id": "q_rural_fuse",
+        "name": "Rural Fuse Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Rural Household"
+      },
+      {
+        "id": "q_rural_unloop",
+        "name": "Rural Unloop Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Rural Household"
+      },
+      {
+        "id": "q_rural_trans_plan",
+        "name": "Rural Transformer Plan Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Rural Household"
+      },
+      {
+        "id": "q_rural_transform",
+        "name": "Rural Transformer Work Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Rural Household"
+      },
+      {
+        "id": "q_rural_install_sched",
+        "name": "Rural Install Schedule Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Rural Household"
+      },
+      {
+        "id": "q_rural_install",
+        "name": "Rural Installation Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Rural Household"
+      },
+      {
+        "id": "q_rural_commission",
+        "name": "Rural Commissioning Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Rural Household"
+      },
+      {
+        "id": "q_training",
+        "name": "Installer Training Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "Installer Trainee"
+      }
+    ],
+    "containerTypes": [],
+    "goals": [
+      {
+        "label": "Mean end-to-end journey < 65 working days (≈90 calendar)",
+        "metric": "summary.avgSojourn",
+        "target": 65,
+        "operator": "<"
+      },
+      {
+        "label": "≥70% of applications complete within the simulation year",
+        "metric": "summary.servedRatio",
+        "target": 0.7,
+        "operator": ">="
+      },
+      {
+        "label": "Fuse Engineer utilisation < 80% (headroom for minor grid work)",
+        "scope": {
+          "id": "et_fuse",
+          "name": "Fuse Engineer",
+          "type": "resource"
+        },
+        "metric": "resource.utilisation",
+        "target": 0.8,
+        "operator": "<"
+      },
+      {
+        "label": "Unlooping Team utilisation < 80% (headroom for unlooping)",
+        "scope": {
+          "id": "et_unloop",
+          "name": "Unlooping Team",
+          "type": "resource"
+        },
+        "metric": "resource.utilisation",
+        "target": 0.8,
+        "operator": "<"
+      },
+      {
+        "label": "Transformer Crew utilisation < 80% (headroom for upgrades)",
+        "scope": {
+          "id": "et_transformer",
+          "name": "Transformer Crew",
+          "type": "resource"
+        },
+        "metric": "resource.utilisation",
+        "target": 0.8,
+        "operator": "<"
+      },
+      {
+        "label": "Heat Pump Installer utilisation > 60% (workforce not idle)",
+        "scope": {
+          "id": "et_installer",
+          "name": "Heat Pump Installer",
+          "type": "resource"
+        },
+        "metric": "resource.utilisation",
+        "target": 0.6,
+        "operator": ">"
+      },
+      {
+        "label": "Rural transformer plan wait < 60 working days (plan horizon)",
+        "scope": {
+          "id": "q_rural_trans_plan",
+          "name": "Rural Transformer Plan Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWait",
+        "target": 60,
+        "operator": "<"
+      },
+      {
+        "label": "Mean suburban transformer plan wait < 45 working days",
+        "scope": {
+          "id": "q_suburban_trans_plan",
+          "name": "Suburban Transformer Plan Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWait",
+        "target": 45,
+        "operator": "<"
+      },
+      {
+        "label": "Mean rural transformer work wait < 21 working days (crew available)",
+        "scope": {
+          "id": "q_rural_transform",
+          "name": "Rural Transformer Work Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWait",
+        "target": 21,
+        "operator": "<"
+      },
+      {
+        "label": "Rural transformer plan WIP < 15 households (queue not exploding)",
+        "scope": {
+          "id": "q_rural_trans_plan",
+          "name": "Rural Transformer Plan Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWIP",
+        "target": 15,
+        "operator": "<"
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "x": 40,
+          "y": 80,
+          "id": "source:b_urban_arrives-0",
+          "type": "source",
+          "refId": "b_urban_arrives"
+        },
+        {
+          "x": 180,
+          "y": 80,
+          "id": "queue:q_urban_assess",
+          "type": "queue",
+          "refId": "q_urban_assess"
+        },
+        {
+          "x": 320,
+          "y": 80,
+          "id": "activity:c_assess_urban",
+          "type": "activity",
+          "refId": "c_assess_urban"
+        },
+        {
+          "x": 530,
+          "y": 80,
+          "id": "queue:q_urban_atc",
+          "type": "queue",
+          "refId": "q_urban_atc"
+        },
+        {
+          "x": 670,
+          "y": 80,
+          "id": "activity:c_atc_urban",
+          "type": "activity",
+          "refId": "c_atc_urban"
+        },
+        {
+          "x": 880,
+          "y": 50,
+          "id": "queue:q_urban_fuse",
+          "type": "queue",
+          "refId": "q_urban_fuse"
+        },
+        {
+          "x": 880,
+          "y": 100,
+          "id": "queue:q_urban_unloop",
+          "type": "queue",
+          "refId": "q_urban_unloop"
+        },
+        {
+          "x": 880,
+          "y": 150,
+          "id": "queue:q_urban_trans_plan",
+          "type": "queue",
+          "refId": "q_urban_trans_plan"
+        },
+        {
+          "x": 1020,
+          "y": 50,
+          "id": "activity:c_fuse_urban",
+          "type": "activity",
+          "refId": "c_fuse_urban"
+        },
+        {
+          "x": 1020,
+          "y": 100,
+          "id": "activity:c_unloop_urban",
+          "type": "activity",
+          "refId": "c_unloop_urban"
+        },
+        {
+          "x": 1020,
+          "y": 150,
+          "id": "activity:c_plan_transform_urban",
+          "type": "activity",
+          "refId": "c_plan_transform_urban"
+        },
+        {
+          "x": 1230,
+          "y": 150,
+          "id": "queue:q_urban_transform",
+          "type": "queue",
+          "refId": "q_urban_transform"
+        },
+        {
+          "x": 1370,
+          "y": 150,
+          "id": "activity:c_transform_urban",
+          "type": "activity",
+          "refId": "c_transform_urban"
+        },
+        {
+          "x": 1580,
+          "y": 80,
+          "id": "queue:q_urban_install_sched",
+          "type": "queue",
+          "refId": "q_urban_install_sched"
+        },
+        {
+          "x": 1720,
+          "y": 80,
+          "id": "activity:c_install_schedule_urban",
+          "type": "activity",
+          "refId": "c_install_schedule_urban"
+        },
+        {
+          "x": 1860,
+          "y": 80,
+          "id": "queue:q_urban_install",
+          "type": "queue",
+          "refId": "q_urban_install"
+        },
+        {
+          "x": 2000,
+          "y": 80,
+          "id": "activity:c_install_urban",
+          "type": "activity",
+          "refId": "c_install_urban"
+        },
+        {
+          "x": 2140,
+          "y": 80,
+          "id": "queue:q_urban_commission",
+          "type": "queue",
+          "refId": "q_urban_commission"
+        },
+        {
+          "x": 2280,
+          "y": 80,
+          "id": "activity:c_commission_urban",
+          "type": "activity",
+          "refId": "c_commission_urban"
+        },
+        {
+          "x": 2420,
+          "y": 80,
+          "id": "sink:b_urban_commissioned",
+          "type": "sink",
+          "refId": "b_urban_commissioned"
+        },
+        {
+          "x": 40,
+          "y": 240,
+          "id": "source:b_suburban_arrives-0",
+          "type": "source",
+          "refId": "b_suburban_arrives"
+        },
+        {
+          "x": 180,
+          "y": 240,
+          "id": "queue:q_suburban_assess",
+          "type": "queue",
+          "refId": "q_suburban_assess"
+        },
+        {
+          "x": 320,
+          "y": 240,
+          "id": "activity:c_assess_suburban",
+          "type": "activity",
+          "refId": "c_assess_suburban"
+        },
+        {
+          "x": 530,
+          "y": 240,
+          "id": "queue:q_suburban_atc",
+          "type": "queue",
+          "refId": "q_suburban_atc"
+        },
+        {
+          "x": 670,
+          "y": 240,
+          "id": "activity:c_atc_suburban",
+          "type": "activity",
+          "refId": "c_atc_suburban"
+        },
+        {
+          "x": 880,
+          "y": 210,
+          "id": "queue:q_suburban_fuse",
+          "type": "queue",
+          "refId": "q_suburban_fuse"
+        },
+        {
+          "x": 880,
+          "y": 260,
+          "id": "queue:q_suburban_unloop",
+          "type": "queue",
+          "refId": "q_suburban_unloop"
+        },
+        {
+          "x": 880,
+          "y": 310,
+          "id": "queue:q_suburban_trans_plan",
+          "type": "queue",
+          "refId": "q_suburban_trans_plan"
+        },
+        {
+          "x": 1020,
+          "y": 210,
+          "id": "activity:c_fuse_suburban",
+          "type": "activity",
+          "refId": "c_fuse_suburban"
+        },
+        {
+          "x": 1020,
+          "y": 260,
+          "id": "activity:c_unloop_suburban",
+          "type": "activity",
+          "refId": "c_unloop_suburban"
+        },
+        {
+          "x": 1020,
+          "y": 310,
+          "id": "activity:c_plan_transform_suburban",
+          "type": "activity",
+          "refId": "c_plan_transform_suburban"
+        },
+        {
+          "x": 1230,
+          "y": 310,
+          "id": "queue:q_suburban_transform",
+          "type": "queue",
+          "refId": "q_suburban_transform"
+        },
+        {
+          "x": 1370,
+          "y": 310,
+          "id": "activity:c_transform_suburban",
+          "type": "activity",
+          "refId": "c_transform_suburban"
+        },
+        {
+          "x": 1580,
+          "y": 240,
+          "id": "queue:q_suburban_install_sched",
+          "type": "queue",
+          "refId": "q_suburban_install_sched"
+        },
+        {
+          "x": 1720,
+          "y": 240,
+          "id": "activity:c_install_schedule_suburban",
+          "type": "activity",
+          "refId": "c_install_schedule_suburban"
+        },
+        {
+          "x": 1860,
+          "y": 240,
+          "id": "queue:q_suburban_install",
+          "type": "queue",
+          "refId": "q_suburban_install"
+        },
+        {
+          "x": 2000,
+          "y": 240,
+          "id": "activity:c_install_suburban",
+          "type": "activity",
+          "refId": "c_install_suburban"
+        },
+        {
+          "x": 2140,
+          "y": 240,
+          "id": "queue:q_suburban_commission",
+          "type": "queue",
+          "refId": "q_suburban_commission"
+        },
+        {
+          "x": 2280,
+          "y": 240,
+          "id": "activity:c_commission_suburban",
+          "type": "activity",
+          "refId": "c_commission_suburban"
+        },
+        {
+          "x": 2420,
+          "y": 240,
+          "id": "sink:b_suburban_commissioned",
+          "type": "sink",
+          "refId": "b_suburban_commissioned"
+        },
+        {
+          "x": 40,
+          "y": 400,
+          "id": "source:b_rural_arrives-0",
+          "type": "source",
+          "refId": "b_rural_arrives"
+        },
+        {
+          "x": 180,
+          "y": 400,
+          "id": "queue:q_rural_assess",
+          "type": "queue",
+          "refId": "q_rural_assess"
+        },
+        {
+          "x": 320,
+          "y": 400,
+          "id": "activity:c_assess_rural",
+          "type": "activity",
+          "refId": "c_assess_rural"
+        },
+        {
+          "x": 530,
+          "y": 400,
+          "id": "queue:q_rural_atc",
+          "type": "queue",
+          "refId": "q_rural_atc"
+        },
+        {
+          "x": 670,
+          "y": 400,
+          "id": "activity:c_atc_rural",
+          "type": "activity",
+          "refId": "c_atc_rural"
+        },
+        {
+          "x": 880,
+          "y": 370,
+          "id": "queue:q_rural_fuse",
+          "type": "queue",
+          "refId": "q_rural_fuse"
+        },
+        {
+          "x": 880,
+          "y": 420,
+          "id": "queue:q_rural_unloop",
+          "type": "queue",
+          "refId": "q_rural_unloop"
+        },
+        {
+          "x": 880,
+          "y": 470,
+          "id": "queue:q_rural_trans_plan",
+          "type": "queue",
+          "refId": "q_rural_trans_plan"
+        },
+        {
+          "x": 1020,
+          "y": 370,
+          "id": "activity:c_fuse_rural",
+          "type": "activity",
+          "refId": "c_fuse_rural"
+        },
+        {
+          "x": 1020,
+          "y": 420,
+          "id": "activity:c_unloop_rural",
+          "type": "activity",
+          "refId": "c_unloop_rural"
+        },
+        {
+          "x": 1020,
+          "y": 470,
+          "id": "activity:c_plan_transform_rural",
+          "type": "activity",
+          "refId": "c_plan_transform_rural"
+        },
+        {
+          "x": 1230,
+          "y": 470,
+          "id": "queue:q_rural_transform",
+          "type": "queue",
+          "refId": "q_rural_transform"
+        },
+        {
+          "x": 1370,
+          "y": 470,
+          "id": "activity:c_transform_rural",
+          "type": "activity",
+          "refId": "c_transform_rural"
+        },
+        {
+          "x": 1580,
+          "y": 400,
+          "id": "queue:q_rural_install_sched",
+          "type": "queue",
+          "refId": "q_rural_install_sched"
+        },
+        {
+          "x": 1720,
+          "y": 400,
+          "id": "activity:c_install_schedule_rural",
+          "type": "activity",
+          "refId": "c_install_schedule_rural"
+        },
+        {
+          "x": 1860,
+          "y": 400,
+          "id": "queue:q_rural_install",
+          "type": "queue",
+          "refId": "q_rural_install"
+        },
+        {
+          "x": 2000,
+          "y": 400,
+          "id": "activity:c_install_rural",
+          "type": "activity",
+          "refId": "c_install_rural"
+        },
+        {
+          "x": 2140,
+          "y": 400,
+          "id": "queue:q_rural_commission",
+          "type": "queue",
+          "refId": "q_rural_commission"
+        },
+        {
+          "x": 2280,
+          "y": 400,
+          "id": "activity:c_commission_rural",
+          "type": "activity",
+          "refId": "c_commission_rural"
+        },
+        {
+          "x": 2420,
+          "y": 400,
+          "id": "sink:b_rural_commissioned",
+          "type": "sink",
+          "refId": "b_rural_commissioned"
+        },
+        {
+          "x": 40,
+          "y": 552,
+          "id": "source:b_trainee_arrives-0",
+          "type": "source",
+          "refId": "b_trainee_arrives"
+        },
+        {
+          "x": 180,
+          "y": 552,
+          "id": "queue:q_training",
+          "type": "queue",
+          "refId": "q_training"
+        },
+        {
+          "x": 320,
+          "y": 552,
+          "id": "activity:c_train_installer",
+          "type": "activity",
+          "refId": "c_train_installer"
+        },
+        {
+          "x": 460,
+          "y": 552,
+          "id": "sink:b_trainee_qualified",
+          "type": "sink",
+          "refId": "b_trainee_qualified"
+        }
+      ],
+      "version": 1,
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "zoom": 1
+      }
+    },
+    "experimentDefaults": {
+      "seed": 627060057,
+      "maxSimTime": 260,
+      "liveDataMode": null,
+      "replications": 40,
+      "warmupPeriod": 21,
+      "terminationMode": "time",
+      "resultDetailLevel": "compact",
+      "terminationCondition": null
+    },
+    "timeUnit": "workingDays",
+    "description": "Multi-crew RASE variant with 3 DNO resolution types (fuse/unloop/transformer). Times working-day units ×1.4 = calendar days.",
+    "sections": [
+      {
+        "id": "sec_demand",
+        "name": "Household Demand & Assessment",
+        "color": "#4A90D9",
+        "memberIds": [
+          "et_urban_hh",
+          "et_surveyor",
+          "q_urban_assess",
+          "b_urban_arrives",
+          "b_urban_assessed",
+          "c_assess_urban",
+          "et_suburban_hh",
+          "et_surveyor",
+          "q_suburban_assess",
+          "b_suburban_arrives",
+          "b_suburban_assessed",
+          "c_assess_suburban",
+          "et_rural_hh",
+          "et_surveyor",
+          "q_rural_assess",
+          "b_rural_arrives",
+          "b_rural_assessed",
+          "c_assess_rural"
+        ]
+      },
+      {
+        "id": "sec_dno",
+        "name": "DNO Connection & Grid Work",
+        "color": "#E74C3C",
+        "memberIds": [
+          "et_fuse",
+          "et_unloop",
+          "et_transformer",
+          "q_urban_atc",
+          "q_urban_fuse",
+          "q_urban_unloop",
+          "q_urban_trans_plan",
+          "q_urban_transform",
+          "b_urban_atc_complete",
+          "b_urban_fuse_complete",
+          "b_urban_unloop_complete",
+          "b_urban_transform_planned",
+          "b_urban_transform_complete",
+          "c_atc_urban",
+          "c_fuse_urban",
+          "c_unloop_urban",
+          "c_plan_transform_urban",
+          "c_transform_urban",
+          "et_fuse",
+          "et_unloop",
+          "et_transformer",
+          "q_suburban_atc",
+          "q_suburban_fuse",
+          "q_suburban_unloop",
+          "q_suburban_trans_plan",
+          "q_suburban_transform",
+          "b_suburban_atc_complete",
+          "b_suburban_fuse_complete",
+          "b_suburban_unloop_complete",
+          "b_suburban_transform_planned",
+          "b_suburban_transform_complete",
+          "c_atc_suburban",
+          "c_fuse_suburban",
+          "c_unloop_suburban",
+          "c_plan_transform_suburban",
+          "c_transform_suburban",
+          "et_fuse",
+          "et_unloop",
+          "et_transformer",
+          "q_rural_atc",
+          "q_rural_fuse",
+          "q_rural_unloop",
+          "q_rural_trans_plan",
+          "q_rural_transform",
+          "b_rural_atc_complete",
+          "b_rural_fuse_complete",
+          "b_rural_unloop_complete",
+          "b_rural_transform_planned",
+          "b_rural_transform_complete",
+          "c_atc_rural",
+          "c_fuse_rural",
+          "c_unloop_rural",
+          "c_plan_transform_rural",
+          "c_transform_rural"
+        ]
+      },
+      {
+        "id": "sec_installation",
+        "name": "Installation & Commissioning",
+        "color": "#27AE60",
+        "memberIds": [
+          "et_installer",
+          "et_commissioning",
+          "q_urban_install_sched",
+          "q_urban_install",
+          "q_urban_commission",
+          "b_urban_install_scheduled",
+          "b_urban_installed",
+          "b_urban_commissioned",
+          "c_install_schedule_urban",
+          "c_install_urban",
+          "c_commission_urban",
+          "et_installer",
+          "et_commissioning",
+          "q_suburban_install_sched",
+          "q_suburban_install",
+          "q_suburban_commission",
+          "b_suburban_install_scheduled",
+          "b_suburban_installed",
+          "b_suburban_commissioned",
+          "c_install_schedule_suburban",
+          "c_install_suburban",
+          "c_commission_suburban",
+          "et_installer",
+          "et_commissioning",
+          "q_rural_install_sched",
+          "q_rural_install",
+          "q_rural_commission",
+          "b_rural_install_scheduled",
+          "b_rural_installed",
+          "b_rural_commissioned",
+          "c_install_schedule_rural",
+          "c_install_rural",
+          "c_commission_rural"
+        ]
+      },
+      {
+        "id": "sec_training",
+        "name": "Installer Training Pipeline",
+        "color": "#8E44AD",
+        "memberIds": [
+          "et_trainee",
+          "et_training",
+          "q_training",
+          "b_trainee_arrives",
+          "b_trainee_qualified",
+          "c_train_installer",
+          "sv_rural_blocked",
+          "sv_trainees_qualified"
+        ]
+      }
+    ]
+  },
+  "exportedAt": "2026-06-29T13:16:49.443Z",
+  "appVersion": "0.9.0 - Beta",
+  "description": "RASE multi-crew variant with 3 DNO resolution types (fuse, unlooping, transformer upgrade), each with dedicated crews. Time unit is working days. Multiply by 1.4 for calendar-day estimates."
+}
