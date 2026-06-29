@@ -369,7 +369,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                       The first shift period sets the initial pool size; the static count is ignored while shifts are in use. Shift changes add or remove idle servers at the scheduled times or when their condition first becomes true.
                     </span>
                   </>)}
-                  </>)}
+                  </>}
                 </SectionPanel>
               )}
               {et.role==="server"&&(
