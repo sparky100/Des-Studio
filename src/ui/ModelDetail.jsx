@@ -39,7 +39,7 @@ import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, buildSche
 import { generateReport, sanitizeFilename, buildModelDefinitionHtml } from "../reports/index.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
-import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
+import { renameEntityType, renameQueue, renameStateVariable, renameContainer } from "../engine/queue-refs.js";
 import { resolveRunAdmissionTier }          from "../engine/run-admission.js";
 import { AdaptiveBatchPanel }               from "./execute/AdaptiveBatchPanel.jsx";
 import { normalizeModelConditions }         from "../model/conditionFormat.js";
@@ -665,12 +665,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const save=()=>{
     setSaving(true);
     setSaveError(null);
+    const v = validateModel(model);
+    if (v.errors.length) {
+      toast.warning(`Model saved with ${v.errors.length} validation error${v.errors.length > 1 ? 's' : ''} — check Model Health`);
+    } else if (v.warnings.length) {
+      toast.info(`Model saved with ${v.warnings.length} warning${v.warnings.length > 1 ? 's' : ''} — check Model Health`);
+    }
     overrides.onSave?.(model)
       .then(saved => {
         setDirty(false);
         setVisualPending(false);
         setSaveSeq(s => s + 1);
-        toast.success("Model saved");
+        if (!v.errors.length && !v.warnings.length) toast.success("Model saved");
         onRefresh?.();
       })
       .catch(error => {
@@ -1356,7 +1362,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </span>
               </div>
             </div>
-            <StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/>
+            <StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?newVars=>{
+              const oldVars = model.stateVariables || [];
+              let updated = { ...model, stateVariables: newVars };
+              for (let i = 0; i < newVars.length; i++) {
+                const oldName = oldVars[i]?.name?.trim();
+                const newName = newVars[i]?.name?.trim();
+                if (oldName && newName && oldName !== newName) {
+                  updated = renameStateVariable(updated, oldName, newName);
+                }
+              }
+              setWholeModel(updated);
+            }:()=>{}}/>
             <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
           </div>
         )}
@@ -1385,7 +1402,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           }
           setWholeModel(updated);
         }:()=>{}}/></div>)}
-        {tab==="containers"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><ContainerEditor containers={model.containerTypes||[]} onChange={canEdit?v=>setField("containerTypes",v):()=>{}}/></div>)}
+        {tab==="containers"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><ContainerEditor containers={model.containerTypes||[]} onChange={canEdit?newContainers=>{
+          const oldContainers = model.containerTypes || [];
+          let updated = { ...model, containerTypes: newContainers };
+          for (let i = 0; i < newContainers.length; i++) {
+            const oldId = oldContainers[i]?.id?.trim();
+            const newId = newContainers[i]?.id?.trim();
+            if (oldId && newId && oldId !== newId) {
+              updated = renameContainer(updated, oldId, newId);
+            }
+          }
+          setWholeModel(updated);
+        }:()=>{}}/></div>)}
 
         {tab==="validate"&&(
           <div style={{maxWidth:1120,margin:"0 auto",display:"flex",flexDirection:"column",gap:14}}>
