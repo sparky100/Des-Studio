@@ -1544,6 +1544,17 @@ export function buildModelDefinitionHtml(model = {}) {
   }
 
   // ── C Events ───────────────────────────────────────────────────────────────
+  function cEventServer(ev) {
+    if (ev.serverType || ev.resourceType) return ev.serverType || ev.resourceType;
+    const e = Array.isArray(ev.effect) ? ev.effect.join(';') : String(ev.effect || '');
+    if (/DELAY\s*\(/i.test(e)) return '—';
+    const assignMatch = /ASSIGN\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/i.exec(e);
+    if (assignMatch) return assignMatch[2].trim();
+    const coseizeMatch = /COSEIZE\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/i.exec(e);
+    if (coseizeMatch) return coseizeMatch[2].trim();
+    return '—';
+  }
+
   const cEventRows = cEvents.length ? [
     ['Name', 'Server', 'Service time', 'Schedules', 'Condition', 'Priority'],
     ...cEvents.map(ev => {
@@ -1559,7 +1570,7 @@ export function buildModelDefinitionHtml(model = {}) {
         .join(', ');
       return [
         esc(ev.name),
-        esc(ev.serverType || ev.resourceType || '—'),
+        esc(cEventServer(ev)),
         sched ? `${sched} ${timeUnit}` : '—',
         scheduledEvents || '—',
         formatCondition(ev.condition),

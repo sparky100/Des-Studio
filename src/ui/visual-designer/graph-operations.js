@@ -1,5 +1,6 @@
 import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES } from "./graph.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
+import { renameQueue } from "../../engine/queue-refs.js";
 
 function clean(value = "") {
   return String(value || "").trim();
@@ -309,17 +310,6 @@ function updateByRef(items, refId, updater) {
   return (items || []).map(item => (item.id === refId ? updater(item) : item));
 }
 
-function replaceQueueName(text = "", oldName, newName) {
-  if (!oldName || !newName) return text;
-  const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return String(text || "")
-    .replace(new RegExp(`queue\\(${esc}\\)`, "gi"), `queue(${newName})`)
-    .replace(new RegExp(`ARRIVE\\(([^,)]+),\\s*${esc}\\)`, "gi"), `ARRIVE($1, ${newName})`)
-    .replace(new RegExp(`ASSIGN\\(${esc},`, "gi"), `ASSIGN(${newName},`)
-    .replace(new RegExp(`DELAY\\(${esc}\\)`, "gi"), `DELAY(${newName})`)
-    .replace(new RegExp(`RELEASE\\(([^,)]+),\\s*${esc}\\)`, "gi"), `RELEASE($1, ${newName})`);
-}
-
 function replaceServerName(text = "", oldName, newName) {
   if (!oldName || !newName) return text;
   const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -342,17 +332,6 @@ function conditionReferencesQueue(condition, queueName) {
   if (!condition || !queueName) return false;
   const names = extractQueueNamesFromCondition(condition);
   return names.some(n => n.toLowerCase() === queueName.toLowerCase());
-}
-
-function replaceQueueNameInObjectCondition(condition, oldName, newName) {
-  if (!condition || typeof condition !== "object" || Array.isArray(condition)) return condition;
-  if (Array.isArray(condition.clauses)) {
-    return { ...condition, clauses: condition.clauses.map(c => replaceQueueNameInObjectCondition(c, oldName, newName)) };
-  }
-  const variable = String(condition.variable || condition.token || condition.left || "");
-  const updated = variable.replace(new RegExp(`queue\\(${escRe(oldName)}\\)`, "gi"), `queue(${newName})`);
-  if (updated === variable) return condition;
-  return { ...condition, variable: updated };
 }
 
 // Format B predicate objects ({variable, operator, value} or {operator: "AND"/"OR", clauses: [...]})
@@ -1365,19 +1344,7 @@ export function updateVisualNode(model, node, patch = {}) {
       ...(patch.overflowDestination !== undefined ? { overflowDestination: patch.overflowDestination } : {}),
     }));
     if (nextName !== undefined && oldName && nextName && oldName !== nextName) {
-      next.bEvents = (next.bEvents || []).map(event => ({
-        ...event,
-        effect: replaceQueueName(event.effect, oldName, nextName),
-      }));
-      next.cEvents = (next.cEvents || []).map(event => ({
-        ...event,
-        condition: typeof event.condition === "string"
-          ? replaceQueueName(event.condition, oldName, nextName)
-          : replaceQueueNameInObjectCondition(event.condition, oldName, nextName),
-        effect: typeof event.effect === "string"
-          ? replaceQueueName(event.effect, oldName, nextName)
-          : replaceQueueNameInObjectCondition(event.effect, oldName, nextName),
-      }));
+      next = renameQueue(next, oldName, nextName);
     }
   }
   if (node.type === VISUAL_NODE_TYPES.ACTIVITY) {
