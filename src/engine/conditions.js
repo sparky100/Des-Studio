@@ -101,14 +101,24 @@ function resolveVariable(ref, state) {
     return resolveQueueValue(queueToken[1].trim(), queueToken[2], state);
   }
 
-  const idleToken = text.match(/^idle\(([^)]+)\)\.count$/i);
+  const idleToken = text.match(/^idle\(([^,)]+)(?:\s*,\s*"([^"]+)")?\)\.count$/i);
   if (idleToken) {
-    return state.helpers?.idleOf?.(idleToken[1].trim())?.length ?? 0;
+    const type = idleToken[1].trim();
+    const skill = idleToken[2] ? idleToken[2].trim() : null;
+    if (skill) {
+      return state.helpers?.idleOf(type)?.filter(s => state.helpers?.hasSkillType?.(s.type, skill))?.length ?? 0;
+    }
+    return state.helpers?.idleOf?.(type)?.length ?? 0;
   }
 
-  const busyToken = text.match(/^busy\(([^)]+)\)\.count$/i);
+  const busyToken = text.match(/^busy\(([^,)]+)(?:\s*,\s*"([^"]+)")?\)\.count$/i);
   if (busyToken) {
-    return state.helpers?.busyOf?.(busyToken[1].trim())?.length ?? 0;
+    const type = busyToken[1].trim();
+    const skill = busyToken[2] ? busyToken[2].trim() : null;
+    if (skill) {
+      return state.helpers?.busyOf(type)?.filter(s => state.helpers?.hasSkillType?.(s.type, skill))?.length ?? 0;
+    }
+    return state.helpers?.busyOf?.(type)?.length ?? 0;
   }
 
   const attrToken = text.match(/^attr\(([^,]+)\s*,\s*([^)]+)\)$/i);
@@ -201,8 +211,8 @@ export function getPredicateDependencies(predicate) {
   } else {
     const variable = String(normalized.variable || "").trim();
     const queueToken = variable.match(/^queue\(([^)]+)\)\.(length|count|size)$/i);
-    const idleToken = variable.match(/^idle\(([^)]+)\)\.count$/i);
-    const busyToken = variable.match(/^busy\(([^)]+)\)\.count$/i);
+    const idleToken = variable.match(/^idle\(([^,)]+)(?:\s*,\s*"[^"]+")?\)\.count$/i);
+    const busyToken = variable.match(/^busy\(([^,)]+)(?:\s*,\s*"[^"]+")?\)\.count$/i);
     const attrToken = variable.match(/^attr\(([^,]+)\s*,\s*([^)]+)\)$/i);
     const containerToken = variable.match(/^container\(([^)]+)\)\.(level|capacity|min|max)$/i);
     if (queueToken) {

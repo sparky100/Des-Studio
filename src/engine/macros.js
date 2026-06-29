@@ -280,13 +280,16 @@ export const MACROS = [
     },
   },
 
-// ── ASSIGN(CustomerType|QueueName, ServerType) ────────────────────────────
+// ── ASSIGN(CustomerType|QueueName, ServerType[, "Skill"]) ───────────────────
+  // Optional 3rd parameter is a skill name. When present, only idle servers whose
+  // server type has the specified skill are considered.
   {
     name:    "ASSIGN",
-    pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)\)$/i,
+    pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"([^"]+)")?\)$/i,
     apply(match, ctx) {
       const cType = match[1].trim();
       const sType = match[2].trim();
+      const skill = match[3] ? match[3].trim() : null;
       const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs, _arbitration } = ctx;
       const arbitrationTarget = _arbitration && typeof _arbitration === "object" ? _arbitration : null;
 
@@ -303,9 +306,15 @@ export const MACROS = [
       const candidates = listWaiting(queueToken, discipline, entities, filterFn, !!matchedQ, true, ctx.index);
       const allIdleServers = helpers.idleOf(sType) || [];
 
+      // Filter by skill if a skill parameter was provided
+      const idleServers = skill
+        ? allIdleServers.filter(s => helpers.hasSkillType(s.type, skill))
+        : allIdleServers;
+
       const arbitration = {
         type: "server",
         serverType: sType,
+        skill: skill || undefined,
         discipline,
         queueName: matchedQ ? queueToken : null,
         candidates: candidates.map(e => ({
@@ -314,15 +323,15 @@ export const MACROS = [
           key: "arrivalTime",
           value: e.arrivalTime || 0,
         })),
-        idleServers: allIdleServers.map(s => ({ serverId: s.id, type: s.type })),
+        idleServers: idleServers.map(s => ({ serverId: s.id, type: s.type, skill: skill || undefined })),
       };
 
       const cust = candidates[0] ?? null;
-      const srv = allIdleServers[0] ?? null;
+      const srv = idleServers[0] ?? null;
 
       if (cust && srv) {
         const queuedAt = cust.queue;
-        if (!claimServerForEntity(cust, srv, clock, ctx.index, ctx)) {
+        if (!claimServerForEntity(cust, srv, clock, ctx.index, ctx, skill)) {
           msgs.push(`ASSIGN(${cType},${sType}): claim failed`);
           return;
         }
@@ -330,13 +339,14 @@ export const MACROS = [
         cust.ceventName    = ctx.ceventName;
         setLastCustId(cust.id);
         setLastSrvId(srv.id);
-        arbitration.winner = { entityId: cust.id, serverId: srv.id };
+        arbitration.winner = { entityId: cust.id, serverId: srv.id, skill: skill || undefined };
         arbitration.losers = candidates
           .filter(e => e.id !== cust.id)
           .map(e => ({ entityId: e.id, reason: "lower priority or later arrival" }));
         if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
+        const skillSuffix = skill ? ` (skill: ${skill})` : '';
         msgs.push(
-          `#${cust.id} (${cType}) → serving by #${srv.id} (${sType}) ` +
+          `#${cust.id} (${cType}) → serving by #${srv.id} (${sType})${skillSuffix} ` +
           `[waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
         );
       } else {
@@ -344,7 +354,8 @@ export const MACROS = [
         arbitration.candidateCount = candidates.length;
         arbitration.idleServerCount = allIdleServers.length;
         if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
-        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${candidates.length} idle=${allIdleServers.length}`);
+        const skillSuffix = skill ? ` (skill: ${skill})` : '';
+        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${candidates.length} idle=${allIdleServers.length}${skillSuffix}`);
       }
     },
   },
@@ -958,19 +969,30 @@ export const MACROS = [
     },
   },
 
-  // ── COSEIZE(Queue, ServerType1, ServerType2[, ...]) ────────────────────────
-  // Seizes one customer and multiple server types simultaneously
+  // ── COSEIZE(Queue, ServerType1[Skill1], ServerType2[Skill2][, ...]) ────────
+  // Seizes one customer and multiple server types simultaneously.
+  // Optional per-type bracket skill: Doctor[Surgery] filters idle pool by skill.
   {
     name:    "COSEIZE",
     pattern: /^COSEIZE\(([^,)]+)\s*,\s*(.+)\)$/i,
     apply(match, ctx) {
       const queueName = match[1].trim();
-      const serverTypes = match[2].split(",").map(s => s.trim());
+      const rawArgs = match[2].split(",").map(s => s.trim());
       const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
 
-      const dupType = serverTypes.find((t, i) => serverTypes.indexOf(t) !== i);
+      // Parse each argument: "Type[Skill]" or just "Type"
+      const serverDefs = rawArgs.map(arg => {
+        const bracketMatch = arg.match(/^([^\[]+)\[([^\]]+)\]$/);
+        if (bracketMatch) {
+          return { type: bracketMatch[1].trim(), skill: bracketMatch[2].trim() };
+        }
+        return { type: arg, skill: null };
+      });
+
+      const dupType = serverDefs.find((t, i) => serverDefs.some((d, j) => j !== i && d.type === t.type));
       if (dupType) {
-        msgs.push(`COSEIZE(${queueName}, ${serverTypes.join(', ')}): duplicate server type "${dupType}" — each server type must appear once; COSEIZE seizes one server per listed type, not one per occurrence`);
+        const typeList = serverDefs.map(d => d.skill ? `${d.type}[${d.skill}]` : d.type).join(', ');
+        msgs.push(`COSEIZE(${queueName}, ${typeList}): duplicate server type "${dupType.type}" — each server type must appear once; COSEIZE seizes one server per listed type, not one per occurrence`);
         return;
       }
 
@@ -979,37 +1001,45 @@ export const MACROS = [
       const cust = queueCandidates[0];
 
       if (!cust) {
-        msgs.push(`COSEIZE(${queueName}, ${serverTypes.join(', ')}): no waiting customer in "${queueName}"`);
+        const typeList = serverDefs.map(d => d.skill ? `${d.type}[${d.skill}]` : d.type).join(', ');
+        msgs.push(`COSEIZE(${queueName}, ${typeList}): no waiting customer in "${queueName}"`);
         return;
       }
 
       const idleServersByType = {};
-      for (const sType of serverTypes) {
-        const idle = helpers.idleOf(sType) || [];
-        if (idle.length === 0) {
-          msgs.push(`COSEIZE(${queueName}, ${serverTypes.join(', ')}): no idle ${sType}`);
+      for (const def of serverDefs) {
+        const idle = helpers.idleOf(def.type) || [];
+        const matched = def.skill
+          ? idle.filter(s => helpers.hasSkillType(s.type, def.skill))
+          : idle;
+        if (matched.length === 0) {
+          const typeLabel = def.skill ? `${def.type}[${def.skill}]` : def.type;
+          msgs.push(`COSEIZE(${queueName}, ...): no idle ${typeLabel}`);
           return;
         }
-        idleServersByType[sType] = idle[0];
+        idleServersByType[def.type] = matched[0];
       }
 
       // Claim all servers atomically — first uses claimServerForEntity (sets customer to serving),
       // subsequent servers get auxiliary claims without re-checking customer status.
       const serverEntries = Object.entries(idleServersByType);
       const primarySrv = serverEntries[0][1];
-      if (!claimServerForEntity(cust, primarySrv, clock, ctx.index, ctx)) {
+      const primarySkill = (serverDefs.find(d => d.type === serverEntries[0][0]) || serverDefs[0]).skill;
+      if (!claimServerForEntity(cust, primarySrv, clock, ctx.index, ctx, primarySkill)) {
         msgs.push(`COSEIZE: claim failed for ${serverEntries[0][0]} #${primarySrv.id}`);
         return;
       }
 
       for (let i = 1; i < serverEntries.length; i++) {
         const [sType, srv] = serverEntries[i];
+        const auxSkill = (serverDefs.find(d => d.type === sType) || serverDefs[i]).skill;
         if (srv._starvationStart != null) {
           srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
           delete srv._starvationStart;
         }
         srv.status = "busy";
         srv._busyStart = clock;
+        srv._currentSkill = auxSkill;
         srv.currentCustId = cust.id;
         srv.resourceClaim = {
           customerId: cust.id,
@@ -1028,7 +1058,10 @@ export const MACROS = [
       setLastSrvId(srvIds[0]);
 
       const serverDesc = Object.entries(idleServersByType)
-        .map(([type, srv]) => `#${srv.id} (${type})`)
+        .map(([type, srv]) => {
+          const def = serverDefs.find(d => d.type === type);
+          return def?.skill ? `#${srv.id} (${type}[${def.skill}])` : `#${srv.id} (${type})`;
+        })
         .join(', ');
       msgs.push(
         `#${cust.id} → serving by ${serverDesc} ` +

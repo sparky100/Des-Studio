@@ -1785,6 +1785,14 @@ const cycleLog = [];
       perResource[srv.type].downtimeSum  += srv._totalDowntime || 0;
       perResource[srv.type].failureCount += srv._failureCount  || 0;
 
+      // Per-skill busy time accumulation
+      if (srv._skillBusyTime) {
+        if (!perResource[srv.type].skillBusyTimeSum) perResource[srv.type].skillBusyTimeSum = {};
+        for (const [skill, bt] of Object.entries(srv._skillBusyTime)) {
+          perResource[srv.type].skillBusyTimeSum[skill] = (perResource[srv.type].skillBusyTimeSum[skill] || 0) + bt;
+        }
+      }
+
       // Per-shift utilisation bucket (F86.4)
       const srvLabel = srv._shiftLabel;
       if (srvLabel) {
@@ -1810,6 +1818,9 @@ const cycleLog = [];
       const r = perResource[type];
       const denominator = elapsed * r.total;
       r.utilisation = denominator > 0 ? +(r.busyTimeSum / denominator).toFixed(4) : 0;
+      r.skillUtil = r.skillBusyTimeSum ? Object.fromEntries(
+        Object.entries(r.skillBusyTimeSum).map(([skill, bt]) => [skill, denominator > 0 ? +(bt / denominator).toFixed(4) : 0])
+      ) : undefined;
       r.starvationTime = denominator > 0 ? +(r.starvationTimeSum / r.total).toFixed(4) : 0;
       r.starvationPct = denominator > 0 ? +(r.starvationTimeSum / denominator).toFixed(4) : 0;
       r.maxStarvationDuration = r.maxContStarvDur > 0 ? +r.maxContStarvDur.toFixed(4) : null;
@@ -1852,6 +1863,7 @@ const cycleLog = [];
       delete r.starvationTimeSum;
       delete r.maxContStarvDur;
       delete r.downtimeSum;
+      delete r.skillBusyTimeSum;
     }
 
     // Flush and add utilisation streak data

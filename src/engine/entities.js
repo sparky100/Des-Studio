@@ -341,7 +341,7 @@ export function clearWaitingState(entity, index = null) {
   return true;
 }
 
-export function claimServerForEntity(customer, server, clock, index = null, ctx = null) {
+export function claimServerForEntity(customer, server, clock, index = null, ctx = null, skill = null) {
   if (!customer || !server) return false;
   if (customer.status !== "waiting" || server.status !== "idle") return false;
 
@@ -359,6 +359,7 @@ export function claimServerForEntity(customer, server, clock, index = null, ctx 
   server.status = "busy";
   server._busyStart = clock;
   server.currentCustId = customer.id;
+  server._currentSkill = skill;
   server.resourceClaim = claim;
 
   // Tag with current shift label for per-shift utilisation tracking (F86.4)
@@ -383,11 +384,18 @@ export function releaseServerClaim(customer, server, clock) {
     delete customer.resourceClaim;
   }
   if (server) {
+    const prevSkill = server._currentSkill;
     delete server.currentCustId;
     delete server.resourceClaim;
+    delete server._currentSkill;
     if (server.status === "busy") {
       if (server._busyStart != null && clock != null) {
-        server._busyTime = (server._busyTime || 0) + Math.max(0, clock - server._busyStart);
+        const delta = Math.max(0, clock - server._busyStart);
+        server._busyTime = (server._busyTime || 0) + delta;
+        if (prevSkill) {
+          if (!server._skillBusyTime) server._skillBusyTime = {};
+          server._skillBusyTime[prevSkill] = (server._skillBusyTime[prevSkill] || 0) + delta;
+        }
       }
       delete server._busyStart;
       server.status = "idle";
@@ -684,6 +692,13 @@ export function makeHelpers(entities, model = null, index = null) {
 
     selectIdleOf: (type) =>
       sortResourceEntities(serverPool().filter(e => match(e.type, type) && e.status === "idle" && !e._suspended))[0],
+
+    hasSkillType: (typeName, skill) => {
+      const et = (model?.entityTypes || []).find(et =>
+        et.role === "server" && match(et.name, typeName)
+      );
+      return et && Array.isArray(et.skills) && et.skills.includes(skill);
+    },
 
     findById: (id) =>
       findEntityById(index, entities, id),

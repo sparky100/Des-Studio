@@ -53,10 +53,11 @@ const conditionOptions = (entityTypes, stateVariables=[], queues=[]) => {
   return opts;
 };
 
-const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName="", containerTypes=[], contextServer=null) => {
+const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName="", containerTypes=[], contextServer=null, modelSkills=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const activeServers = contextServer ? servers.filter(s=>s===contextServer) : servers;
+  const serverSkills = Object.fromEntries((entityTypes||[]).filter(e=>e.role==='server').map(e=>[normTypeName(e.name),Array.isArray(e.skills)?e.skills:[]]));
   const opts = [{label:'— select effect —',value:''}];
   const cName = contextName || "service";
   // Queue-based ASSIGN combinations
@@ -65,6 +66,10 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
     queues.forEach(q => {
       activeServers.forEach(s => {
         opts.push({label:`Start ${cName} with ${s} and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`, value:`ASSIGN(${q.name}, ${s})`});
+        const skills=serverSkills[s]||[];
+        skills.forEach(skill=>{
+          opts.push({label:`Start ${cName} with ${s} (${skill}) and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`, value:`ASSIGN(${q.name}, ${s}, "${skill}")`});
+        });
       });
     });
   }
@@ -73,6 +78,10 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
     opts.push({label:'── ASSIGN ──',value:'',disabled:true});
     custs.forEach(c=>activeServers.forEach(s=>{
       opts.push({label:`Start ${cName} with ${s} and ${c}`,value:`ASSIGN(${c}, ${s})`});
+      const skills=serverSkills[s]||[];
+      skills.forEach(skill=>{
+        opts.push({label:`Start ${cName} with ${s} (${skill}) and ${c}`,value:`ASSIGN(${c}, ${s}, "${skill}")`});
+      });
     }));
   }
   // BATCH options — C-Event macro
@@ -151,9 +160,23 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       const entityLabel = q.customerType ? normTypeName(q.customerType) : 'entity';
       for(let i=0;i<servers.length;i++){
         for(let j=i+1;j<servers.length;j++){
+          const s1=servers[i], s2=servers[j];
+          const sk1=serverSkills[s1]||[], sk2=serverSkills[s2]||[];
           opts.push({
-            label: `Seize ${servers[i]} + ${servers[j]} for ${entityLabel} from ${queueDisplayName(q.name)}`,
-            value: `COSEIZE(${q.name}, ${servers[i]}, ${servers[j]})`,
+            label: `Seize ${s1} + ${s2} for ${entityLabel} from ${queueDisplayName(q.name)}`,
+            value: `COSEIZE(${q.name}, ${s1}, ${s2})`,
+          });
+          sk1.forEach(skill=>{
+            opts.push({
+              label: `Seize ${s1}[${skill}] + ${s2} for ${entityLabel} from ${queueDisplayName(q.name)}`,
+              value: `COSEIZE(${q.name}, ${s1}[${skill}], ${s2})`,
+            });
+          });
+          sk2.forEach(skill=>{
+            opts.push({
+              label: `Seize ${s1} + ${s2}[${skill}] for ${entityLabel} from ${queueDisplayName(q.name)}`,
+              value: `COSEIZE(${q.name}, ${s1}, ${s2}[${skill}])`,
+            });
           });
         }
       }

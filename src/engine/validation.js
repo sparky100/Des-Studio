@@ -1226,6 +1226,73 @@ export function validateModel(model) {
     });
   }
 
+  // ── Skills validation ──────────────────────────────────────────────────────
+  const modelSkills = model.skills || [];
+  const serverTypeMap = {};
+  entityTypes.filter(et => et.role === 'server').forEach(et => {
+    serverTypeMap[(et.name || '').trim().toLowerCase()] = et;
+  });
+
+  // V-SKILL-1: Server type skills must exist in the global skills list
+  entityTypes.filter(et => et.role === 'server').forEach(et => {
+    if (!Array.isArray(et.skills)) return;
+    et.skills.forEach(skill => {
+      if (!modelSkills.includes(skill)) {
+        err('V-SKILL-1',
+          `Entity class '${et.name}' references skill '${skill}' which is not defined in the model's skill registry. Add '${skill}' in Model Settings → Skills.`,
+          'entities',
+          { entityTypeIds: [et.id] });
+      }
+    });
+  });
+
+  // V-SKILL-2: Skills referenced in ASSIGN/COSEIZE effects must exist on the target server type
+  [...bEvents, ...cEvents].forEach(ev => {
+    const text = effectText(ev.effect);
+    // ASSIGN(Queue, ServerType, "Skill")
+    const assignMatch = text.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*"([^"]+)"\s*\)/gi);
+    if (assignMatch) {
+      assignMatch.forEach(m => {
+        const parts = m.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*"([^"]+)"\s*\)/i);
+        if (!parts) return;
+        const sType = parts[2].trim();
+        const skill = parts[3].trim();
+        const stKey = sType.toLowerCase();
+        const serverType = serverTypeMap[stKey];
+        if (serverType && (!Array.isArray(serverType.skills) || !serverType.skills.includes(skill))) {
+          err('V-SKILL-2',
+            `Effect '${m.trim()}' references skill '${skill}' but server type '${sType}' does not have that skill assigned.`,
+            ev.effect ? 'cevents' : 'bevents',
+            { eventIds: [ev.id] });
+        }
+      });
+    }
+    // COSEIZE with bracket skill syntax: COSEIZE(Q, Doctor[Surgery], Nurse[Triage])
+    const coseizeMatch = text.match(/COSEIZE\s*\(([^)]+)\)/gi);
+    if (coseizeMatch) {
+      coseizeMatch.forEach(m => {
+        const inner = m.match(/COSEIZE\s*\(([^)]+)\)/i);
+        if (!inner) return;
+        const args = inner[1].split(',').map(a => a.trim());
+        for (let i = 1; i < args.length; i++) {
+          const bracketMatch = args[i].match(/^([^\[]+)\[([^\]]+)\]$/);
+          if (bracketMatch) {
+            const sType = bracketMatch[1].trim();
+            const skill = bracketMatch[2].trim();
+            const stKey = sType.toLowerCase();
+            const serverType = serverTypeMap[stKey];
+            if (serverType && (!Array.isArray(serverType.skills) || !serverType.skills.includes(skill))) {
+              err('V-SKILL-2',
+                `Effect '${m.trim()}' references skill '${skill}' for server type '${sType}' which does not have that skill assigned.`,
+                ev.effect ? 'cevents' : 'bevents',
+                { eventIds: [ev.id] });
+            }
+          }
+        }
+      });
+    }
+  });
+
   return { errors, warnings };
 }
 

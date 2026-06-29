@@ -40,6 +40,8 @@ export interface EntityTypeDefinition {
   mtbfDistParams?: Record<string, unknown>;
   mttrDist?: string;
   mttrDistParams?: Record<string, unknown>;
+  /** Skills assigned to this server type (must exist in model_json.skills). */
+  skills?: string[];
   description?: string;
 }
 
@@ -222,6 +224,8 @@ export interface DesModelJson {
   dataSources?: DataSourceDefinition[];
   experimentDefaults?: ExperimentDefaults;
   graph?: ModelGraphMetadata;
+  /** Global skill registry for server-type skills. */
+  skills?: string[];
 }
 
 export interface ExperimentDefaults {

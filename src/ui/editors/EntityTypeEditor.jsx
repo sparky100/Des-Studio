@@ -37,7 +37,7 @@ const shiftWhenVariableLabel=(variable,stateVariables,queues)=>{
   return variable;
 };
 
-const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=null,timeUnit="minutes",errorFilter=null,onClearErrorFilter,onChange})=>{
+const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=null,timeUnit="minutes",errorFilter=null,onClearErrorFilter,skills=[],onChange})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -409,6 +409,27 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                         : "One failure takes the entire pool offline. All servers are repaired together."}
                     </span>
                   </>)}
+                </SectionPanel>
+              )}
+              {et.role==="server"&&skills.length>0&&(
+                <SectionPanel label="Skills" status={Array.isArray(et.skills)&&et.skills.length?`${et.skills.length} skill${et.skills.length>1?"s":""}`:"none"} color={C.server}>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {skills.map(skill=>{
+                      const has=Array.isArray(et.skills)&&et.skills.includes(skill);
+                      return (
+                        <label key={skill} style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontFamily:FONT,fontSize:11,color:has?C.server:C.muted,userSelect:"none"}}>
+                          <input type="checkbox" checked={has} style={{accentColor:C.server}}
+                            onChange={()=>{
+                              const n=[...types];
+                              const current=Array.isArray(n[i].skills)?[...n[i].skills]:[];
+                              n[i]={...n[i],skills:has?current.filter(s=>s!==skill):[...current,skill]};
+                              onChange(n);
+                            }}/>
+                          {skill}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </SectionPanel>
               )}
               <input value={et.description||""} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"

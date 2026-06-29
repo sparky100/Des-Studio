@@ -95,8 +95,30 @@ function deriveTypeStats(serverType, snap, refId, model) {
       customerEntityId: cust?.attrs?.entityId ?? null,
       customerArrivalTime: cust?.arrivalTime ?? null,
       ceventName: cust?.ceventName ?? null,
+      currentSkill: srv._currentSkill ?? null,
     };
   });
+  const skillNameCount = {};
+  for (const srv of relevant) {
+    const sk = srv._currentSkill;
+    if (sk) {
+      if (!skillNameCount[sk]) skillNameCount[sk] = { busy: 0, idle: 0, total: 0 };
+      skillNameCount[sk].total++;
+      if (srv.status === "busy") skillNameCount[sk].busy++;
+      else if (srv.status === "idle") skillNameCount[sk].idle++;
+    }
+  }
+  const skillBreakdown = Object.keys(skillNameCount).length ? Object.fromEntries(
+    Object.entries(skillNameCount).map(([skill, counts]) => [
+      skill, {
+        busyCount: counts.busy,
+        idleCount: counts.idle,
+        totalCount: counts.total,
+        utilisation: counts.total > 0 ? (counts.busy / counts.total) * 100 : 0,
+      }
+    ])
+  ) : undefined;
+
   return {
     serverTypeName: serverType,
     capacity: actualCapacity,
@@ -107,6 +129,7 @@ function deriveTypeStats(serverType, snap, refId, model) {
     suspendedCount,
     utilisation: actualCapacity > 0 ? (busyCount / actualCapacity) * 100 : 0,
     servers: serverDetails,
+    skillBreakdown,
   };
 }
 

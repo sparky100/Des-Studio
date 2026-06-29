@@ -9,7 +9,7 @@ import { summarizeBEventEffect } from "../../model/effectSummary.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter, onCreateBEvent, focusCEventId=null, onFocusHandled, onGoToBEvent})=>{
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter, onCreateBEvent, focusCEventId=null, onFocusHandled, onGoToBEvent, skills=[]})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -299,7 +299,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                         return (
                           <EffectPicker
                             effects={effectArr}
-                            options={assignOptions(entityTypes, stateVariables, queues, ev.name, containerTypes, contextServer)}
+                            options={assignOptions(entityTypes, stateVariables, queues, ev.name, containerTypes, contextServer, skills)}
                             expressionContext={{
                               stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
                               attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean))

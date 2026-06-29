@@ -65,7 +65,30 @@ function PoolText({ activityBusyCount, busyCount, failedCount, capacity }) {
   );
 }
 
-function ResourceRow({ serverName, capacity, busyCount, activityBusyCount, failedCount, utilisation }) {
+function SkillBadges({ skillBreakdown }) {
+  const { C, FONT } = useTheme();
+  if (!skillBreakdown) return null;
+  const skills = Object.entries(skillBreakdown);
+  if (!skills.length) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 2 }}>
+      {skills.map(([skill, data]) => (
+        <span key={skill} style={{
+          fontSize: 8,
+          fontFamily: FONT,
+          color: data.utilisation >= 90 ? C.red : data.utilisation >= 60 ? C.amber : C.muted,
+          background: `${C.border}30`,
+          borderRadius: 3,
+          padding: "1px 5px",
+        }}>
+          {skill} {data.utilisation.toFixed(0)}%
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ResourceRow({ serverName, capacity, busyCount, activityBusyCount, failedCount, utilisation, skillBreakdown }) {
   const { C, FONT } = useTheme();
   const useText     = capacity > MAX_DOTS;
   const hasFailures = failedCount > 0;
@@ -99,6 +122,7 @@ function ResourceRow({ serverName, capacity, busyCount, activityBusyCount, faile
           </span>
         )}
       </div>
+      <SkillBadges skillBreakdown={skillBreakdown} />
     </>
   );
 }
@@ -133,6 +157,7 @@ export function ExecuteActivityNode({ data }) {
   const utilisation        = live?.utilisation        ?? 0;
   const serverName         = live?.serverTypeName     ?? null;
   const rows               = live?.perType?.length > 1 ? live.perType : null;
+  const skillBreakdown     = live?.skillBreakdown     ?? null;
 
   return (
     <div style={{
@@ -200,6 +225,7 @@ export function ExecuteActivityNode({ data }) {
                 activityBusyCount={row.activityBusyCount}
                 failedCount={row.failedCount}
                 utilisation={row.utilisation}
+                skillBreakdown={row.skillBreakdown}
               />
             </div>
           ))
@@ -218,6 +244,7 @@ export function ExecuteActivityNode({ data }) {
               activityBusyCount={activityBusyCount}
               failedCount={failedCount}
               utilisation={utilisation}
+              skillBreakdown={skillBreakdown}
             />
           </>
         )

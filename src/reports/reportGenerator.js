@@ -793,6 +793,21 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     });
     utilTableHtml = `<p class="note">Percentage of time each resource was busy (averaged across the run, excluding warm-up). Green &lt;75%, amber 75–90%, red &gt;90%.</p>
     ${htmlTable(['Resource type', 'Capacity', 'Utilisation'], utilRows)}`;
+
+    // Per-skill utilisation rows
+    const skillRows = resourceTypes.flatMap(t => {
+      const sk = perResource[t].skillUtil;
+      return sk ? Object.entries(sk).map(([skill, util]) => [
+        `${t} (${skill})`,
+        '—',
+        Number.isFinite(util) ? `${Math.round(util * 100)}%` : '—',
+      ]) : [];
+    });
+    if (skillRows.length) {
+      utilTableHtml += `<h4 style="margin-top:18px">Per-skill utilisation</h4>
+      <p class="note">Breakdown of resource busy time by the skill they were performing.</p>
+      ${htmlTable(['Resource (skill)', '', 'Utilisation'], skillRows)}`;
+    }
   }
 
   // Container levels table

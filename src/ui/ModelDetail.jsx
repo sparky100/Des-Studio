@@ -1296,7 +1296,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 <Btn small variant="ghost" onClick={()=>setShowCsvImport(true)}>Import from CSV</Btn>
               </div>
             )}
-            <EntityTypeEditor types={model.entityTypes||[]} sections={model.sections||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} errorFilter={errorFilter?.tab==="entities"?{filteredEntityTypeIds:errorFilter.affectedEntityTypeIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} onChange={canEdit?newTypes=>{
+            <EntityTypeEditor types={model.entityTypes||[]} sections={model.sections||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} skills={model.skills||[]} errorFilter={errorFilter?.tab==="entities"?{filteredEntityTypeIds:errorFilter.affectedEntityTypeIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} onChange={canEdit?newTypes=>{
               const oldTypes = model.entityTypes || [];
               let updated = { ...model, entityTypes: newTypes };
               for (let i = 0; i < newTypes.length; i++) {
@@ -1362,6 +1362,44 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </span>
               </div>
             </div>
+            {/* ── Skills section ── */}
+            <div>
+              <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Skills</div>
+              <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Define capabilities that server types can possess. Used for skill-based routing in ASSIGN and COSEIZE.</div>
+            </div>
+            <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:"16px 18px",display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,minHeight:28}}>
+                {(model.skills||[]).map((skill,i)=>(
+                  <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,background:C.cEvent+'22',color:C.cEvent,border:`1px solid ${C.cEvent}44`,borderRadius:4,fontFamily:FONT,fontSize:12,padding:"3px 8px"}}>
+                    {skill}
+                    {canEdit&&(
+                      <span onClick={()=>setField("skills",(model.skills||[]).filter((_,j)=>j!==i))} style={{cursor:"pointer",opacity:0.6,fontSize:14,lineHeight:"14px"}}>×</span>
+                    )}
+                  </span>
+                ))}
+                {(model.skills||[]).length===0&&(
+                  <span style={{fontSize:12,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>No skills defined yet</span>
+                )}
+              </div>
+              {canEdit&&(
+                <div style={{display:"flex",gap:6}}>
+                  <input
+                    id="skill-input"
+                    placeholder="Type skill name and press Enter"
+                    onKeyDown={e=>{
+                      if(e.key==="Enter"){
+                        const v=e.target.value.trim();
+                        if(v&&!(model.skills||[]).includes(v)){
+                          setField("skills",[...(model.skills||[]),v]);
+                        }
+                        e.target.value="";
+                      }
+                    }}
+                    style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}
+                  />
+                </div>
+              )}
+            </div>
             <StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?newVars=>{
               const oldVars = model.stateVariables || [];
               let updated = { ...model, stateVariables: newVars };
@@ -1378,7 +1416,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           </div>
         )}
         {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><TabErrors tabId="bevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}} onGoToCEvent={(cEventId)=>{setFocusCEventId(cEventId);setTab("cevents");}} errorFilter={errorFilter?.tab==="bevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
-        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><TabErrors tabId="cevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}} onCreateBEvent={canEdit?b=>setField("bEvents",[...(model.bEvents||[]),b]):undefined} focusCEventId={focusCEventId} onFocusHandled={()=>setFocusCEventId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} errorFilter={errorFilter?.tab==="cevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
+        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><TabErrors tabId="cevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} skills={model.skills||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}} onCreateBEvent={canEdit?b=>setField("bEvents",[...(model.bEvents||[]),b]):undefined} focusCEventId={focusCEventId} onFocusHandled={()=>setFocusCEventId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} errorFilter={errorFilter?.tab==="cevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
         {tab==="sections"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><SectionEditor sections={model.sections||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} bEvents={model.bEvents||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("sections",v):()=>{}}/></div>)}
         {tab==="goals"&&renderAuthoringShell(<div style={{maxWidth:760,margin:"0 auto"}}><GoalsEditor goals={model.goals||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/></div>)}
         {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} dataSources={model.dataSources||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
