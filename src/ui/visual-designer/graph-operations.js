@@ -1,4 +1,5 @@
 import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES } from "./graph.js";
+import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 
 function clean(value = "") {
   return String(value || "").trim();
@@ -335,6 +336,23 @@ function replaceContainerName(text = "", oldName, newName) {
     .replace(new RegExp(`FILL\\(${esc}\\s*,`, "gi"), `FILL(${newName},`)
     .replace(new RegExp(`DRAIN\\(${esc}\\s*,`, "gi"), `DRAIN(${newName},`)
     .replace(new RegExp(`container\\(${esc}\\)`, "gi"), `container(${newName})`);
+}
+
+function conditionReferencesQueue(condition, queueName) {
+  if (!condition || !queueName) return false;
+  const names = extractQueueNamesFromCondition(condition);
+  return names.some(n => n.toLowerCase() === queueName.toLowerCase());
+}
+
+function replaceQueueNameInObjectCondition(condition, oldName, newName) {
+  if (!condition || typeof condition !== "object" || Array.isArray(condition)) return condition;
+  if (Array.isArray(condition.clauses)) {
+    return { ...condition, clauses: condition.clauses.map(c => replaceQueueNameInObjectCondition(c, oldName, newName)) };
+  }
+  const variable = String(condition.variable || condition.token || condition.left || "");
+  const updated = variable.replace(new RegExp(`queue\\(${escRe(oldName)}\\)`, "gi"), `queue(${newName})`);
+  if (updated === variable) return condition;
+  return { ...condition, variable: updated };
 }
 
 // Format B predicate objects ({variable, operator, value} or {operator: "AND"/"OR", clauses: [...]})
@@ -878,10 +896,13 @@ export function connectVisualNodes(model, graph, from, to) {
   }
 
   if (source.type === VISUAL_NODE_TYPES.ACTIVITY && target.type === VISUAL_NODE_TYPES.SINK) {
-    next.cEvents = updateByRef(next.cEvents, source.refId, event => ({
-      ...event,
-      cSchedules: [{ eventId: target.refId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
-    }));
+    next.cEvents = updateByRef(next.cEvents, source.refId, event => {
+      const kept = (event.cSchedules || []).filter(cs => cs.eventId !== target.refId);
+      return {
+        ...event,
+        cSchedules: [...kept, { eventId: target.refId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+      };
+    });
   }
 
   return { model: updateGraphLayout(next, deriveGraphFromModel(next)), validation };
@@ -921,7 +942,7 @@ export function findNodeDependents(model, node) {
       cEvents.forEach(ce => {
         const cond = typeof ce.condition === "string" ? ce.condition : "";
         const eff = Array.isArray(ce.effect) ? ce.effect.join(";") : (typeof ce.effect === "string" ? ce.effect : "");
-        if (condPat.test(cond) || effPat.test(eff)) {
+        if (condPat.test(cond) || effPat.test(eff) || conditionReferencesQueue(ce.condition, queue.name)) {
           affectedCIds.add(ce.id);
           deps.push({ name: ce.name || ce.id, elementType: "C-Event", description: "will be deleted" });
         }
@@ -1016,10 +1037,10 @@ export function deleteVisualEdge(model, graph, edgeId) {
     );
   }
 
-  // Queue → Activity ("condition"): clear queue-specific condition and ASSIGN/DELAY effect
+  // Queue → Activity ("condition"): clear queue-specific condition, ASSIGN/DELAY effect and cSchedules
   if (edge.source === "condition" && fromNode.type === VISUAL_NODE_TYPES.QUEUE && toNode.type === VISUAL_NODE_TYPES.ACTIVITY) {
     next.cEvents = cEvents.map(ce =>
-      ce.id !== toNode.refId ? ce : { ...ce, condition: "", effect: [] }
+      ce.id !== toNode.refId ? ce : { ...ce, condition: "", effect: [], cSchedules: [] }
     );
   }
 
@@ -1208,7 +1229,7 @@ export function deleteVisualNode(model, node) {
     if (queue && queue.name) {
       const esc = escRe(queue.name);
       const condPat = new RegExp(`queue\\(${esc}\\)`, "i");
-      const effPat = new RegExp(`ASSIGN\\(${esc}`, "i");
+      const effPat = new RegExp(`(?:ASSIGN|DELAY)\\(${esc}`, "i");
       const arrivePat = new RegExp(`ARRIVE\\([^,]+,\\s*${esc}\\)`, "i");
       const releasePat = new RegExp(`RELEASE\\([^,]+,\\s*${esc}\\)`, "i");
 
@@ -1217,7 +1238,7 @@ export function deleteVisualNode(model, node) {
           .filter(ce => {
             const cond = typeof ce.condition === "string" ? ce.condition : "";
             const eff = Array.isArray(ce.effect) ? ce.effect.join(";") : (typeof ce.effect === "string" ? ce.effect : "");
-            return condPat.test(cond) || effPat.test(eff);
+            return condPat.test(cond) || effPat.test(eff) || conditionReferencesQueue(ce.condition, queue.name);
           })
           .map(ce => ce.id)
       );
@@ -1350,8 +1371,12 @@ export function updateVisualNode(model, node, patch = {}) {
       }));
       next.cEvents = (next.cEvents || []).map(event => ({
         ...event,
-        condition: replaceQueueName(event.condition, oldName, nextName),
-        effect: replaceQueueName(event.effect, oldName, nextName),
+        condition: typeof event.condition === "string"
+          ? replaceQueueName(event.condition, oldName, nextName)
+          : replaceQueueNameInObjectCondition(event.condition, oldName, nextName),
+        effect: typeof event.effect === "string"
+          ? replaceQueueName(event.effect, oldName, nextName)
+          : replaceQueueNameInObjectCondition(event.effect, oldName, nextName),
       }));
     }
   }
