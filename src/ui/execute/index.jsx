@@ -30,7 +30,7 @@ import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
 import { qrSvg } from "../share/qr.js";
-import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
@@ -1693,6 +1693,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setTimeout(() => setSaveStatus(null), 4000);
   }, [model, results, replicationResults, aggregateStats, exportConfig, resultFilenameBase]);
 
+  const exportResultsXlsx = useCallback(() => {
+    setSaveStatus({ state: 'saving', message: 'Preparing Excel export…' });
+    buildResultsXlsx({ results, replicationResults, aggregateStats, config: exportConfig, model });
+    setSaveStatus({ state: 'success', message: '✓ Excel export complete' });
+    setTimeout(() => setSaveStatus(null), 4000);
+  }, [results, replicationResults, aggregateStats, exportConfig, model]);
+
   const assembleRunMeta = (runId) => {
     const rec = savedRunHistory.find(r => r.id === runId);
     const rj = rec?.results_json || {};
@@ -2812,6 +2819,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 <PopoverRow label="Full model results (.json)" onClick={() => { setShowExportPopover(false); exportResultsJson(false); }} />
                 <PopoverRow label="Metrics only (.json)" onClick={() => { setShowExportPopover(false); exportResultsJson(true); }} mute hint="KPIs only — no time series or entity data" />
                 <PopoverRow label="Results table (.csv)" onClick={() => { setShowExportPopover(false); exportResultsCsv(); }} />
+                <PopoverRow label="Results workbook (.xlsx)" onClick={() => { setShowExportPopover(false); exportResultsXlsx(); }} mute hint="Multi-sheet Excel workbook — Summary, Replications, Entity Journeys" />
                 <div style={{ height: 1, background: C.border, margin: "4px 8px" }} />
                 <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>AI & REPORTS</span>
                 <PopoverRow label="LLM Bundle (.md)" onClick={() => { setShowExportPopover(false); exportLLMBundle(); }} mute hint="Model + results as Markdown — paste into any AI tool" />

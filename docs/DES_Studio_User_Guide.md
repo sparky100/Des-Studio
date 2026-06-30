@@ -399,7 +399,7 @@ All export formats are available from the single **Export ▾** popover in the E
 
 | Popover section | Options |
 |-----------------|---------|
-| **Results Data** | Full model results (.json), Metrics only (.json — KPIs, no time series or entity data), Results table (.csv — per-replication rows + aggregate stats) |
+| **Results Data** | Full model results (.json), Metrics only (.json — KPIs, no time series or entity data), Results table (.csv), Results workbook (.xlsx — multi-sheet Excel with Summary, Replications, and Entity Journeys) |
 | **AI & Reports** | LLM Bundle (.md), Create Report… (Senior Management or Technical, HTML or Markdown) |
 | **Reference** | Schema reference — opens a modal showing the full `simmodlr.results.v1` JSON structure with a "Copy schema" button |
 

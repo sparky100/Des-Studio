@@ -3,6 +3,7 @@
 import { TOKEN_COLORS } from "../shared/tokens.js";
 import { slugifyResultName, timestampForFilename, csvEscape, downloadTextFile } from "../shared/utils.js";
 import { buildWaitDistEntry, finalizeWeightedStats } from "../../engine/statistics.js";
+import * as XLSX from 'xlsx';
 export { downloadTextFile };
 
 export const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
@@ -612,6 +613,107 @@ export function buildResultsCsv({ results, replicationResults = [], aggregateSta
   }
 
   return rows.map(row => row.map(csvEscape).join(",")).join("\n");
+}
+
+export function buildResultsXlsx({ results, replicationResults = [], aggregateStats = {}, config = {}, model } = {}) {
+  const modelName = model?.name || 'Untitled model';
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Summary
+  const summary = results?.summary || {};
+  const summaryRows = [
+    ['Metric', 'Value'],
+    ['Model', modelName],
+    ['Run Label', config.runLabel || ''],
+    ['Seed', config.seed ?? ''],
+    ['Replications', config.replications ?? ''],
+    ['Warm-up Period', config.warmupPeriod ?? ''],
+    ['Max Sim Time', config.maxSimTime ?? ''],
+    ['Total Arrived', summary.total ?? ''],
+    ['Served', summary.served ?? ''],
+    ['Reneged', summary.reneged ?? ''],
+    ['Completion Rate', summary.servedRatio != null ? Math.round(summary.servedRatio * 100) + '%' : ''],
+    ['Avg Wait', summary.avgWait ?? ''],
+    ['Avg Service', summary.avgSvc ?? ''],
+    ['Avg Sojourn', summary.avgSojourn ?? ''],
+    ['Avg Time in System', summary.avgTimeInSystem ?? ''],
+    ['Avg WIP', summary.avgWIP ?? ''],
+    ['Max WIP', summary.maxWIP ?? ''],
+    ['Total Cost', summary.totalCost ?? ''],
+    ['Cost per Served', summary.costPerServed ?? ''],
+  ];
+  const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
+  summaryWs['!cols'] = [{ wch: 22 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+  // Sheet 2: Replications
+  const repRows = [['Replication', 'Seed', 'Arrived', 'Served', 'Reneged', 'Completion Rate', 'Avg Wait', 'Avg Svc', 'Avg Sojourn', 'Avg Time in System', 'Total Cost', 'Cost per Served', 'Final Time']];
+  const resultRows = replicationResults.length
+    ? replicationResults.map(p => ({
+        idx: p.replicationIndex, seed: p.seed,
+        s: p.result?.summary ?? p.summary ?? {},
+        ft: p.result?.finalTime ?? p.finalTime ?? null,
+      }))
+    : results ? [{ idx: 0, seed: config.seed ?? '', s: summary, ft: results.finalTime ?? null }] : [];
+  for (const r of resultRows) {
+    repRows.push([
+      r.idx, r.seed, r.s.total ?? '', r.s.served ?? '', r.s.reneged ?? '',
+      r.s.servedRatio != null ? Math.round(r.s.servedRatio * 100) + '%' : '',
+      r.s.avgWait ?? '', r.s.avgSvc ?? '', r.s.avgSojourn ?? '',
+      r.s.avgTimeInSystem ?? '', r.s.totalCost ?? '', r.s.costPerServed ?? '',
+      r.ft ?? '',
+    ]);
+  }
+
+  // Aggregate stats footer
+  const aggEntries = Object.entries(aggregateStats).filter(([, s]) => s && s.n > 0);
+  if (aggEntries.length) {
+    repRows.push([]);
+    repRows.push(['Metric', 'n', 'Mean', 'Lower 95%', 'Upper 95%', 'Half-Width']);
+    for (const [metric, stat] of aggEntries) {
+      repRows.push([metric, stat.n, stat.mean, stat.lower, stat.upper, stat.halfWidth]);
+    }
+  }
+  const repWs = XLSX.utils.aoa_to_sheet(repRows);
+  repWs['!cols'] = Array(13).fill({ wch: 14 });
+  XLSX.utils.book_append_sheet(wb, repWs, 'Replications');
+
+  // Sheet 3: Entity Journeys (when present)
+  const entitySummary = results?.entitySummary;
+  if (Array.isArray(entitySummary) && entitySummary.length) {
+    const journeys = buildEntityJourneys(entitySummary);
+    const ejRows = [['Entity ID', 'Type', 'Arrived At', 'Completed At', 'Status', 'Stage Queue', 'Stage Wait', 'Stage Server', 'Stage Service', 'Outcome Route', 'Outcome Status']];
+    for (const j of journeys) {
+      if (j.stages.length) {
+        for (const stage of j.stages) {
+          ejRows.push([
+            j.entityId, j.type, j.arrivedAt, j.completedAt, j.status,
+            stage.queue, stage.wait, stage.server, stage.service,
+            j.outcome?.routeLabel || '', j.outcome?.status || '',
+          ]);
+        }
+      } else {
+        ejRows.push([
+          j.entityId, j.type, j.arrivedAt, j.completedAt, j.status,
+          '', '', '', '',
+          j.outcome?.routeLabel || '', j.outcome?.status || '',
+        ]);
+      }
+    }
+    const ejWs = XLSX.utils.aoa_to_sheet(ejRows);
+    ejWs['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ejWs, 'Entity Journeys');
+  }
+
+  // Write to buffer and trigger download
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `simmodlr-results-${slugifyResultName(modelName)}-${timestampForFilename()}.xlsx`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 

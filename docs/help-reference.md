@@ -876,7 +876,7 @@ The LLM Bundle is a structured Markdown file that combines model definition and 
 4. The file downloads immediately. Paste its contents into any LLM interface.
 
 Other options in the **Export ▾** popover:
-- **Results Data** section: Full JSON (.json), Metrics-only JSON, Results table (.csv)
+- **Results Data** section: Full JSON (.json), Metrics-only JSON, Results table (.csv), Results workbook (.xlsx — multi-sheet: Summary, Replications, Entity Journeys)
 - **AI & Reports** section: LLM Bundle (.md), Create Report…
 - **Reference** section: Schema reference — opens a modal documenting the full `simmodlr.results.v1` JSON structure
 
