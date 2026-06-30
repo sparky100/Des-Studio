@@ -7,6 +7,7 @@ import { SectionFilterTabs } from "../editors/helpers.jsx";
 import { buildResultsViewModel } from "./resultsViewModel.js";
 import { evaluateResultsHealth } from "./healthFlags.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { ExportPopover } from "../shared/ExportPopover.jsx";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { buildGoalGaps } from "../../llm/prompts.js";
 
@@ -1619,6 +1620,21 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     return { ...SECTION_DEFAULTS };
   });
   const [activeSectionIds, setActiveSectionIds] = useState([]);
+  const [showExportPopover, setShowExportPopover] = useState(false);
+
+  const exportConfigRW = useMemo(() => {
+    const expConfig = results?._experiment_config || {};
+    return {
+      runLabel: expConfig.runLabel || '',
+      seed: results?._base_seed ?? expConfig.seed ?? null,
+      replications: expConfig.replications ?? replicationResults.length ?? 1,
+      warmupPeriod: expConfig.warmupPeriod ?? 0,
+      maxSimTime: expConfig.maxSimTime ?? null,
+      terminationMode: expConfig.terminationMode || 'time',
+      terminationCondition: expConfig.terminationCondition || null,
+      batchStatus: 'complete',
+    };
+  }, [results, replicationResults]);
 
   const toggleSection = id => setSectionsOpen(prev => {
     const next = { ...prev, [id]: !prev[id] };
@@ -1808,14 +1824,32 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
       <KeyFindingsBanner healthFlags={healthFlags} C={C} FONT={FONT} />
       {/* ── Export toolbar ─────────────────────────────────────────────────── */}
-      {hasChartData && (
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <Btn small variant="ghost" onClick={handleDownloadAllChartData}>
-            ⬇ Download all chart data (.csv)
-          </Btn>
-          <Btn small variant="ghost" onClick={handleExportLLMBundle}>
-            AI tools (.md)
-          </Btn>
+      {(hasChartData || results) && (
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
+          <div style={{ position: "relative" }}>
+            <Btn small variant="ghost" onClick={() => setShowExportPopover(v => !v)} disabled={!results}>Export ▾</Btn>
+            {showExportPopover && (
+              <>
+                <div
+                  style={{ position: "fixed", inset: 0, zIndex: 99 }}
+                  onClick={() => setShowExportPopover(false)}
+                />
+                <ExportPopover
+                  model={model}
+                  results={results}
+                  replicationResults={replicationResults}
+                  aggregateStats={results?.aggregateStats || {}}
+                  config={exportConfigRW}
+                  onClose={() => setShowExportPopover(false)}
+                />
+              </>
+            )}
+          </div>
+          {hasChartData && (
+            <Btn small variant="ghost" onClick={handleDownloadAllChartData}>
+              ⬇ Download all chart data (.csv)
+            </Btn>
+          )}
         </div>
       )}
       {/* ── 1. Headline KPIs ───────────────────────────────────────────────── */}

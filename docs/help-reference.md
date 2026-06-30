@@ -868,10 +868,14 @@ All actions require an explicit click — nothing fires automatically when you s
 
 The LLM Bundle is a structured Markdown file that combines model definition and run results into a self-contained document for paste-into-LLM analysis. It includes a plain-English DES preamble so no additional context is needed when pasting into Claude, ChatGPT, or Gemini.
 
+### Where to find Export ▾
+
+The unified **Export ▾** popover is available across all results views: the **Execute/Run** panel toolbar (after a run completes), the **Results** workspace tab, and per-run in **Run History** via the ⋯ (More actions) menu.
+
 ### How to download
 
 1. Complete a run (any number of replications).
-2. In the Execute panel, click **Export ▾** in the toolbar.
+2. Open **Export ▾** in the toolbar of the Execute panel, Results workspace, or the Run History ⋯ menu.
 3. Under the **AI & Reports** section, click **LLM Bundle (.md)**.
 4. The file downloads immediately. Paste its contents into any LLM interface.
 

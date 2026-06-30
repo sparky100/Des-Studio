@@ -14,6 +14,7 @@ import { CI_METRICS, METRIC_LABELS, fmt } from "./execute/executeHelpers.js";
 import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
 import { buildLLMBundle } from "../llm/bundleExport.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { ExportPopover } from "./shared/ExportPopover.jsx";
 
 function slugifyModelName(name = "") {
 
@@ -60,6 +61,7 @@ export function ModelHistoryTab({
   const [moreMenuId, setMoreMenuId] = useState(null);
   const [moreMenuPos, setMoreMenuPos] = useState({ top: 0, right: 0 });
   const [exportListMenuOpen, setExportListMenuOpen] = useState(false);
+  const [exportPopoverRowId, setExportPopoverRowId] = useState(null);
   const [selectedComparison, setSelectedComparison] = useState(null);
   const runHistoryFetcher = (filters = {}) => (
     userId ? fetchRunHistory(modelId, filters) : Promise.resolve(fetchLocalRunHistory(modelId))
@@ -547,10 +549,46 @@ export function ModelHistoryTab({
                                     style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
                                   >{reproduceState[row.id]?.status === 'running' ? 'Running…' : 'Reproduce'}</button>
                                   {hasResultsPayload(row) && (
-                                    <button
-                                      onClick={() => handleExportLLMBundle(row)}
-                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
-                                    >Export for AI tools (.md)</button>
+                                    <div style={{ position: "relative" }}>
+                                      <button
+                                        onClick={() => {
+                                          setExportPopoverRowId(exportPopoverRowId === row.id ? null : row.id);
+                                        }}
+                                        style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
+                                      >Export results ▾</button>
+                                      {exportPopoverRowId === row.id && (
+                                        <>
+                                          <div style={{ position: "fixed", inset: 0, zIndex: 1099 }} onClick={() => setExportPopoverRowId(null)} />
+                                          <div style={{ position: "relative", zIndex: 1100, minWidth: 260 }}>
+                                            {(() => {
+                                              const rowResults = row.results_json || {};
+                                              const expConfig = rowResults._experiment_config || {};
+                                              const rowConfig = {
+                                                runLabel: row.run_label || '',
+                                                seed: row.seed ?? expConfig.seed ?? null,
+                                                replications: row.replications ?? expConfig.replications ?? 1,
+                                                warmupPeriod: row.warmup_period ?? expConfig.warmupPeriod ?? 0,
+                                                maxSimTime: row.max_simulation_time ?? expConfig.maxSimTime ?? null,
+                                                terminationMode: expConfig.terminationMode || 'time',
+                                                terminationCondition: expConfig.terminationCondition || null,
+                                                batchStatus: 'complete',
+                                              };
+                                              const rowReps = rowResults.replications || [];
+                                              return (
+                                                <ExportPopover
+                                                  model={model}
+                                                  results={rowResults}
+                                                  replicationResults={rowReps.map((p, i) => ({ replicationIndex: p.replicationIndex ?? i, seed: p.seed, result: { summary: p.summary || {} }, summary: p.summary || {} }))}
+                                                  aggregateStats={rowResults.aggregateStats || {}}
+                                                  config={rowConfig}
+                                                  onClose={() => setExportPopoverRowId(null)}
+                                                />
+                                              );
+                                            })()}
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
                                   )}
                                   {shareLinksMap?.[row.id] ? (
                                     <>

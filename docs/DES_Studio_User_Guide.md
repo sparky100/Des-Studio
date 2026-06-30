@@ -395,7 +395,7 @@ Once sections are defined:
 
 **When to use this.** You want to analyse results in an external tool — paste into an LLM (Claude, ChatGPT, Gemini), load into a Python notebook, consume from an R script, or connect from a BI tool.
 
-All export formats are available from the single **Export ▾** popover in the Execute panel toolbar (disabled until at least one run completes).
+The unified **Export ▾** popover is available wherever results are present: in the **Execute/Run** panel toolbar, in the **Results** workspace when viewing saved run results, and per-run in **Run History** via the ⋯ (More actions) menu. The popover is disabled until at least one run completes.
 
 | Popover section | Options |
 |-----------------|---------|
