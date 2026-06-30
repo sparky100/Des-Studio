@@ -470,6 +470,35 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
   };
 }
 
+export function buildEntityJourneys(entitySummary) {
+  if (!Array.isArray(entitySummary) || !entitySummary.length) return [];
+  return entitySummary
+    .filter(e => e && e.role !== "server")
+    .map(entity => ({
+      entityId: entity.id ?? null,
+      type: entity.type ?? null,
+      arrivedAt: entity.arrivalTime ?? null,
+      completedAt: entity.completedAt ?? null,
+      status: entity.status ?? null,
+      stages: Array.isArray(entity.stages)
+        ? entity.stages.map(stage => ({
+            queue: stage.queueName ?? null,
+            wait: Number.isFinite(stage.stageWait) ? stage.stageWait : null,
+            server: stage.serverType ?? null,
+            service: Number.isFinite(stage.stageService) ? stage.stageService : null,
+          }))
+        : [],
+      outcome: entity.outcome
+        ? {
+            routeId: entity.outcome.routeId ?? null,
+            routeLabel: entity.outcome.routeLabel ?? null,
+            status: entity.outcome.status ?? null,
+            endedBy: entity.outcome.endedBy ?? null,
+          }
+        : null,
+    }));
+}
+
 export function buildResultsExportPayload({
   model,
   results,
@@ -490,6 +519,11 @@ export function buildResultsExportPayload({
     return { summary, phaseCTruncated, cycleLimitReached, runtimeMetrics };
   }
 
+  const stripped = stripResults(results);
+  const entityJourneys = !metricsOnly && stripped ? buildEntityJourneys(stripped.entitySummary) : undefined;
+  const resultData = { ...stripped };
+  if (entityJourneys !== undefined) resultData.entityJourneys = entityJourneys;
+
   return {
     schema: "simmodlr.results.v1",
     exportedAt,
@@ -509,7 +543,7 @@ export function buildResultsExportPayload({
       terminationMode: config.terminationMode ?? "time",
       terminationCondition: config.terminationCondition ?? null,
     },
-    results: stripResults(results),
+    results: resultData,
     replications: replicationResults.map(payload => ({
       replicationIndex: payload.replicationIndex,
       seed: payload.seed,

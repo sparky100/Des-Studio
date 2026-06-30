@@ -30,7 +30,7 @@ import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
 import { qrSvg } from "../share/qr.js";
-import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
@@ -184,6 +184,186 @@ async function doCloudSave(saveFn, {
 }
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
+
+function PopoverRow({ label, onClick, mute, hint }) {
+  const { C, FONT } = useTheme();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: "none",
+        border: "none",
+        borderRadius: 4,
+        color: mute ? C.muted : C.text,
+        cursor: "pointer",
+        fontFamily: FONT,
+        fontSize: 12,
+        padding: "7px 8px",
+        textAlign: "left",
+        width: "100%",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = C.bg; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "none"; }}
+    >
+      {label}
+      {hint && <div style={{ fontSize: 9, color: C.muted, marginTop: 1 }}>{hint}</div>}
+    </button>
+  );
+}
+
+function SchemaInfoModal({ onClose }) {
+  const { C, FONT } = useTheme();
+  return (
+    <>
+      <div
+        style={{ position: "fixed", inset: 0, background: C.overlay, zIndex: 200 }}
+        onClick={onClose}
+      />
+      <div role="dialog" aria-modal="true" aria-label="JSON export schema reference"
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 201,
+          background: C.cardBg,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+          padding: 24,
+          width: 560,
+          maxWidth: "95vw",
+          maxHeight: "90vh",
+          overflowY: "auto",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          fontFamily: FONT,
+        }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>JSON Export Schema — simmodlr.results.v1</span>
+          <button type="button" aria-label="Close" onClick={onClose}
+            style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", fontFamily: FONT, padding: "0 4px" }}>×</button>
+        </div>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6, marginBottom: 12 }}>
+          Every JSON export produces a <code style={{ background: C.bg, padding: "1px 4px", borderRadius: 3, fontSize: 10 }}>simmodlr.results.v1</code> document. Copy the structure below into an AI tool, Python script, or R notebook to understand the data shape.
+        </div>
+        <pre style={{
+          background: C.bg,
+          border: `1px solid ${C.border}`,
+          borderRadius: 6,
+          padding: 14,
+          fontSize: 10,
+          color: C.text,
+          fontFamily: "monospace",
+          overflowX: "auto",
+          lineHeight: 1.5,
+          whiteSpace: "pre",
+        }}>{SCHEMA_REFERENCE_TEXT}</pre>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+          <Btn variant="primary" small onClick={() => {
+            if (typeof navigator !== "undefined" && navigator.clipboard) {
+              navigator.clipboard.writeText(SCHEMA_REFERENCE_TEXT).catch(() => {});
+            }
+          }}>Copy schema</Btn>
+        </div>
+      </div>
+    </>
+  );
+}
+
+const SCHEMA_REFERENCE_TEXT = `simmodlr.results.v1 — JSON Export Schema
+═══════════════════════════════════════════════
+
+{
+  schema: "simmodlr.results.v1",     // schema identifier
+  exportedAt: "2026-06-30T...",       // ISO timestamp
+  status: "complete",                 // "complete" | "partial"
+  batchStatus: "complete",            // "idle" | "running" | "complete" | ...
+  metricsOnly: false,                 // true if metrics-only export
+
+  model: {
+    id: "uuid",                       // model ID (null if anonymous)
+    name: "My Model"                  // model name
+  },
+
+  experiment: {
+    runLabel: "Baseline",             // user-set run label
+    seed: 12345,                      // base random seed
+    replications: 10,                 // number of replications
+    warmupPeriod: 100,                // time units excluded from stats
+    maxSimTime: 5000,                 // run duration (null if condition-based)
+    terminationMode: "time",          // "time" | "condition"
+    terminationCondition: null        // predicate JSON (if condition-based)
+  },
+
+  results: {
+    summary: {
+      total: 1000,                    // total entities arrived
+      served: 950,                    // entities that completed service
+      reneged: 50,                    // entities that abandoned
+      avgWait: 2.34,                  // mean queue wait time
+      avgSvc: 1.05,                   // mean service time
+      avgSojourn: 3.39,               // mean time in system (completed)
+      avgTimeInSystem: 3.15,          // mean time in system (all)
+      avgWIP: 4.7,                    // time-average work in progress
+      maxWIP: 12,                     // peak concurrent entities
+      totalCost: 500.0,               // accumulated cost (COST macro)
+      costPerServed: 0.52,            // cost per served entity
+      servedRatio: 0.95,              // served / total
+      outcomes: { ... },              // per-route completion counts
+      perResource: [ ... ],           // per-server type stats
+      containers: { ... },            // container level summaries
+      queueJourneys: [ ... ]          // per-queue journey paths
+    },
+    entityJourneys: [                 // (new) per-entity journey data
+      {
+        entityId: "e_42",
+        type: "Customer",
+        arrivedAt: 0.0,
+        completedAt: 12.5,
+        stages: [
+          { queue: "Checkout", wait: 3.2, server: "Cashier", service: 1.8 }
+        ],
+        outcome: {
+          routeId: "route-exit:main",
+          routeLabel: "Served",
+          status: "completed"
+        }
+      }
+    ],
+    timeSeries: [                     // per-interval snapshots
+      { clock: 0.5, byQueue: { ... }, byType: { ... }, wip: 3, completed: 1 }
+    ],
+    waitDist: {                       // per-queue wait distributions
+      "QueueName": { n: 200, mean: 2.3, values: [ ... ], histogram: { ... } }
+    },
+    phaseCTruncated: false,           // Phase C limit hit?
+    cycleLimitReached: false,         // engine cycle limit reached?
+    runtimeMetrics: {
+      eventsProcessed: 15000,
+      cEventScans: 1200,
+      maxFelSize: 45,
+      peakQueueDepth: { ... }
+    }
+  },
+
+  replications: [                     // per-replication summaries
+    {
+      replicationIndex: 0,
+      seed: 12346,
+      summary: { total: 102, ... },
+      finalTime: 5120.5
+    }
+  ],
+
+  aggregateStats: {                   // across-replication CIs (when > 1 rep)
+    "summary.avgWait": {
+      n: 10, mean: 2.34,
+      lower: 2.28, upper: 2.40, halfWidth: 0.06
+    }
+  }
+}
+`;
 
 /** Editable run-settings inputs for the saved-experiment New/Edit forms — reuses the same
  * shared state setters as ExperimentControls.jsx's "Edit setup" panel so saving an
@@ -400,9 +580,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const qrRef = useRef(null);
   const [latestRunId, setLatestRunId] = useState(null);
   const [showExportPopover, setShowExportPopover] = useState(false);
-  const [exportFormats, setExportFormats] = useState({ json: true, csv: false });
-  const [exportMetricsOnly, setExportMetricsOnly] = useState(false);
   const [showCreateReportModal, setShowCreateReportModal] = useState(false);
+  const [showSchemaModal, setShowSchemaModal] = useState(false);
   const [reportType, setReportType] = useState('seniorMgmt'); // 'seniorMgmt' | 'technical'
   const [reportFormat, setReportFormat] = useState('html'); // 'html' | 'markdown'
   const effectiveAutoSpeed = useMemo(
@@ -2606,83 +2785,43 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         )}
         <Btn variant={modelAssistantOpen ? "primary" : "ghost"} onClick={() => onOpenModelAssistant?.()}>Simulation Assistant</Btn>
         <div style={{ position: "relative", display: "flex", gap: 6 }}>
-          {/* Export Data popover */}
+          {/* Unified Export ▾ popover */}
+          <Btn variant="ghost" onClick={() => setShowExportPopover(v => !v)} disabled={!canExportResults}>Export ▾</Btn>
           {showExportPopover && (
-            <div
-              style={{ position: "fixed", inset: 0, zIndex: 99 }}
-              onClick={() => setShowExportPopover(false)}
-            />
-          )}
-          <Btn variant="ghost" onClick={() => setShowExportPopover(v => !v)} disabled={!canExportResults}>Export Data</Btn>
-          {showExportPopover && (
-            <div style={{
-              position: "absolute",
-              top: "calc(100% + 4px)",
-              left: 0,
-              zIndex: 100,
-              background: C.cardBg,
-              border: `1px solid ${C.border}`,
-              borderRadius: 6,
-              padding: 12,
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              minWidth: 160,
-              boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-            }}>
-              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>FORMAT</span>
-              {[["json", "JSON Results"], ["csv", "CSV Results"]].map(([key, label]) => (
-                <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
-                  <input
-                    type="checkbox"
-                    checked={!!exportFormats[key]}
-                    onChange={e => setExportFormats(f => ({ ...f, [key]: e.target.checked }))}
-                    style={{ accentColor: C.accent }}
-                  />
-                  {label}
-                </label>
-              ))}
-              {exportFormats.json && (
-                <>
-                  <div style={{ height: 1, background: C.border, margin: "2px 0" }} />
-                  <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>JSON CONTENT</span>
-                  <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
-                    <input
-                      type="checkbox"
-                      checked={exportMetricsOnly}
-                      onChange={e => setExportMetricsOnly(e.target.checked)}
-                      style={{ accentColor: C.accent }}
-                    />
-                    Metrics only
-                  </label>
-                  {exportMetricsOnly && (
-                    <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.4, paddingLeft: 18 }}>
-                      KPIs only — excludes time series, wait distributions, and entity details.
-                    </div>
-                  )}
-                </>
-              )}
-              <Btn variant="primary" small onClick={() => {
-                if (exportFormats.json) exportResultsJson(exportMetricsOnly);
-                if (exportFormats.csv) exportResultsCsv();
-                setShowExportPopover(false);
-              }} disabled={!Object.values({ json: exportFormats.json, csv: exportFormats.csv }).some(Boolean)}>
-                Download
-              </Btn>
-              <div style={{ height: 1, background: C.border, margin: "2px 0" }} />
-              <Btn variant="ghost" small onClick={() => { exportLLMBundle(); setShowExportPopover(false); }}>
-                Export for AI tools (.md)
-              </Btn>
-              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.4 }}>
-                Model + results as Markdown — paste into any AI tool.
+            <>
+              <div
+                style={{ position: "fixed", inset: 0, zIndex: 99 }}
+                onClick={() => setShowExportPopover(false)}
+              />
+              <div style={{
+                position: "absolute",
+                top: "calc(100% + 4px)",
+                left: 0,
+                zIndex: 100,
+                background: C.cardBg,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                padding: 8,
+                display: "flex",
+                flexDirection: "column",
+                gap: 0,
+                minWidth: 240,
+                boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+              }}>
+                <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>RESULTS DATA</span>
+                <PopoverRow label="Full model results (.json)" onClick={() => { setShowExportPopover(false); exportResultsJson(false); }} />
+                <PopoverRow label="Metrics only (.json)" onClick={() => { setShowExportPopover(false); exportResultsJson(true); }} mute hint="KPIs only — no time series or entity data" />
+                <PopoverRow label="Results table (.csv)" onClick={() => { setShowExportPopover(false); exportResultsCsv(); }} />
+                <div style={{ height: 1, background: C.border, margin: "4px 8px" }} />
+                <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>AI & REPORTS</span>
+                <PopoverRow label="LLM Bundle (.md)" onClick={() => { setShowExportPopover(false); exportLLMBundle(); }} mute hint="Model + results as Markdown — paste into any AI tool" />
+                <PopoverRow label="Create Report…" onClick={() => { setShowExportPopover(false); setShowCreateReportModal(true); }} />
+                <div style={{ height: 1, background: C.border, margin: "4px 8px" }} />
+                <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>REFERENCE</span>
+                <PopoverRow label="Schema reference" onClick={() => { setShowExportPopover(false); setShowSchemaModal(true); }} mute hint="Field-by-field documentation of the JSON export format" />
               </div>
-            </div>
+            </>
           )}
-
-          {/* Create Report button */}
-          <Btn variant="ghost" onClick={() => setShowCreateReportModal(true)} disabled={!canExportResults || reportGenerating}>
-            {reportGenerating ? "Generating…" : "Create Report"}
-          </Btn>
 
           {/* Create Report modal */}
           {showCreateReportModal && (
@@ -2757,6 +2896,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               </div>
             </>
           )}
+
+          {/* Schema reference modal */}
+          {showSchemaModal && <SchemaInfoModal onClose={() => setShowSchemaModal(false)} />}
         </div>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
@@ -3616,6 +3758,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 };
 
 export {
+  buildEntityJourneys,
   buildResultsCsv,
   buildResultsExportPayload,
   CustomerToken,

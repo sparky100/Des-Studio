@@ -134,7 +134,9 @@ flowchart LR
 | Wait time accuracy & transparency | ✅ Complete | Sprint 83: RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, per-queue `waitSamplesBreakdown`, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), live metrics align with engine formula. |
 | Engine fidelity — PRNG streams, shifts, purge, starvation | ✅ Complete | Sprint 84: PRNG stream isolation per process (`deriveSubSeed` + `StreamRegistry`), shift-change behavior toggle (delay/preempt/suspend), opt-in purge/run-down period, per-resource starvation duration tracking. 15 new tests. |
 | Sign-in welcome dialog & AI Prompt Pack | ✅ Complete | Sprint 85: sign-in welcome dialog with four option cards (Create a Model, Access the Model Library, Build with AI Tools, Get Help); `signedInThisSession` trigger in App.jsx with `didShowWelcome` ref guard in ModelLibrary; race-condition fix (`setLoading(true)` on SIGNED_IN before `setSession()`); `buildLLMSchemaPromptPack()` bundling `docs/model-schema-for-llm.md` verbatim; ↓ AI Prompt Pack button in Model Library header. |
-| Calendar-aware recurring resource scheduling | ⬜ Planned | Sprint 86: weekly repeating capacity patterns (`schedulePattern` on server entity types), engine expansion into `SHIFT_CHANGE` events, visual 24×7 grid editor, exception date overrides, per-shift utilisation tracking, schedule adherence metric, V50–V56 validation rules, LLM prompt updates, ADR-018. See `docs/reviews/sprint-86-plan.md`. |
+| Calendar-aware recurring resource scheduling | ✅ Complete | Sprint 86: weekly repeating capacity patterns (`schedulePattern` on server entity types), engine expansion into `SHIFT_CHANGE` events, visual 24×7 grid editor, exception date overrides, per-shift utilisation tracking, schedule adherence metric, V50–V56 validation rules, LLM prompt updates, ADR-018. |
+| Parameterised weekly schedule patterns | ✅ Complete | Sprint 87: multiplier mode (0–100% of base capacity), `resolveSchedulePattern()`, V57–V60, sweep variable support. See `docs/reviews/sprint-87-plan.md`. |
+| Export consolidation & data portability | ✅ Complete | Sprint 88: single "Export ▾" popover, "Download all chart data", entity journey data in JSON, schema reference modal. F66.3 absorbed. See `docs/reviews/sprint-88-plan.md`. |
 
 ### Key Issues and Watchpoints
 
@@ -216,6 +218,8 @@ flowchart LR
 | 1.85 | 2026-06-09 | Sprint 83 completed. Wait time accuracy: RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, `waitSamplesBreakdown` with served/reneged/inProgress counts, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), BottomPanel live metrics align with engine formula. 10 new tests. User Guide, Engineering Spec, and Product Spec updated. |
 | 1.86 | 2026-06-14 | Sprint 85 completed. Sign-in welcome dialog (four option cards, `signedInThisSession` trigger, race-condition fix) and AI Prompt Pack export (`buildLLMSchemaPromptPack()`, ↓ AI Prompt Pack button in library header). User Guide, Product Spec, and Build Plan updated. |
 | 1.87 | 2026-06-29 | Sprint 86 planned. Calendar-aware recurring weekly resource scheduling — `schedulePattern` schema, engine expansion into SHIFT_CHANGE events, visual 24×7 grid editor, per-shift utilisation tracking, exception date overrides, LLM prompt updates, ADR-018. See `docs/reviews/sprint-86-plan.md`. |
+| 1.88 | 2026-06-30 | Sprint 87 completed. Parameterised weekly schedule patterns — multiplier mode (0–100% of base capacity), `resolveSchedulePattern()` pure function, V57–V60 validation rules, WeeklyPatternEditor mode toggle, baseCapacity input, sweep variable support, LLM prompt updates. |
+| 1.89 | 2026-06-30 | Sprint 88 completed. Export consolidation — single "Export ▾" popover replaces 4+ scattered buttons, "Download all chart data" in ResultsWorkspace, entity journey data in JSON export, schema reference modal. F66.3 absorbed. |
 
 ---
 
@@ -1958,7 +1962,7 @@ npm run build
 |---|---|---|
 | F66.1 — Node badge system | ⬜ | `when` badge (amber) on ACTIVITY nodes with conditional cSchedules; `feed` badge (cyan) on SOURCE nodes with scheduleFeed data sources |
 | F66.2 — Animate/Collect/Speed to Setup | ⬜ | Move three run-configuration controls to Setup tab (`ExperimentControls.jsx`) |
-| F66.3 — Export consolidation | ⬜ | Single Export… button with format-selection popover |
+| F66.3 — Export consolidation | ✅ (Sprint 88) | Single Export… button with format-selection popover — absorbed into Sprint 88 |
 | F66.4 — Remove Share Model | ⬜ | Delete Share button, state, and modal |
 | F66.5 — Log guard | ⬜ | Disable Log menu button during active run; re-enable post-run |
 | F66.6 — Entity Details rename | ⬜ | Rename "Entities" tab → "Entity Details" |

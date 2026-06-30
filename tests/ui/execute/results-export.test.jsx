@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildEntityJourneys,
   buildResultsCsv,
   buildResultsExportPayload,
   ExecutePanel,
@@ -87,7 +88,7 @@ describe('results export helpers', () => {
       schema: 'simmodlr.results.v1',
       status: 'complete',
       exportedAt: '2026-05-04T12:00:00.000Z',
-      results: singleResult,
+      results: { ...singleResult, entityJourneys: [] },
     }));
     expect(payload.model).toEqual({ id: 'model-1', name: 'Queue Demo' });
     expect(payload.experiment).toEqual(expect.objectContaining({
@@ -124,7 +125,106 @@ describe('results export helpers', () => {
   });
 });
 
-describe('ExecutePanel results export buttons', () => {
+describe('buildEntityJourneys', () => {
+  it('returns empty array for null/undefined input', () => {
+    expect(buildEntityJourneys(null)).toEqual([]);
+    expect(buildEntityJourneys(undefined)).toEqual([]);
+    expect(buildEntityJourneys([])).toEqual([]);
+  });
+
+  it('filters out server entities', () => {
+    const summary = [
+      { id: 's1', role: 'server', type: 'Cashier', status: 'idle', arrivalTime: 0 },
+      { id: 'c1', role: 'customer', type: 'Customer', status: 'done', arrivalTime: 0, completedAt: 10 },
+    ];
+    const result = buildEntityJourneys(summary);
+    expect(result).toHaveLength(1);
+    expect(result[0].entityId).toBe('c1');
+  });
+
+  it('maps entity fields to flat journey structure', () => {
+    const summary = [{
+      id: 'e_42',
+      type: 'Customer',
+      role: 'customer',
+      status: 'done',
+      arrivalTime: 0,
+      completedAt: 12.5,
+      stages: [
+        { queueName: 'Checkout', stageWait: 3.2, serverType: 'Cashier', stageService: 1.8 },
+        { queueName: 'Counter', stageWait: 0.5, serverType: 'Clerk', stageService: 2.1 },
+      ],
+      outcome: { routeId: 'route-exit:main', routeLabel: 'Served', status: 'completed', endedBy: 'COMPLETE' },
+    }];
+    const result = buildEntityJourneys(summary);
+    expect(result[0]).toEqual({
+      entityId: 'e_42',
+      type: 'Customer',
+      arrivedAt: 0,
+      completedAt: 12.5,
+      status: 'done',
+      stages: [
+        { queue: 'Checkout', wait: 3.2, server: 'Cashier', service: 1.8 },
+        { queue: 'Counter', wait: 0.5, server: 'Clerk', service: 2.1 },
+      ],
+      outcome: { routeId: 'route-exit:main', routeLabel: 'Served', status: 'completed', endedBy: 'COMPLETE' },
+    });
+  });
+
+  it('handles entities with no stages', () => {
+    const summary = [{
+      id: 'e_1', type: 'Customer', role: 'customer', status: 'waiting',
+      arrivalTime: 5, completedAt: null, outcome: null,
+    }];
+    const result = buildEntityJourneys(summary);
+    expect(result[0].stages).toEqual([]);
+    expect(result[0].outcome).toBeNull();
+  });
+
+  it('handles entities with non-finite stage values', () => {
+    const summary = [{
+      id: 'e_1', type: 'Customer', role: 'customer', status: 'done',
+      arrivalTime: 0, completedAt: 10,
+      stages: [{ queueName: 'Q', stageWait: null, serverType: 'S', stageService: undefined }],
+      outcome: null,
+    }];
+    const result = buildEntityJourneys(summary);
+    expect(result[0].stages[0].wait).toBeNull();
+    expect(result[0].stages[0].service).toBeNull();
+  });
+
+  it('entityJourneys included in JSON export payload when metricsOnly=false', () => {
+    const payload = buildResultsExportPayload({
+      model: validModel,
+      results: { ...singleResult, entitySummary: [
+        { id: 'e1', type: 'Customer', role: 'customer', status: 'done', arrivalTime: 0, completedAt: 10, stages: [], outcome: null },
+      ]},
+      config: { modelId: 'm1', seed: 42 },
+      metricsOnly: false,
+    });
+    expect(payload.results.entityJourneys).toHaveLength(1);
+    expect(payload.results.entityJourneys[0].entityId).toBe('e1');
+  });
+
+  it('entityJourneys excluded from JSON export when metricsOnly=true', () => {
+    const payload = buildResultsExportPayload({
+      model: validModel,
+      results: { ...singleResult, entitySummary: [
+        { id: 'e1', type: 'Customer', role: 'customer', status: 'done', arrivalTime: 0, completedAt: 10, stages: [], outcome: null },
+      ]},
+      config: { modelId: 'm1', seed: 42 },
+      metricsOnly: true,
+    });
+    expect(payload.results.entityJourneys).toBeUndefined();
+  });
+});
+
+describe('ExecutePanel unified export popover', () => {
+  it('renders Export button disabled before run', () => {
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+    expect(screen.getByRole('button', { name: 'Export ▾' })).toBeDisabled();
+  });
+
   beforeEach(() => {
     mockSaveSimulationRun.mockReset();
     mockSaveSimulationRun.mockResolvedValue(undefined);
@@ -133,12 +233,12 @@ describe('ExecutePanel results export buttons', () => {
   it('disables result exports before a run and enables them after completion', async () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    expect(screen.getByRole('button', { name: 'Export Data' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export ▾' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Export Data' })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Export ▾' })).not.toBeDisabled()
     );
   });
 });

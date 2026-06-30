@@ -5,9 +5,9 @@
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Current sprint plan: `docs/reviews/sprint-84-plan.md` — PRNG Streams, Shift Behavior, Purge Period & Starvation
-- Previous sprint plan: `docs/reviews/sprint-83-plan.md` — Wait Time Accuracy & Transparency
-- API design spec: `docs/architecture/results-api-design.md` — Results API endpoint schemas and consumer guidance
+- Current sprint plan: `docs/reviews/sprint-88-plan.md` — Export Consolidation & Data Portability
+- Previous sprint plan: `docs/reviews/sprint-87-plan.md` — Parameterised Weekly Schedule Patterns
+- Sprint 84 plan: `docs/reviews/sprint-84-plan.md` — Engine Fidelity
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
@@ -1529,6 +1529,7 @@ See `docs/simmodlr_Build_Plan.md` for the full sprint-by-sprint roadmap. Latest 
 | Sprint 84 | ✅ Complete | 2026-06-09 | Engine Fidelity — PRNG stream isolation per process (arrival/service/renege/mtbf/mttr), shift-change behavior toggle (delay/preempt/suspend), purge period option, starvation duration tracking per resource |
 | Sprint 86 | ✅ Complete | 2026-06-29 | Calendar-Aware Resource Scheduling — weekly schedule patterns with 24×7 grid editor, per-shift utilisation chart, schedule adherence badge, V50–V56 validation rules, LLM bundle schedule columns, UI tests, documentation |
 | Sprint 87 | ✅ Complete | 2026-06-30 | Parameterised Weekly Schedule Patterns — multiplier mode (0–100% of base capacity), `resolveSchedulePattern()` pure function, V57–V60 validation rules, WeeklyPatternEditor mode toggle, baseCapacity input, sweep variable support, LLM prompt updates, documentation |
+| Sprint 88 | ✅ Complete | 2026-06-30 | Export Consolidation & Data Portability — unified "Export ▾" popover replaces scattered buttons, "Download all chart data" in ResultsWorkspace, entity journey data in JSON export, schema reference modal |
 
 ---
 

@@ -1652,6 +1652,32 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     const filename = `simmodlr-llm-bundle-${slugifyResultName(model?.name || 'model')}-${timestampForFilename()}.md`;
     downloadTextFile(buildLLMBundle(model, bundleResults, config), filename, "text/markdown;charset=utf-8");
   }, [model, results, replicationResults]);
+
+  const handleDownloadAllChartData = useCallback(() => {
+    const modelName = model?.name || 'model';
+    const timestamp = timestampForFilename();
+    const sections = [];
+    const allSeriesSections = chartModel?.chartSections || [];
+    for (const section of allSeriesSections) {
+      if (section.series) {
+        for (const series of section.series) {
+          sections.push({ label: section.title || section.id, csv: buildSeriesCsv(series) });
+        }
+      }
+      if (section.distributions) {
+        for (const dist of section.distributions) {
+          sections.push({ label: section.title || section.id, csv: buildWaitValuesCsv(dist) });
+        }
+      }
+    }
+    if (!sections.length) return;
+    const header = `# simmodlr — All Chart Data — ${modelName} — ${timestamp}\n#\n`;
+    const csvParts = sections.map(s => `# Section: ${s.label}\n${s.csv}\n`);
+    const content = header + csvParts.join("\n");
+    downloadTextFile(content, `simmodlr-all-chart-data-${slugifyResultName(modelName)}-${timestamp}.csv`, "text/csv;charset=utf-8");
+  }, [model, chartModel]);
+
+  const hasChartData = !!((chartModel?.chartSections || []).some(s => (s.series || []).length > 0 || (s.distributions || []).length > 0));
   const queueSection = chartModel.chartSections.find(section => section.id === "queue-depth");
   const serverSection = chartModel.chartSections.find(section => section.id === "server-utilization");
   const waitSection = chartModel.chartSections.find(section => section.id === "wait-distribution");
@@ -1781,6 +1807,17 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
       <KeyFindingsBanner healthFlags={healthFlags} C={C} FONT={FONT} />
+      {/* ── Export toolbar ─────────────────────────────────────────────────── */}
+      {hasChartData && (
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <Btn small variant="ghost" onClick={handleDownloadAllChartData}>
+            ⬇ Download all chart data (.csv)
+          </Btn>
+          <Btn small variant="ghost" onClick={handleExportLLMBundle}>
+            AI tools (.md)
+          </Btn>
+        </div>
+      )}
       {/* ── 1. Headline KPIs ───────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
         <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
