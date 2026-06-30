@@ -96,14 +96,21 @@ function extractResources(model = {}, summary = {}) {
     }
     if (server.schedulePattern?.type === "weekly") {
       const days = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const mode = server.schedulePattern.mode || "absolute";
       const periodSummaries = (server.schedulePattern.periods || []).map(p =>
-        `${days[p.dayOfWeek] || p.dayOfWeek} ${p.start}-${p.end} (cap ${p.capacity})`
+        mode === "multiplier"
+          ? `${days[p.dayOfWeek] || p.dayOfWeek} ${p.start}-${p.end} (${Math.round(p.capacity * 100)}%)`
+          : `${days[p.dayOfWeek] || p.dayOfWeek} ${p.start}-${p.end} (cap ${p.capacity})`
       );
       result.schedulePattern = {
         type: "weekly",
+        mode,
         periodCount: (server.schedulePattern.periods || []).length,
         summary: periodSummaries.length ? periodSummaries.join("; ") : "No periods defined",
       };
+      if (mode === "multiplier") {
+        result.schedulePattern.baseCapacity = server.schedulePattern.baseCapacity;
+      }
       if (pr?.scheduleAdherence != null) {
         result.scheduleAdherence = Math.round(pr.scheduleAdherence * 100);
       }

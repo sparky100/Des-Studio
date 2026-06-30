@@ -352,6 +352,38 @@ See the full help guide at `docs/user/simpy-export.md`.
 | **Preempt** | In-progress service is interrupted immediately; the entity re-queues with its remaining service time. |
 | **Suspend** | In-progress service is paused and resumes when capacity is next available. |
 
+**Weekly Schedule Patterns.** Server entity types can have a repeating weekly schedule that defines capacity at every hour of the week. Click **Weekly Schedule Pattern** to open the 24×7 grid editor. Two modes are available:
+
+| Mode | How it works |
+|------|-------------|
+| **Absolute capacity** | Enter the exact number of servers for each time slot (e.g. 3 for day shift, 1 for night shift). |
+| **Multiplier (0–100%)** | Enter a percentage (0.0–1.0) and a **Base capacity**. The engine calculates actual capacity as `base × multiplier`. For example, base capacity 6 with a multiplier of 0.67 gives 4 staff. This mode integrates with parametric sweeps — set base capacity to `{{nurseCount}}` and sweep over staffing levels. |
+
+The grid editor lets you click-drag to select cells, then apply a capacity value to all selected cells at once. Use **Invert Selection** to quickly toggle between day and night shifts. Add **Exception Dates** for one-off changes like bank holidays.
+
+**Server Skills.** When your model has multiple server types that can perform different tasks, you can use **Skills** to control which servers are eligible for specific activities. For example, in a hospital, only doctors with the "Surgery" skill should be assigned to surgical procedures.
+
+To use skills:
+
+1. **Define skills** — Go to the **State** tab (under Design). Scroll to the **Skills** section. Type a skill name (e.g. "Triage", "Surgery", "X-Ray") and press **Enter** to add it to the model's skill registry. Repeat for each skill your model needs.
+
+2. **Assign skills to servers** — Go to the **Entity Types** tab. Expand a server entity type. If skills are defined, a **Skills** panel appears with checkboxes for each registered skill. Tick the skills this server type possesses. A doctor might have "Surgery" and "Consultation"; a nurse might have "Triage" and "Monitoring".
+
+3. **Use skills in C-Events** — Go to the **C-Events** tab. When you pick an ASSIGN or COSEIZE effect, the dropdown now shows skill-filtered options:
+   - `Start service with Doctor (Surgery) and Patient from SurgeryQueue` — only idle doctors with the "Surgery" skill are considered
+   - `Seize Doctor[Surgery] + Nurse[Triage] for Patient from ERQueue` — each server type is filtered by its required skill
+
+   The skill name appears in brackets in the effect picker. The engine enforces that only servers possessing the specified skill are matched.
+
+4. **Conditions with skills** — In the Predicate Builder, you can use `idle(Doctor, "Surgery").count` to check how many doctors with the Surgery skill are currently idle. This lets you write conditions like "if a surgery patient is waiting AND a surgeon is available → start operation".
+
+**When to use skills.** Skills are useful when:
+- Multiple server types exist but not all can perform every task (e.g. junior vs senior doctors)
+- You need to model certification or training requirements (e.g. only certified operators can run certain machines)
+- You want to analyse utilisation per skill (the Results workspace shows per-skill utilisation breakdowns)
+
+**Validation.** The engine checks that every skill referenced in an ASSIGN/COSEIZE effect or condition exists in the model's skill registry (V-SKILL-1, V-SKILL-2). If you delete a skill from the registry, any effects or conditions referencing it will show a validation error.
+
 **Sections (large-model organisation).** When a model grows beyond roughly ten queues or twenty events, you can group elements into named *sections* to keep the editors manageable. Open the **Sections** tab (under the Design area) and click **+ Add Section** to create a named, coloured group. Assign queues, entity types, B-events, and C-events to the section using the member checkboxes. For queues that act as handoff points between sections, mark them **IN** (entities arrive from another section) or **OUT** (entities leave to another section).
 
 Once sections are defined:

@@ -2,8 +2,9 @@
 
 **Sprint:** 87
 **Theme:** Multiplier-based capacity patterns with sweep-variable base capacity
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Branch:** `claude/sprint-87-multiplier-schedules`
+**Completed:** 2026-06-30
 
 ---
 

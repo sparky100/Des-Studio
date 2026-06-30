@@ -52,6 +52,8 @@ function buildGridLookup(periods) {
 const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
   const { C, FONT } = useTheme();
   const [defaultCap, setDefaultCap] = useState(pattern?.defaultCapacity ?? 0);
+  const [mode, setMode] = useState(pattern?.mode || "absolute");
+  const [baseCapacity, setBaseCapacity] = useState(pattern?.baseCapacity ?? "");
 
   const periods = pattern?.periods || [];
   const exceptions = pattern?.exceptions || [];
@@ -59,7 +61,7 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
   // Selection state
   const [selecting, setSelecting] = useState(false);
   const [selection, setSelection] = useState(() => new Map()); // Map<dayOfWeek, Set<hour>>
-  const [capacityVal, setCapacityVal] = useState(3);
+  const [capacityVal, setCapacityVal] = useState(mode === "multiplier" ? 1.0 : 3);
   const dragRef = useRef({ startDay: null, startHour: null });
 
   const grid = useMemo(() => buildGridLookup(periods), [periods]);
@@ -107,17 +109,17 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
     const newPeriods = hoursToPeriods(selection, capacityVal);
     // Merge with existing periods (remove duplicates for same hour ranges, then add new)
     const merged = mergePeriods([...periods, ...newPeriods]);
-    onChange?.({ ...pattern, type: "weekly", defaultCapacity: defaultCap, periods: merged, exceptions });
+    onChange?.({ ...pattern, type: "weekly", mode, defaultCapacity: defaultCap, baseCapacity: mode === "multiplier" ? baseCapacity : undefined, periods: merged, exceptions });
     setSelection(new Map());
-  }, [selection, capacityVal, periods, pattern, onChange, defaultCap, exceptions]);
+  }, [selection, capacityVal, periods, pattern, onChange, defaultCap, exceptions, mode, baseCapacity]);
 
   const clearSelection = useCallback(() => {
     setSelection(new Map());
   }, []);
 
   const clearAllPeriods = useCallback(() => {
-    onChange?.({ ...pattern, type: "weekly", defaultCapacity: defaultCap, periods: [], exceptions });
-  }, [pattern, onChange, defaultCap, exceptions]);
+    onChange?.({ ...pattern, type: "weekly", mode, defaultCapacity: defaultCap, baseCapacity: mode === "multiplier" ? baseCapacity : undefined, periods: [], exceptions });
+  }, [pattern, onChange, defaultCap, exceptions, mode, baseCapacity]);
 
   const invertSelection = useCallback(() => {
     const next = new Map();
@@ -133,37 +135,76 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
   }, [selHas]);
 
   const addException = useCallback(() => {
-    const exc = { date: "", label: "", periods: [{ start: "09:00", end: "17:00", capacity: 0 }] };
-    onChange?.({ ...pattern, type: "weekly", defaultCapacity: defaultCap, periods, exceptions: [...exceptions, exc] });
-  }, [pattern, onChange, defaultCap, periods, exceptions]);
+    const exc = { date: "", label: "", periods: [{ start: "09:00", end: "17:00", capacity: mode === "multiplier" ? 0 : 0 }] };
+    onChange?.({ ...pattern, type: "weekly", mode, defaultCapacity: defaultCap, baseCapacity: mode === "multiplier" ? baseCapacity : undefined, periods, exceptions: [...exceptions, exc] });
+  }, [pattern, onChange, defaultCap, periods, exceptions, mode, baseCapacity]);
 
   const updException = useCallback((idx, patch) => {
     const next = exceptions.map((e, i) => i === idx ? { ...e, ...patch } : e);
-    onChange?.({ ...pattern, type: "weekly", defaultCapacity: defaultCap, periods, exceptions: next });
-  }, [exceptions, pattern, onChange, defaultCap, periods]);
+    onChange?.({ ...pattern, type: "weekly", mode, defaultCapacity: defaultCap, baseCapacity: mode === "multiplier" ? baseCapacity : undefined, periods, exceptions: next });
+  }, [exceptions, pattern, onChange, defaultCap, periods, mode, baseCapacity]);
 
   const remException = useCallback((idx) => {
-    onChange?.({ ...pattern, type: "weekly", defaultCapacity: defaultCap, periods, exceptions: exceptions.filter((_, i) => i !== idx) });
-  }, [exceptions, pattern, onChange, defaultCap, periods]);
+    onChange?.({ ...pattern, type: "weekly", mode, defaultCapacity: defaultCap, baseCapacity: mode === "multiplier" ? baseCapacity : undefined, periods, exceptions: exceptions.filter((_, i) => i !== idx) });
+  }, [exceptions, pattern, onChange, defaultCap, periods, mode, baseCapacity]);
+
+  const onModeChange = useCallback((newMode) => {
+    setMode(newMode);
+    if (newMode === "multiplier") {
+      setCapacityVal(1.0);
+      setDefaultCap(0);
+    } else {
+      setCapacityVal(3);
+      setDefaultCap(0);
+    }
+    onChange?.({ ...pattern, type: "weekly", mode: newMode, defaultCapacity: newMode === "multiplier" ? 0 : defaultCap, baseCapacity: newMode === "multiplier" ? baseCapacity : undefined, periods, exceptions });
+  }, [pattern, onChange, defaultCap, periods, exceptions, baseCapacity]);
 
   const selCount = [...selection.values()].reduce((sum, s) => sum + s.size, 0);
 
   const previewEvents = useMemo(() => {
     if (!pattern?.periods?.length || !epoch) return null;
     try {
-      const { expandWeeklyPatternToEvents } = require("../../engine/schedule-pattern.js");
-      const result = expandWeeklyPatternToEvents(pattern, epoch, 7 * 24 * 60, "minutes");
+      const { expandWeeklyPatternToEvents, resolveSchedulePattern } = require("../../engine/schedule-pattern.js");
+      const resolved = resolveSchedulePattern(pattern);
+      const result = expandWeeklyPatternToEvents(resolved.pattern, epoch, 7 * 24 * 60, "minutes");
       return result;
     } catch { return null; }
   }, [pattern, epoch]);
 
+  const formatCapacity = (cap) => {
+    if (mode === "multiplier" && cap != null) {
+      return `${Math.round(cap * 100)}%`;
+    }
+    return cap;
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Default off-shift capacity:</span>
-        <input type="number" min="0" step="1" value={defaultCap}
-          onChange={e => { const v = parseInt(e.target.value, 10) || 0; setDefaultCap(v); onChange?.({ ...pattern, type: "weekly", defaultCapacity: v, periods, exceptions }); }}
+        <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Mode:</span>
+        <select value={mode} onChange={e => onModeChange(e.target.value)}
+          style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }}>
+          <option value="absolute">Absolute capacity</option>
+          <option value="multiplier">Multiplier (0–100%)</option>
+        </select>
+        {mode === "multiplier" && (
+          <>
+            <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Base capacity:</span>
+            <input type="number" min="0" step="1" value={baseCapacity}
+              onChange={e => { const v = e.target.value; setBaseCapacity(v); onChange?.({ ...pattern, type: "weekly", mode, defaultCapacity: defaultCap, baseCapacity: v, periods, exceptions }); }}
+              placeholder="e.g. 6"
+              style={{ width: 70, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }} />
+            <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>staff × multiplier = actual</span>
+          </>
+        )}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Default off-shift {mode === "multiplier" ? "(%)" : "capacity"}:</span>
+        <input type="number" min="0" step={mode === "multiplier" ? "0.01" : "1"} value={defaultCap}
+          onChange={e => { const v = mode === "multiplier" ? parseFloat(e.target.value) || 0 : parseInt(e.target.value, 10) || 0; setDefaultCap(v); onChange?.({ ...pattern, type: "weekly", mode, defaultCapacity: v, baseCapacity: mode === "multiplier" ? baseCapacity : undefined, periods, exceptions }); }}
           style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }} />
+        {mode === "multiplier" && <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{Math.round((Number(defaultCap) || 0) * 100)}%</span>}
       </div>
       <div style={{ overflowX: "auto" }} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}>
         <table style={{ borderCollapse: "collapse", fontFamily: FONT, fontSize: 10, userSelect: "none" }}>
@@ -182,10 +223,11 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
                 {DAYS.map((_, di) => {
                   const cap = cellCap(di, hour);
                   const isSelected = selHas(di, hour);
+                  const displayCap = formatCapacity(cap);
                   const bg = isSelected
-                    ? `${C.server}${Math.min(255, 80 + capacityVal * 20).toString(16).padStart(2, "0")}`
+                    ? `${C.server}${Math.min(255, 80 + (mode === "multiplier" ? capacityVal * 100 : capacityVal * 20)).toString(16).padStart(2, "0")}`
                     : cap != null
-                      ? `${C.green}${Math.min(255, 60 + cap * 25).toString(16).padStart(2, "0")}`
+                      ? `${C.green}${Math.min(255, 60 + (mode === "multiplier" ? cap * 100 : cap * 25)).toString(16).padStart(2, "0")}`
                       : `${C.border}22`;
                   const borderColor = isSelected ? C.server : cap != null ? C.green : C.border;
                   return (
@@ -198,7 +240,7 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
                         textAlign: "center", fontSize: 8, color: isSelected ? C.text : cap != null ? C.text : C.muted,
                         transition: "background 0.1s",
                       }}>
-                      {cap != null ? cap : ""}
+                      {displayCap != null ? displayCap : ""}
                     </td>
                   );
                 })}
@@ -212,10 +254,11 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
           {selCount > 0 ? `${selCount} cell${selCount !== 1 ? "s" : ""} selected` : "Click-drag cells to select"}
         </span>
         {selCount > 0 && <>
-          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Capacity:</span>
-          <input type="number" min="0" max="99" step="1" value={capacityVal}
-            onChange={e => setCapacityVal(parseInt(e.target.value, 10) || 0)}
-            style={{ width: 50, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.server, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }} />
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{mode === "multiplier" ? "Multiplier:" : "Capacity:"}</span>
+          <input type="number" min="0" max={mode === "multiplier" ? "1" : "99"} step={mode === "multiplier" ? "0.01" : "1"} value={capacityVal}
+            onChange={e => setCapacityVal(mode === "multiplier" ? parseFloat(e.target.value) || 0 : parseInt(e.target.value, 10) || 0)}
+            style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.server, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }} />
+          {mode === "multiplier" && <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{Math.round(capacityVal * 100)}%</span>}
           <Btn small variant="primary" onClick={applySelection}>Apply</Btn>
           <Btn small variant="ghost" onClick={clearSelection}>Clear selection</Btn>
         </>}
@@ -233,9 +276,10 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
                 style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 6px", outline: "none" }} />
               <input value={exc.label || ""} onChange={e => updException(idx, { label: e.target.value })} placeholder="Label"
                 style={{ width: 120, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 6px", outline: "none" }} />
-              <input type="number" min="0" value={exc.periods?.[0]?.capacity ?? 0} onChange={e => { const p = [...(exc.periods || [])]; p[0] = { ...p[0], capacity: parseInt(e.target.value, 10) || 0 }; updException(idx, { periods: p }); }}
-                style={{ width: 50, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.server, fontFamily: FONT, fontSize: 10, padding: "2px 6px", outline: "none" }} />
-              <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>capacity</span>
+              <input type="number" min="0" max={mode === "multiplier" ? "1" : undefined} step={mode === "multiplier" ? "0.01" : "1"} value={exc.periods?.[0]?.capacity ?? 0} onChange={e => { const p = [...(exc.periods || [])]; p[0] = { ...p[0], capacity: mode === "multiplier" ? parseFloat(e.target.value) || 0 : parseInt(e.target.value, 10) || 0 }; updException(idx, { periods: p }); }}
+                style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.server, fontFamily: FONT, fontSize: 10, padding: "2px 6px", outline: "none" }} />
+              <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{mode === "multiplier" ? "multiplier" : "capacity"}</span>
+              {mode === "multiplier" && <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{Math.round((exc.periods?.[0]?.capacity || 0) * 100)}%</span>}
               <Btn small variant="danger" onClick={() => remException(idx)}>✕</Btn>
             </div>
           ))}
@@ -244,7 +288,7 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
       <Btn small variant="ghost" onClick={addException}>+ Add Exception Date</Btn>
       {previewEvents && (
         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: 8 }}>
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 4 }}>Preview: first 7 days</div>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 4 }}>Preview: first 7 days (resolved capacities)</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 120, overflowY: "auto" }}>
             {previewEvents.events.slice(0, 20).map((ev, i) => (
               <div key={i} style={{ fontSize: 9, color: C.text, fontFamily: FONT }}>
@@ -258,7 +302,10 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
         </div>
       )}
       <InfoBox color={C.server}>
-        Define your weekly capacity pattern. Selected cells become shift periods. <strong>Requires a Real-world start date (Epoch)</strong> in experiment settings to align days of the week.
+        {mode === "multiplier"
+          ? <>Define your weekly capacity pattern as multipliers (0–100%). The actual capacity is calculated as <strong>base capacity × multiplier</strong>. For example, with base capacity 6 and a multiplier of 0.67, you get 4 staff. <strong>Requires a Real-world start date (Epoch)</strong> in experiment settings to align days of the week.</>
+          : <>Define your weekly capacity pattern. Selected cells become shift periods. <strong>Requires a Real-world start date (Epoch)</strong> in experiment settings to align days of the week.</>
+        }
       </InfoBox>
     </div>
   );

@@ -232,6 +232,61 @@ export function getPatternInitialCapacity(pattern, epoch, timeUnit = "minutes") 
   return pattern.defaultCapacity != null ? Math.max(0, parseInt(pattern.defaultCapacity, 10) || 0) : 0;
 }
 
+// Resolve a schedule pattern from multiplier mode to absolute capacities.
+// Pure function — never mutates the input pattern.
+//
+// If mode === "multiplier": multiplies each period.capacity and defaultCapacity
+// by baseCapacity, rounds to nearest integer, returns a new pattern with mode: "absolute".
+// If mode === "absolute" or absent: returns pattern unchanged (identity).
+//
+// Returns: { pattern: SchedulePattern, warnings: string[] }
+export function resolveSchedulePattern(pattern) {
+  const warnings = [];
+  if (!pattern || pattern.type !== "weekly") {
+    return { pattern, warnings };
+  }
+  const mode = pattern.mode || "absolute";
+  if (mode === "absolute") {
+    return { pattern, warnings };
+  }
+  if (mode !== "multiplier") {
+    warnings.push(`Unknown schedulePattern mode '${mode}' — treating as absolute`);
+    return { pattern, warnings };
+  }
+  const baseCapacity = Number(pattern.baseCapacity);
+  if (!Number.isFinite(baseCapacity) || baseCapacity < 0) {
+    warnings.push(`Invalid baseCapacity '${pattern.baseCapacity}' — cannot resolve multiplier pattern`);
+    return { pattern, warnings };
+  }
+  const resolvedPeriods = (pattern.periods || []).map(p => {
+    const mult = Number(p.capacity);
+    const absCap = Number.isFinite(mult) ? Math.round(baseCapacity * mult) : 0;
+    return { ...p, capacity: absCap };
+  });
+  const resolvedDefault = Number.isFinite(Number(pattern.defaultCapacity))
+    ? Math.round(baseCapacity * Number(pattern.defaultCapacity))
+    : 0;
+  const resolvedExceptions = (pattern.exceptions || []).map(exc => ({
+    ...exc,
+    periods: (exc.periods || []).map(ep => {
+      const mult = Number(ep.capacity);
+      const absCap = Number.isFinite(mult) ? Math.round(baseCapacity * mult) : 0;
+      return { ...ep, capacity: absCap };
+    })
+  }));
+  return {
+    pattern: {
+      ...pattern,
+      mode: "absolute",
+      baseCapacity: undefined,
+      defaultCapacity: resolvedDefault,
+      periods: resolvedPeriods,
+      exceptions: resolvedExceptions
+    },
+    warnings
+  };
+}
+
 // Build per-shift period labels from a pattern for utilisation tracking.
 // Returns a map of "shift period key" → human-readable label.
 export function buildShiftPeriodLabels(pattern) {

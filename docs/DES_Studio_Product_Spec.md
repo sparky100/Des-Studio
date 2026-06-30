@@ -213,6 +213,7 @@ Valuable additions already partially implemented or planned for near-term sprint
 - Results per-shift utilisation chart shows a horizontal bar for each shift (label, % busy, entities-per-capacity count).
 - Resource cards display a colour-coded schedule adherence badge (green/amber/red) against the planned capacity.
 - V50–V56 validation rules catch pattern/epoch/shift mismatches before the run.
+- Multiplier mode (Sprint 87): schedule pattern can use percentages (0–100%) of a base capacity, enabling parametric sweeps over staffing levels. V57–V60 validation rules guard multiplier mode.
 
 ---
 

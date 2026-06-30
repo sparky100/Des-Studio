@@ -216,11 +216,14 @@ Servers can have time-varying capacity:
 
 ### Optional: Calendar-Aware Weekly Schedule (schedulePattern)
 
-Servers can have a weekly repeating schedule with named periods:
+Servers can have a weekly repeating schedule with named periods. Two modes are supported:
+
+**Absolute mode (default):** Specify exact capacity per period.
 
 ```json
 "schedulePattern": {
   "type": "weekly",
+  "mode": "absolute",
   "periods": [
     { "dayOfWeek": 1, "start": "09:00", "end": "17:00", "capacity": 3 },
     { "dayOfWeek": 2, "start": "09:00", "end": "17:00", "capacity": 3 },
@@ -231,13 +234,34 @@ Servers can have a weekly repeating schedule with named periods:
 }
 ```
 
+**Multiplier mode:** Specify capacity as a percentage (0.0–1.0) of a base capacity. Useful for parametric sweeps over staffing levels.
+
+```json
+"schedulePattern": {
+  "type": "weekly",
+  "mode": "multiplier",
+  "baseCapacity": 6,
+  "defaultCapacity": 0,
+  "periods": [
+    { "dayOfWeek": 1, "start": "07:00", "end": "19:00", "capacity": 1.0 },
+    { "dayOfWeek": 1, "start": "19:00", "end": "07:00", "capacity": 0.67 },
+    { "dayOfWeek": 6, "start": "07:00", "end": "19:00", "capacity": 0.5 },
+    { "dayOfWeek": 6, "start": "19:00", "end": "07:00", "capacity": 0.33 }
+  ]
+}
+```
+
 - `type` must be `"weekly"`.
+- `mode` (optional): `"absolute"` (default) or `"multiplier"`.
+- `baseCapacity` (required in multiplier mode): The base staffing level. Actual capacity = `baseCapacity × multiplier`, rounded to nearest integer.
 - `periods[].dayOfWeek`: 1=Monday through 7=Sunday.
 - `start`/`end`: HH:MM format on a 24-hour clock.
-- `capacity` must be a positive integer.
+- `capacity`: In absolute mode, a positive integer. In multiplier mode, a number 0.0–1.0.
+- `defaultCapacity`: Capacity outside defined periods. In absolute mode, an integer. In multiplier mode, a number 0.0–1.0.
 - The model must have an `epoch` (ISO 8601 datetime string on the model root) for the engine to resolve wall-clock times to simulation ticks.
 - Engine initialises the server pool from `entityTypes[].count` at time 0, then applies `applyShiftChange()` at each period boundary.
 - Schedule adherence is tracked per server type as the fraction of scheduled capacity-time that was actually available during the run.
+- In multiplier mode, `baseCapacity` can use sweep variable syntax (e.g., `"{{nurseCount}}"`) for parametric experiments.
 
 ### Optional: Server Failure Model
 
@@ -1096,6 +1120,10 @@ All generated model JSON MUST pass every blocking rule below.
 | V47 | `DELAY(QueueName)` must reference a defined queue (blocking error). A C-event whose effect contains `DELAY` should also set `"useEntityCtx": true` on its `cSchedules` entry, or its completion B-event will not know which entity to route (warning). Its `cSchedules` entry's `dist` must not be `"ServerAttr"` — `DELAY` claims no server, so this always falls back to a fixed delay of `1` (warning). Its completion B-event's effect must not be a *bare* `ARRIVE(...)` with nothing else — `ARRIVE` never resolves the delayed entity, leaving it stuck in `"serving"` forever; `ARRIVE` combined with `COMPLETE()`/`RELEASE()`/a routing table is fine (blocking error). |
 | V-SKILL-1 | Every skill name declared in a server entity type's `skills[]` must appear in the model-level `skills` array. A server type referencing a skill that is not registered at the model level is a blocking error. |
 | V-SKILL-2 | Every skill reference in an ASSIGN 3-arg, COSEIZE bracket syntax, or idle/busy condition predicate must be a valid entry in the model-level `skills` array. A reference to an unregistered skill name is a blocking error. |
+| V57 | `schedulePattern` with `mode: "multiplier"` requires `baseCapacity` to be a positive number. |
+| V58 | In multiplier mode, `periods[].capacity` must be a number between 0.0 and 1.0 (inclusive). |
+| V59 | In multiplier mode, `defaultCapacity` must be a number between 0.0 and 1.0 (inclusive). |
+| V60 | In multiplier mode, exception period capacities must be between 0.0 and 1.0 (inclusive). |
 
 ### Warnings (run proceeds, banner shown)
 

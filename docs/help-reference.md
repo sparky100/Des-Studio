@@ -283,6 +283,33 @@ All 6 queue disciplines.
 
 **Validation:** Seven rules (V50–V56) guard pattern integrity — see the Warning-Level Rules table.
 
+### Multiplier Mode (Sprint 87)
+
+**Purpose:** Decouple schedule shape from staffing level for parametric sweeps.
+
+**Fields on `schedulePattern`:**
+- `mode`: `"absolute"` (default) or `"multiplier"`.
+- `baseCapacity`: Required in multiplier mode. The base staffing level (integer or `{{var}}` sweep reference).
+- `periods[].capacity`: In multiplier mode, a number 0.0–1.0 representing the fraction of base capacity.
+
+**Resolution:** `actualCapacity = Math.round(baseCapacity × multiplier)`. The engine resolves multipliers to absolute capacities before expansion.
+
+**Example:**
+```json
+{
+  "type": "weekly",
+  "mode": "multiplier",
+  "baseCapacity": 6,
+  "periods": [
+    { "dayOfWeek": 1, "start": "07:00", "end": "19:00", "capacity": 1.0 },
+    { "dayOfWeek": 1, "start": "19:00", "end": "07:00", "capacity": 0.67 }
+  ]
+}
+```
+This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
+
+**Validation:** V57–V60 guard multiplier mode — baseCapacity must be positive, capacities must be 0.0–1.0.
+
 ### Purge Period
 
 **Purpose:** Remove entities that have exceeded a maximum dwell age in a queue.
@@ -409,6 +436,10 @@ All 6 queue disciplines.
 | V54 | Shift schedule rows overlap and are not merged | Use the **Merge overlapping shifts** button in the shift schedule editor |
 | V55 | Per-shift utilisation chart is empty | Ensure at least one schedule-pattern cell has capacity > 0 and the run is long enough |
 | V56 | Schedule adherence is N/A | Only computed for server types with `schedulePattern.type === 'weekly'` |
+| V57 | Multiplier mode requires baseCapacity | Set baseCapacity to a positive number when using multiplier mode |
+| V58 | Multiplier mode period capacity out of range | In multiplier mode, period capacity must be between 0.0 and 1.0 |
+| V59 | Multiplier mode defaultCapacity out of range | In multiplier mode, defaultCapacity must be between 0.0 and 1.0 |
+| V60 | Multiplier mode exception capacity out of range | In multiplier mode, exception period capacity must be between 0.0 and 1.0 |
 
 Gaps in the numbering (e.g. no V7) are intentional — codes were retired or renumbered during development and are not reused.
 

@@ -8,6 +8,7 @@ import {
   getPatternInitialCapacity,
   summarizePattern,
   periodLabel,
+  resolveSchedulePattern,
 } from '../../src/engine/schedule-pattern.js';
 
 // ── parseHHMM ──────────────────────────────────────────────────────────────────
@@ -397,5 +398,146 @@ describe('getPatternInitialCapacity', () => {
       periods: [{ dayOfWeek: 3, start: '00:00', end: '08:00', capacity: '4' }],
     };
     expect(getPatternInitialCapacity(pattern, wedEpoch)).toBe(4);
+  });
+});
+
+// ── resolveSchedulePattern ─────────────────────────────────────────────────────
+
+describe('resolveSchedulePattern', () => {
+  test('returns pattern unchanged when mode is absolute', () => {
+    const pattern = {
+      type: 'weekly',
+      mode: 'absolute',
+      defaultCapacity: 0,
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 5 }],
+    };
+    const { pattern: resolved, warnings } = resolveSchedulePattern(pattern);
+    expect(resolved).toBe(pattern);
+    expect(warnings).toEqual([]);
+  });
+
+  test('returns pattern unchanged when mode is absent', () => {
+    const pattern = {
+      type: 'weekly',
+      defaultCapacity: 0,
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 5 }],
+    };
+    const { pattern: resolved, warnings } = resolveSchedulePattern(pattern);
+    expect(resolved).toBe(pattern);
+    expect(warnings).toEqual([]);
+  });
+
+  test('resolves multiplier mode with baseCapacity', () => {
+    const pattern = {
+      type: 'weekly',
+      mode: 'multiplier',
+      baseCapacity: 6,
+      defaultCapacity: 0,
+      periods: [
+        { dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 1.0 },
+        { dayOfWeek: 1, start: '17:00', end: '22:00', capacity: 0.5 },
+      ],
+    };
+    const { pattern: resolved, warnings } = resolveSchedulePattern(pattern);
+    expect(warnings).toEqual([]);
+    expect(resolved.mode).toBe('absolute');
+    expect(resolved.baseCapacity).toBeUndefined();
+    expect(resolved.periods[0].capacity).toBe(6);
+    expect(resolved.periods[1].capacity).toBe(3);
+  });
+
+  test('rounds to nearest integer', () => {
+    const pattern = {
+      type: 'weekly',
+      mode: 'multiplier',
+      baseCapacity: 6,
+      defaultCapacity: 0.1,
+      periods: [
+        { dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 0.33 },
+      ],
+    };
+    const { pattern: resolved } = resolveSchedulePattern(pattern);
+    expect(resolved.periods[0].capacity).toBe(2);
+    expect(resolved.defaultCapacity).toBe(1);
+  });
+
+  test('handles baseCapacity of 0', () => {
+    const pattern = {
+      type: 'weekly',
+      mode: 'multiplier',
+      baseCapacity: 0,
+      defaultCapacity: 0,
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 1.0 }],
+    };
+    const { pattern: resolved } = resolveSchedulePattern(pattern);
+    expect(resolved.periods[0].capacity).toBe(0);
+  });
+
+  test('preserves exceptions', () => {
+    const pattern = {
+      type: 'weekly',
+      mode: 'multiplier',
+      baseCapacity: 10,
+      defaultCapacity: 0,
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 1.0 }],
+      exceptions: [{
+        date: '2026-06-01',
+        periods: [{ start: '10:00', end: '14:00', capacity: 0.5 }],
+      }],
+    };
+    const { pattern: resolved } = resolveSchedulePattern(pattern);
+    expect(resolved.exceptions[0].periods[0].capacity).toBe(5);
+  });
+
+  test('does not mutate input pattern', () => {
+    const pattern = {
+      type: 'weekly',
+      mode: 'multiplier',
+      baseCapacity: 6,
+      defaultCapacity: 0,
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 1.0 }],
+    };
+    const original = JSON.parse(JSON.stringify(pattern));
+    resolveSchedulePattern(pattern);
+    expect(pattern).toEqual(original);
+  });
+
+  test('returns warning for invalid baseCapacity', () => {
+    const pattern = {
+      type: 'weekly',
+      mode: 'multiplier',
+      baseCapacity: 'not-a-number',
+      defaultCapacity: 0,
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 1.0 }],
+    };
+    const { pattern: resolved, warnings } = resolveSchedulePattern(pattern);
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toContain('Invalid baseCapacity');
+    expect(resolved).toBe(pattern);
+  });
+
+  test('returns warning for unknown mode', () => {
+    const pattern = {
+      type: 'weekly',
+      mode: 'unknown',
+      defaultCapacity: 0,
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 5 }],
+    };
+    const { warnings } = resolveSchedulePattern(pattern);
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toContain('Unknown schedulePattern mode');
+  });
+
+  test('returns pattern unchanged for null pattern', () => {
+    const { pattern: resolved, warnings } = resolveSchedulePattern(null);
+    expect(resolved).toBeNull();
+    expect(warnings).toEqual([]);
+  });
+
+  test('returns pattern unchanged for non-weekly type', () => {
+    const pattern = { type: 'daily', periods: [] };
+    const { pattern: resolved, warnings } = resolveSchedulePattern(pattern);
+    expect(resolved).toBe(pattern);
+    expect(warnings).toEqual([]);
   });
 });

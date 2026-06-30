@@ -16,7 +16,7 @@ import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent, applyShiftChange } from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
 import { nullRegistry }                        from "./adapters/index.js";
-import { expandWeeklyPatternToEvents, getPatternInitialCapacity, buildShiftPeriodLabels } from "./schedule-pattern.js";
+import { expandWeeklyPatternToEvents, getPatternInitialCapacity, buildShiftPeriodLabels, resolveSchedulePattern } from "./schedule-pattern.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
@@ -293,13 +293,25 @@ function modelWithShiftInitialCapacity(model) {
     ...model,
     entityTypes: (model.entityTypes || []).map(entityType => {
       if (entityType.role !== "server") return entityType;
-      const pattern = getPatternInitialCapacity(entityType.schedulePattern, model.epoch, model.timeUnit);
+      const resolved = resolveSchedulePattern(entityType.schedulePattern);
+      const pattern = getPatternInitialCapacity(resolved.pattern, model.epoch, model.timeUnit);
       if (pattern != null) {
-        return { ...entityType, count: pattern };
+        return { ...entityType, count: pattern, schedulePattern: resolved.pattern };
       }
       const schedule = getValidShiftSchedule(entityType);
       if (!schedule.length) return entityType;
       return { ...entityType, count: schedule[0].capacity };
+    }),
+  };
+}
+
+function resolveModelSchedulePatterns(model) {
+  return {
+    ...model,
+    entityTypes: (model.entityTypes || []).map(entityType => {
+      if (entityType.role !== "server" || !entityType.schedulePattern) return entityType;
+      const { pattern: resolved } = resolveSchedulePattern(entityType.schedulePattern);
+      return { ...entityType, schedulePattern: resolved };
     }),
   };
 }

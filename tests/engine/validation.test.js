@@ -1751,4 +1751,176 @@ describe("V5 — EntityAttr skips dist validation", () => {
       expect(warnings.filter(e => e.code === "V56")).toHaveLength(0);
     });
   });
+
+  // ── V57–V60: Multiplier mode ─────────────────────────────────────────────
+
+  describe("V57–V60: Multiplier mode validation", () => {
+    const baseModel = (overrides = {}) => ({
+      entityTypes: [{
+        id: "et1",
+        name: "Nurse",
+        role: "server",
+        count: 6,
+        attributes: [],
+        ...overrides,
+      }],
+      queues: [],
+      bEvents: [],
+      cEvents: [],
+      stateVariables: [],
+      containerTypes: [],
+      epoch: "2026-06-01T00:00:00Z",
+      timeUnit: "minutes",
+      experimentDefaults: { replications: 1, maxSimTime: 10080, warmupPeriod: 0 },
+    });
+
+    it("V57: requires baseCapacity in multiplier mode", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "multiplier",
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 1.0 }],
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V57" }));
+    });
+
+    it("V57: rejects negative baseCapacity", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "multiplier",
+          baseCapacity: -5,
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 1.0 }],
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V57" }));
+    });
+
+    it("V57: passes with valid baseCapacity", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "multiplier",
+          baseCapacity: 6,
+          defaultCapacity: 0,
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 1.0 }],
+        },
+      }));
+      expect(errors.filter(e => e.code === "V57")).toHaveLength(0);
+    });
+
+    it("V58: rejects period capacity > 1.0 in multiplier mode", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "multiplier",
+          baseCapacity: 6,
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 1.5 }],
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V58" }));
+    });
+
+    it("V58: rejects negative period capacity in multiplier mode", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "multiplier",
+          baseCapacity: 6,
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: -0.5 }],
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V58" }));
+    });
+
+    it("V58: accepts period capacity 0.0–1.0 in multiplier mode", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "multiplier",
+          baseCapacity: 6,
+          defaultCapacity: 0,
+          periods: [
+            { dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 1.0 },
+            { dayOfWeek: 1, start: "17:00", end: "22:00", capacity: 0.5 },
+            { dayOfWeek: 2, start: "09:00", end: "17:00", capacity: 0 },
+          ],
+        },
+      }));
+      expect(errors.filter(e => e.code === "V58")).toHaveLength(0);
+    });
+
+    it("V59: rejects defaultCapacity > 1.0 in multiplier mode", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "multiplier",
+          baseCapacity: 6,
+          defaultCapacity: 1.5,
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 1.0 }],
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V59" }));
+    });
+
+    it("V59: accepts defaultCapacity 0.0–1.0 in multiplier mode", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "multiplier",
+          baseCapacity: 6,
+          defaultCapacity: 0.33,
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 1.0 }],
+        },
+      }));
+      expect(errors.filter(e => e.code === "V59")).toHaveLength(0);
+    });
+
+    it("V60: rejects exception period capacity > 1.0 in multiplier mode", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "multiplier",
+          baseCapacity: 6,
+          defaultCapacity: 0,
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 1.0 }],
+          exceptions: [{
+            date: "2026-06-01",
+            periods: [{ start: "10:00", end: "14:00", capacity: 1.5 }],
+          }],
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V60" }));
+    });
+
+    it("V60: accepts exception period capacity 0.0–1.0 in multiplier mode", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "multiplier",
+          baseCapacity: 6,
+          defaultCapacity: 0,
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 1.0 }],
+          exceptions: [{
+            date: "2026-06-01",
+            periods: [{ start: "10:00", end: "14:00", capacity: 0.5 }],
+          }],
+        },
+      }));
+      expect(errors.filter(e => e.code === "V60")).toHaveLength(0);
+    });
+
+    it("does not apply multiplier validation in absolute mode", () => {
+      const { errors } = validateModel(baseModel({
+        schedulePattern: {
+          type: "weekly",
+          mode: "absolute",
+          defaultCapacity: 0,
+          periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 5 }],
+        },
+      }));
+      expect(errors.filter(e => ["V57", "V58", "V59", "V60"].includes(e.code))).toHaveLength(0);
+    });
+  });
 });

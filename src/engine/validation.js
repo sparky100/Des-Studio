@@ -1195,6 +1195,45 @@ export function validateModel(model) {
     });
   }
 
+  // ── V57–V60: Multiplier mode validation ─────────────────────────────────────
+  {
+    entityTypes.forEach(et => {
+      const pat = et.schedulePattern;
+      if (!pat || pat.mode !== 'multiplier') return;
+      // V57: baseCapacity is required and must be a positive number
+      const baseCap = Number(pat.baseCapacity);
+      if (!Number.isFinite(baseCap) || baseCap < 0) {
+        err('V57', `Entity class '${et.name}' schedulePattern uses multiplier mode but baseCapacity is missing or invalid. Set baseCapacity to a positive number.`, 'entities',
+          { entityTypeIds: [et.id] });
+        return;
+      }
+      // V58: period capacities must be numbers 0.0–1.0
+      (pat.periods || []).forEach((period, pi) => {
+        const mult = Number(period.capacity);
+        if (!Number.isFinite(mult) || mult < 0 || mult > 1) {
+          err('V58', `Entity class '${et.name}' period ${pi + 1}: multiplier mode requires capacity between 0.0 and 1.0, got '${period.capacity}'.`, 'entities',
+            { entityTypeIds: [et.id] });
+        }
+      });
+      // V59: defaultCapacity must be a number 0.0–1.0
+      const defMult = Number(pat.defaultCapacity);
+      if (pat.defaultCapacity != null && (!Number.isFinite(defMult) || defMult < 0 || defMult > 1)) {
+        err('V59', `Entity class '${et.name}' schedulePattern: multiplier mode requires defaultCapacity between 0.0 and 1.0, got '${pat.defaultCapacity}'.`, 'entities',
+          { entityTypeIds: [et.id] });
+      }
+      // V60: exception period capacities must be 0.0–1.0
+      (pat.exceptions || []).forEach((exc, ei) => {
+        (exc.periods || []).forEach((ep, epi) => {
+          const mult = Number(ep.capacity);
+          if (!Number.isFinite(mult) || mult < 0 || mult > 1) {
+            err('V60', `Entity class '${et.name}' exception ${ei + 1} period ${epi + 1}: multiplier mode requires capacity between 0.0 and 1.0, got '${ep.capacity}'.`, 'entities',
+              { entityTypeIds: [et.id] });
+          }
+        });
+      });
+    });
+  }
+
   // ── V46: Detect overflowDestination cycles (F11.3) ────────────────────────
   // At runtime, attemptQueueJoin() recursively reroutes a blocked entity through
   // overflowDestination chains and is guarded against cycles (it falls back to

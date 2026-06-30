@@ -588,6 +588,19 @@ Updated at each timeSeries snapshot (`index.js:1039–1059`). Streaks are flushe
 - Tags each server instance with `_shiftLabel` at seizure time (`claimServerForEntity()` in `entities.js`) for per-shift attribution.
 - `getSummary()` aggregates per-shift utilisation (`perShiftUtil[]`) and schedule adherence (fraction of shift changes that fired on schedule).
 
+#### 3.1.5 Multiplier mode resolution (Sprint 87)
+
+`resolveSchedulePattern(pattern)` (`src/engine/schedule-pattern.js`) is a pure function that converts a multiplier-mode schedule pattern to absolute capacities before expansion.
+
+**Algorithm:**
+1. If `mode === "multiplier"`: validate `baseCapacity` is a positive number, multiply each `period.capacity` and `defaultCapacity` by `baseCapacity`, round to nearest integer.
+2. Return a new pattern object with `mode: "absolute"` and resolved capacities (immutable — never mutates the input).
+3. If `mode` is absent or `"absolute"`: return pattern unchanged (identity function).
+
+**Integration:** Called in `modelWithShiftInitialCapacity()` before `getPatternInitialCapacity()`, and the resolved pattern is stored in `runtimeModel.entityTypes[].schedulePattern` for downstream use by `expandWeeklyPatternToEvents()`.
+
+**Sweep variable support:** `baseCapacity` accepts `{{var}}` syntax that is substituted by the sweep runner before engine initialisation. After substitution, `baseCapacity` is always a number before `resolveSchedulePattern` sees it.
+
 ### 3.2 Visual Designer interaction contract
 
 The Visual Designer is an authoring surface over the canonical `model_json`; it does not maintain a separate graph model. `deriveGraphFromModel(model)` derives nodes and edges from queues, B-Events, C-Events, and `model_json.graph` layout metadata.
