@@ -1,0 +1,168 @@
+{
+  "name": "Blood Bank Inventory",
+  "description": "Regional blood bank managing red blood cell inventory. Donations arrive 24/7 (Exponential mean 1.3h), processed by lab technicians working Mon-Fri 08:00–18:00. Transfusion demand is piecewise: higher on weekdays (mean 1.2h) than weekends (mean 3h). Blood has a 42-day shelf life — a weekly expiry purge drains expired stock. COST tracks wastage at £130/unit. DELAY macro handles transfusion fulfillment without claiming a server. Parametric sweep over LabTech count answers: how many technicians minimise wastage while avoiding stockouts?",
+  "domain": "Healthcare",
+  "visibility": "public",
+  "epoch": "2025-01-06T08:00:00.000Z",
+  "timeUnit": "hours",
+  "graph": null,
+
+  "entityTypes": [
+    {
+      "id": "et_donation",
+      "name": "Donation",
+      "role": "customer",
+      "count": 0,
+      "attrDefs": []
+    },
+    {
+      "id": "et_transfusion",
+      "name": "Transfusion",
+      "role": "customer",
+      "count": 0,
+      "attrDefs": []
+    },
+    {
+      "id": "et_labtech",
+      "name": "LabTech",
+      "role": "server",
+      "count": 3,
+      "attrDefs": [],
+      "schedulePattern": {
+        "type": "weekly",
+        "mode": "absolute",
+        "defaultCapacity": 0,
+        "periods": [
+          { "dayOfWeek": 1, "start": "08:00", "end": "18:00", "capacity": 3 },
+          { "dayOfWeek": 2, "start": "08:00", "end": "18:00", "capacity": 3 },
+          { "dayOfWeek": 3, "start": "08:00", "end": "18:00", "capacity": 3 },
+          { "dayOfWeek": 4, "start": "08:00", "end": "18:00", "capacity": 3 },
+          { "dayOfWeek": 5, "start": "08:00", "end": "18:00", "capacity": 3 }
+        ]
+      }
+    }
+  ],
+
+  "stateVariables": [
+    { "name": "unitsIssued",  "initialValue": "0" },
+    { "name": "unitsWasted",  "initialValue": "0" },
+    { "name": "stockouts",    "initialValue": "0" },
+    { "name": "unitsDonated", "initialValue": "0" }
+  ],
+
+  "bEvents": [
+    {
+      "id": "b_donate",
+      "name": "Donation Arrives",
+      "scheduledTime": "0",
+      "effect": ["ARRIVE(Donation, Processing)"],
+      "schedules": [
+        { "eventId": "b_donate", "dist": "Exponential", "distParams": { "mean": "1.3" } }
+      ]
+    },
+    {
+      "id": "b_processed",
+      "name": "Processing Complete",
+      "scheduledTime": "9999",
+      "effect": ["FILL(rc_stock, 1)", "unitsDonated++", "COMPLETE()"],
+      "schedules": []
+    },
+    {
+      "id": "b_transfuse_arrive",
+      "name": "Transfusion Requested",
+      "scheduledTime": "0",
+      "effect": ["ARRIVE(Transfusion, TransfusionQ)"],
+      "schedules": [
+        {
+          "eventId": "b_transfuse_arrive",
+          "dist": "Piecewise",
+          "distParams": {
+            "periods": [
+              { "startTime": "0",   "dist": "Exponential", "distParams": { "mean": "1.2" } },
+              { "startTime": "120", "dist": "Exponential", "distParams": { "mean": "3.0" } },
+              { "startTime": "168", "dist": "Exponential", "distParams": { "mean": "1.2" } },
+              { "startTime": "288", "dist": "Exponential", "distParams": { "mean": "3.0" } }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "b_transfused",
+      "name": "Transfusion Complete",
+      "scheduledTime": "9999",
+      "effect": ["DRAIN(rc_stock, 1)", "COST(130)", "unitsIssued++", "COMPLETE()"],
+      "schedules": []
+    },
+    {
+      "id": "b_expire_purge",
+      "name": "Weekly Expiry Purge",
+      "scheduledTime": "168",
+      "effect": ["DRAIN(rc_stock, 17)", "COST(2210)", "SET(unitsWasted, unitsWasted+17)"],
+      "schedules": [
+        { "eventId": "b_expire_purge", "dist": "Constant", "distParams": { "value": "168" } }
+      ]
+    }
+  ],
+
+  "cEvents": [
+    {
+      "id": "c_process",
+      "name": "Process Donation",
+      "priority": 1,
+      "condition": "queue(Processing).length > 0 AND idle(LabTech).count > 0",
+      "effect": ["ASSIGN(Processing, LabTech)"],
+      "cSchedules": [
+        {
+          "eventId": "b_processed",
+          "dist": "Triangular",
+          "distParams": { "min": "1.5", "mode": "2", "max": "3" },
+          "useEntityCtx": true
+        }
+      ]
+    },
+    {
+      "id": "c_transfuse",
+      "name": "Fulfill Transfusion",
+      "priority": 2,
+      "condition": "container(rc_stock).level >= 1 AND queue(TransfusionQ).length > 0",
+      "effect": ["DELAY(TransfusionQ)"],
+      "cSchedules": [
+        {
+          "eventId": "b_transfused",
+          "dist": "Fixed",
+          "distParams": { "value": "0.01" },
+          "useEntityCtx": true
+        }
+      ]
+    }
+  ],
+
+  "queues": [
+    { "id": "q_processing",  "name": "Processing",   "customerType": "Donation",    "capacity": "", "discipline": "FIFO" },
+    { "id": "q_transfusion", "name": "TransfusionQ",  "customerType": "Transfusion", "capacity": "", "discipline": "FIFO" }
+  ],
+
+  "containerTypes": [
+    {
+      "id": "rc_stock",
+      "capacity": 200,
+      "initialLevel": 80
+    }
+  ],
+
+  "goals": [
+    { "metric": "summary.totalCost",   "operator": "<", "target": 5000, "label": "Total wastage cost < £5,000 over simulation" },
+    { "metric": "container.minLevel",  "operator": ">", "target": 10,   "label": "Stock never drops below 10 units",
+      "scope": { "type": "container", "id": "rc_stock", "name": "rc_stock" } }
+  ],
+
+  "experimentDefaults": {
+    "maxSimTime": 1000,
+    "warmupPeriod": 168,
+    "replications": 10
+  },
+
+  "dataSources": [],
+  "sections": []
+}

@@ -1,0 +1,179 @@
+{
+  "name": "Crown Court Backlog",
+  "description": "UK Crown Court case backlog model. Cases flow through PTPH (Plea and Trial Preparation Hearing), then route probabilistically: 70% plead guilty → sentencing, 30% plead not guilty → trial. Trial Queue uses PRIORITY discipline — custody defendants always served before bail defendants. Courtrooms operate Mon-Fri 10:00–16:30 via weekly schedule pattern. Parametric sweep over courtroom count answers: how many sitting days clear the backlog?",
+  "domain": "Public Services",
+  "visibility": "public",
+  "epoch": "2025-01-06T10:00:00.000Z",
+  "timeUnit": "hours",
+  "graph": null,
+
+  "entityTypes": [
+    {
+      "id": "et_case",
+      "name": "Case",
+      "role": "customer",
+      "count": 0,
+      "attrDefs": [
+        {
+          "id": "a_custody",
+          "name": "custody",
+          "valueType": "number",
+          "dist": "Uniform",
+          "distParams": { "min": "1", "max": "2" },
+          "mutable": false
+        },
+        {
+          "id": "a_verdict",
+          "name": "verdictRoll",
+          "valueType": "number",
+          "dist": "Uniform",
+          "distParams": { "min": "0", "max": "1" },
+          "mutable": false
+        }
+      ]
+    },
+    {
+      "id": "et_courtroom",
+      "name": "Courtroom",
+      "role": "server",
+      "count": 25,
+      "attrDefs": [],
+      "schedulePattern": {
+        "type": "weekly",
+        "mode": "absolute",
+        "defaultCapacity": 0,
+        "periods": [
+          { "dayOfWeek": 1, "start": "10:00", "end": "16:30", "capacity": 25 },
+          { "dayOfWeek": 2, "start": "10:00", "end": "16:30", "capacity": 25 },
+          { "dayOfWeek": 3, "start": "10:00", "end": "16:30", "capacity": 25 },
+          { "dayOfWeek": 4, "start": "10:00", "end": "16:30", "capacity": 25 },
+          { "dayOfWeek": 5, "start": "10:00", "end": "16:30", "capacity": 25 }
+        ]
+      }
+    }
+  ],
+
+  "stateVariables": [
+    { "name": "casesCompleted", "initialValue": "0" }
+  ],
+
+  "bEvents": [
+    {
+      "id": "b_arrive",
+      "name": "Case Committed to Crown Court",
+      "scheduledTime": "0",
+      "effect": ["ARRIVE(Case, PTPH Queue)"],
+      "schedules": [
+        { "eventId": "b_arrive", "dist": "Exponential", "distParams": { "mean": "0.47" } }
+      ]
+    },
+    {
+      "id": "b_ptph_done",
+      "name": "PTPH Complete",
+      "scheduledTime": "9999",
+      "effect": ["RELEASE(Courtroom)"],
+      "probabilisticRouting": [
+        { "probability": 0.7, "queueName": "Sentencing" },
+        { "probability": 0.3, "queueName": "Trial Queue" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_trial_convicted",
+      "name": "Trial — Convicted",
+      "scheduledTime": "9999",
+      "effect": ["RELEASE(Courtroom, Sentencing)", "COST(3.5)"],
+      "schedules": []
+    },
+    {
+      "id": "b_trial_acquitted",
+      "name": "Trial — Acquitted",
+      "scheduledTime": "9999",
+      "effect": ["COMPLETE()", "COST(3.5)"],
+      "schedules": []
+    },
+    {
+      "id": "b_sentence_done",
+      "name": "Sentencing Complete",
+      "scheduledTime": "9999",
+      "effect": ["COMPLETE()", "casesCompleted++"],
+      "schedules": []
+    }
+  ],
+
+  "cEvents": [
+    {
+      "id": "c_ptph",
+      "name": "Assign PTPH Hearing",
+      "priority": 1,
+      "condition": "queue(PTPH Queue).length > 0 AND idle(Courtroom).count > 0",
+      "effect": ["ASSIGN(PTPH Queue, Courtroom)"],
+      "cSchedules": [
+        {
+          "eventId": "b_ptph_done",
+          "dist": "Fixed",
+          "distParams": { "value": "1" },
+          "useEntityCtx": true
+        }
+      ]
+    },
+    {
+      "id": "c_trial",
+      "name": "Assign Trial",
+      "priority": 2,
+      "condition": "queue(Trial Queue).length > 0 AND idle(Courtroom).count > 0",
+      "effect": ["ASSIGN(Trial Queue, Courtroom)"],
+      "cSchedules": [
+        {
+          "eventId": "b_trial_convicted",
+          "dist": "Triangular",
+          "distParams": { "min": "12", "mode": "24", "max": "48" },
+          "when": { "variable": "Entity.verdictRoll", "operator": "<=", "value": 0.58 },
+          "useEntityCtx": true
+        },
+        {
+          "eventId": "b_trial_acquitted",
+          "dist": "Triangular",
+          "distParams": { "min": "12", "mode": "24", "max": "48" },
+          "useEntityCtx": true
+        }
+      ]
+    },
+    {
+      "id": "c_sentence",
+      "name": "Assign Sentencing Hearing",
+      "priority": 3,
+      "condition": "queue(Sentencing).length > 0 AND idle(Courtroom).count > 0",
+      "effect": ["ASSIGN(Sentencing, Courtroom)"],
+      "cSchedules": [
+        {
+          "eventId": "b_sentence_done",
+          "dist": "Fixed",
+          "distParams": { "value": "1" },
+          "useEntityCtx": true
+        }
+      ]
+    }
+  ],
+
+  "queues": [
+    { "id": "q_ptph",       "name": "PTPH Queue",  "customerType": "Case", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_trial",      "name": "Trial Queue",  "customerType": "Case", "capacity": "", "discipline": "PRIORITY(custody)" },
+    { "id": "q_sentencing", "name": "Sentencing",    "customerType": "Case", "capacity": "", "discipline": "FIFO" }
+  ],
+
+  "goals": [
+    { "metric": "summary.avgWait",    "operator": "<", "target": 96,  "label": "Average trial queue wait < 4 calendar days" },
+    { "metric": "summary.avgSojourn", "operator": "<", "target": 240, "label": "Average total case duration < 10 calendar days" }
+  ],
+
+  "experimentDefaults": {
+    "maxSimTime": 2500,
+    "warmupPeriod": 168,
+    "replications": 10
+  },
+
+  "containerTypes": [],
+  "dataSources": [],
+  "sections": []
+}
