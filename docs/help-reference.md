@@ -871,9 +871,16 @@ The LLM Bundle is a structured Markdown file that combines model definition and 
 ### How to download
 
 1. Complete a run (any number of replications).
-2. In the Execute panel, click **Export…**.
-3. Select **LLM Bundle (.md)**.
+2. In the Execute panel, click **Export ▾** in the toolbar.
+3. Under the **AI & Reports** section, click **LLM Bundle (.md)**.
 4. The file downloads immediately. Paste its contents into any LLM interface.
+
+Other options in the **Export ▾** popover:
+- **Results Data** section: Full JSON (.json), Metrics-only JSON, Results table (.csv)
+- **AI & Reports** section: LLM Bundle (.md), Create Report…
+- **Reference** section: Schema reference — opens a modal documenting the full `simmodlr.results.v1` JSON structure
+
+The full JSON export now includes an **entity journeys** section with every customer entity's path through the model (stages, wait times, service times, outcome).
 
 ### What the bundle contains
 

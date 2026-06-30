@@ -124,7 +124,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | ANOVA / ranking & selection | ❌ | ⚠️ | ❌ | ✅ oneWayANOVA + tukeyHSD | — |
 | Cost / ROI modelling | ❌ | ✅ | ✅ | ✅ COST macro; totalCost/costPerServed | — |
 | Histogram output (freq distribution) | ⚠️ manual | ✅ | ✅ | ✅ buildHistogram / buildHistogramFD | — |
-| Entity-level data export | ⚠️ manual | ✅ | ✅ | ✅ entitySummary[] | — |
+| Entity-level data export | ✅ auto (Sprint 88) | ✅ | ✅ | ✅ entityJourneys[] in JSON export | — |
 | Structured trace / event log export | ❌ | ⚠️ | ❌ | ✅ cycleLog[] | — |
 | Run labelling, tagging, archiving | ❌ | ❌ | ❌ | ✅ run_label, tags, archived | — |
 | Saved experiment configurations | ❌ | ✅ | ⚠️ | ✅ experiments table | — |

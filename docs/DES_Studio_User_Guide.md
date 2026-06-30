@@ -273,7 +273,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    - Click **Compare** to compare against a saved historical run.
    - Use the text input to ask specific questions about the results (e.g. "Which queue had the longest wait?").
 
-   The **Export** button sits next to the **Saved Run** dropdown in the toolbar (not in the sub-tab bar), providing quick access to LLM Bundle, reports, and JSON export.
+   The **Export ▾** button sits in the toolbar next to the run controls. Click to open a three-section popover: **Results Data** (Full JSON, Metrics-only JSON, CSV), **AI & Reports** (LLM Bundle, Create Report), and **Reference** (Schema reference showing the JSON structure).
 
 ### 4.5 Compare scenarios with a parametric sweep
 
@@ -395,6 +395,41 @@ Once sections are defined:
 
 **When to use this.** You want to analyse results in an external tool — paste into an LLM (Claude, ChatGPT, Gemini), load into a Python notebook, consume from an R script, or connect from a BI tool.
 
+All export formats are available from the single **Export ▾** popover in the Execute panel toolbar (disabled until at least one run completes).
+
+| Popover section | Options |
+|-----------------|---------|
+| **Results Data** | Full model results (.json), Metrics only (.json — KPIs, no time series or entity data), Results table (.csv — per-replication rows + aggregate stats) |
+| **AI & Reports** | LLM Bundle (.md), Create Report… (Senior Management or Technical, HTML or Markdown) |
+| **Reference** | Schema reference — opens a modal showing the full `simmodlr.results.v1` JSON structure with a "Copy schema" button |
+
+#### Full JSON export
+
+The JSON export (`simmodlr.results.v1`) contains the complete model metadata, experiment configuration, results summary, time series, wait distributions, and per-replication summaries. A new **entity journeys** section includes every customer entity's full path through the model: arrival time, stage-by-stage wait and service times, and outcome (served, reneged, incomplete).
+
+**Python quick-start with entity journeys:**
+
+```python
+import json, pandas as pd
+with open("results.json") as f:
+    data = json.load(f)
+# Per-replication KPIs
+reps = pd.json_normalize(data["replications"])
+# Per-entity journey data
+journeys = pd.json_normalize(data["results"]["entityJourneys"])
+# Flatten stages for each entity
+all_stages = []
+for j in data["results"]["entityJourneys"]:
+    for stage in j["stages"]:
+        stage["entityId"] = j["entityId"]
+        all_stages.append(stage)
+stages_df = pd.DataFrame(all_stages)
+```
+
+#### Download all chart data
+
+In the **Results** workspace, a **⬇ Download all chart data (.csv)** button appears when chart data is present. It combines every chart series into a single CSV file with section headers (`# Section: Queue Depth — Checkout`). No more clicking each chart individually.
+
 #### LLM Bundle (.md)
 
 The LLM Bundle is a single Markdown file that gives an LLM everything it needs to answer questions about your model and results, with no additional context required.
@@ -413,18 +448,16 @@ The LLM Bundle is a single Markdown file that gives an LLM everything it needs t
 | Goals pass/fail | Each performance goal with its target, actual value, and PASS/FAIL status |
 | Replication summary | Seed, served, reneged, and avgWait per replication (for multi-replication runs) |
 
-**Token estimate:** 1,500–2,500 words (2,000–3,300 tokens) for a fully populated model — fits within any current LLM context window.
-
 **How to download:**
 
 1. Complete a run (single replication or multi-replication).
-2. In the Execute panel, click **Export…** in the toolbar.
-3. Select **LLM Bundle (.md)** from the menu.
+2. In the Execute panel, click **Export ▾** in the toolbar.
+3. Click **LLM Bundle (.md)**.
 4. A `.md` file downloads to your browser's default download folder.
 5. Open your LLM of choice, start a new conversation, and paste the file contents (or upload the file if the LLM supports file upload).
 6. Ask any question — for example: *"Which queue has the longest average wait?"* or *"Does this model meet its service-level target?"*
 
-**The bundle is disabled** (greyed out in the Export… menu) until at least one run has been completed for the current model session.
+**The Export ▾ button is disabled** (greyed out) until at least one run has been completed for the current model session.
 
 #### Results API (programmatic access)
 
