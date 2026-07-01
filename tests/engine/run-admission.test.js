@@ -205,4 +205,37 @@ describe("getRunAdmission", () => {
       expect.objectContaining({ code: "RA15" }),
     ]));
   });
+
+  it("warns when a run will save at 'full' detail because of a silent model-level default", () => {
+    const result = getAdmission({
+      resultDetailLevel: "full",
+      resultDetailLevelSource: "model-default",
+    });
+
+    expect(result.confirmations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "RA17" }),
+    ]));
+  });
+
+  it("does not warn when the user explicitly chose 'full' detail this session", () => {
+    const result = getAdmission({
+      resultDetailLevel: "full",
+      resultDetailLevelSource: "explicit",
+    });
+
+    expect(result.confirmations).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "RA17" }),
+    ]));
+  });
+
+  it("does not warn about full-detail saves at 'standard'/'minimal' detail level", () => {
+    const result = getAdmission({
+      resultDetailLevel: "compact",
+      resultDetailLevelSource: "model-default",
+    });
+
+    expect(result.confirmations).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "RA17" }),
+    ]));
+  });
 });

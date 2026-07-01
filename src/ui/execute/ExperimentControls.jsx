@@ -333,6 +333,11 @@ export function ExperimentControls({
               <strong style={{ color: C.text }}>Standard</strong> — chart data (200 points) + per-replication summaries (default).{" "}
               <strong style={{ color: C.text }}>Full</strong> — keeps per-entity log, trace, and raw wait distributions; slowest save.
             </div>
+            {saveDetailLevel === "full" && (
+              <div style={{ ...helperStyle, marginTop: 4, maxWidth: 420, color: C.amber }}>
+                Full detail saves take longer, especially for large models — consider Standard for routine runs.
+              </div>
+            )}
           </div>
         </div>
       )}

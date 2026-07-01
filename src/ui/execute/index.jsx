@@ -138,6 +138,7 @@ async function doCloudSave(saveFn, {
   setLog,
   prepareDurationMs,
   snapClock,
+  resultDetailLevel,
   slowWarnMs     = SAVE_SLOW_WARN_MS,
   criticalWarnMs = SAVE_CRITICAL_WARN_MS,
   timeoutMs      = SAVE_TIMEOUT_MS,
@@ -146,7 +147,11 @@ async function doCloudSave(saveFn, {
 
   const buildTickMessage = () => {
     const elapsed = nowPerf() - saveStartedAt;
-    if (elapsed >= criticalWarnMs) return `⏳ Still saving — this is taking longer than usual`;
+    if (elapsed >= criticalWarnMs) {
+      return resultDetailLevel === "full"
+        ? `⏳ Still saving — Full detail saves take longer, especially for large models`
+        : `⏳ Still saving — this is taking longer than usual`;
+    }
     return `Saving results…`;
   };
 
@@ -526,6 +531,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     replications,
     schedulesMap: activeSchedulesMap,
   }), [model, terminationMode, maxSimTime, replications, activeSchedulesMap]);
+  const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : saveDetailLevel === "minimal" ? "minimal" : "compact";
+  // Only warn when "full" comes from a silent model-level default the user may not have
+  // noticed, not when they just picked "Full" themselves in the Archive Detail dropdown.
+  const resultDetailLevelSource = saveDetailLevel === model?.experimentDefaults?.resultDetailLevel ? "model-default" : "explicit";
   const runAdmission = useMemo(() => getRunAdmission(model, {
     warmupPeriod,
     maxSimTime,
@@ -538,7 +547,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     tierPolicies,
     validation,
     complexityEstimate,
-  }), [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, plan, isAdmin, tierPolicies, validation, complexityEstimate]);
+    resultDetailLevel: effectiveResultDetailLevel,
+    resultDetailLevelSource,
+  }), [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, plan, isAdmin, tierPolicies, validation, complexityEstimate, effectiveResultDetailLevel, resultDetailLevelSource]);
   // Auto Run and single-run drive the engine directly (buildEngine) rather than via
   // runReplications, which already defaults collectTrace to false for batches — so this
   // is the only place those two paths get the size-gated trace setting, with an explicit
@@ -546,11 +557,15 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const traceWouldAutoDisable = runAdmission.effectiveSettings.collectTrace === false;
   const effectiveCollectTrace = forceTraceCollection ? true : runAdmission.effectiveSettings.collectTrace;
   const traceAutoDisabled = traceWouldAutoDisable && !forceTraceCollection;
+  // Whether the confirmation dialog should offer the chart/trace force-on choice at all,
+  // vs. just being an informational heads-up (e.g. RA17's full-detail-save warning) with
+  // a single "Continue" button.
+  const timeSeriesWouldAutoDisable = collectTimeSeries && !runAdmission.effectiveSettings.collectTimeSeries;
+  const offersChartToggle = timeSeriesWouldAutoDisable || traceWouldAutoDisable;
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
   const estimateHasActionableContent = runAdmission.warnings.length > 0 || runAdmission.confirmations.length > 0;
   const effectiveShowEstimate = showEstimate != null ? showEstimate : estimateHasActionableContent;
-  const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : saveDetailLevel === "minimal" ? "minimal" : "compact";
   const readinessTagColor = hasAdmissionErrors ? C.red : C.green;
   const readinessTagBg = hasAdmissionErrors ? C.errorBg : `${C.green}18`;
   const readinessBorder = hasAdmissionErrors ? C.danger : `${C.green}66`;
@@ -782,7 +797,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           setSaveStatus({ state: 'saving', message: 'Saving results…' });
           doCloudSave(
             () => saveSimulationRun(modelId, userId, fullResult, { ...config, runRecord }),
-            { setSaveStatus, setLog, prepareDurationMs, snapClock: r.snap.clock },
+            { setSaveStatus, setLog, prepareDurationMs, snapClock: r.snap.clock, resultDetailLevel: config.resultDetailLevel },
           ).then(runId => {
             if (runId) {
               setLatestRunId(runId);
@@ -988,7 +1003,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               setSaveStatus({ state: 'saving', message: 'Saving results…' });
               doCloudSave(
                 () => saveSimulationRun(modelId, userId, batchResult, { ...batchConfig, runRecord: batchRunRecord }),
-                { setSaveStatus, setLog, prepareDurationMs, snapClock: batchResult.snap.clock },
+                { setSaveStatus, setLog, prepareDurationMs, snapClock: batchResult.snap.clock, resultDetailLevel: batchConfig.resultDetailLevel },
               ).then(runId => {
                 if (runId) {
                   setLatestRunId(runId);
@@ -1153,7 +1168,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setSaveStatus({ state: 'saving', message: 'Saving results…' });
       doCloudSave(
         () => saveSimulationRun(modelId, userId, result, { ...config, runRecord: singleRunRecord }),
-        { setSaveStatus, setLog, prepareDurationMs, snapClock: result.snap.clock },
+        { setSaveStatus, setLog, prepareDurationMs, snapClock: result.snap.clock, resultDetailLevel: config.resultDetailLevel },
       ).then(runId => {
         if (runId) {
           setLatestRunId(runId);
@@ -3379,6 +3394,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         onCancel={() => resolveChartDataChoice("cancel")}
         onProceedWithoutCharts={() => resolveChartDataChoice("without")}
         onProceedWithCharts={() => resolveChartDataChoice("force")}
+        offersChartToggle={offersChartToggle}
       />
     </div>
   );

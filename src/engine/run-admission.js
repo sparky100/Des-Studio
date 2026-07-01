@@ -235,6 +235,13 @@ export function getRunAdmission(model, options = {}) {
     ));
   }
 
+  if (options.resultDetailLevel === "full" && options.resultDetailLevelSource === "model-default") {
+    confirmations.push(makeDecisionIssue(
+      "RA17",
+      "This model's default save setting is 'Full' detail. Full saves include per-entity data and raw distributions, and take noticeably longer to save — for large models this can approach the save timeout. You can change this in Run Setup → Archive Detail."
+    ));
+  }
+
   return {
     hardErrors,
     warnings,

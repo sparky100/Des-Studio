@@ -19,13 +19,14 @@ import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 
 const SAVE_SLOW_WARN_MS     = 5_000;
 const SAVE_CRITICAL_WARN_MS = 15_000;
-const SAVE_TIMEOUT_MS       = 30_000;
+const SAVE_TIMEOUT_MS       = 45_000;
 
 async function doCloudSave(saveFn, {
   setSaveStatus,
   setLog,
   prepareDurationMs,
   snapClock,
+  resultDetailLevel,
   slowWarnMs     = SAVE_SLOW_WARN_MS,
   criticalWarnMs = SAVE_CRITICAL_WARN_MS,
   timeoutMs      = SAVE_TIMEOUT_MS,
@@ -35,7 +36,9 @@ async function doCloudSave(saveFn, {
   const buildTickMessage = () => {
     const elapsed = performance.now() - saveStartedAt;
     if (elapsed >= criticalWarnMs) {
-      return `⏳ Still saving… — Supabase may be starting up`;
+      return resultDetailLevel === "full"
+        ? `⏳ Still saving — Full detail saves take longer, especially for large models`
+        : `⏳ Still saving — this is taking longer than usual`;
     }
     if (elapsed >= slowWarnMs) {
       return `Saving results… (taking longer than usual)`;
@@ -200,9 +203,48 @@ describe("doCloudSave — timeout and warning behaviour", () => {
     // If thresholds in index.jsx are changed, update both places.
     expect(SAVE_SLOW_WARN_MS).toBe(5_000);
     expect(SAVE_CRITICAL_WARN_MS).toBe(15_000);
-    expect(SAVE_TIMEOUT_MS).toBe(30_000);
+    expect(SAVE_TIMEOUT_MS).toBe(45_000);
     // Timeout must be strictly longer than both warning thresholds
     expect(SAVE_TIMEOUT_MS).toBeGreaterThan(SAVE_CRITICAL_WARN_MS);
     expect(SAVE_CRITICAL_WARN_MS).toBeGreaterThan(SAVE_SLOW_WARN_MS);
+  });
+
+  // jsdom's performance.now() isn't driven by vi.useFakeTimers()'s virtual clock,
+  // so tests that assert on elapsed-time-dependent message content (rather than
+  // just the terminal success/error state) need performance.now() pinned to the
+  // same fake clock that Date.now()/setInterval already use.
+  describe("elapsed-time-dependent tick messages", () => {
+    beforeEach(() => {
+      vi.spyOn(performance, "now").mockImplementation(() => Date.now());
+    });
+
+    it("explains that 'full' detail is the likely cause once a save is critically slow", async () => {
+      const saveFn = vi.fn(() => new Promise(() => {}));
+      const opts   = makeOpts({ timeoutMs: 20_000, criticalWarnMs: 15_000, resultDetailLevel: "full" });
+
+      const promise = doCloudSave(saveFn, opts);
+      await vi.advanceTimersByTimeAsync(16_000);
+
+      const lastStatus = opts.setSaveStatus.mock.calls.at(-1)[0];
+      expect(lastStatus.message).toMatch(/Full detail saves take longer/i);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await promise;
+    });
+
+    it("uses the generic slow-save message for non-'full' detail levels", async () => {
+      const saveFn = vi.fn(() => new Promise(() => {}));
+      const opts   = makeOpts({ timeoutMs: 20_000, criticalWarnMs: 15_000, resultDetailLevel: "compact" });
+
+      const promise = doCloudSave(saveFn, opts);
+      await vi.advanceTimersByTimeAsync(16_000);
+
+      const lastStatus = opts.setSaveStatus.mock.calls.at(-1)[0];
+      expect(lastStatus.message).toMatch(/taking longer than usual/i);
+      expect(lastStatus.message).not.toMatch(/Full detail/i);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await promise;
+    });
   });
 });

@@ -38,6 +38,20 @@ function formatRunDate(value) {
   return `${dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})} ${dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`;
 }
 
+const DETAIL_LEVEL_LABELS = { full: "Full", compact: "Standard", minimal: "Minimal" };
+
+function detailLevelBadgeInfo(resultsJson) {
+  const level = resultsJson?._result_detail_level;
+  if (!level) return null;
+  const label = DETAIL_LEVEL_LABELS[level] || level;
+  const autoTrimmed = resultsJson._auto_trimmed_from;
+  const trimmedFields = Array.isArray(resultsJson._trimmed_fields) ? resultsJson._trimmed_fields : [];
+  const titleParts = [];
+  if (autoTrimmed) titleParts.push(`Auto-trimmed from '${DETAIL_LEVEL_LABELS[autoTrimmed] || autoTrimmed}' to 'Minimal' — payload exceeded the size guard.`);
+  if (trimmedFields.length) titleParts.push(`Trimmed: ${trimmedFields.join(", ")}`);
+  return { label, autoTrimmed: !!autoTrimmed, title: titleParts.join(" ") || undefined };
+}
+
 const formatPercent = value => Number.isFinite(value) ? `${Math.round(value)}%` : "—";
 const formatTime = value => value != null && Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}t` : "—";
 
@@ -433,13 +447,28 @@ export function ModelHistoryTab({
                         )}
                       </td>
                       <td style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
-                        {row.model_versions ? (
-                          <span style={{ fontSize: 10, fontWeight: 700, color: C.purple, background: `${C.purple}15`, border: `1px solid ${C.purple}33`, borderRadius: 999, padding: "2px 8px" }}>
-                            V{row.model_versions.version}
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 10, color: C.muted }}>—</span>
-                        )}
+                        <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+                          {row.model_versions ? (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: C.purple, background: `${C.purple}15`, border: `1px solid ${C.purple}33`, borderRadius: 999, padding: "2px 8px" }}>
+                              V{row.model_versions.version}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 10, color: C.muted }}>—</span>
+                          )}
+                          {(() => {
+                            const info = detailLevelBadgeInfo(row.results_json);
+                            if (!info) return null;
+                            const color = info.label === "Full" ? C.purple : C.muted;
+                            return (
+                              <span
+                                title={info.title}
+                                style={{ fontSize: 10, fontWeight: 700, color, background: `${color}15`, border: `1px solid ${color}33`, borderRadius: 999, padding: "2px 8px" }}
+                              >
+                                {info.label}{info.autoTrimmed && <span style={{ color: C.amber, marginLeft: 3 }}>⚠</span>}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </td>
                       <td style={{ padding: "6px 12px", textAlign: "center" }}>
                         <span style={{

@@ -12,9 +12,10 @@ import { useTheme } from "../shared/ThemeContext.jsx";
  *   onCancel: () => void,
  *   onProceedWithoutCharts: () => void,
  *   onProceedWithCharts: () => void,
+ *   offersChartToggle: boolean,
  * }} props
  */
-export function ChartDataChoiceDialog({ isOpen, messages, onCancel, onProceedWithoutCharts, onProceedWithCharts }) {
+export function ChartDataChoiceDialog({ isOpen, messages, onCancel, onProceedWithoutCharts, onProceedWithCharts, offersChartToggle = true }) {
   const { C, FONT } = useTheme();
   const dialogRef = useRef(null);
   const headingId = "chart-data-choice-heading";
@@ -75,7 +76,7 @@ export function ChartDataChoiceDialog({ isOpen, messages, onCancel, onProceedWit
         }}
       >
         <div id={headingId} style={{ fontFamily: FONT, ...TYPO.heading, color: C.text }}>
-          Large run — chart data collection
+          {offersChartToggle ? "Large run — chart data collection" : "Before you run"}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: SPACE.sm }}>
@@ -95,10 +96,12 @@ export function ChartDataChoiceDialog({ isOpen, messages, onCancel, onProceedWit
           ))}
         </div>
 
-        <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
-          Collecting charts may slow this run down or use significant browser memory. Numeric summaries
-          (waits, utilisation, cost) are unaffected either way — this only affects the time-series charts.
-        </div>
+        {offersChartToggle && (
+          <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+            Collecting charts may slow this run down or use significant browser memory. Numeric summaries
+            (waits, utilisation, cost) are unaffected either way — this only affects the time-series charts.
+          </div>
+        )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: SPACE.sm, flexWrap: "wrap" }}>
           <button
@@ -108,20 +111,32 @@ export function ChartDataChoiceDialog({ isOpen, messages, onCancel, onProceedWit
           >
             Cancel run
           </button>
-          <button
-            type="button"
-            onClick={onProceedWithoutCharts}
-            style={{ ...buttonBase, background: alpha(C.accent, 0.15), color: C.accent }}
-          >
-            Run without chart data
-          </button>
-          <button
-            type="button"
-            onClick={onProceedWithCharts}
-            style={{ ...buttonBase, background: C.amber, color: C.bg }}
-          >
-            Run with chart data anyway
-          </button>
+          {offersChartToggle ? (
+            <>
+              <button
+                type="button"
+                onClick={onProceedWithoutCharts}
+                style={{ ...buttonBase, background: alpha(C.accent, 0.15), color: C.accent }}
+              >
+                Run without chart data
+              </button>
+              <button
+                type="button"
+                onClick={onProceedWithCharts}
+                style={{ ...buttonBase, background: C.amber, color: C.bg }}
+              >
+                Run with chart data anyway
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onProceedWithoutCharts}
+              style={{ ...buttonBase, background: alpha(C.accent, 0.15), color: C.accent }}
+            >
+              Continue
+            </button>
+          )}
         </div>
       </div>
     </div>
