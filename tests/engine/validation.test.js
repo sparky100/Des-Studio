@@ -1923,4 +1923,54 @@ describe("V5 — EntityAttr skips dist validation", () => {
       expect(errors.filter(e => ["V57", "V58", "V59", "V60"].includes(e.code))).toHaveLength(0);
     });
   });
+
+  describe("V-SKILL-7: entity-side Categorical skill requirements must be coverable by a server", () => {
+    const baseSkillModel = (serverOverrides = {}) => ({
+      entityTypes: [
+        {
+          id: "patient", name: "Patient", role: "customer",
+          attrDefs: [{
+            name: "requiredSkill", valueType: "string", dist: "Categorical",
+            distParams: { options: [{ value: "Surgery", weight: 100 }] },
+          }],
+        },
+        { id: "doctor", name: "Doctor", role: "server", count: 2, ...serverOverrides },
+      ],
+      skills: ["Surgery", "Consultation"],
+      queues: [{ id: "q", name: "Queue", discipline: "FIFO", customerType: "Patient" }],
+      bEvents: [{ id: "b", name: "Arrive", effect: ["ARRIVE(Patient)"], schedules: [] }],
+      cEvents: [{
+        id: "c", name: "Serve",
+        effect: "ASSIGN(Queue, Doctor, Entity.requiredSkill)",
+        cSchedules: [{ eventId: "b", useEntityCtx: true }],
+      }],
+    });
+
+    it("warns when no server instance — type-level or per-profile — has the required skill", () => {
+      const { warnings } = validateModel(baseSkillModel({ skills: ["Consultation"] }));
+      const v7 = warnings.filter(w => w.code === "V-SKILL-7");
+      expect(v7).toHaveLength(1);
+      expect(v7[0].message).toMatch(/Surgery/);
+    });
+
+    it("does not warn when the type-level skills cover the required value", () => {
+      const { warnings } = validateModel(baseSkillModel({ skills: ["Surgery"] }));
+      expect(warnings.filter(w => w.code === "V-SKILL-7")).toHaveLength(0);
+    });
+
+    it("does not warn when a skillProfiles entry (not the base skills) covers the required value", () => {
+      const { warnings } = validateModel(baseSkillModel({
+        skills: ["Consultation"],
+        skillProfiles: [{ name: "Surgeon", skills: ["Surgery"], count: 1 }],
+      }));
+      expect(warnings.filter(w => w.code === "V-SKILL-7")).toHaveLength(0);
+    });
+
+    it("does not warn for non-Categorical entity attributes used in ASSIGN", () => {
+      const model = baseSkillModel({ skills: ["Consultation"] });
+      model.entityTypes[0].attrDefs[0] = { name: "requiredSkill", valueType: "number", dist: "Fixed", distParams: { value: "1" } };
+      const { warnings } = validateModel(model);
+      expect(warnings.filter(w => w.code === "V-SKILL-7")).toHaveLength(0);
+    });
+  });
 });

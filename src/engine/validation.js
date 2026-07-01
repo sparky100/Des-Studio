@@ -1457,6 +1457,53 @@ export function validateModel(model) {
     }
   });
 
+  // V-SKILL-7: Entity-side Categorical skill requirements should be coverable by
+  // at least one server instance (type-level skills[] or any skillProfiles entry).
+  // Otherwise entities requiring that value will queue forever with no server ever
+  // able to serve them (silent starvation/deadlock).
+  cEvents.forEach(ev => {
+    const text = effectText(ev.effect);
+    const entitySkillAssign = text.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*Entity\.(\w+)\s*\)/gi);
+    if (!entitySkillAssign) return;
+    entitySkillAssign.forEach(m => {
+      const parts = m.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*Entity\.(\w+)\s*\)/i);
+      if (!parts) return;
+      const queueOrType = parts[1].trim().toLowerCase();
+      const sType = parts[2].trim();
+      const attrName = parts[3].trim();
+      const serverType = serverTypeMap[sType.toLowerCase()];
+      if (!serverType) return;
+
+      const reachableTypes = queueToCustomerTypes[queueOrType] || new Set([queueOrType]);
+      let attrDef = null;
+      for (const typeName of reachableTypes) {
+        const et = customerTypeMap[typeName];
+        if (!et) continue;
+        const found = (et.attrDefs || []).find(a => (a.name || '').trim().toLowerCase() === attrName.toLowerCase());
+        if (found) { attrDef = found; break; }
+      }
+      if (!attrDef || attrDef.dist !== 'Categorical') return;
+
+      const options = Array.isArray(attrDef.distParams?.options) ? attrDef.distParams.options : [];
+      const requiredValues = [...new Set(
+        options.filter(o => (Number(o.weight) || 0) > 0 && typeof o.value === 'string').map(o => o.value)
+      )];
+      if (!requiredValues.length) return;
+
+      const coverage = new Set(Array.isArray(serverType.skills) ? serverType.skills : []);
+      (serverType.skillProfiles || []).forEach(p => (p.skills || []).forEach(s => coverage.add(s)));
+
+      requiredValues.forEach(val => {
+        if (!coverage.has(val)) {
+          warn('V-SKILL-7',
+            `Entity class arriving via '${parts[1].trim()}' can require skill '${val}' (via Entity.${attrName}), but server type '${sType}' has no instance — type-level or per-profile — with that skill. Entities requiring '${val}' will wait indefinitely.`,
+            'cevents',
+            { eventIds: [ev.id], entityTypeIds: [serverType.id] });
+        }
+      });
+    });
+  });
+
   // V-CAL-1: Calendar conditions require epoch
   const calendarVars = ['isWeekday', 'isWeekend', 'hourOfDay', 'dayOfWeek'];
   const hasEpoch = !!(model.epoch && model.epoch.trim());

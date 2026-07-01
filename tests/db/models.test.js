@@ -2081,4 +2081,59 @@ describe('Sprint 71 — persistence layer', () => {
       expect(entityType.schedulePattern).toEqual(schedulePattern);
     });
   });
+
+  // ── round-trip: model.skills, entityTypes[].skills, entityTypes[].skillProfiles ──
+  describe('round-trip — skills registry and skillProfiles survive saveModel + norm()', () => {
+    const skills = ['Surgery', 'Triage', 'Consultation'];
+    const skillProfiles = [
+      { name: 'Surgeon', skills: ['Surgery'], count: 1 },
+      { name: 'Generalist', skills: ['Triage', 'Consultation'], weight: 50 },
+    ];
+
+    it('preserves model.skills and entityTypes[].skills/skillProfiles in the insert payload', async () => {
+      const model = {
+        name: 'Skills RT Model',
+        skills,
+        entityTypes: [
+          { id: 'srv', name: 'Doctor', role: 'server', count: 3, skills: ['Consultation'], skillProfiles },
+        ],
+        queues: [{ id: 'q', name: 'Queue', discipline: 'FIFO' }],
+        bEvents: [{ id: 'b-rt', name: 'Arrive', effect: ['ARRIVE(Patient)'], schedules: [] }],
+        cEvents: [{ id: 'c-rt', name: 'Serve', effect: 'ASSIGN(Patient, Doctor)', cSchedules: [{ eventId: 'b-rt', useEntityCtx: true }] }],
+      };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'skills-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json.skills).toEqual(skills);
+      const entityType = insertArg.entity_types.find(et => et.id === 'srv');
+      expect(entityType.skills).toEqual(['Consultation']);
+      expect(entityType.skillProfiles).toEqual(skillProfiles);
+    });
+
+    it('norm() preserves model.skills and entityTypes[].skills/skillProfiles from a DB row', () => {
+      const result = norm({
+        id: 'm-skills', name: 'Skills RT Model',
+        entity_types: [
+          { id: 'srv', name: 'Doctor', role: 'server', count: 3, skills: ['Consultation'], skillProfiles },
+        ],
+        queues: [{ id: 'q', name: 'Queue', discipline: 'FIFO' }],
+        b_events: [{ id: 'b-rt', name: 'Arrive', effect: ['ARRIVE(Patient)'], schedules: [] }],
+        c_events: [{ id: 'c-rt', name: 'Serve', effect: 'ASSIGN(Patient, Doctor)', cSchedules: [{ eventId: 'b-rt', useEntityCtx: true }] }],
+        model_json: { skills },
+      });
+
+      expect(result.skills).toEqual(skills);
+      const entityType = result.entityTypes.find(et => et.id === 'srv');
+      expect(entityType.skills).toEqual(['Consultation']);
+      expect(entityType.skillProfiles).toEqual(skillProfiles);
+    });
+  });
 });

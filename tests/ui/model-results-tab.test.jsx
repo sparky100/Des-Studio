@@ -114,4 +114,32 @@ describe("ModelDetail Results tab", () => {
     expect(screen.getByText(/Run started/i)).toBeInTheDocument();
     expect(screen.getByText(/Run finished/i)).toBeInTheDocument();
   });
+
+  test("opens the Export popover from the Results summary view without crashing", async () => {
+    mockFetchRunHistory.mockResolvedValue([
+      {
+        id: "run-1",
+        run_label: "Morning baseline",
+        ran_at: "2026-05-11T10:00:00.000Z",
+        results_json: { summary: { served: 3 } },
+      },
+    ]);
+
+    render(
+      <ModelDetail
+        modelId="m1"
+        modelData={baseModel}
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        overrides={{ isOwner: true, canEdit: true, profiles: [], userId: "user-1" }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^results$/i }));
+    await screen.findByText(/Morning baseline/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /^export/i }));
+
+    expect(screen.getByText(/full model results \(\.json\)/i)).toBeInTheDocument();
+  });
 });

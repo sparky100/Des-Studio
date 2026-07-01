@@ -305,17 +305,6 @@ function modelWithShiftInitialCapacity(model) {
   };
 }
 
-function resolveModelSchedulePatterns(model) {
-  return {
-    ...model,
-    entityTypes: (model.entityTypes || []).map(entityType => {
-      if (entityType.role !== "server" || !entityType.schedulePattern) return entityType;
-      const { pattern: resolved } = resolveSchedulePattern(entityType.schedulePattern);
-      return { ...entityType, schedulePattern: resolved };
-    }),
-  };
-}
-
 function makeShiftChangeEvents(model) {
   return (model.entityTypes || [])
     .filter(entityType => entityType.role === "server")
