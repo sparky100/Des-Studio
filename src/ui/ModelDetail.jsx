@@ -20,6 +20,7 @@ import { EntitySummaryTable } from "./execute/SweepViews.jsx";
 import { CsvImportModal } from "./CsvImportModal.jsx";
 import { SimPyExportModal } from "./editors/SimPyExportModal.jsx";
 import { ResultsWorkspace } from "./results/ResultsWorkspace.jsx";
+import { ExportPopover } from "./shared/ExportPopover.jsx";
 import { buildLLMBundle } from "../llm/bundleExport.js";
 import { ModelHistoryTab } from "./ModelHistoryTab.jsx";
 import { ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
@@ -475,7 +476,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [describePrompt,setDescribePrompt]=useState("");
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
   const [resultsReportGenerating,setResultsReportGenerating]=useState(false);
-  const [exportMenuOpen,setExportMenuOpen]=useState(false);
   const [showResultsSnapshot,setShowResultsSnapshot]=useState(false);
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const [notesEditing,setNotesEditing]=useState(false);
@@ -760,6 +760,21 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       "summary.costPerServed": toCI(s.costPerServed),
     };
   }, [latestResults]);
+  const resultsExportConfig = useMemo(() => {
+    const row = historyRows.find(r => r.id === selectedResultsRunId);
+    const expConfig = latestResults?._experiment_config || {};
+    return {
+      runLabel: row?.run_label || '',
+      seed: row?.seed ?? expConfig.seed ?? null,
+      replications: row?.replications ?? expConfig.replications ?? latestReplicationResults.length ?? 1,
+      warmupPeriod: row?.warmup_period ?? expConfig.warmupPeriod ?? 0,
+      maxSimTime: row?.max_simulation_time ?? expConfig.maxSimTime ?? null,
+      terminationMode: expConfig.terminationMode || 'time',
+      terminationCondition: expConfig.terminationCondition || null,
+      batchStatus: 'complete',
+      modelId,
+    };
+  }, [latestResults, historyRows, selectedResultsRunId, latestReplicationResults, modelId]);
   const isStarterBlank = useMemo(() => isStarterBlankModel(model), [model]);
   const runHistoryFetcher = useMemo(
     () => (overrides.userId ? (filters => fetchRunHistory(modelId, filters)) : () => Promise.resolve(fetchLocalRunHistory(modelId))),
@@ -830,37 +845,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     const storedReps = Array.isArray(hydratedResults?.replications) ? hydratedResults.replications : [];
     setLatestReplicationResults(storedReps);
   };
-
-  const handleResultsExportJson = useCallback(() => {
-    if (!latestResults) return;
-    const json = JSON.stringify(latestResults, null, 2);
-    const row = historyRows.find(r => r.id === selectedResultsRunId);
-    const label = row?.run_label || selectedResultsRunId || 'results';
-    downloadTextFile(json, `${sanitizeFilename(model.name || 'model')}-${sanitizeFilename(label)}.json`, 'application/json');
-  }, [latestResults, historyRows, selectedResultsRunId, model.name]);
-
-  const handleResultsExportLLMBundle = useCallback(() => {
-    if (!latestResults) return;
-    const row = historyRows.find(r => r.id === selectedResultsRunId);
-    const json = latestResults;
-    const expConfig = json._experiment_config || {};
-    const config = {
-      runLabel: row?.run_label,
-      ranAt: row?.ran_at,
-      engineVersion: json._engine_version,
-      prngAlgorithm: json._prng_algorithm || 'mulberry32',
-      baseSeed: json._base_seed,
-      replications: row?.replications ?? expConfig.replications,
-      maxSimTime: row?.max_simulation_time ?? expConfig.maxSimTime,
-      warmupPeriod: row?.warmup_period ?? expConfig.warmupPeriod,
-      seed: row?.seed ?? expConfig.seed,
-    };
-    const bundleResults = { ...json, replications: json.replications || [] };
-    const md = buildLLMBundle(model, bundleResults, config);
-    const name = (model?.name || 'model').replace(/\s+/g, '-').toLowerCase();
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    downloadTextFile(md, `simmodlr-llm-bundle-${name}-${ts}.md`, "text/markdown;charset=utf-8");
-  }, [latestResults, historyRows, selectedResultsRunId, model]);
 
   const handleResultsReport = useCallback(async (type = 'seniorMgmt') => {
     if (!latestResults || resultsReportGenerating) return;
@@ -1596,7 +1580,24 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         return <option key={row.id} value={row.id}>{label}</option>;
                       })}
                     </select>
-                    {latestResults && null}
+                    {latestResults && (
+                      <div style={{ position: "relative", marginLeft: "auto" }}>
+                        <Btn small variant="ghost" onClick={() => setResultsExportOpen(v => !v)}>Export ▾</Btn>
+                        {resultsExportOpen && (
+                          <>
+                            <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setResultsExportOpen(false)} />
+                            <ExportPopover
+                              model={model}
+                              results={latestResults}
+                              replicationResults={latestReplicationResults}
+                              aggregateStats={latestResults?.aggregateStats || {}}
+                              config={resultsExportConfig}
+                              onClose={() => setResultsExportOpen(false)}
+                            />
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
                 {latestResults ? (
