@@ -183,6 +183,25 @@ describe('model JSON import', () => {
     expect(imported.skills).toEqual([]);
   });
 
+  it('preserves model-level notes when present in imported model_json', () => {
+    const imported = extractImportedModelPayload({
+      name: 'Notes model',
+      model_json: {
+        ...emptyModelJson,
+        notes: 'Assumes 8-hour shifts; increase replications for tighter CIs.',
+      },
+    });
+    expect(imported.notes).toBe('Assumes 8-hour shifts; increase replications for tighter CIs.');
+  });
+
+  it('omits notes from the imported payload when absent from imported model_json', () => {
+    const imported = extractImportedModelPayload({
+      name: 'No notes model',
+      model_json: emptyModelJson,
+    });
+    expect(imported.notes).toBeUndefined();
+  });
+
   it('applies entered name and description when importing pasted JSON', async () => {
     const user = userEvent.setup();
     const importPayload = { name: 'Shared model', description: 'Original', model_json: emptyModelJson };
