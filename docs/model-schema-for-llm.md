@@ -52,7 +52,7 @@ Read every row in the TOP LLM MISTAKES table. For each one, confirm your model d
 
 ### Step 4 — Validate before output
 Before returning any JSON, check every blocking rule in §10 programmatically or by inspection.
-A model with any blocking error (V1–V47, V-SKILL-1 to V-SKILL-2, CHK-001 to CHK-014) must not be returned to the user.
+A model with any blocking error (V1–V47, V-SKILL-1, V-SKILL-2, V-SKILL-4, V-SKILL-5 (when profile counts oversubscribe), CHK-001 to CHK-014) must not be returned to the user.
 Fix all errors first.
 
 ### Step 5 — Planned arrivals: check row count
@@ -1220,9 +1220,17 @@ All generated model JSON MUST pass every blocking rule below.
 | V45 | Every declared queue must appear as a routing destination (ARRIVE, RELEASE 2-arg, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination`). A queue not reachable by any of these is a disconnected fragment. Only enforced when at least one queue is explicitly named in routing (avoids false positives on single-arg `ARRIVE` models). |
 | V46 | `overflowDestination` must not form a cycle (A → B → A). Overflow chains are followed recursively at runtime, so a cycle would otherwise loop; it is instead caught at design time. |
 | V47 | `DELAY(QueueName)` must reference a defined queue (blocking error). A C-event whose effect contains `DELAY` should also set `"useEntityCtx": true` on its `cSchedules` entry, or its completion B-event will not know which entity to route (warning). Its `cSchedules` entry's `dist` must not be `"ServerAttr"` — `DELAY` claims no server, so this always falls back to a fixed delay of `1` (warning). Its completion B-event's effect must not be a *bare* `ARRIVE(...)` with nothing else — `ARRIVE` never resolves the delayed entity, leaving it stuck in `"serving"` forever; `ARRIVE` combined with `COMPLETE()`/`RELEASE()`/a routing table is fine (blocking error). |
+| V41 | `SET_ATTR(attrName, ...)` targets an attribute that is declared with `mutable: false`. Attempting to set an immutable attribute at runtime is a blocking error. |
+| V48 | `shiftSchedule` entries using condition-triggered (`when`) form: a single entry must not mix `time` and `when` (pick one); `when.variable` must reference a supported `state.*` or `Queue.*` value; `when.operator` must be a valid comparison operator; `when.value` must be present. Any violation is a blocking error. |
+| V50 | `schedulePattern.periods` must be a non-empty array. A server entity type must not define both `schedulePattern` and a manual `shiftSchedule` — remove one. Each period's `start`/`end` are required, must parse as `HH:MM`, and `start` must be strictly before `end`. Exception-period `start`/`end` are validated the same way. All are blocking errors. |
+| V51 | Within a single `dayOfWeek`, `schedulePattern.periods` must not overlap (e.g. `09:00-17:00` and `12:00-20:00` on the same day) — blocking error. |
+| V52 | `schedulePattern.periods[].capacity` (and exception-period `capacity`) must be an integer ≥ 0 — blocking error. |
+| V53 | `schedulePattern.periods[].dayOfWeek` must be an integer 1 (Monday) through 7 (Sunday) — blocking error. |
+| V54 | `schedulePattern.exceptions[].date` must be a valid ISO date string — blocking error. |
+| V55 | A server entity type with `schedulePattern` requires the model to have `epoch` set — without a real-world anchor the engine cannot resolve weekly periods to simulation time. Blocking error; when it fires, no further `schedulePattern` checks run for that entity type. |
 | V-SKILL-1 | Every skill name declared in a server entity type's `skills[]` must appear in the model-level `skills` array. A server type referencing a skill that is not registered at the model level is a blocking error. |
 | V-SKILL-2 | Every skill reference in an ASSIGN 3-arg, COSEIZE bracket syntax, or idle/busy condition predicate must be a valid entry in the model-level `skills` array. A reference to an unregistered skill name is a blocking error. |
-| V-SKILL-3 | When ASSIGN uses `Entity.attrName` as its skill source, `attrName` must be a defined attribute on at least one customer entity type reachable by the specified queue. The attribute should have `valueType: "string"` (warning V-SKILL-3-warn if not — non-string values can never match server skill names). |
+| V-SKILL-3 | When ASSIGN uses `Entity.attrName` as its skill source, `attrName` must be a defined attribute on at least one customer entity type reachable by the specified queue. The attribute should have `valueType: "string"` (warning, same code V-SKILL-3, if not — non-string values can never match server skill names). |
 | V-SKILL-4 | Every skill in a `skillProfiles[].skills` must exist in the model-level `skills[]` array. A profile referencing an unregistered skill is a blocking error. |
 | V-SKILL-5 | Count-based profile totals must not exceed the server type's `count`. Sum > count is a blocking error; sum < count is a warning (remaining servers get no instance skills). |
 | V57 | `schedulePattern` with `mode: "multiplier"` requires `baseCapacity` to be a positive number. |
@@ -1241,15 +1249,22 @@ All generated model JSON MUST pass every blocking rule below.
 | V29 | A C-event whose `cSchedules` entries all have a `when` predicate with no fallback entry — entities not matching any condition receive no service |
 | V33 | `probabilisticRouting` with a single 100% null-exit branch and `COMPLETE()` — valid but unusual. Prefer plain `COMPLETE()` without routing for simple terminal completions. |
 | V38 | `RELEASE()` immediately followed by `COMPLETE()` in the same B-event effect. `RELEASE` sets entity to `"waiting"` so `COMPLETE` skips silently. Use `COMPLETE()` alone — it releases the server automatically. |
+| V40 | `SET_ATTR(attrName, ...)` targets an attribute that isn't declared on any entity class — likely a typo. The engine still applies the effect. |
+| V42 | A queue uses `discipline: "SPT"` but the customer entity type reaching it has no `serviceTime`/`processingTime` attribute — SPT can't rank entities and falls back to arrival order. |
+| V43 | A queue uses `discipline: "EDD"` but the customer entity type reaching it has no `dueDate` attribute — EDD can't rank entities and falls back to arrival order. |
+| V49 | A condition-triggered `shiftSchedule` entry's `when.variable` references `state.X` where `X` is not a defined state variable — the condition can never become true, so this shift change will never fire. |
+| V56 | A server entity type's `schedulePattern` resolves to capacity 0 at simulation time 0 (the epoch falls outside every period) — no server instances exist until the first period starts. Expected for schedules that intentionally start closed (e.g. before opening hours); arrivals during this time simply queue. If unintended, check that `periods[].dayOfWeek`/`start`/`end` align with the model's `epoch`. |
+| W-FAIL-01 | A server entity type uses `failureScope: "pool"` with more than one server — a single failure takes the entire pool offline simultaneously. Consider `"unit"` for independent per-server failures unless modelling shared-infrastructure outages. |
 | CHK-005 | Follow-on event chain has no terminal event — may cause infinite scheduling |
 | CHK-006 | A queue is referenced in a C-event condition but no B-event routes entities into it |
 | CHK-007 | Entity types are defined but no events exist — the model will not simulate anything |
 | CHK-008 | A server entity type is defined but never used in any C-event — it will show 0% utilisation |
 | W-CAP-01 | Multi-class resource contention — multiple customer types competing for the same server type may cause unexpected priority inversion |
 | W-CAP-02 | Very high arrival rate — an arrival schedule uses Exponential with mean interval < 0.001, suggesting arrivals beyond discrete-event simulation limits |
-| V-SKILL-3-warn | ASSIGN uses `Entity.attrName` as a skill source but the referenced attribute has `valueType` other than `"string"`. Since server skill names are always strings, a non-string attribute value will never match any server's skills. |
-| V-SKILL-5-warn | Count-based profile sum is less than the server type's `count` — the remaining servers will have no instance skills and will fall back to the type-level `skills[]` check. |
-| V-SKILL-6-warn | All weight-based profiles on a server type have weight 0 — no servers will receive instance skills from weight-based profiles. |
+| V-SKILL-3 | (warning variant) ASSIGN uses `Entity.attrName` as a skill source but the referenced attribute has `valueType` other than `"string"`. Since server skill names are always strings, a non-string attribute value will never match any server's skills. Emitted with the same code as the blocking V-SKILL-3 rule above — severity is distinguished by which list (`errors` vs `warnings`) it appears in, not by the code string. |
+| V-SKILL-5 | (warning variant) Count-based profile sum is less than the server type's `count` — the remaining servers will have no instance skills and will fall back to the type-level `skills[]` check. Emitted with the same code as the blocking V-SKILL-5 rule above. |
+| V-SKILL-6 | All weight-based profiles on a server type have weight 0 — no servers will receive instance skills from weight-based profiles. Warning-only code (no blocking counterpart). |
+| V-SKILL-7 | An entity-side `Categorical` attribute feeding `ASSIGN(Q, ServerType, Entity.attrName)` has a required value with no server instance — neither type-level `skills[]` nor any `skillProfiles[].skills` — that covers it. Entities requiring that value will queue indefinitely with no server ever able to serve them. Warning-only code. |
 | V-SLOT-1 | `DELAY(QueueName, N)` capacity must be a positive integer. |
 | V-CAL-1 | Calendar conditions (`isWeekday`, `isWeekend`, `hourOfDay`, `dayOfWeek`) are used but the model has no `epoch` set. Calendar variables will return defaults (isWeekday=true, hourOfDay=0). Set a Real-world start date in Model Settings. |
 | V-CAL-2 | `hourOfDay` comparison value is outside the valid range 0-23. |

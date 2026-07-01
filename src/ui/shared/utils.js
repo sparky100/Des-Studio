@@ -1,6 +1,6 @@
 // ui/shared/utils.js — General utility functions
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "goals", "containerTypes"];
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "goals", "containerTypes", "skills"];
 
 /**
  * Normalise an imported JSON payload (raw model or DB envelope) into a
@@ -35,6 +35,7 @@ export function extractImportedModelPayload(payload) {
   if (source.epoch)    model.epoch    = source.epoch;
   if (Array.isArray(source.dataSources)) model.dataSources = source.dataSources;
   if (Array.isArray(source.sections)) model.sections = source.sections;
+  if (typeof source.notes === "string" && source.notes) model.notes = source.notes;
   return model;
 }
 
