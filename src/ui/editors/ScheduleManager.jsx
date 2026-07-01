@@ -175,8 +175,21 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, dataSources =
 
   // Collect attribute names from first few rows
   const attrHeaders = totalRows > 0
-    ? Object.keys(allRows[0].attrs || {})
+    ? [...new Set(allRows.flatMap(r => Object.keys(r.attrs || {})))]
     : [];
+
+  // Collect entity type names from B-Event effects (for display reference)
+  const arrivingEntityTypes = (() => {
+    const types = new Set();
+    (sched.scheduleJson || []).forEach(entry => {
+      const be = matchBEvent(entry.eventId);
+      if (!be) return;
+      const effectText = Array.isArray(be.effect) ? be.effect.filter(Boolean).join(';') : (be.effect || '');
+      const arriveMatch = effectText.match(/ARRIVE\s*\(\s*([^,)]+)(?:\s*,\s*([^,)]+))?\)/i);
+      if (arriveMatch) types.add(arriveMatch[1].trim());
+    });
+    return [...types];
+  })();
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -570,6 +583,16 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, dataSources =
         <Empty>No schedule rows — this schedule is empty.</Empty>
       ) : (
         <div style={{ overflowX: "auto" }}>
+          {arrivingEntityTypes.length > 0 && attrHeaders.length === 0 && canEdit && (
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, marginBottom: 8, fontStyle: 'italic' }}>
+              Arriving entities: {arrivingEntityTypes.join(', ')}. Attribute columns appear after CSV import.
+            </div>
+          )}
+          {attrHeaders.length > 0 && canEdit && (
+            <div style={{ fontSize: 10, color: C.muted + '88', fontFamily: FONT, marginBottom: 4 }}>
+              Attribute cells are editable. Delete the value to revert to the entity type default.
+            </div>
+          )}
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: C.panel }}>
@@ -588,7 +611,49 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, dataSources =
                     {timeUnit === "minutes" ? formatMinutes(row.time) : row.time}
                   </td>
                   {attrHeaders.map(h => (
-                    <td key={h} style={tdStyle}>{String(row.attrs?.[h] ?? "")}</td>
+                    <td key={h} style={tdStyle}>
+                      {canEdit ? (
+                        <input
+                          type={String(row.attrs?.[h] ?? '') === 'true' || String(row.attrs?.[h] ?? '') === 'false' ? 'checkbox' : 'text'}
+                          checked={row.attrs?.[h] === true || row.attrs?.[h] === 'true'}
+                          value={typeof row.attrs?.[h] === 'boolean' ? undefined : String(row.attrs?.[h] ?? '')}
+                          placeholder="—"
+                          style={{
+                            background: 'transparent', border: `1px solid ${C.border}44`,
+                            borderRadius: 3, color: C.text, fontFamily: FONT, fontSize: 11,
+                            padding: '2px 4px', width: String(h).length > 12 ? 110 : 80,
+                            outline: 'none',
+                          }}
+                          onChange={e => {
+                            const newAttrs = { ...(row.attrs || {}) };
+                            if (e.target.type === 'checkbox') {
+                              newAttrs[h] = e.target.checked;
+                            } else {
+                              const v = e.target.value.trim();
+                              if (v === '' || v === null || v === undefined) {
+                                delete newAttrs[h];
+                              } else {
+                                const num = Number(v);
+                                newAttrs[h] = !isNaN(num) && v !== '' ? num : v;
+                              }
+                            }
+                            const newJson = (sched.scheduleJson || []).map(entry => {
+                              if (entry.eventId !== row._eventId) return entry;
+                              return {
+                                ...entry,
+                                rows: (entry.rows || []).map(r => {
+                                  if (r.time !== row.time) return r;
+                                  return { ...r, attrs: newAttrs };
+                                }),
+                              };
+                            });
+                            onSave({ ...sched, scheduleJson: newJson });
+                          }}
+                        />
+                      ) : (
+                        String(row.attrs?.[h] ?? "")
+                      )}
+                    </td>
                   ))}
                 </tr>
               ))}

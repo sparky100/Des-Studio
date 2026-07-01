@@ -280,23 +280,25 @@ export const MACROS = [
     },
   },
 
-// ── ASSIGN(CustomerType|QueueName, ServerType[, "Skill"]) ───────────────────
-  // Optional 3rd parameter is a skill name. When present, only idle servers whose
-  // server type has the specified skill are considered.
+// ── ASSIGN(CustomerType|QueueName, ServerType[, "Skill"|Entity.attrName]) ───────
+  // Optional 3rd parameter: a skill name (quoted string) OR Entity.attrName
+  // (unquoted, resolves from the entity's attribute at runtime). When a skill is
+  // specified, only idle servers whose server type has that skill are considered.
+  // When Entity.attrName is used, the skill is read from the first waiting entity;
+  // if the attribute is null/empty, no skill filter is applied.
   {
     name:    "ASSIGN",
-    pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"([^"]+)")?\)$/i,
+    pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"([^"]+)"|\s*,\s*Entity\.(\w+))?\)$/i,
     apply(match, ctx) {
       const cType = match[1].trim();
       const sType = match[2].trim();
-      const skill = match[3] ? match[3].trim() : null;
+      const skillLiteral = match[3] ? match[3].trim() : null;
+      const skillAttrName = match[4] ? match[4].trim() : null;
       const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs, _arbitration } = ctx;
       const arbitrationTarget = _arbitration && typeof _arbitration === "object" ? _arbitration : null;
 
       const matchedQ = helpers.findQueueConfig?.(cType);
       const discipline = matchedQ?.discipline || 'FIFO';
-      // When cType matched via customerType (not queue name), use the actual queue name as the token
-      // so listWaiting searches entity.queue === queueName rather than entity.queue === customerType
       const queueToken = matchedQ ? matchedQ.name : cType;
 
       const filterFn = ctx.entityFilter
@@ -306,7 +308,16 @@ export const MACROS = [
       const candidates = listWaiting(queueToken, discipline, entities, filterFn, !!matchedQ, true, ctx.index);
       const allIdleServers = helpers.idleOf(sType) || [];
 
-      // Filter by skill if a skill parameter was provided
+      const cust = candidates[0] ?? null;
+
+      // Resolve skill: literal takes precedence, otherwise resolve from entity attribute
+      let skill = skillLiteral;
+      if (!skill && skillAttrName && cust) {
+        const raw = cust.attrs?.[skillAttrName];
+        skill = (raw !== null && raw !== undefined && raw !== '') ? String(raw) : null;
+      }
+
+      // Filter by skill
       const idleServers = skill
         ? allIdleServers.filter(s => helpers.hasSkillType(s.type, skill))
         : allIdleServers;
@@ -326,7 +337,6 @@ export const MACROS = [
         idleServers: idleServers.map(s => ({ serverId: s.id, type: s.type, skill: skill || undefined })),
       };
 
-      const cust = candidates[0] ?? null;
       const srv = idleServers[0] ?? null;
 
       if (cust && srv) {
@@ -339,12 +349,12 @@ export const MACROS = [
         cust.ceventName    = ctx.ceventName;
         setLastCustId(cust.id);
         setLastSrvId(srv.id);
-        arbitration.winner = { entityId: cust.id, serverId: srv.id, skill: skill || undefined };
+        arbitration.winner = { entityId: cust.id, serverId: srv.id, skill: skill || undefined, skillSource: skillAttrName || undefined };
         arbitration.losers = candidates
           .filter(e => e.id !== cust.id)
           .map(e => ({ entityId: e.id, reason: "lower priority or later arrival" }));
         if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
-        const skillSuffix = skill ? ` (skill: ${skill})` : '';
+        const skillSuffix = skill ? ` (skill: ${skill}${skillAttrName ? ` ← Entity.${skillAttrName}` : ''})` : '';
         msgs.push(
           `#${cust.id} (${cType}) → serving by #${srv.id} (${sType})${skillSuffix} ` +
           `[waited ${(clock - cust.arrivalTime).toFixed(3)} t]`

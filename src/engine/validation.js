@@ -224,6 +224,22 @@ export function validateModel(model) {
           err('V5', `${context}: Lognormal logStdDev must be > 0 (got '${p.logStdDev ?? ''}').`, tab);
         break;
       }
+      case 'Categorical': {
+        const options = Array.isArray(p.options) ? p.options : [];
+        if (!options.length) {
+          err('V5', `${context}: Categorical distribution requires at least one option.`, tab);
+          break;
+        }
+        const hasPositiveWeight = options.some(o => Math.max(0, Number(o.weight) || 0) > 0);
+        if (!hasPositiveWeight) {
+          err('V5', `${context}: Categorical distribution must have at least one option with weight > 0.`, tab);
+        }
+        const hasNegativeWeight = options.some(o => Number(o.weight) < 0);
+        if (hasNegativeWeight) {
+          err('V5', `${context}: Categorical distribution option weights must be non-negative.`, tab);
+        }
+        break;
+      }
       default:
         break;
     }
@@ -1327,6 +1343,66 @@ export function validateModel(model) {
                 { eventIds: [ev.id] });
             }
           }
+        }
+      });
+    }
+  });
+
+  // V-SKILL-3: ASSIGN(QueueName, ServerType, Entity.attrName) — attrName must exist
+  // on a customer entity type reachable via the queue
+  const customerTypeMap = {};
+  entityTypes.filter(et => et.role === 'customer').forEach(et => {
+    customerTypeMap[(et.name || '').trim().toLowerCase()] = et;
+  });
+
+  // Build queue-to-entity-type reverse map
+  const queueToCustomerTypes = {};
+  queues.forEach(q => {
+    const qName = (q.name || '').trim().toLowerCase();
+    if (!queueToCustomerTypes[qName]) queueToCustomerTypes[qName] = new Set();
+    const matchingTypes = entityTypes
+      .filter(et => et.role === 'customer' && (!q.customerType || (q.customerType || '').trim().toLowerCase() === (et.name || '').trim().toLowerCase()));
+    matchingTypes.forEach(et => {
+      queueToCustomerTypes[qName].add((et.name || '').trim().toLowerCase());
+    });
+  });
+
+  cEvents.forEach(ev => {
+    const text = effectText(ev.effect);
+    const entitySkillAssign = text.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*Entity\.(\w+)\s*\)/gi);
+    if (entitySkillAssign) {
+      entitySkillAssign.forEach(m => {
+        const parts = m.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*Entity\.(\w+)\s*\)/i);
+        if (!parts) return;
+        const queueOrType = parts[1].trim().toLowerCase();
+        const attrName = parts[3].trim();
+
+        // Check if attrName exists on any customer type reachable from this queue
+        const reachableTypes = queueToCustomerTypes[queueOrType]
+          || new Set([queueOrType]);
+        let attrFound = false;
+        let attrValueType = null;
+        for (const typeName of reachableTypes) {
+          const et = customerTypeMap[typeName];
+          if (!et) continue;
+          const attrDef = (et.attrDefs || []).find(a => (a.name || '').trim().toLowerCase() === attrName.toLowerCase());
+          if (attrDef) {
+            attrFound = true;
+            attrValueType = attrDef.valueType || 'number';
+            break;
+          }
+        }
+
+        if (!attrFound) {
+          err('V-SKILL-3',
+            `Effect '${m.trim()}' references Entity.${attrName} but attribute '${attrName}' is not defined on any entity type using queue/type '${parts[1].trim()}'.`,
+            'cevents',
+            { eventIds: [ev.id] });
+        } else if (attrValueType !== 'string') {
+          warn('V-SKILL-3',
+            `Effect '${m.trim()}' references Entity.${attrName} as a skill but attribute '${attrName}' has valueType '${attrValueType}'. Non-string values will never match server skill names.`,
+            'cevents',
+            { eventIds: [ev.id] });
         }
       });
     }

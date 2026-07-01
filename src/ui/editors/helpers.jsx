@@ -70,6 +70,17 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
         skills.forEach(skill=>{
           opts.push({label:`Start ${cName} with ${s} (${skill}) and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`, value:`ASSIGN(${q.name}, ${s}, "${skill}")`});
         });
+        // Entity-driven skill: use entity's string attributes as skill source
+        const custTypeForQueue = (entityTypes||[]).find(e => e.role === 'customer' &&
+          (!q.customerType || normTypeName(q.customerType) === normTypeName(e.name)));
+        const stringAttrs = ((custTypeForQueue?.attrDefs || [])
+          .filter(a => a.valueType === 'string' && a.name)).map(a => a.name);
+        stringAttrs.forEach(attr => {
+          opts.push({
+            label: `Start ${cName} with ${s} (← Entity.${attr}) and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`,
+            value: `ASSIGN(${q.name}, ${s}, Entity.${attr})`,
+          });
+        });
       });
     });
   }
@@ -81,6 +92,16 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       const skills=serverSkills[s]||[];
       skills.forEach(skill=>{
         opts.push({label:`Start ${cName} with ${s} (${skill}) and ${c}`,value:`ASSIGN(${c}, ${s}, "${skill}")`});
+      });
+      // Entity-driven skill from customer type's string attributes
+      const custType = (entityTypes||[]).find(e => e.role === 'customer' && normTypeName(e.name) === c);
+      const stringAttrs = ((custType?.attrDefs || [])
+        .filter(a => a.valueType === 'string' && a.name)).map(a => a.name);
+      stringAttrs.forEach(attr => {
+        opts.push({
+          label: `Start ${cName} with ${s} (← Entity.${attr}) and ${c}`,
+          value: `ASSIGN(${c}, ${s}, Entity.${attr})`,
+        });
       });
     }));
   }

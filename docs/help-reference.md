@@ -116,6 +116,8 @@ All 20 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | COMPLETE | `COMPLETE()` | Marks context entity as served, releases server | Increments served count; records sojourn time | Using without preceding RELEASE |
 | RELEASE | `RELEASE(ServerType)` or `RELEASE(ServerType, QueueName)` | Frees server unit, routes entity onward | Sets server to idle; updates service stats | Combining with routing table (mutually exclusive) |
 | ASSIGN | `ASSIGN(QueueName, ServerType)` | Seizes server, starts serving front entity from queue | Sets server to busy; sets entity to inService | Using in B-event (C-event only) |
+| ASSIGN (skilled) | `ASSIGN(QueueName, ServerType, "Skill")` | Seizes server, only considers idle servers whose type has the named skill | Sets server to busy with skill tracking | Skill not in model registry (V-SKILL-2) |
+| ASSIGN (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Reads skill from entity attribute at runtime; null = any server | Supports per-entity skill variation from one C-event | Attribute undefined on customer type (V-SKILL-3) |
 | RENEGE | `RENEGE(ctx)` | Removes context entity from queue (abandonment) | Increments reneged count | Using entity type name instead of ctx |
 | RENEGE_OLDEST | `RENEGE_OLDEST(EntityType)` | Removes oldest entity of specified type from queue | Increments reneged count; used for max-queue policies | Confusing with RENEGE(ctx) |
 
@@ -501,6 +503,33 @@ context (no suggestion text is shown live).
 | L5 | H10 | Resource sustained ≥90% utilisation for 15+ consecutive time units |
 | L6 | H11 | Resource at 0% utilisation while arrivals are active |
 | L7 | H6 | Entities have balked at a queue so far |
+
+---
+
+## Skills & Attribute-Based Routing
+
+### Defining and using server skills
+
+1. **Register skills** in Model Settings / State tab / Skills section. Type a skill name and press Enter.
+2. **Assign to server types** in Entity Types tab. Expand a server type, tick skills in the Skills panel.
+3. **Use in C-Events** via ASSIGN with quoted skill: `ASSIGN(Queue, Doctor, "Surgery")` — only doctors with Surgery skill are considered.
+
+### Setting skill requirements on arrival (entity-side)
+
+Instead of one C-Event per skill, use a single C-Event that reads the skill from the entity:
+
+1. **Add a string attribute** to the customer entity type (e.g. `requiredSkill`), set valueType to String.
+2. **Choose Weighted mode** in the attribute editor. Add weighted options: value + relative weight. Options can include **no requirement** (null), which means any idle server matches.
+3. **The visual bar** always fills 100% width. Segments show proportions. Remainder = no requirement.
+4. **Use in a C-Event**: pick `ASSIGN(Queue, Server, Entity.requiredSkill)` from the effect dropdown. The engine reads each entity's attribute at runtime and filters servers accordingly.
+
+### Schedule-based attribute overrides
+
+In the Schedule Manager, view a schedule's detail. After CSV import, attribute columns appear next to time slots. Each cell is editable — type a value to override the entity type's default for that time slot. Delete a cell value to revert to the entity type default. This is useful for varying `requiredSkill`, `priority`, or `severity` by time of day.
+
+### Categorical distribution for entity attributes
+
+The **Categorical** distribution type does weighted random selection from a list of values. It is the only distribution that returns non-numeric values (strings, booleans, null). It is used exclusively for entity attributes — never for B-event delays or service times. Configure it in the Attribute Editor by switching from Static to Weighted mode.
 
 ---
 

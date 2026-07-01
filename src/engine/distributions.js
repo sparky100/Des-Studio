@@ -73,6 +73,8 @@ const DIST_ALIASES = {
   piecewise: "Piecewise",
   schedule: "Schedule",
   plan: "Schedule",
+  categorical: "Categorical",
+  weighted: "Categorical",
 };
 
 export function normalizeDistributionName(dist) {
@@ -218,6 +220,23 @@ export const DISTRIBUTIONS = {
     label:  "Entity attribute",
     hint:   "Read named attribute from the arriving customer entity",
     sample: () => 0, // resolved in phases.js via effectCtx._lastCustId
+  },
+  Categorical: {
+    params: [],
+    label:  "Categorical (weighted options)",
+    hint:   "Weighted random selection from a list of values. Returns null when no option matches.",
+    sample: (p, rng) => {
+      const options = Array.isArray(p.options) ? p.options : [];
+      if (!options.length) return null;
+      const totalWeight = options.reduce((sum, o) => sum + Math.max(0, Number(o.weight) || 0), 0);
+      if (totalWeight <= 0) return null;
+      let r = rng() * totalWeight;
+      for (const opt of options) {
+        r -= Math.max(0, Number(opt.weight) || 0);
+        if (r <= 0) return opt.hasOwnProperty("value") ? opt.value : null;
+      }
+      return options[options.length - 1].hasOwnProperty("value") ? options[options.length - 1].value : null;
+    },
   },
   Schedule: {
     params: [],

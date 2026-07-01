@@ -305,3 +305,69 @@ describe('Schedule rows[] — S40.2', () => {
     expect(state['__schedIdx_s']).toBe(3);
   });
 });
+
+describe('Categorical distribution', () => {
+  test('returns the only option when weight is positive', () => {
+    const rng = mulberry32(42);
+    const params = { options: [{ value: 'Surgery', weight: 50 }] };
+    const result = sample('Categorical', params, rng);
+    expect(result).toBe('Surgery');
+  });
+
+  test('returns null when all weights are zero', () => {
+    const rng = mulberry32(42);
+    const params = { options: [{ value: 'Surgery', weight: 0 }, { value: 'Consultation', weight: 0 }] };
+    const result = sample('Categorical', params, rng);
+    expect(result).toBeNull();
+  });
+
+  test('returns null when options array is empty', () => {
+    const rng = mulberry32(42);
+    const params = { options: [] };
+    const result = sample('Categorical', params, rng);
+    expect(result).toBeNull();
+  });
+
+  test('returns null when option has value: null', () => {
+    const rng = mulberry32(42);
+    const params = { options: [{ value: null, weight: 100 }] };
+    const result = sample('Categorical', params, rng);
+    expect(result).toBeNull();
+  });
+
+  test('produces approximately correct proportions over many samples', () => {
+    const rng = mulberry32(99);
+    const params = { options: [
+      { value: 'A', weight: 50 },
+      { value: 'B', weight: 30 },
+      { value: null, weight: 20 },
+    ]};
+    const counts = { A: 0, B: 0, null: 0 };
+    for (let i = 0; i < 10000; i++) {
+      const v = sample('Categorical', params, rng);
+      const key = v === null ? 'null' : v;
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    expect(counts.A / 10000).toBeCloseTo(0.5, 1);
+    expect(counts.B / 10000).toBeCloseTo(0.3, 1);
+    expect(counts.null / 10000).toBeCloseTo(0.2, 1);
+  });
+
+  test('handles boolean values', () => {
+    const rng = mulberry32(1);
+    const params = { options: [
+      { value: true, weight: 70 },
+      { value: false, weight: 30 },
+    ]};
+    let trueCount = 0;
+    for (let i = 0; i < 1000; i++) {
+      if (sample('Categorical', params, rng) === true) trueCount++;
+    }
+    expect(trueCount / 1000).toBeCloseTo(0.7, 1);
+  });
+
+  test('normalizeDistributionName maps categorical and weighted aliases', () => {
+    expect(normalizeDistributionName('categorical')).toBe('Categorical');
+    expect(normalizeDistributionName('weighted')).toBe('Categorical');
+  });
+});

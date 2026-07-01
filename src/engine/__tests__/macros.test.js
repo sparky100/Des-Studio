@@ -1010,3 +1010,46 @@ describe('applyScalar', () => {
     expect(result).toBe(false);
   });
 });
+
+// ── ASSIGN with Entity.attrName skill source ──────────────────────────────────
+describe('ASSIGN(Queue, Server, Entity.attrName)', () => {
+  test('pattern matches basic form without skill', () => {
+    const p = MACROS.find(m => m.name === 'ASSIGN')?.pattern;
+    const m = 'ASSIGN(Patient, Nurse)'.match(p);
+    expect(m).not.toBeNull();
+    expect(m[1]).toBe('Patient');
+    expect(m[2]).toBe('Nurse');
+    expect(m[3]).toBeUndefined();
+    expect(m[4]).toBeUndefined();
+  });
+
+  test('pattern matches quoted skill form', () => {
+    const p = MACROS.find(m => m.name === 'ASSIGN')?.pattern;
+    const m = 'ASSIGN(SurgeryQueue, Doctor, "Surgery")'.match(p);
+    expect(m).not.toBeNull();
+    expect(m[1]).toBe('SurgeryQueue');
+    expect(m[2]).toBe('Doctor');
+    expect(m[3]).toBe('Surgery');
+    expect(m[4]).toBeUndefined();
+  });
+
+  test('pattern matches Entity.attrName form and captures attribute name', () => {
+    const p = MACROS.find(m => m.name === 'ASSIGN')?.pattern;
+    const m = 'ASSIGN(Q, Doctor, Entity.requiredSkill)'.match(p);
+    expect(m).not.toBeNull();
+    expect(m[1]).toBe('Q');
+    expect(m[2]).toBe('Doctor');
+    expect(m[3]).toBeUndefined();
+    expect(m[4]).toBe('requiredSkill');
+  });
+
+  test('pattern matches Entity.attrName with attached queue name', () => {
+    const p = MACROS.find(m => m.name === 'ASSIGN')?.pattern;
+    const m = 'ASSIGN(Patient Queue, Nurse, Entity.repairType)'.match(p);
+    expect(m).not.toBeNull();
+    expect(m[1]).toBe('Patient Queue');
+    expect(m[2]).toBe('Nurse');
+    expect(m[3]).toBeUndefined();
+    expect(m[4]).toBe('repairType');
+  });
+});

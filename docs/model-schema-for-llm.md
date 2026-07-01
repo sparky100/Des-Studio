@@ -140,7 +140,7 @@ Read this before writing any model JSON.
 | `experimentDefaults.liveDataMode` | `null` \| `"calibrated_batch"` \| `"rolling"` \| `"lookahead"` | No | Live-data run mode. `null` = static (default). See §15 for live data. |
 | `dataSources` | array | No | Live data source definitions. See §15. |
 | `sections` | array | No | Named groupings of model elements. See §12.1. |
-| `skills` | string[] | No | Registry of all skill names used in the model. Each entry is a unique skill name that server entity types can declare as possessed (see §2) and that ASSIGN/COSEIZE macros or condition predicates can reference when matching servers to tasks. Default `[]`. |
+| `skills` | string[] | No | Registry of all skill names used in the model. Each entry is a unique skill name that server entity types can declare as possessed (see §2) and that ASSIGN/COSEIZE macros or condition predicates can reference when matching servers to tasks. **Entity-side skills:** Customer entity types can carry a string attribute (e.g. `requiredSkill`) set via `Categorical` distribution at arrival; the `ASSIGN(Q, Server, Entity.requiredSkill)` form reads the attribute at runtime to determine which skill to require — each entity can specify a different skill (or none). Default `[]`. |
 
 ---
 
@@ -178,6 +178,33 @@ Every model has entity types. There are two roles: **customer** (flows through t
 }
 ```
 
+**Entity-side skill example** (attribute with categorical skill assignment):
+```json
+{
+  "id": "et_surgery_patient",
+  "name": "Surgery Patient",
+  "role": "customer",
+  "count": 0,
+  "attrDefs": [
+    {
+      "name": "requiredSkill",
+      "valueType": "string",
+      "mutable": true,
+      "dist": "Categorical",
+      "distParams": {
+        "options": [
+          { "value": "Surgery", "weight": 40 },
+          { "value": "Consultation", "weight": 30 },
+          { "value": null, "weight": 30 }
+        ]
+      }
+    }
+  ]
+}
+```
+
+In this example, 40% of arriving entities have `requiredSkill = "Surgery"`, 30% have `requiredSkill = "Consultation"`, and 30% have `requiredSkill = null` (no skill filter — any server matches). The weighted bar in the AttrEditor always fills 100% width; any remaining portion not covered by explicit options is shown as **"No requirement"**. Use this with `ASSIGN(QueueName, ServerType, Entity.requiredSkill)` in a C-event. See §4 for `Categorical` distribution details.
+
 ### Rules
 
 - `name` must be unique across all entity types.
@@ -195,6 +222,7 @@ Every model has entity types. There are two roles: **customer** (flows through t
   - `boolean` → `"true"` or `"false"` (string)
   - `string` → any string
 - If `dist` is set, `distParams` is required. See §4 for valid distributions.
+- **String/boolean attributes with `dist: "Categorical"`:** `Categorical` returns a value (string, boolean, or `null`) rather than a number. Use it to set entity attributes like `requiredSkill` probabilistically at arrival. The weighted options UI is available in the AttrEditor for string-type customer attributes; boolean attributes use a probability slider. When a Categorical option has `"value": null`, the resolved attribute value is `null` — treated as "no requirement" in `ASSIGN(Q, Server, Entity.attrName)`. On the weighted bar display, any portion of the bar not claimed by explicit option weights is shown as "No requirement" and produces `null` at sampling time.
 
 > **String rules: `defaultValue` vs `distParams`:** `defaultValue` for `number` type accepts either form (`"3"` or `3`). However, **all `distParams` values must always be strings** (`"3"`, never `3`) — the engine's distribution sampler requires the string form, and numeric `distParams` values will be blocked by V5. Do not carry the `defaultValue` leniency across to distribution parameters.
 
@@ -376,10 +404,11 @@ Used in B-event schedules, C-event service times, and entity attribute defaults.
 | `Schedule`    | `{ "times": [10, 25, 40] }` or `{ "rows": [{ "time": 10, "attrs": { ... } }, ...] }` | Planned absolute arrival times; exhausts and stops. Empty rows/times array produces no arrivals (CHK-009). |
 | `ServerAttr`  | `{ "attr": "serviceTime" }`                  | Reads named attribute from matched server entity; returns max(0, value) or 1 if not found |
 | `EntityAttr`  | `{ "attr": "requestedDuration" }`            | Reads named attribute from arriving customer entity; returns value or 0 if not found |
+| `Categorical` | `{ "options": [{ "value": "Surgery", "weight": 40 }, { "value": null, "weight": 30 }] }` | Weighted random selection from a list of values. At least one option with weight > 0. Weights are relative (auto-normalized). Each `value` can be any type or `null` ("no requirement"). Returns `null` when all weights sum to 0. Primarily used for string/boolean entity attributes — set via the AttrEditor's weighted options UI (string) or probability slider (boolean). Returns non-numeric values, so it must not be used for B-event delays or service-time durations. |
 
 **All numeric parameter values must be strings** (e.g. `"5"`, not `5`).
 
-> **Distribution selection guidance for service times:** Use `Exponential` for memoryless inter-arrival times (Poisson process). Use `Triangular` when you have a best/typical/worst estimate. Use `Erlang` when service consists of multiple identifiable phases. Use `Lognormal` for right-skewed durations with a long tail (repair times, complex task durations). Use `Empirical` when you have historical data. Avoid `Normal` for times that must be non-negative unless mean ≫ stddev.
+> **Distribution selection guidance for service times:** Use `Exponential` for memoryless inter-arrival times (Poisson process). Use `Triangular` when you have a best/typical/worst estimate. Use `Erlang` when service consists of multiple identifiable phases. Use `Lognormal` for right-skewed durations with a long tail (repair times, complex task durations). Use `Empirical` when you have historical data. Avoid `Normal` for times that must be non-negative unless mean ≫ stddev. **Use `Categorical` for entity attributes (skills, types, flags), not for time delays — it is the only distribution that returns non-numeric values.**
 
 ---
 
@@ -788,6 +817,7 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 |-------|--------|---------|
 | `ASSIGN` | `ASSIGN(QueueName, ServerType)` | Seizes a server of `ServerType`, starts serving the front entity from `QueueName`. Schedules `cSchedules` B-events. Both `QueueName` and `ServerType` must reference defined objects. |
 | `ASSIGN` (skilled) | `ASSIGN(QueueName, ServerType, "Skill")` | Same as ASSIGN above but only idle servers whose `skills[]` contains `"Skill"` are considered. The skill name must be a valid entry in the model's top-level `skills` registry (V-SKILL-2). The skill string is case-sensitive and must exactly match the declared skill name. |
+| `ASSIGN` (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Same as ASSIGN above but the required skill is read from the entity's `attrs[attrName]` at runtime. If the attribute value is `null`, `undefined`, or `""`, no skill filter is applied — any idle server of `ServerType` is eligible. The engine takes the first waiting entity by queue discipline and filters servers by **that entity's** resolved skill; if no matching server is idle, the ASSIGN fails (it does not scan subsequent entities). Use entity filters (`entityFilter`) on the C-event to pre-scope the queue when multiple entity types share a queue. `attrName` must be a defined attribute on at least one customer entity type reachable from `QueueName` (V-SKILL-3). |
 | `DELAY` | `DELAY(QueueName)` | Holds the front entity from `QueueName` for the duration sampled by the `cSchedules` entry, **without seizing any server**. Use for resource-free waits (cooling period, mandatory hold, recovery, paperwork delay). `DELAY` must be the entire effect — never combine with `ASSIGN`/`RELEASE` in the same C-event. The completion B-event needs `"useEntityCtx": true` to know which entity to route, and may use `COMPLETE()` or routing-table exit, same as a normal service completion. `QueueName` must reference a defined queue (V47). See §6.2. |
 | `BATCH` | `BATCH(QueueName, N)` | Accumulates N entities from `QueueName` into a parent batch entity. N ≥ 2 (V22). `QueueName` must reference a defined queue. |
 | `COSEIZE` | `COSEIZE(QueueName, Srv1, Srv2, ...)` | Atomically seizes one entity and multiple server types simultaneously. Fails cleanly if any server is unavailable. All server type names must reference defined server entity types. |
@@ -1120,6 +1150,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V47 | `DELAY(QueueName)` must reference a defined queue (blocking error). A C-event whose effect contains `DELAY` should also set `"useEntityCtx": true` on its `cSchedules` entry, or its completion B-event will not know which entity to route (warning). Its `cSchedules` entry's `dist` must not be `"ServerAttr"` — `DELAY` claims no server, so this always falls back to a fixed delay of `1` (warning). Its completion B-event's effect must not be a *bare* `ARRIVE(...)` with nothing else — `ARRIVE` never resolves the delayed entity, leaving it stuck in `"serving"` forever; `ARRIVE` combined with `COMPLETE()`/`RELEASE()`/a routing table is fine (blocking error). |
 | V-SKILL-1 | Every skill name declared in a server entity type's `skills[]` must appear in the model-level `skills` array. A server type referencing a skill that is not registered at the model level is a blocking error. |
 | V-SKILL-2 | Every skill reference in an ASSIGN 3-arg, COSEIZE bracket syntax, or idle/busy condition predicate must be a valid entry in the model-level `skills` array. A reference to an unregistered skill name is a blocking error. |
+| V-SKILL-3 | When ASSIGN uses `Entity.attrName` as its skill source, `attrName` must be a defined attribute on at least one customer entity type reachable by the specified queue. The attribute should have `valueType: "string"` (warning V-SKILL-3-warn if not — non-string values can never match server skill names). |
 | V57 | `schedulePattern` with `mode: "multiplier"` requires `baseCapacity` to be a positive number. |
 | V58 | In multiplier mode, `periods[].capacity` must be a number between 0.0 and 1.0 (inclusive). |
 | V59 | In multiplier mode, `defaultCapacity` must be a number between 0.0 and 1.0 (inclusive). |
@@ -1142,6 +1173,7 @@ All generated model JSON MUST pass every blocking rule below.
 | CHK-008 | A server entity type is defined but never used in any C-event — it will show 0% utilisation |
 | W-CAP-01 | Multi-class resource contention — multiple customer types competing for the same server type may cause unexpected priority inversion |
 | W-CAP-02 | Very high arrival rate — an arrival schedule uses Exponential with mean interval < 0.001, suggesting arrivals beyond discrete-event simulation limits |
+| V-SKILL-3-warn | ASSIGN uses `Entity.attrName` as a skill source but the referenced attribute has `valueType` other than `"string"`. Since server skill names are always strings, a non-string attribute value will never match any server's skills. |
 | CHK-013 | A queue receives entities (via `ARRIVE`, `RELEASE`, or routing) but no C-event consumes from it — entities will accumulate indefinitely |
 
 ---

@@ -124,6 +124,7 @@ const SUGGESTED_QUESTIONS = {
   ],
   entities: [
     "How do I add a priority attribute to my Customer?",
+    "How do I give different customers different required skills?",
     "What's the difference between mutable and fixed attributes?",
     "How do I model patients with different triage levels?",
   ],
@@ -136,9 +137,11 @@ const SUGGESTED_QUESTIONS = {
     "How do I model arrivals that happen every 5 minutes?",
     "What distribution should I use for service times?",
     "Can I schedule arrivals at specific times of day?",
+    "How do I set entity attributes from a schedule timetable?",
   ],
   cevents: [
     "How do I make service start only when a server is free?",
+    "How do I match a server's skill to the entity's requirement?",
     "What operators can I use in conditions?",
     "Why isn't my C-Event firing?",
   ],

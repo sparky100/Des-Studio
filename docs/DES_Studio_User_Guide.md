@@ -382,7 +382,21 @@ To use skills:
 - You need to model certification or training requirements (e.g. only certified operators can run certain machines)
 - You want to analyse utilisation per skill (the Results workspace shows per-skill utilisation breakdowns)
 
-**Validation.** The engine checks that every skill referenced in an ASSIGN/COSEIZE effect or condition exists in the model's skill registry (V-SKILL-1, V-SKILL-2). If you delete a skill from the registry, any effects or conditions referencing it will show a validation error.
+**Validation.** The engine checks that every skill referenced in an ASSIGN/COSEIZE effect or condition exists in the model's skill registry (V-SKILL-1, V-SKILL-2, V-SKILL-3). If you delete a skill from the registry, any effects or conditions referencing it will show a validation error.
+
+**Setting skill requirements on arrival (entity-side).** Instead of hardcoding one skill name per C-Event, you can give arriving entities different skill requirements using a weighted string attribute on the customer type:
+
+1. **Add a string attribute** — In the **Entity Types** tab, expand your customer type. Add an attribute (e.g. `requiredSkill`) with value type **String**.
+
+2. **Choose Weighted mode** — Click the **Weighted** radio button (instead of Static). Add option rows: each row has a value and a relative weight. For example: Surgery weight 40, Consultation weight 30. One option can be set to **no requirement** — entities that get this value will match any idle server.
+
+3. **Read the visual bar** — The bar always fills 100% width. Coloured segments show each option's proportion. Any remaining portion is labelled **No requirement** and produces no skill filter at runtime.
+
+4. **Connect in a C-event** — Go to the **C-Events** tab. When you pick an ASSIGN effect, the dropdown now shows `Start service with Doctor (left-arrow Entity.requiredSkill)` — select this to have the engine read each entity's `requiredSkill` attribute at runtime. The C-event uses `ASSIGN(Queue, Server, Entity.requiredSkill)`.
+
+5. **Falls back cleanly** — If an entity's `requiredSkill` is null or empty, the ASSIGN matches any idle server of that type (no skill filter). If no server with the matching skill is idle, the ASSIGN fails as usual and the C-event will re-evaluate on the next pass.
+
+This means one C-event handles all skill variations — no duplicate C-events per skill name. Combined with schedule-based overrides (see Schedule Manager), you can vary required skills per time slot.
 
 **Sections (large-model organisation).** When a model grows beyond roughly ten queues or twenty events, you can group elements into named *sections* to keep the editors manageable. Open the **Sections** tab (under the Design area) and click **+ Add Section** to create a named, coloured group. Assign queues, entity types, B-events, and C-events to the section using the member checkboxes. For queues that act as handoff points between sections, mark them **IN** (entities arrive from another section) or **OUT** (entities leave to another section).
 
