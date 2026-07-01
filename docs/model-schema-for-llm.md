@@ -879,7 +879,7 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 
 ### 6.2 Resource-Free Activities (`DELAY`)
 
-Use `DELAY` instead of `ASSIGN` whenever the activity does not actually claim a piece of equipment or staff — only time passes. Examples: a mandatory cooling-off period, an unmonitored recovery wait, a paperwork hold, a fixed dwell time.
+Use `DELAY` instead of `ASSIGN` whenever the activity does not actually claim a piece of equipment or staff — only time passes. Examples: a mandatory cooling-off period, an unmonitored recovery wait, a paperwork hold, a fixed dwell time, or a scheduling delay with slot capacity.
 
 ```json
 { "id": "c_recover", "name": "Recover", "priority": 1,
@@ -888,11 +888,32 @@ Use `DELAY` instead of `ASSIGN` whenever the activity does not actually claim a 
   "cSchedules": [{ "eventId": "b_recovery_done", "useEntityCtx": true, "dist": "Exponential", "distParams": { "mean": "180" } }] }
 ```
 
+**DELAY with slot capacity:** `DELAY(QueueName, N)` drains at most N entities from the queue per firing. Remaining entities stay in the queue for the next firing. Combined with a state variable timer and calendar conditions, this models periodic batch scheduling:
+
+```json
+{ "id": "c_schedule", "name": "Schedule Appointment", "priority": 1,
+  "condition": "queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND (clock - state.lastSlotTime) >= 60",
+  "effect": ["DELAY(BookingQueue, 3)", "SET(lastSlotTime, clock)"],
+  "cSchedules": [{ "eventId": "b_slot_done", "useEntityCtx": true, "dist": "Fixed", "distParams": { "value": "1" } }] }
+```
+
+**Per-entity delay times:** Use `EntityAttr` distribution in `cSchedules` to read the delay duration from an entity attribute. Combined with `cSchedules[].when` predicates, different entity types can get different delay durations:
+
+```json
+"cSchedules": [
+  { "when": { "variable": "Entity.appointmentType", "operator": "==", "value": "General" },
+    "eventId": "b_done", "dist": "Fixed", "distParams": { "value": "30" }, "useEntityCtx": true },
+  { "when": { "variable": "Entity.appointmentType", "operator": "==", "value": "Specialist" },
+    "eventId": "b_done", "dist": "Fixed", "distParams": { "value": "60" }, "useEntityCtx": true },
+  { "eventId": "b_done", "dist": "Fixed", "distParams": { "value": "45" }, "useEntityCtx": true }
+]
+```
+
 Rules:
-- `DELAY(QueueName)` is the **entire** effect — never pair it with `ASSIGN`, `RELEASE`, or any server macro in the same C-event.
+- `DELAY(QueueName)` or `DELAY(QueueName, N)` is the **entire** effect — never pair it with `ASSIGN`, `RELEASE`, or any server macro in the same C-event.
 - Never invent a `ServerType` to model a resource-free wait. If nothing is actually seized, there is no server type to declare.
 - The C-event's `cSchedules` entry MUST set `"useEntityCtx": true` so the completion B-event knows which entity to route — same requirement as `ASSIGN`.
-- The `cSchedules` entry's `dist` must be a sampled distribution (`Exponential`, `Fixed`, `Uniform`, …) — **never `"ServerAttr"`**. `DELAY` claims no server, so there is no server attribute to read; `ServerAttr` silently falls back to a fixed delay of `1`. Warning V47.
+- The `cSchedules` entry's `dist` must be a sampled distribution (`Exponential`, `Fixed`, `Uniform`, `EntityAttr`, …) — **never `"ServerAttr"`**. `DELAY` claims no server, so there is no server attribute to read; `ServerAttr` silently falls back to a fixed delay of `1`. Warning V47.
 - The completion B-event has three valid ways to resolve the delayed entity — pick based on what actually happens when the delay ends:
   1. **`COMPLETE()`** — the entity's journey ends here. Works correctly with no server claimed: the engine explicitly checks the entity's `_isDelay` flag and skips the "no matching busy server" guard for delay completions.
   2. **A routing table (`routing[]` + `defaultQueueName`, or `probabilisticRouting[]`) with NO effect macro at all** — use this when the entity continues to another queue and no server is involved anywhere in this entity's journey. Leave `effect` empty/absent; the engine's routing logic explicitly accepts a delay-held entity (status `"serving"` with a customer context but no server context) the same way it accepts a `"waiting"` entity — no `COMPLETE()` or `RELEASE()` needed to "unlock" it first.
@@ -900,6 +921,7 @@ Rules:
 - **The completion B-event's effect must not be a bare `ARRIVE(...)` with nothing else.** `ARRIVE` always spawns a brand-new entity and never resolves the delayed entity, which is left stuck in `"serving"` status forever. Resolve the delayed entity with one of the three options above — `ARRIVE` is fine *in addition* to `COMPLETE()`/`RELEASE()` (e.g. `["RELEASE(Clinician, Discharge Queue)", "ARRIVE(AuditRecord, Log Queue)"]` to also spawn a derived log entity), just never alone. Blocked by V47.
 - `DELAY(QueueName)` counts as a valid consumer of `QueueName` for CHK-013 — do not add a redundant `ASSIGN`/`BATCH` just to silence that check.
 - `QueueName` must reference a defined queue (V47, parity with the `BATCH`/`FILL`/`DRAIN` queue checks).
+- When `N` is provided in `DELAY(QueueName, N)`, it must be a positive integer (V-SLOT-1).
 
 ### 6.1 Condition Formats
 
@@ -947,6 +969,10 @@ Variable vocabulary (valid as `variable` on any of the four fields):
 - `container(ContainerId).level` / `.capacity` / `.min` / `.max` — container level/bounds; `ContainerId` must match a `containerTypes[].id`
 - `clock` — current simulation time
 - `served` / `reneged` / `loopCount` — built-in counters
+- `isWeekday` — boolean, true when simulation time falls on Monday-Friday (requires `epoch` to be set; defaults to `true` without epoch)
+- `isWeekend` — boolean, true when simulation time falls on Saturday-Sunday (requires `epoch`; defaults to `false` without epoch)
+- `hourOfDay` — integer 0-23, the hour of day from the simulation wall-clock (requires `epoch`; defaults to `0` without epoch)
+- `dayOfWeek` — integer 0-6, where 0=Sunday, 1=Monday, ..., 6=Saturday (requires `epoch`; defaults to `1` without epoch)
 
 #### String shorthand (accepted everywhere, parsed on save)
 
@@ -1224,6 +1250,9 @@ All generated model JSON MUST pass every blocking rule below.
 | V-SKILL-3-warn | ASSIGN uses `Entity.attrName` as a skill source but the referenced attribute has `valueType` other than `"string"`. Since server skill names are always strings, a non-string attribute value will never match any server's skills. |
 | V-SKILL-5-warn | Count-based profile sum is less than the server type's `count` — the remaining servers will have no instance skills and will fall back to the type-level `skills[]` check. |
 | V-SKILL-6-warn | All weight-based profiles on a server type have weight 0 — no servers will receive instance skills from weight-based profiles. |
+| V-SLOT-1 | `DELAY(QueueName, N)` capacity must be a positive integer. |
+| V-CAL-1 | Calendar conditions (`isWeekday`, `isWeekend`, `hourOfDay`, `dayOfWeek`) are used but the model has no `epoch` set. Calendar variables will return defaults (isWeekday=true, hourOfDay=0). Set a Real-world start date in Model Settings. |
+| V-CAL-2 | `hourOfDay` comparison value is outside the valid range 0-23. |
 | CHK-013 | A queue receives entities (via `ARRIVE`, `RELEASE`, or routing) but no C-event consumes from it — entities will accumulate indefinitely |
 
 ---

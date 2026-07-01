@@ -5,6 +5,7 @@
 // migrateLegacyCondition() before evaluation (see compilePredicate/getPredicateDependencies).
 
 import { migrateLegacyCondition } from "../model/conditionFormat.js";
+import { simToWall } from "./clockUtils.js";
 
 const COMPILED_PREDICATE = Symbol("compiledPredicate");
 const PREDICATE_DEPS = Symbol("predicateDependencies");
@@ -136,6 +137,27 @@ function resolveVariable(ref, state) {
   if (text === "loopCount") return state.__loopCount ?? state.loopCount ?? state.currentEntity?.loopCount ?? 0;
   if (text === "clock") return state.clock ?? 0;
 
+  // Calendar-aware condition variables (require epoch to be set)
+  if (text === "isWeekday" || text === "isWeekend" || text === "hourOfDay" || text === "dayOfWeek") {
+    const clock = state.clock ?? 0;
+    const epoch = state.model?.epoch;
+    const timeUnit = state.model?.timeUnit || "minutes";
+    const wallDate = simToWall(clock, epoch, timeUnit);
+    if (!wallDate) {
+      // No epoch set — return defaults
+      if (text === "isWeekday") return true;
+      if (text === "isWeekend") return false;
+      if (text === "hourOfDay") return 0;
+      if (text === "dayOfWeek") return 1; // Monday
+    }
+    const day = wallDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const hour = wallDate.getHours();
+    if (text === "isWeekday") return day >= 1 && day <= 5;
+    if (text === "isWeekend") return day === 0 || day === 6;
+    if (text === "hourOfDay") return hour;
+    if (text === "dayOfWeek") return day;
+  }
+
   const parts = ref.split('.');
   if (parts[0] === 'Entity') {
     if (parts[1] === 'loopCount') {
@@ -229,6 +251,9 @@ export function getPredicateDependencies(predicate) {
     } else if (variable === "clock") {
       deps.clock = true;
       deps.builtins.add("clock");
+    } else if (variable === "isWeekday" || variable === "isWeekend" || variable === "hourOfDay" || variable === "dayOfWeek") {
+      deps.clock = true;
+      deps.builtins.add(variable);
     } else if (variable.startsWith("Entity.")) {
       deps.entityAttrs.add(variable.slice("Entity.".length));
     } else if (variable.startsWith("Queue.")) {

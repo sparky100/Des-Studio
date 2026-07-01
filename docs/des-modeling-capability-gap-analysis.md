@@ -94,6 +94,9 @@
 | Per-server service times via attribute | ✅ | `ServerAttr` distribution reads server's `attrs.serviceTime` |
 | Per-skill service times | ✅ | `cSchedule.when` predicate selects distribution per entity attribute |
 | Resource-free delays | ✅ | `DELAY(QueueName)` macro |
+| DELAY with slot capacity | ✅ | `DELAY(QueueName, N)` drains at most N entities per firing. Combined with state variable timer and calendar conditions, models periodic batch scheduling. |
+| Per-entity delay times | ✅ | `EntityAttr` distribution in `cSchedule` reads delay from entity attribute. Combined with `cSchedule[].when` predicates, different entity types get different delays. |
+| Calendar-aware conditions | ✅ | `isWeekday`, `isWeekend`, `hourOfDay`, `dayOfWeek` built-in variables. Requires `epoch` to be set. |
 | Multi-stage service with RELEASE | ✅ | `RELEASE(Server, NextQueue)` for stage transitions |
 | Activity of unknown duration | ❌ | B-event fires at scheduled time. Cannot "service ends when StateVar > 10" |
 | Inspection / yield with re-work | ✅ | Probabilistic routing with loop-back and `loopConfig` guard |

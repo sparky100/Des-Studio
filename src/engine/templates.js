@@ -1102,6 +1102,126 @@ const PLANE_ARRIVALS_LIVE = {
   },
 };
 
+// ── Slot Booking Clinic ───────────────────────────────────────────────────────
+
+const SLOT_BOOKING_CLINIC = {
+  name: "Slot Booking Clinic",
+  description: "Patients arrive and need appointments with a doctor. Appointments are limited to 3 per hour, available weekdays 9am-5pm. Different patient types get different appointment lengths using EntityAttr distribution. Demonstrates DELAY with capacity, calendar-aware conditions, and per-entity delay times.",
+  domain: "Healthcare",
+  templateMeta: {
+    scenarioType: "Slot booking with calendar constraints",
+    keyMacros: ["ARRIVE", "DELAY", "ASSIGN", "COMPLETE"],
+    paramGuide: "Arrival mean 15 min. Slot capacity 3 per hour. Appointment length: General 30 min, Specialist 60 min (EntityAttr). Calendar: weekdays 9am-5pm only.",
+    limitations: "No-show modelling not included. Appointment lengths are fixed per patient type, not dynamically adjusted.",
+  },
+  entityTypes: [
+    { id: "et_patient", name: "Patient", role: "customer", count: 0, attrDefs: [
+      { id: "a_type", name: "appointmentType", valueType: "string", defaultValue: "General", mutable: false,
+        dist: "Categorical", distParams: { options: [{ value: "General", weight: 70 }, { value: "Specialist", weight: 30 }] } },
+      { id: "a_length", name: "appointmentLength", valueType: "number", defaultValue: "30", mutable: false,
+        dist: "EntityAttr", distParams: { attr: "appointmentLength" } },
+    ]},
+    { id: "et_doctor", name: "Doctor", role: "server", count: 2, attrDefs: [] },
+  ],
+  stateVariables: [
+    { name: "lastSlotTime", initialValue: "0" },
+  ],
+  bEvents: [
+    { id: "b_arrive", name: "Patient Arrival", scheduledTime: "0", effect: ["ARRIVE(Patient, BookingQueue)"],
+      schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "15" } }] },
+    { id: "b_slot_done", name: "Slot Complete", scheduledTime: "9999", effect: [],
+      routing: [{ condition: { variable: "Entity.appointmentType", operator: "==", value: "General" }, queueName: "GeneralQueue" },
+                { condition: { variable: "Entity.appointmentType", operator: "==", value: "Specialist" }, queueName: "SpecialistQueue" }],
+      defaultQueueName: "GeneralQueue" },
+    { id: "b_appointment_done", name: "Appointment Done", scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
+  ],
+  cEvents: [
+    { id: "c_book_slot", name: "Book Appointment Slot", priority: 1,
+      condition: "queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND (clock - state.lastSlotTime) >= 60",
+      effect: ["DELAY(BookingQueue, 3)", "SET(lastSlotTime, clock)"],
+      cSchedules: [{ eventId: "b_slot_done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+    { id: "c_general", name: "General Appointment", priority: 2,
+      condition: "queue(GeneralQueue).length > 0 AND idle(Doctor).count > 0",
+      effect: ["ASSIGN(GeneralQueue, Doctor)"],
+      cSchedules: [{ eventId: "b_appointment_done", dist: "Fixed", distParams: { value: "30" }, useEntityCtx: true }] },
+    { id: "c_specialist", name: "Specialist Appointment", priority: 3,
+      condition: "queue(SpecialistQueue).length > 0 AND idle(Doctor).count > 0",
+      effect: ["ASSIGN(SpecialistQueue, Doctor)"],
+      cSchedules: [{ eventId: "b_appointment_done", dist: "Fixed", distParams: { value: "60" }, useEntityCtx: true }] },
+  ],
+  queues: [
+    { id: "q_booking", name: "BookingQueue", customerType: "Patient", capacity: "", discipline: "FIFO" },
+    { id: "q_general", name: "GeneralQueue", customerType: "Patient", capacity: "", discipline: "FIFO" },
+    { id: "q_specialist", name: "SpecialistQueue", customerType: "Patient", capacity: "", discipline: "FIFO" },
+  ],
+  epoch: "2026-07-01T09:00:00",
+  timeUnit: "minutes",
+  experimentDefaults: {
+    maxSimTime: 2880,
+    warmupPeriod: 480,
+    replications: 5,
+  },
+};
+
+// ── RASE Service Request ──────────────────────────────────────────────────────
+
+const RASE_SERVICE_REQUEST = {
+  name: "RASE Service Request",
+  description: "Request-Assessment-Schedule-Execute pattern for service requests. Requests arrive, are assessed by a triage officer, scheduled into slots (limited capacity), then executed by field technicians. Demonstrates the full RASE workflow with DELAY capacity and calendar constraints.",
+  domain: "Service Systems",
+  templateMeta: {
+    scenarioType: "RASE workflow with slot scheduling",
+    keyMacros: ["ARRIVE", "ASSIGN", "DELAY", "COMPLETE"],
+    paramGuide: "Request arrival mean 30 min. Assessment Triangular(10,20,40) min. Schedule: 5 slots per 2 hours, weekdays 9am-5pm. Execution Triangular(60,120,240) min.",
+    limitations: "Simplified RASE pattern. No priority routing, no skill-based matching, no multi-crew variants.",
+  },
+  entityTypes: [
+    { id: "et_request", name: "ServiceRequest", role: "customer", count: 0, attrDefs: [
+      { id: "a_priority", name: "priority", valueType: "number", defaultValue: "3", mutable: true,
+        dist: "Uniform", distParams: { min: "1", max: "5" } },
+    ]},
+    { id: "et_assessor", name: "Assessor", role: "server", count: 2, attrDefs: [] },
+    { id: "et_technician", name: "Technician", role: "server", count: 4, attrDefs: [] },
+  ],
+  stateVariables: [
+    { name: "lastScheduleSlot", initialValue: "0" },
+  ],
+  bEvents: [
+    { id: "b_arrive", name: "Request Arrival", scheduledTime: "0", effect: ["ARRIVE(ServiceRequest, AssessmentQueue)"],
+      schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "30" } }] },
+    { id: "b_assess_done", name: "Assessment Done", scheduledTime: "9999", effect: ["RELEASE(Assessor, ScheduleQueue)"], schedules: [] },
+    { id: "b_schedule_done", name: "Schedule Done", scheduledTime: "9999", effect: [],
+      routing: [{ queueName: "ExecutionQueue" }], defaultQueueName: "ExecutionQueue" },
+    { id: "b_execute_done", name: "Execution Done", scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
+  ],
+  cEvents: [
+    { id: "c_assess", name: "Assess Request", priority: 1,
+      condition: "queue(AssessmentQueue).length > 0 AND idle(Assessor).count > 0",
+      effect: ["ASSIGN(AssessmentQueue, Assessor)"],
+      cSchedules: [{ eventId: "b_assess_done", dist: "Triangular", distParams: { min: "10", mode: "20", max: "40" }, useEntityCtx: true }] },
+    { id: "c_schedule", name: "Schedule into Slot", priority: 2,
+      condition: "queue(ScheduleQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND (clock - state.lastScheduleSlot) >= 120",
+      effect: ["DELAY(ScheduleQueue, 5)", "SET(lastScheduleSlot, clock)"],
+      cSchedules: [{ eventId: "b_schedule_done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+    { id: "c_execute", name: "Execute Request", priority: 3,
+      condition: "queue(ExecutionQueue).length > 0 AND idle(Technician).count > 0",
+      effect: ["ASSIGN(ExecutionQueue, Technician)"],
+      cSchedules: [{ eventId: "b_execute_done", dist: "Triangular", distParams: { min: "60", mode: "120", max: "240" }, useEntityCtx: true }] },
+  ],
+  queues: [
+    { id: "q_assessment", name: "AssessmentQueue", customerType: "ServiceRequest", capacity: "", discipline: "PRIORITY" },
+    { id: "q_schedule", name: "ScheduleQueue", customerType: "ServiceRequest", capacity: "", discipline: "PRIORITY" },
+    { id: "q_execution", name: "ExecutionQueue", customerType: "ServiceRequest", capacity: "", discipline: "PRIORITY" },
+  ],
+  epoch: "2026-07-01T09:00:00",
+  timeUnit: "minutes",
+  experimentDefaults: {
+    maxSimTime: 5760,
+    warmupPeriod: 960,
+    replications: 5,
+  },
+};
+
 export const TEMPLATES = [
   // Academic
   { id: "mm1",             ...MM1 },
@@ -1111,12 +1231,14 @@ export const TEMPLATES = [
   { id: "ward-admission",  ...WARD_ADMISSION },
   { id: "surgical-suite",  ...SURGICAL_SUITE },
   { id: "appointment-clinic", ...APPOINTMENT_CLINIC },
+  { id: "slot-booking-clinic", ...SLOT_BOOKING_CLINIC },
   // Service Systems
   { id: "call-center",     ...CALL_CENTER },
   { id: "fast-food",       ...FAST_FOOD },
   { id: "airport",         ...AIRPORT },
   { id: "bank-branch",     ...BANK_BRANCH },
   { id: "retail-checkout", ...RETAIL_CHECKOUT },
+  { id: "rase-service-request", ...RASE_SERVICE_REQUEST },
   // Manufacturing
   { id: "factory",         ...FACTORY },
   { id: "construction",    ...CONSTRUCTION },

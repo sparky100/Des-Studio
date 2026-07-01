@@ -133,7 +133,7 @@ All 20 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 | Macro | Syntax | Purpose | Side Effects | Common Mistakes |
 |-------|--------|---------|--------------|-----------------|
-| DELAY | `DELAY(QueueName)` | Removes the next entity from a queue and marks it serving — without claiming any server | Duration is set by the firing C-event's `cSchedules` entry, not by a server; pairs with a completion B-event for routing | Completion B-event has only an `ARRIVE` effect — `ARRIVE` always creates a new entity and never resolves the delayed one, leaving it stuck in "serving" forever (V47). Add `COMPLETE()`, `RELEASE()`, or routing to the completion B-event |
+| DELAY | `DELAY(QueueName)` or `DELAY(QueueName, N)` | Removes up to N entities from a queue (or all if N omitted) and marks them serving — without claiming any server. Use for scheduling delays, recovery periods, or any hold that doesn't tie up a server. | Duration is set by the firing C-event's `cSchedules` entry, not by a server; pairs with a completion B-event for routing. When N is provided, drains at most N entities per firing (slot capacity pattern). | Completion B-event has only an `ARRIVE` effect — `ARRIVE` always creates a new entity and never resolves the delayed one, leaving it stuck in "serving" forever (V47). Add `COMPLETE()`, `RELEASE()`, or routing to the completion B-event. Capacity N must be a positive integer (V-SLOT-1). |
 
 ### Entity Transformation Macros
 
@@ -543,6 +543,50 @@ In the Schedule Manager, view a schedule's detail. After CSV import, attribute c
 ### Categorical distribution for entity attributes
 
 The **Categorical** distribution type does weighted random selection from a list of values. It is the only distribution that returns non-numeric values (strings, booleans, null). It is used exclusively for entity attributes — never for B-event delays or service times. Configure it in the Attribute Editor by switching from Static to Weighted mode.
+
+### Calendar-aware conditions
+
+Use calendar variables in C-event conditions to restrict activities to specific times:
+
+- `isWeekday` — boolean, true Monday-Friday
+- `isWeekend` — boolean, true Saturday-Sunday
+- `hourOfDay` — integer 0-23
+- `dayOfWeek` — integer 0-6 (0=Sunday, 1=Monday, ..., 6=Saturday)
+
+**Requires epoch:** Set the model's epoch in Model Settings → State tab → "Real-world start date and time". Without epoch, calendar variables return defaults (isWeekday=true, hourOfDay=0).
+
+**Example:** "Schedule appointments weekdays 9am-5pm only":
+```
+Condition: queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17
+```
+
+**Validation:** V-CAL-1 warns if calendar conditions are used without epoch set. V-CAL-2 warns if hourOfDay comparison value is outside 0-23.
+
+### Slot booking pattern
+
+Model periodic batch scheduling with DELAY capacity + state variable timer + calendar conditions:
+
+1. Create a state variable `lastSlotTime` (initial 0)
+2. Create a C-event with condition: `queue(Queue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND (clock - state.lastSlotTime) >= slotInterval`
+3. Effect: `DELAY(Queue, N)` + `SET(lastSlotTime, clock)`
+
+This drains up to N entities per firing, resets the timer, and only fires during business hours. Remaining entities wait for the next slot.
+
+### Per-entity delay times
+
+Use `EntityAttr` distribution in cSchedule to read delay duration from an entity attribute. Combined with `cSchedule[].when` predicates, different entity types get different delays:
+
+```json
+"cSchedules": [
+  { "when": { "variable": "Entity.type", "operator": "==", "value": "General" },
+    "eventId": "b_done", "dist": "Fixed", "distParams": { "value": "30" }, "useEntityCtx": true },
+  { "when": { "variable": "Entity.type", "operator": "==", "value": "Specialist" },
+    "eventId": "b_done", "dist": "Fixed", "distParams": { "value": "60" }, "useEntityCtx": true },
+  { "eventId": "b_done", "dist": "Fixed", "distParams": { "value": "45" }, "useEntityCtx": true }
+]
+```
+
+First-match semantics: engine evaluates `when` in order, uses first match. Last entry (no `when`) is fallback.
 
 ---
 

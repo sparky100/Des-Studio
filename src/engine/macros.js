@@ -370,15 +370,17 @@ export const MACROS = [
     },
   },
 
-// ── DELAY(QueueName) — resource-free activity ──────────────────────────────
+// ── DELAY(QueueName[, N]) — resource-free activity ─────────────────────────
 // Removes entity from queue and marks it as serving without claiming any server.
 // The C-Event cSchedules mechanism provides the delay duration; the completion
 // B-Event handles routing via the standard conditional/probabilistic routing table.
+// Optional N parameter: drain at most N entities (slot capacity). Default: drain all.
   {
     name:    "DELAY",
-    pattern: /^DELAY\(([^,)]+)\)$/i,
+    pattern: /^DELAY\(([^,)]+)(?:\s*,\s*(\d+))?\)$/i,
     apply(match, ctx) {
       const queueToken = match[1].trim();
+      const capacity = match[2] ? parseInt(match[2]) : null;
       const { entities, helpers, clock, setLastCustId, msgs } = ctx;
 
       const matchedQ   = helpers.findQueueConfig?.(queueToken);
@@ -392,7 +394,11 @@ export const MACROS = [
       // DELAY has no server capacity — all waiting entities start simultaneously.
       // Process every entity in the queue in one Phase C invocation so N entities
       // need 1 pass rather than N passes.
-      const waiting = listWaiting(token, discipline, entities, filterFn, !!matchedQ, true, ctx.index);
+      // When capacity is specified, drain at most N entities (slot booking pattern).
+      let waiting = listWaiting(token, discipline, entities, filterFn, !!matchedQ, true, ctx.index);
+      if (capacity !== null && capacity > 0) {
+        waiting = waiting.slice(0, capacity);
+      }
 
       if (waiting.length > 0) {
         const delayedIds = [];
@@ -406,8 +412,9 @@ export const MACROS = [
           cust._isDelay     = true;
           delete cust.queue;
           delayedIds.push(cust.id);
+          const capNote = capacity !== null ? ` [slot ${delayedIds.length}/${capacity}]` : '';
           msgs.push(
-            `#${cust.id} (${cust.type}) → delay [queue: ${token}, waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
+            `#${cust.id} (${cust.type}) → delay [queue: ${token}, waited ${(clock - cust.arrivalTime).toFixed(3)} t]${capNote}`
           );
         }
         setLastCustId(delayedIds[0]);

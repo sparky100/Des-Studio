@@ -236,17 +236,29 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               {/* Activity type toggle + Effects */}
               {(()=>{
                 const effectArr=rowEffectArr;
-                // Match DELAY() with optional queue name so the mode flag persists before a queue is chosen
-                const delayMatch=effectArr.map(e=>typeof e==='string'?e.match(/^DELAY\(([^)]*)\)/i):null).find(Boolean);
+                // Match DELAY() with optional queue name and capacity so the mode flag persists before a queue is chosen
+                const delayMatch=effectArr.map(e=>typeof e==='string'?e.match(/^DELAY\(([^,)]+)(?:\s*,\s*(\d+))?\)/i):null).find(Boolean);
                 const isDelay=rowIsDelay;
                 const delayQueue=delayMatch?.[1]?.trim()||"";
+                const delayCapacity=delayMatch?.[2]?parseInt(delayMatch[2]):null;
 
                 const setDelayMode=(on)=>{
                   // Always write DELAY() (empty queue) so the detection works before a queue is selected
                   if(on) upd(i,'effect',[`DELAY(${delayQueue})`]);
                   else upd(i,'effect',[]);
                 };
-                const setDelayQueue=(qName)=>upd(i,'effect',[`DELAY(${qName})`]);
+                const setDelayQueue=(qName)=>{
+                  const capStr=delayCapacity!==null?`, ${delayCapacity}`:"";
+                  upd(i,'effect',[`DELAY(${qName}${capStr})`]);
+                };
+                const setDelayCapacity=(cap)=>{
+                  if(cap===null||cap===""){
+                    upd(i,'effect',[`DELAY(${delayQueue})`]);
+                  } else {
+                    const n=Math.max(1,parseInt(cap)||1);
+                    upd(i,'effect',[`DELAY(${delayQueue}, ${n})`]);
+                  }
+                };
 
                 return (<>
                   {/* Activity type selector */}
@@ -286,9 +298,20 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                             ))}
                           </select>
                         </div>
+                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                          <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>Slot capacity:</span>
+                          <input type="number" min={1} value={delayCapacity||""}
+                            onChange={e=>setDelayCapacity(e.target.value)}
+                            placeholder="all"
+                            style={{width:80,background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
+                              color:C.amber,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+                          <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
+                            {delayCapacity!==null?`Drain up to ${delayCapacity} entities per firing`:"Drain all waiting entities"}
+                          </span>
+                        </div>
                         {delayQueue&&(
                           <div style={{fontSize:10,color:C.muted,fontFamily:FONT,background:C.panel,borderRadius:4,padding:"5px 8px"}}>
-                            Effect: <code style={{color:C.amber}}>DELAY({delayQueue})</code> — entity leaves queue, enters delay, completion B-event handles routing
+                            Effect: <code style={{color:C.amber}}>DELAY({delayQueue}{delayCapacity!==null?`, ${delayCapacity}`:""})</code> — entity leaves queue, enters delay, completion B-event handles routing
                           </div>
                         )}
                       </div>

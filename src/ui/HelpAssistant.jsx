@@ -145,6 +145,9 @@ const SUGGESTED_QUESTIONS = {
     "How do I match a server's skill to the entity's requirement?",
     "What operators can I use in conditions?",
     "Why isn't my C-Event firing?",
+    "How do I limit appointments to 3 per hour?",
+    "Can I restrict activities to business hours only?",
+    "How do different patient types get different delay times?",
   ],
   // Running
   execute: [

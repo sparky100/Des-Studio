@@ -640,7 +640,81 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 
    **Do not** invent a `RELEASE()` for a chain where no server was ever seized — `RELEASE` has no awareness that this entity came from a Delay, so it either does nothing (entity stuck, same problem as bare `ARRIVE`) or, worse, can release an unrelated server's claim on a different entity. If no server is involved, use `COMPLETE()` or a routing table instead.
 
-### 5.5 Finding what a scheduled B-Event actually does
+### 5.5 "How do I limit appointments to N per time period (slot booking)?"
+
+**When this applies.** You need to model a scheduling step where entities are processed in batches — e.g., "3 appointment slots per hour", "5 patients scheduled every 2 hours", "10 trucks loaded per shift".
+
+**How to set it up:**
+
+1. **Create a state variable** to track the last slot time (e.g., `lastSlotTime`, initial value 0).
+2. **Create a C-Event** with Activity Type **Delay (no resource)**. In the Source queue dropdown, pick the queue where entities wait for scheduling.
+3. **Set the Slot capacity** field to the maximum number of entities to process per firing (e.g., 3). Leave it blank to drain all waiting entities (default behavior).
+4. **Add a condition** that combines:
+   - `queue(QueueName).length >= 1` — there are entities waiting
+   - `(clock - state.lastSlotTime) >= slotInterval` — enough time has passed since the last slot (e.g., 60 minutes for hourly slots)
+   - Optional calendar constraints: `isWeekday AND hourOfDay >= 9 AND hourOfDay < 17` — only during business hours
+5. **Add two effects:** `DELAY(QueueName, N)` and `SET(lastSlotTime, clock)` — drain up to N entities and reset the timer.
+
+**Example:** A clinic with 3 appointment slots per hour, weekdays 9am-5pm:
+
+```
+Condition: queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND (clock - state.lastSlotTime) >= 60
+Effect: DELAY(BookingQueue, 3), SET(lastSlotTime, clock)
+```
+
+The C-Event fires once per hour (when the condition is true), drains up to 3 entities from the queue, and resets the timer. Remaining entities wait for the next slot.
+
+### 5.6 "How do I make different entity types get different delay times?"
+
+**When this applies.** You need per-entity delay durations — e.g., "General appointments take 30 minutes, Specialist appointments take 60 minutes", "Urban reinforcement takes 10 days, Rural takes 21 days".
+
+**How to set it up:**
+
+1. **Add an attribute** to your customer entity type that stores the delay duration (e.g., `appointmentLength`, valueType: number).
+2. **Set the attribute at arrival** using a Categorical distribution or a fixed value per entity type.
+3. **In the C-Event's Schedule Follow-on Event panel**, pick **Entity attribute** from the "delay via:" dropdown and enter the attribute name (e.g., `appointmentLength`).
+4. **Or use conditional schedules** — add multiple cSchedule rows with `when` predicates that check the entity's type attribute:
+
+```json
+"cSchedules": [
+  { "when": { "variable": "Entity.appointmentType", "operator": "==", "value": "General" },
+    "eventId": "b_done", "dist": "Fixed", "distParams": { "value": "30" }, "useEntityCtx": true },
+  { "when": { "variable": "Entity.appointmentType", "operator": "==", "value": "Specialist" },
+    "eventId": "b_done", "dist": "Fixed", "distParams": { "value": "60" }, "useEntityCtx": true },
+  { "eventId": "b_done", "dist": "Fixed", "distParams": { "value": "45" }, "useEntityCtx": true }
+]
+```
+
+The engine evaluates `when` predicates in order and uses the first match. The last entry (no `when`) is the fallback for anything unmatched.
+
+### 5.7 "How do I restrict activities to business hours only?"
+
+**When this applies.** You need to model time-of-day or day-of-week constraints — e.g., "appointments only available weekdays 9am-5pm", "maintenance only on weekends", "night shift starts at 10pm".
+
+**How to set it up:**
+
+1. **Set the model's epoch** in Model Settings → State tab → "Real-world start date and time". This anchors simulation time to a real calendar datetime. Without an epoch, calendar variables return defaults (isWeekday=true, hourOfDay=0).
+2. **Use calendar variables** in your C-Event conditions:
+   - `isWeekday` — boolean, true Monday-Friday
+   - `isWeekend` — boolean, true Saturday-Sunday
+   - `hourOfDay` — integer 0-23
+   - `dayOfWeek` — integer 0-6 (0=Sunday, 1=Monday, ..., 6=Saturday)
+
+**Example:** "Schedule appointments weekdays 9am-5pm only":
+
+```
+Condition: queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17
+```
+
+**Example:** "Weekend maintenance only":
+
+```
+Condition: queue(MaintenanceQueue).length >= 1 AND isWeekend
+```
+
+**Validation:** If you use calendar variables without setting an epoch, validation rule V-CAL-1 warns that the variables will return defaults. Set the epoch to get real calendar-aware behavior.
+
+### 5.8 Finding what a scheduled B-Event actually does
 
 Each row in a C-Event's **Schedule Follow-on Event** panel shows a one-line, plain-language summary of the linked B-Event's effect right under the schedule preview — e.g. "Releases Nurse · routes 80% → Discharge Queue, 20% → Transfer Queue" or "Entity exits simulation." Macros without a friendly phrase yet (FILL, PREEMPT, FAIL, …) fall back to showing the raw macro call instead of being hidden. Click the bolded B-Event name to jump straight to it in the **B-Events** tab.
 

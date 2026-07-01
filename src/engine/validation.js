@@ -765,11 +765,17 @@ export function validateModel(model) {
   // ── V47: DELAY must reference a declared queue; nudge useEntityCtx on its cSchedule ──
   cEvents.forEach(c => {
     const text = effectText(c.effect);
-    const delayHits = [...text.matchAll(/DELAY\s*\(\s*([^,)]+)\s*\)/gi)];
+    const delayHits = [...text.matchAll(/DELAY\s*\(\s*([^,)]+)(?:\s*,\s*(\d+))?\s*\)/gi)];
     delayHits.forEach(m => {
       const qName = m[1].trim();
+      const capacity = m[2] ? parseInt(m[2]) : null;
       if (!queueNamesLower.has(qName.toLowerCase())) {
         err('V47', `C-Event '${c.name || c.id}' DELAY references unknown queue '${qName}'.`, 'cevents',
+          { eventIds: [c.id] });
+      }
+      // V-SLOT-1: DELAY capacity must be a positive integer
+      if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1)) {
+        err('V-SLOT-1', `C-Event '${c.name || c.id}' DELAY capacity must be a positive integer (got '${m[2]}').`, 'cevents',
           { eventIds: [c.id] });
       }
     });
@@ -1449,6 +1455,35 @@ export function validateModel(model) {
         'entities',
         { entityTypeIds: [et.id] });
     }
+  });
+
+  // V-CAL-1: Calendar conditions require epoch
+  const calendarVars = ['isWeekday', 'isWeekend', 'hourOfDay', 'dayOfWeek'];
+  const hasEpoch = !!(model.epoch && model.epoch.trim());
+  cEvents.forEach(c => {
+    const condText = typeof c.condition === 'string' ? c.condition : JSON.stringify(c.condition || {});
+    const usesCalendar = calendarVars.some(v => condText.includes(v));
+    if (usesCalendar && !hasEpoch) {
+      warn('V-CAL-1',
+        `C-Event '${c.name || c.id}' uses calendar conditions (${calendarVars.filter(v => condText.includes(v)).join(', ')}) but the model has no epoch set. Calendar variables will return defaults (isWeekday=true, hourOfDay=0). Set a Real-world start date in Model Settings.`,
+        'cevents',
+        { eventIds: [c.id] });
+    }
+  });
+
+  // V-CAL-2: hourOfDay comparison value should be 0-23
+  cEvents.forEach(c => {
+    const condText = typeof c.condition === 'string' ? c.condition : JSON.stringify(c.condition || {});
+    const hourMatches = [...condText.matchAll(/hourOfDay\s*(==|!=|<|>|<=|>=)\s*(\d+)/gi)];
+    hourMatches.forEach(m => {
+      const val = parseInt(m[2]);
+      if (val < 0 || val > 23) {
+        warn('V-CAL-2',
+          `C-Event '${c.name || c.id}' compares hourOfDay to ${val}, which is outside the valid range 0-23.`,
+          'cevents',
+          { eventIds: [c.id] });
+      }
+    });
   });
 
   return { errors, warnings };

@@ -72,6 +72,10 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
     const builtInTokens = [
       { label:'Served — total who have completed service', value:'served', valueType:'number' },
       { label:'Reneged — total who abandoned the queue',  value:'reneged', valueType:'number' },
+      { label:'Is weekday — true Mon-Fri (requires epoch)', value:'isWeekday', valueType:'boolean' },
+      { label:'Is weekend — true Sat-Sun (requires epoch)', value:'isWeekend', valueType:'boolean' },
+      { label:'Hour of day — 0-23 (requires epoch)', value:'hourOfDay', valueType:'number' },
+      { label:'Day of week — 0=Sun, 1=Mon, ..., 6=Sat (requires epoch)', value:'dayOfWeek', valueType:'number' },
     ];
     const stateVarTokens = (stateVariables||[]).filter(sv=>sv.name).map(sv=>({
       label: `${sv.name} — ${sv.description||'state variable'}`,
