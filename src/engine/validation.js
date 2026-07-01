@@ -1211,7 +1211,7 @@ export function validateModel(model) {
       // V56: initial capacity is 0 warning
       const initialCap = getPatternInitialCapacity(pat, model.epoch, model.timeUnit || 'minutes');
       if (initialCap === 0) {
-        warn('V56', `Entity class '${et.name}' has a schedule pattern with initial capacity 0. No servers will exist at time 0. Use shiftBehavior 'preempt' or 'suspend' to handle work starting on shift arrival.`, 'entities',
+        warn('V56', `Entity class '${et.name}' has a schedule pattern with initial capacity 0 — no servers exist at simulation time 0 (the epoch falls outside every period). This is expected if the schedule intentionally starts closed (e.g. before opening hours); arrivals during this time will simply queue until the first period begins. If unintended, check that 'dayOfWeek'/'start'/'end' align with the model's epoch.`, 'entities',
           { entityTypeIds: [et.id] });
       }
     });
