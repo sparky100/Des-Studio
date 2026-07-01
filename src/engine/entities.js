@@ -606,13 +606,26 @@ export function createCustomer(typeName, role, attrs, clock) {
 /**
  * Pre-create all server entities from entity type definitions.
  */
-export function createServerEntities(entityTypes, sampleAttrsFn) {
+export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
   const entities = [];
   for (const et of entityTypes) {
     if (et.role !== "server") continue;
     const count = Math.max(1, parseInt(et.count) || 1);
+    const profiles = Array.isArray(et.skillProfiles) ? et.skillProfiles : null;
+
+    // Pre-calculate count-based profile assignments
+    const countProfiles = profiles ? profiles.filter(p => p.count != null && p.count > 0) : [];
+    const weightProfiles = profiles ? profiles.filter(p => p.weight != null && !(p.count != null && p.count > 0)) : [];
+    let cumulativeCount = 0;
+    const countAssignments = [];
+    for (const p of countProfiles) {
+      const n = Math.min(p.count, count - cumulativeCount);
+      countAssignments.push({ profile: p, count: n });
+      cumulativeCount += n;
+    }
+
     for (let i = 0; i < count; i++) {
-      entities.push({
+      const server = {
         id:          nextId(),
         type:        et.name.trim(),
         role:        "server",
@@ -622,7 +635,36 @@ export function createServerEntities(entityTypes, sampleAttrsFn) {
         stages:      [],
         _starvationStart: 0,
         _instanceIndex: i,
-      });
+      };
+
+      // Assign instance skills from profiles
+      if (profiles) {
+        const instanceSkills = new Set();
+
+        // Count-based: servers 0..N get assigned profiles in order
+        let slot = i;
+        for (const { profile, count: c } of countAssignments) {
+          if (slot < c) {
+            (profile.skills || []).forEach(s => instanceSkills.add(s));
+            break;
+          }
+          slot -= c;
+        }
+
+        // Weight-based: each server independently rolls for each weight profile
+        if (rng) {
+          for (const p of weightProfiles) {
+            const w = Math.max(0, Math.min(100, Number(p.weight) || 0));
+            if (w > 0 && rng() < w / 100) {
+              (p.skills || []).forEach(s => instanceSkills.add(s));
+            }
+          }
+        }
+
+        server.skills = instanceSkills.size > 0 ? [...instanceSkills] : undefined;
+      }
+
+      entities.push(server);
     }
   }
   return entities;

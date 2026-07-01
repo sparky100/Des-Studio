@@ -412,24 +412,165 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                 </SectionPanel>
               )}
               {et.role==="server"&&skills.length>0&&(
-                <SectionPanel label="Skills" status={Array.isArray(et.skills)&&et.skills.length?`${et.skills.length} skill${et.skills.length>1?"s":""}`:"none"} color={C.server}>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                    {skills.map(skill=>{
-                      const has=Array.isArray(et.skills)&&et.skills.includes(skill);
-                      return (
-                        <label key={skill} style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontFamily:FONT,fontSize:11,color:has?C.server:C.muted,userSelect:"none"}}>
-                          <input type="checkbox" checked={has} style={{accentColor:C.server}}
-                            onChange={()=>{
-                              const n=[...types];
-                              const current=Array.isArray(n[i].skills)?[...n[i].skills]:[];
-                              n[i]={...n[i],skills:has?current.filter(s=>s!==skill):[...current,skill]};
-                              onChange(n);
-                            }}/>
-                          {skill}
-                        </label>
-                      );
-                    })}
+                <SectionPanel label="Skills" status={
+                  (() => {
+                    if (Array.isArray(et.skillProfiles)) {
+                      return et.skillProfiles.length > 0 ? `${et.skillProfiles.length} profile${et.skillProfiles.length>1?"s":""}` : "per-instance";
+                    }
+                    return Array.isArray(et.skills)&&et.skills.length?`${et.skills.length} skill${et.skills.length>1?"s":""}`:"none";
+                  })()
+                } color={C.server}>
+                  {/* Shared / Per-instance toggle */}
+                  <div style={{display:"flex",gap:4,alignItems:"center",fontSize:10,fontFamily:FONT,marginBottom:6}}>
+                    <span style={{color:C.muted}}>Mode:</span>
+                    <label style={{display:"flex",alignItems:"center",gap:3,cursor:"pointer",
+                      color:!Array.isArray(et.skillProfiles)?C.server:C.muted,fontWeight:!Array.isArray(et.skillProfiles)?700:400}}>
+                      <input type="radio" checked={!Array.isArray(et.skillProfiles)}
+                        onChange={()=>upd(i,"skillProfiles",undefined)}
+                        style={{margin:0}}/>
+                      Shared
+                    </label>
+                    <label style={{display:"flex",alignItems:"center",gap:3,cursor:"pointer",
+                      color:Array.isArray(et.skillProfiles)?C.purple:C.muted,fontWeight:Array.isArray(et.skillProfiles)?700:400}}>
+                      <input type="radio" checked={Array.isArray(et.skillProfiles)}
+                        onChange={()=>{
+                          if (!Array.isArray(et.skillProfiles)) {
+                            const currentSkills = Array.isArray(et.skills) ? [...et.skills] : [];
+                            upd(i,"skillProfiles",[{name:"",skills:currentSkills,count:et.count||"1"}]);
+                          }
+                        }}
+                        style={{margin:0}}/>
+                      Per-instance
+                    </label>
                   </div>
+
+                  {Array.isArray(et.skillProfiles) ? (
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      {et.skillProfiles.map((profile, pi) => {
+                        const pSkills = Array.isArray(profile.skills) ? profile.skills : [];
+                        const hasCount = profile.count != null && profile.count > 0;
+                        const hasWeight = (profile.weight != null) && !hasCount;
+                        return (
+                          <div key={pi} style={{
+                            border:`1px solid ${C.purple}33`,borderRadius:6,padding:"8px 10px",
+                            background:C.bg,display:"flex",flexDirection:"column",gap:6,
+                          }}>
+                            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                              <CommitInput value={profile.name||""} onCommit={v=>{
+                                const n=[...et.skillProfiles];n[pi]={...n[pi],name:v};
+                                upd(i,"skillProfiles",n);
+                              }} placeholder="Profile name" style={{
+                                background:"transparent",border:`1px solid ${C.border}`,
+                                borderRadius:4,color:C.purple,fontFamily:FONT,fontSize:11,
+                                padding:"3px 6px",flex:1,maxWidth:160,outline:"none",
+                              }}/>
+                              <Btn small variant="danger" onClick={()=>{
+                                upd(i,"skillProfiles",et.skillProfiles.filter((_,idx)=>idx!==pi));
+                              }}>Remove</Btn>
+                            </div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                              {skills.map(skill=>{
+                                const has=pSkills.includes(skill);
+                                return (
+                                  <label key={skill} style={{display:"flex",alignItems:"center",gap:3,cursor:"pointer",fontFamily:FONT,fontSize:10,color:has?C.purple:C.muted,userSelect:"none"}}>
+                                    <input type="checkbox" checked={has} style={{accentColor:C.purple,margin:0}}
+                                      onChange={()=>{
+                                        const n=[...et.skillProfiles];
+                                        n[pi]={...n[pi],skills:has?pSkills.filter(s=>s!==skill):[...pSkills,skill]};
+                                        upd(i,"skillProfiles",n);
+                                      }}/>
+                                    {skill}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                              <label style={{display:"flex",alignItems:"center",gap:3,fontFamily:FONT,fontSize:10,
+                                color:hasCount?C.purple:C.muted,cursor:"pointer"}}>
+                                <input type="radio" checked={hasCount} style={{margin:0,accentColor:C.purple}}
+                                  onChange={()=>{
+                                    const n=[...et.skillProfiles];
+                                    n[pi]={...n[pi],count:1,weight:undefined};
+                                    upd(i,"skillProfiles",n);
+                                  }}/>
+                                Count:
+                                <input type="number" value={profile.count||""} disabled={!hasCount} min={0} max={et.count||999}
+                                  onChange={e=>{
+                                    const n=[...et.skillProfiles];
+                                    n[pi]={...n[pi],count:Math.max(0,parseInt(e.target.value)||0),weight:undefined};
+                                    upd(i,"skillProfiles",n);
+                                  }}
+                                  style={{
+                                    background:"transparent",border:`1px solid ${C.border}`,width:40,
+                                    borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,
+                                    padding:"2px 4px",outline:"none",textAlign:"center",
+                                    opacity:hasCount?1:0.4,
+                                  }}/>
+                              </label>
+                              <label style={{display:"flex",alignItems:"center",gap:3,fontFamily:FONT,fontSize:10,
+                                color:hasWeight?C.purple:C.muted,cursor:"pointer"}}>
+                                <input type="radio" checked={hasWeight} style={{margin:0,accentColor:C.purple}}
+                                  onChange={()=>{
+                                    const n=[...et.skillProfiles];
+                                    n[pi]={...n[pi],weight:100,count:undefined};
+                                    upd(i,"skillProfiles",n);
+                                  }}/>
+                                Weight:
+                                <input type="number" value={hasWeight?profile.weight:""} disabled={!hasWeight} min={0} max={100}
+                                  onChange={e=>{
+                                    const n=[...et.skillProfiles];
+                                    n[pi]={...n[pi],weight:Math.max(0,Math.min(100,Number(e.target.value)||0)),count:undefined};
+                                    upd(i,"skillProfiles",n);
+                                  }}
+                                  style={{
+                                    background:"transparent",border:`1px solid ${C.border}`,width:40,
+                                    borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,
+                                    padding:"2px 4px",outline:"none",textAlign:"center",
+                                    opacity:hasWeight?1:0.4,
+                                  }}/>%
+                              </label>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <Btn small variant="ghost" onClick={()=>{
+                        const profiles=[...(et.skillProfiles||[]),{name:"",skills:[],count:1}];
+                        upd(i,"skillProfiles",profiles);
+                      }}>+ Add Profile</Btn>
+                      {/* Count summary */}
+                      {(() => {
+                        const countProfiles = (et.skillProfiles||[]).filter(p => p.count != null && p.count > 0);
+                        const totalCount = countProfiles.reduce((s,p) => s + (parseInt(p.count)||0), 0);
+                        const serverCount = Math.max(1, parseInt(et.count) || 1);
+                        if (countProfiles.length === 0) return null;
+                        return (
+                          <div style={{fontSize:10,fontFamily:FONT,
+                            color:totalCount>serverCount?C.red:totalCount<serverCount?C.amber:C.muted}}>
+                            Count-based profiles: {totalCount} / {serverCount}
+                            {totalCount>serverCount?` (exceeds server count by ${totalCount-serverCount})`:""}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {skills.map(skill=>{
+                        const has=Array.isArray(et.skills)&&et.skills.includes(skill);
+                        return (
+                          <label key={skill} style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontFamily:FONT,fontSize:11,color:has?C.server:C.muted,userSelect:"none"}}>
+                            <input type="checkbox" checked={has} style={{accentColor:C.server}}
+                              onChange={()=>{
+                                const n=[...types];
+                                const current=Array.isArray(n[i].skills)?[...n[i].skills]:[];
+                                n[i]={...n[i],skills:has?current.filter(s=>s!==skill):[...current,skill]};
+                                onChange(n);
+                              }}/>
+                            {skill}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </SectionPanel>
               )}
               <input value={et.description||""} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"

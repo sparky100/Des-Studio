@@ -125,6 +125,7 @@ const SUGGESTED_QUESTIONS = {
   entities: [
     "How do I add a priority attribute to my Customer?",
     "How do I give different customers different required skills?",
+    "Can different servers of the same type have different skills?",
     "What's the difference between mutable and fixed attributes?",
     "How do I model patients with different triage levels?",
   ],

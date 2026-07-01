@@ -106,7 +106,7 @@ function resolveVariable(ref, state) {
     const type = idleToken[1].trim();
     const skill = idleToken[2] ? idleToken[2].trim() : null;
     if (skill) {
-      return state.helpers?.idleOf(type)?.filter(s => state.helpers?.hasSkillType?.(s.type, skill))?.length ?? 0;
+      return state.helpers?.idleOf(type)?.filter(s => state.helpers?.hasSkillType?.(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill)))?.length ?? 0;
     }
     return state.helpers?.idleOf?.(type)?.length ?? 0;
   }
@@ -116,7 +116,7 @@ function resolveVariable(ref, state) {
     const type = busyToken[1].trim();
     const skill = busyToken[2] ? busyToken[2].trim() : null;
     if (skill) {
-      return state.helpers?.busyOf(type)?.filter(s => state.helpers?.hasSkillType?.(s.type, skill))?.length ?? 0;
+      return state.helpers?.busyOf(type)?.filter(s => state.helpers?.hasSkillType?.(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill)))?.length ?? 0;
     }
     return state.helpers?.busyOf?.(type)?.length ?? 0;
   }

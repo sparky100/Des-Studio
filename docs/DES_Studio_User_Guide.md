@@ -382,6 +382,28 @@ To use skills:
 - You need to model certification or training requirements (e.g. only certified operators can run certain machines)
 - You want to analyse utilisation per skill (the Results workspace shows per-skill utilisation breakdowns)
 
+**Per-instance server skills.** When your server pool needs individual skill assignments — e.g., 4 doctors with different specialisations — switch to Per-instance mode:
+
+1. **Define the skill pool** in Shared mode first: check all skills this server type could possibly have (e.g. Surgery, Consultation, Triage, X-Ray).
+
+2. **Switch to Per-instance mode** — below the skill checkboxes, click the **Per-instance** radio button. This creates your first profile automatically.
+
+3. **Add and configure profiles.** Each profile card has:
+   - A **name** (e.g. "Surgeon")
+   - **Skill checkboxes** — which skills from the pool this profile grants
+   - A **Count** or **Weight** assignment method:
+     - **Count** — exactly N servers get this profile (deterministic, good for small pools). Servers are assigned in the order the profiles appear.
+     - **Weight** — each server has an X% chance of getting this profile (random, good for large pools)
+   - **Remove** button to delete the profile
+
+4. **Profiles are non-exclusive** — a server can match multiple profiles. For example, a count-based "Surgeon" profile gives 2 doctors Surgery + Consultation, while a weight-based "Triage" profile at 100% gives all 4 doctors Triage. A server's final skills = the union of all matched profiles.
+
+5. **Check the counter** below the profile list — it shows count-based total / server count. If it exceeds, a validation error blocks the run (V-SKILL-5).
+
+6. **Remaining servers** (if count-based profiles cover fewer than the pool size) get no instance skills — they fall back to the type-level `skills[]` check.
+
+**Validation.** The engine checks that every skill referenced in an ASSIGN/COSEIZE effect or condition exists in the model's skill registry (V-SKILL-1, V-SKILL-2, V-SKILL-3, V-SKILL-4). If you delete a skill from the registry, any effects or conditions referencing it will show a validation error. The count-based profile check (V-SKILL-5) ensures your assignments don't exceed the server count.
+
 **Validation.** The engine checks that every skill referenced in an ASSIGN/COSEIZE effect or condition exists in the model's skill registry (V-SKILL-1, V-SKILL-2, V-SKILL-3). If you delete a skill from the registry, any effects or conditions referencing it will show a validation error.
 
 **Setting skill requirements on arrival (entity-side).** Instead of hardcoding one skill name per C-Event, you can give arriving entities different skill requirements using a weighted string attribute on the customer type:

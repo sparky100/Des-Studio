@@ -319,7 +319,7 @@ export const MACROS = [
 
       // Filter by skill
       const idleServers = skill
-        ? allIdleServers.filter(s => helpers.hasSkillType(s.type, skill))
+        ? allIdleServers.filter(s => helpers.hasSkillType(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill)))
         : allIdleServers;
 
       const arbitration = {
@@ -1020,7 +1020,7 @@ export const MACROS = [
       for (const def of serverDefs) {
         const idle = helpers.idleOf(def.type) || [];
         const matched = def.skill
-          ? idle.filter(s => helpers.hasSkillType(s.type, def.skill))
+          ? idle.filter(s => helpers.hasSkillType(s.type, def.skill) || (Array.isArray(s.skills) && s.skills.includes(def.skill)))
           : idle;
         if (matched.length === 0) {
           const typeLabel = def.skill ? `${def.type}[${def.skill}]` : def.type;

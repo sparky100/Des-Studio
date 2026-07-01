@@ -604,7 +604,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   let entities = createServerEntities(
     runtimeModel.entityTypes || [],
-    (attrDefs) => sampleAttrs(attrDefs, rng)
+    (attrDefs) => sampleAttrs(attrDefs, rng),
+    rng
   );
   // Assign IDs to pre-created servers
   for (const e of entities) e.id = nextId();

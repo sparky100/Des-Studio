@@ -514,6 +514,19 @@ context (no suggestion text is shown live).
 2. **Assign to server types** in Entity Types tab. Expand a server type, tick skills in the Skills panel.
 3. **Use in C-Events** via ASSIGN with quoted skill: `ASSIGN(Queue, Doctor, "Surgery")` — only doctors with Surgery skill are considered.
 
+### Per-instance server skills
+
+For server pools where individual servers have different skill sets (e.g., 4 doctors: 2 surgeons, 1 consultant, 1 radiologist):
+
+1. **Define the skill pool** in Shared mode — check all skills the type could have.
+2. **Switch to Per-instance mode** — radio toggle below the checkboxes.
+3. **Add profiles** — each profile has a name, a subset of skills, and either:
+   - **Count** — exactly N servers get this profile, assigned in order to servers 0, 1, ... N-1
+   - **Weight** (0-100%) — each server independently gets this profile with the given probability
+4. **Profiles are non-exclusive** — a server matches multiple profiles, final skills = union.
+5. **Check the counter** — count-based total must not exceed server count (V-SKILL-5).
+6. **Switch back to Shared** to remove all profiles and revert to identical servers.
+
 ### Setting skill requirements on arrival (entity-side)
 
 Instead of one C-Event per skill, use a single C-Event that reads the skill from the entity:
@@ -521,7 +534,7 @@ Instead of one C-Event per skill, use a single C-Event that reads the skill from
 1. **Add a string attribute** to the customer entity type (e.g. `requiredSkill`), set valueType to String.
 2. **Choose Weighted mode** in the attribute editor. Add weighted options: value + relative weight. Options can include **no requirement** (null), which means any idle server matches.
 3. **The visual bar** always fills 100% width. Segments show proportions. Remainder = no requirement.
-4. **Use in a C-Event**: pick `ASSIGN(Queue, Server, Entity.requiredSkill)` from the effect dropdown. The engine reads each entity's attribute at runtime and filters servers accordingly.
+4. **Use in a C-event**: pick `ASSIGN(Queue, Server, Entity.requiredSkill)` from the effect dropdown. The engine reads each entity's attribute at runtime and filters servers accordingly.
 
 ### Schedule-based attribute overrides
 

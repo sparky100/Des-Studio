@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { makeHelpers, resetSeq, selectWaiting, listWaiting } from '../../src/engine/entities.js';
+import { makeHelpers, resetSeq, selectWaiting, listWaiting, createServerEntities } from '../../src/engine/entities.js';
 import { buildEngine } from '../../src/engine/index.js';
+import { mulberry32 } from '../../src/engine/distributions.js';
 
 // Tests for queue discipline in waitingOf().
 // These tests fail on the unmodified codebase (waitingOf ignores discipline).
@@ -330,5 +331,107 @@ describe('ASSIGN delegation — all disciplines (M4 integration)', () => {
   test('PRIORITY: model runs without errors', () => {
     const engine = buildEngine(makeAssignModel('PRIORITY'), 42, 0, 100);
     expect(() => engine.runAll()).not.toThrow();
+  });
+});
+
+// ── createServerEntities — skillProfiles ─────────────────────────────────────
+describe('createServerEntities — skillProfiles', () => {
+  test('count-based profiles assign skills in order', () => {
+    const entityTypes = [{
+      name: 'Doctor', role: 'server', count: 3,
+      skills: ['Surgery', 'Triage'],
+      skillProfiles: [
+        { name: 'Surgeon', skills: ['Surgery'], count: 2 },
+        { name: 'Triage Dr', skills: ['Triage'], count: 1 },
+      ],
+    }];
+    const serverEntities = createServerEntities(entityTypes, () => ({}), mulberry32(1));
+    expect(serverEntities).toHaveLength(3);
+    // Count-based: server 0 → Surgeon, server 1 → Surgeon, server 2 → Triage Dr
+    expect(serverEntities[0].skills).toEqual(['Surgery']);
+    expect(serverEntities[1].skills).toEqual(['Surgery']);
+    expect(serverEntities[2].skills).toEqual(['Triage']);
+  });
+
+  test('weight-based profiles assign via random', () => {
+    const entityTypes = [{
+      name: 'Nurse', role: 'server', count: 10,
+      skills: ['Triage', 'Admin'],
+      skillProfiles: [
+        { name: 'Triage Cert', skills: ['Triage'], weight: 100 },
+        { name: 'Admin Cert', skills: ['Admin'], weight: 50 },
+      ],
+    }];
+    const rng = mulberry32(42);
+    const serverEntities = createServerEntities(entityTypes, () => ({}), rng);
+    expect(serverEntities).toHaveLength(10);
+    // All should have Triage (100% weight)
+    expect(serverEntities.every(s => s.skills?.includes('Triage'))).toBe(true);
+    // Some should have Admin (50% weight)
+    const adminCount = serverEntities.filter(s => s.skills?.includes('Admin')).length;
+    expect(adminCount).toBeGreaterThanOrEqual(1);
+  });
+
+  test('no profiles falls back to no instance skills', () => {
+    const entityTypes = [{
+      name: 'Server', role: 'server', count: 2,
+      skills: ['General'],
+    }];
+    const serverEntities = createServerEntities(entityTypes, () => ({}));
+    expect(serverEntities).toHaveLength(2);
+    expect(serverEntities[0].skills).toBeUndefined();
+    expect(serverEntities[1].skills).toBeUndefined();
+  });
+
+  test('empty profiles array produces no instance skills', () => {
+    const entityTypes = [{
+      name: 'Server', role: 'server', count: 2,
+      skills: ['General'],
+      skillProfiles: [],
+    }];
+    const serverEntities = createServerEntities(entityTypes, () => ({}));
+    expect(serverEntities[0].skills).toBeUndefined();
+  });
+
+  test('count + weight mixed: extra servers beyond count-based get weight skills', () => {
+    const entityTypes = [{
+      name: 'Worker', role: 'server', count: 4,
+      skills: ['A', 'B', 'C'],
+      skillProfiles: [
+        { name: 'Fixed', skills: ['A'], count: 2 },
+        { name: 'Optional', skills: ['B'], weight: 100 },
+        { name: 'Rare', skills: ['C'], weight: 0 },
+      ],
+    }];
+    const rng = mulberry32(99);
+    const serverEntities = createServerEntities(entityTypes, () => ({}), rng);
+    // Servers 0-1 get count-based A
+    expect(serverEntities[0].skills).toContain('A');
+    expect(serverEntities[1].skills).toContain('A');
+    // All 4 should get weight-based B (100%)
+    expect(serverEntities.every(s => s.skills?.includes('B'))).toBe(true);
+    // None should get C (0% weight)
+    expect(serverEntities.every(s => !s.skills?.includes('C'))).toBe(true);
+    // Servers 2-3: not in count-based, but get B
+    expect(serverEntities[2].skills).toContain('B');
+    expect(serverEntities[3].skills).toContain('B');
+  });
+
+  test('profile skills union when server matches multiple profiles', () => {
+    const entityTypes = [{
+      name: 'Doctor', role: 'server', count: 2,
+      skills: ['Surgery', 'Consultation', 'Triage'],
+      skillProfiles: [
+        { name: 'Surgeon', skills: ['Surgery'], count: 2 },
+        { name: 'All Triage', skills: ['Triage'], weight: 100 },
+      ],
+    }];
+    const rng = mulberry32(1);
+    const serverEntities = createServerEntities(entityTypes, () => ({}), rng);
+    // Both servers should have both Surgery (count) and Triage (weight 100%)
+    expect(serverEntities[0].skills).toContain('Surgery');
+    expect(serverEntities[0].skills).toContain('Triage');
+    expect(serverEntities[1].skills).toContain('Surgery');
+    expect(serverEntities[1].skills).toContain('Triage');
   });
 });

@@ -1408,6 +1408,49 @@ export function validateModel(model) {
     }
   });
 
+  // V-SKILL-4: Profile skills must exist in model-level skills registry
+  entityTypes.filter(et => et.role === 'server' && Array.isArray(et.skillProfiles)).forEach(et => {
+    et.skillProfiles.forEach((profile, pi) => {
+      (profile.skills || []).forEach(skill => {
+        if (!modelSkills.includes(skill)) {
+          err('V-SKILL-4',
+            `Entity class '${et.name}' profile '${profile.name || `#${pi + 1}`}' references skill '${skill}' which is not in the model's skill registry. Add '${skill}' in Model Settings → Skills.`,
+            'entities',
+            { entityTypeIds: [et.id] });
+        }
+      });
+    });
+  });
+
+  // V-SKILL-5: Count-based profiles must not exceed server count
+  entityTypes.filter(et => et.role === 'server' && Array.isArray(et.skillProfiles)).forEach(et => {
+    const count = Math.max(1, parseInt(et.count) || 1);
+    const countProfiles = et.skillProfiles.filter(p => p.count != null && p.count > 0);
+    const totalCount = countProfiles.reduce((sum, p) => sum + (parseInt(p.count) || 0), 0);
+    if (totalCount > count) {
+      err('V-SKILL-5',
+        `Entity class '${et.name}' has ${count} servers but count-based profiles sum to ${totalCount}. Reduce profile counts to not exceed server count.`,
+        'entities',
+        { entityTypeIds: [et.id] });
+    } else if (totalCount < count && countProfiles.length > 0) {
+      warn('V-SKILL-5',
+        `Entity class '${et.name}' has ${count} servers but count-based profiles only cover ${totalCount}. The remaining ${count - totalCount} servers will have no instance skills.`,
+        'entities',
+        { entityTypeIds: [et.id] });
+    }
+  });
+
+  // V-SKILL-6: Weight-based profiles — warn if all weights are zero
+  entityTypes.filter(et => et.role === 'server' && Array.isArray(et.skillProfiles)).forEach(et => {
+    const weightProfiles = et.skillProfiles.filter(p => (p.weight != null || p.weight === 0) && !(p.count != null && p.count > 0));
+    if (weightProfiles.length > 0 && weightProfiles.every(p => (Number(p.weight) || 0) <= 0)) {
+      warn('V-SKILL-6',
+        `Entity class '${et.name}' has weight-based profiles but all weights are 0 — no servers will receive instance skills from weight-based profiles.`,
+        'entities',
+        { entityTypeIds: [et.id] });
+    }
+  });
+
   return { errors, warnings };
 }
 
