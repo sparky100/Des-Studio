@@ -476,6 +476,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [describePrompt,setDescribePrompt]=useState("");
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
   const [resultsReportGenerating,setResultsReportGenerating]=useState(false);
+  const [resultsExportOpen,setResultsExportOpen]=useState(false);
   const [showResultsSnapshot,setShowResultsSnapshot]=useState(false);
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const [notesEditing,setNotesEditing]=useState(false);
@@ -1543,6 +1544,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
               {[
                 {id:"summary",label:"Summary",disabled:false},
+                {id:"log",label:"Log",disabled:false},
+                {id:"entities",label:"Entities",disabled:false},
                 {id:"history",label:"History",disabled:false},
               ].map(sub=>(
                 <Btn

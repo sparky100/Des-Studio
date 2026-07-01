@@ -118,7 +118,7 @@ Allow users to draw blocks of any duration (e.g., a single cell spanning 09:00�
 
 - **Event count scales with run duration**: a 6-month run with daily patterns generates ~1,040 events (26 weeks × 10 boundaries × 4 periods/day). For very long run durations this could approach event queue pressure. The current event model handles hundreds of thousands of events without issue — this is not expected to be a bottleneck.
 - **Requires epoch**: the user must set a real-world start date for day-of-week alignment. The UI enforces this by disabling the pattern checkbox when epoch is not set.
-- **DST ambiguity**: clocks changing forward/backward is not handled. Validation warns if an exception date falls on a DST transition day. Full DST support is deferred.
+- **DST ambiguity**: clocks changing forward/backward is not handled, and no validation warning is raised for exception dates that fall on a DST transition day. Adding such a warning would require timezone-aware date logic, which conflicts with the "no new dependencies" and determinism goals above. Full DST support (and any associated validation) is deferred to A3.
 
 ### Rules Added to AGENTS.md
 

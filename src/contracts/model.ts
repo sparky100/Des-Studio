@@ -42,7 +42,20 @@ export interface EntityTypeDefinition {
   mttrDistParams?: Record<string, unknown>;
   /** Skills assigned to this server type (must exist in model_json.skills). */
   skills?: string[];
+  /** Per-instance skill assignment (count- or weight-based); overrides `skills` per server. */
+  skillProfiles?: SkillProfile[];
   description?: string;
+}
+
+/** One row of a server type's per-instance skill assignment (V-SKILL-4/5/6). */
+export interface SkillProfile {
+  name?: string;
+  /** Must exist in model_json.skills — see V-SKILL-4. */
+  skills?: string[];
+  /** Exact number of server instances to receive this profile's skills (mutually exclusive with `weight`). */
+  count?: number | string;
+  /** Percent (0-100) chance per server instance of receiving this profile's skills (mutually exclusive with `count`). */
+  weight?: number;
 }
 
 // `time` and `when` are mutually exclusive — enforced by validator rule V48
