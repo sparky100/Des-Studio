@@ -51,13 +51,12 @@ describe("ModelDetail Results tab", () => {
     fireEvent.click(screen.getByRole("button", { name: /^results$/i }));
 
     expect(screen.getByRole("button", { name: "Summary" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Log" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
     expect(screen.getByText(/No results yet/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Run$/i })).toBeInTheDocument();
   });
 
-  test("loads a saved run directly in Results and shows its log", async () => {
+  test("loads a saved run directly in Results", async () => {
     mockFetchRunHistory.mockResolvedValue([
       {
         id: "run-1",
@@ -65,10 +64,6 @@ describe("ModelDetail Results tab", () => {
         ran_at: "2026-05-11T10:00:00.000Z",
         results_json: {
           summary: { served: 3 },
-          log: [
-            { phase: "INIT", time: 0, message: "Run started" },
-            { phase: "END", time: 5, message: "Run finished" },
-          ],
           timeSeries: [
             {
               t: 0,
@@ -110,9 +105,6 @@ describe("ModelDetail Results tab", () => {
     await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith("m1", expect.objectContaining({ archived: false })));
     expect(await screen.findByRole("combobox", { name: /saved run/i })).toHaveValue("run-1");
     expect(screen.getByText(/Morning baseline/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Log" }));
-    expect(screen.getByText(/Run started/i)).toBeInTheDocument();
-    expect(screen.getByText(/Run finished/i)).toBeInTheDocument();
   });
 
   test("opens the Export popover from the Results summary view without crashing", async () => {
