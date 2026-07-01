@@ -1,6 +1,6 @@
 // ui/shared/utils.js — General utility functions
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "goals", "containerTypes"];
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "goals", "containerTypes", "skills"];
 
 /**
  * Normalise an imported JSON payload (raw model or DB envelope) into a

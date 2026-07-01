@@ -160,6 +160,29 @@ describe('model JSON import', () => {
     expect(imported.graph).toEqual({ nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] });
   });
 
+  it('preserves the model-level skills registry when present in imported model_json', () => {
+    const imported = extractImportedModelPayload({
+      name: 'Skills model',
+      model_json: {
+        ...emptyModelJson,
+        skills: ['Surgery', 'Triage'],
+        entityTypes: [
+          { id: 'doc', name: 'Doctor', role: 'server', count: 2, skills: ['Surgery'] },
+        ],
+      },
+    });
+    expect(imported.skills).toEqual(['Surgery', 'Triage']);
+    expect(imported.entityTypes[0].skills).toEqual(['Surgery']);
+  });
+
+  it('defaults skills to an empty array when absent from imported model_json', () => {
+    const imported = extractImportedModelPayload({
+      name: 'No skills model',
+      model_json: emptyModelJson,
+    });
+    expect(imported.skills).toEqual([]);
+  });
+
   it('applies entered name and description when importing pasted JSON', async () => {
     const user = userEvent.setup();
     const importPayload = { name: 'Shared model', description: 'Original', model_json: emptyModelJson };
