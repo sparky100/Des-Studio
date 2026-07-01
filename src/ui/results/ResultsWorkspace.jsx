@@ -10,6 +10,7 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 import { ExportPopover } from "../shared/ExportPopover.jsx";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { buildGoalGaps } from "../../llm/prompts.js";
+import * as XLSX from 'xlsx';
 
 const HIST_W = 360;
 const HIST_H = 140;
@@ -1621,6 +1622,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   });
   const [activeSectionIds, setActiveSectionIds] = useState([]);
   const [showExportPopover, setShowExportPopover] = useState(false);
+  const [showChartDownloadPopover, setShowChartDownloadPopover] = useState(false);
 
   const exportConfigRW = useMemo(() => {
     const expConfig = results?._experiment_config || {};
@@ -1691,6 +1693,54 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     const csvParts = sections.map(s => `# Section: ${s.label}\n${s.csv}\n`);
     const content = header + csvParts.join("\n");
     downloadTextFile(content, `simmodlr-all-chart-data-${slugifyResultName(modelName)}-${timestamp}.csv`, "text/csv;charset=utf-8");
+  }, [model, chartModel]);
+
+  const handleDownloadAllChartDataXlsx = useCallback(() => {
+    const modelName = model?.name || 'model';
+    const timestamp = timestampForFilename();
+    const allSeriesSections = chartModel?.chartSections || [];
+    const wb = XLSX.utils.book_new();
+    let hasData = false;
+    for (const section of allSeriesSections) {
+      const sectionName = (section.title || section.id || 'chart').slice(0, 31);
+      // Series data
+      if (section.series) {
+        for (const series of section.series) {
+          const pts = series.points || [];
+          if (!pts.length) continue;
+          hasData = true;
+          const rows = [['index', 'time', 'value']];
+          pts.forEach((p, i) => rows.push([i + 1, p.t ?? '', p.value ?? '']));
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          ws['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 10 }];
+          const sheetLabel = (series.label || sectionName).slice(0, 31);
+          XLSX.utils.book_append_sheet(wb, ws, sheetLabel);
+        }
+      }
+      // Distribution data
+      if (section.distributions) {
+        for (const dist of section.distributions) {
+          const values = dist.values || [];
+          if (!values.length) continue;
+          hasData = true;
+          const rows = [['rank', 'wait']];
+          values.forEach((v, i) => rows.push([i + 1, v]));
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          ws['!cols'] = [{ wch: 8 }, { wch: 10 }];
+          const sheetLabel = (dist.label || sectionName).slice(0, 31);
+          XLSX.utils.book_append_sheet(wb, ws, sheetLabel);
+        }
+      }
+    }
+    if (!hasData) return;
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `simmodlr-all-chart-data-${slugifyResultName(modelName)}-${timestamp}.xlsx`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, [model, chartModel]);
 
   const hasChartData = !!((chartModel?.chartSections || []).some(s => (s.series || []).length > 0 || (s.distributions || []).length > 0));
@@ -1846,9 +1896,42 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
             )}
           </div>
           {hasChartData && (
-            <Btn small variant="ghost" onClick={handleDownloadAllChartData}>
-              ⬇ Download all chart data (.csv)
-            </Btn>
+            <div style={{ position: "relative" }}>
+              <Btn small variant="ghost" onClick={() => setShowChartDownloadPopover(v => !v)}>
+                ⬇ Download all chart data ▾
+              </Btn>
+              {showChartDownloadPopover && (
+                <>
+                  <div
+                    style={{ position: "fixed", inset: 0, zIndex: 99 }}
+                    onClick={() => setShowChartDownloadPopover(false)}
+                  />
+                  <div style={{
+                    position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 100,
+                    background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 6,
+                    padding: 4, minWidth: 160, boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+                    display: "flex", flexDirection: "column", gap: 0,
+                  }}>
+                    <button type="button" onClick={() => { setShowChartDownloadPopover(false); handleDownloadAllChartData(); }}
+                      style={{ background: "none", border: "none", borderRadius: 4, color: C.text, cursor: "pointer", fontFamily: FONT, fontSize: 12, padding: "7px 8px", textAlign: "left" }}
+                      onMouseEnter={e => { e.currentTarget.style.background = C.bg; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "none"; }}
+                    >
+                      CSV (.csv)
+                      <div style={{ fontSize: 9, color: C.muted, marginTop: 1 }}>One file with section headers</div>
+                    </button>
+                    <button type="button" onClick={() => { setShowChartDownloadPopover(false); handleDownloadAllChartDataXlsx(); }}
+                      style={{ background: "none", border: "none", borderRadius: 4, color: C.text, cursor: "pointer", fontFamily: FONT, fontSize: 12, padding: "7px 8px", textAlign: "left" }}
+                      onMouseEnter={e => { e.currentTarget.style.background = C.bg; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "none"; }}
+                    >
+                      Excel workbook (.xlsx)
+                      <div style={{ fontSize: 9, color: C.muted, marginTop: 1 }}>One sheet per chart</div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       )}

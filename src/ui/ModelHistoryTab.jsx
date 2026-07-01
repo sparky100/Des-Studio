@@ -2,12 +2,13 @@
 import { useState } from "react";
 import { alpha } from "./shared/tokens.js";
 import { Btn, Empty } from "./shared/components.jsx";
-import { csvEscape, downloadTextFile, downloadJsonFile, buildRunHistoryExportPayload, buildRunHistoryCsv } from "./shared/utils.js";
+import { csvEscape, downloadTextFile, downloadJsonFile, buildRunHistoryExportPayload, buildRunHistoryCsv, slugifyResultName, timestampForFilename } from "./shared/utils.js";
 import { ScenarioComparisonTable } from "./shared/ScenarioComparisonTable.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink, fetchModelSchedules, buildSchedulesMap } from "../db/models.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { buildEngine } from "../engine/index.js";
+import * as XLSX from 'xlsx';
 import { compareResults } from "../db/runRecord.js";
 import { compareScenarios } from "../engine/statistics.js";
 import { CI_METRICS, METRIC_LABELS, fmt } from "./execute/executeHelpers.js";
@@ -174,6 +175,17 @@ export function ModelHistoryTab({
     toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as CSV`);
   };
 
+  const exportRunHistoryXlsx = () => {
+    const csv = buildRunHistoryCsv(historyRows);
+    const csvRows = csv.split("\n").map(line => line.split(",").map(cell => cell.replace(/^"|"$/g, '')));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(csvRows);
+    ws['!cols'] = Array(csvRows[0]?.length || 13).fill({ wch: 16 });
+    XLSX.utils.book_append_sheet(wb, ws, 'Run History');
+    XLSX.writeFile(wb, `simmodlr-run-history-${slugifyModelName(model?.name)}.xlsx`);
+    toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as Excel`);
+  };
+
   const handleExportLLMBundle = (row) => {
     const json = row.results_json || {};
     const expConfig = json._experiment_config || {};
@@ -300,6 +312,7 @@ export function ModelHistoryTab({
             >
               <button onClick={() => { exportRunHistoryJson(); setExportListMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export as JSON</button>
               <button onClick={() => { exportRunHistoryCsv(); setExportListMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export as CSV</button>
+              <button onClick={() => { exportRunHistoryXlsx(); setExportListMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export as Excel (.xlsx)</button>
             </div>
           )}
         </div>
