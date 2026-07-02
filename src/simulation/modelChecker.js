@@ -315,8 +315,9 @@ function chk008(model) {
         usedServers.add(schedule.serverTypeName.trim().toLowerCase());
       }
     }
-    // Old format: ASSIGN(queue, serverType) in effect string
-    for (const m of effectString(cEvent).matchAll(/ASSIGN\s*\([^,)]+,\s*([^)]+)\)/gi)) {
+    // ASSIGN(queue, serverType) or skill-qualified ASSIGN(queue, serverType, "Skill" | Entity.attr)
+    // in effect string — capture only the server-type arg, not a trailing skill argument.
+    for (const m of effectString(cEvent).matchAll(/ASSIGN\s*\([^,)]+,\s*([^,)]+)(?:,[^)]*)?\)/gi)) {
       usedServers.add(m[1].trim().toLowerCase());
     }
     // COSEIZE(queue, type1, type2, ...) — every arg after the queue is a server type
