@@ -1128,6 +1128,10 @@ export function validateModel(model) {
     const reachableNames = new Set();
     const ARRIVE_QUEUE_G  = /ARRIVE\s*\([^,)]+,\s*([^)]+)\)/gi;
     const RELEASE_QUEUE_G = /RELEASE\s*\([^,)]+,\s*([^)]+)\)/gi;
+    // RELEASE_COSEIZED([Type1, Type2, ...], TargetQueue) names its destination queue after
+    // the bracketed type list — RELEASE_QUEUE_G's `[^,)]+` for the first arg can't span the
+    // comma-separated bracket contents, so it needs its own bracket-aware pattern.
+    const RELEASE_COSEIZED_QUEUE_G = /RELEASE_COSEIZED\s*\(\s*\[[^\]]+\]\s*,\s*([^)]+)\)/gi;
     // MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue) and SPLIT(EntityType, N, TargetQueue)
     // both route into a queue named in their final argument — same as ARRIVE/RELEASE.
     const MATCH_QUEUE_G = /MATCH\s*\([^,)]+,\s*[^,)]+,\s*[^,)]+,\s*[^,)]+,\s*([^)]+)\)/gi;
@@ -1136,6 +1140,7 @@ export function validateModel(model) {
     const collectFromEffect = (text) => {
       for (const m of text.matchAll(ARRIVE_QUEUE_G))  reachableNames.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(RELEASE_QUEUE_G)) reachableNames.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(RELEASE_COSEIZED_QUEUE_G)) reachableNames.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(MATCH_QUEUE_G))   reachableNames.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(SPLIT_QUEUE_G))   reachableNames.add(m[1].trim().toLowerCase());
     };
