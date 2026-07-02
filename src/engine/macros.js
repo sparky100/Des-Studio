@@ -511,8 +511,20 @@ export const MACROS = [
       const custId = felRef?._contextCustId ?? getLastCustId();
       const srvId  = felRef?._contextSrvId  ?? getLastSrvId();
       const srvById = findEntityById(ctx.index, entities, srvId);
-      const srv    = (srvById && srvById.role === "server" ? srvById : null)
-                  || entities.find(e => e.type.trim().toLowerCase() === srvType.trim().toLowerCase() && e.status === "busy");
+      // Only trust the cached context server id if its type actually matches this
+      // RELEASE(...) call's own type argument — otherwise (e.g. a COSEIZE B-event
+      // whose context id points at a different co-seized type) fall through to a
+      // type-scoped lookup among the servers actually claimed by this customer.
+      const srvByIdIsMatch = srvById && srvById.role === "server" &&
+        srvById.type.trim().toLowerCase() === srvType.trim().toLowerCase();
+      const srv    = srvByIdIsMatch
+        ? srvById
+        : entities.find(e =>
+            e.role === "server" &&
+            e.type.trim().toLowerCase() === srvType.trim().toLowerCase() &&
+            e.status === "busy" &&
+            (custId == null || e.currentCustId === custId)
+          );
       const cust   = srv
         ? (findEntityById(ctx.index, entities, srv.currentCustId) || findEntityById(ctx.index, entities, custId))
         : findEntityById(ctx.index, entities, custId);
@@ -538,6 +550,65 @@ export const MACROS = [
         }
       } else {
         msgs.push(`RELEASE(${srvType}): no busy server+customer pair found`);
+      }
+    },
+  },
+
+  // ── RELEASE_COSEIZED([Type1, Type2, ...][, TargetQueue]) ───────────────────
+  // Releases multiple co-seized servers atomically for the context customer and
+  // returns the customer to waiting — the multi-resource counterpart to RELEASE.
+  // Unlike stacking separate RELEASE() calls (which all resolve against the same
+  // cached primary-server context id and silently leak the other resources), this
+  // resolves each named type independently against whatever this customer actually
+  // has claimed, and releases all of them or none.
+  {
+    name:    "RELEASE_COSEIZED",
+    pattern: /^RELEASE_COSEIZED\(\s*\[([^\]]+)\]\s*(?:,\s*([^,)]+))?\)$/i,
+    apply(match, ctx) {
+      const typeList     = match[1].split(",").map(s => s.trim()).filter(Boolean);
+      const targetQueue  = match[2]?.trim() || null;
+      const typeListLabel = typeList.join(", ");
+      const { entities, clock, getLastCustId, felRef, msgs } = ctx;
+      const custId = felRef?._contextCustId ?? getLastCustId();
+      const cust   = findEntityById(ctx.index, entities, custId);
+
+      if (!cust) {
+        msgs.push(`RELEASE_COSEIZED([${typeListLabel}]): no context customer found`);
+        return;
+      }
+
+      const claimedServers = [];
+      for (const t of typeList) {
+        const srv = entities.find(e =>
+          e.role === "server" &&
+          e.currentCustId === cust.id &&
+          e.type.trim().toLowerCase() === t.toLowerCase() &&
+          (e.status === "busy" || e.status === "serving")
+        );
+        if (!srv) {
+          msgs.push(`RELEASE_COSEIZED([${typeListLabel}]): no claimed ${t} server for customer #${cust.id} — check it matches the scheduling COSEIZE(...) types`);
+          return;
+        }
+        claimedServers.push(srv);
+      }
+
+      if (!cust.stages) cust.stages = [];
+      cust.stages.push(buildStageRecord(cust, claimedServers[0], clock));
+      cust.lastStageStart = clock;
+      const destQueue = targetQueue || cust.lastQueue || cust.queue;
+      delete cust.serviceStart;
+
+      let retired = 0;
+      for (const srv of claimedServers) {
+        releaseServerClaim(cust, srv, clock);
+        retired += retireIdleExcessServers(ctx, srv.type);
+      }
+      const joined = attemptQueueJoin(cust, destQueue, clock, ctx);
+      if (joined) {
+        msgs.push(`#${cust.id} released [${claimedServers.map(s => `#${s.id} (${s.type})`).join(", ")}] → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done]`);
+      }
+      if (retired > 0) {
+        msgs.push(`Server capacity reconciliation: retired ${retired} idle server(s)`);
       }
     },
   },

@@ -1974,3 +1974,62 @@ describe("V5 — EntityAttr skips dist validation", () => {
     });
   });
 });
+
+describe("V38c/V38d — RELEASE / RELEASE_COSEIZED consistency with scheduling COSEIZE", () => {
+  const coseizeModel = (bEffect) => ({
+    entityTypes: [
+      { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+      { id: "surgeon", name: "Surgeon", role: "server", count: 1, attrDefs: [] },
+      { id: "anesthetist", name: "Anesthetist", role: "server", count: 1, attrDefs: [] },
+    ],
+    stateVariables: [],
+    queues: [{ id: "surgery_q", name: "SurgeryQueue", discipline: "FIFO" }],
+    bEvents: [
+      { id: "arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Patient, SurgeryQueue)",
+        schedules: [{ eventId: "arrive", dist: "Fixed", distParams: { value: "1" } }] },
+      { id: "surgery_done", name: "Surgery Complete", scheduledTime: "9999", effect: bEffect, schedules: [] },
+    ],
+    cEvents: [{
+      id: "ce_surgery", name: "Perform Surgery", priority: 1,
+      condition: "queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0",
+      effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+      cSchedules: [{ eventId: "surgery_done", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }],
+    }],
+  });
+
+  it("V38c: warns when two separate RELEASE() calls target co-seized types", () => {
+    const model = coseizeModel(["RELEASE(Surgeon)", "RELEASE(Anesthetist)"]);
+    const { warnings } = validateModel(model);
+    expect(warnings).toEqual(expect.arrayContaining([expect.objectContaining({ code: "V38c" })]));
+  });
+
+  it("V38c: does not warn for a single RELEASE() targeting one co-seized type", () => {
+    const model = coseizeModel(["RELEASE(Surgeon)"]);
+    const { warnings } = validateModel(model);
+    expect(warnings.filter(w => w.code === "V38c")).toHaveLength(0);
+  });
+
+  it("V38c: does not warn for COMPLETE() or a single RELEASE_COSEIZED([...]) call", () => {
+    expect(validateModel(coseizeModel(["COMPLETE()"])).warnings.filter(w => w.code === "V38c")).toHaveLength(0);
+    expect(validateModel(coseizeModel(["RELEASE_COSEIZED([Surgeon, Anesthetist])"])).warnings.filter(w => w.code === "V38c")).toHaveLength(0);
+  });
+
+  it("V38d: warns when RELEASE_COSEIZED([...]) lists a type not part of the scheduling COSEIZE", () => {
+    const model = coseizeModel(["RELEASE_COSEIZED([Surgeon, Nurse])"]);
+    const { warnings } = validateModel(model);
+    expect(warnings).toEqual(expect.arrayContaining([expect.objectContaining({ code: "V38d" })]));
+  });
+
+  it("V38d: does not warn when RELEASE_COSEIZED([...]) types match the scheduling COSEIZE", () => {
+    const model = coseizeModel(["RELEASE_COSEIZED([Surgeon, Anesthetist])"]);
+    const { warnings } = validateModel(model);
+    expect(warnings.filter(w => w.code === "V38d")).toHaveLength(0);
+  });
+
+  it("does not warn V38c/V38d for a B-event not scheduled by any COSEIZE", () => {
+    const model = coseizeModel(["RELEASE(Surgeon)"]);
+    model.cEvents[0].effect = "ASSIGN(SurgeryQueue, Surgeon)";
+    const { warnings } = validateModel(model);
+    expect(warnings.filter(w => w.code === "V38c" || w.code === "V38d")).toHaveLength(0);
+  });
+});

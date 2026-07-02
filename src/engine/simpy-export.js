@@ -8,7 +8,7 @@
 
 // Macros whose SimPy translation requires manual completion
 const TODO_MACRO_SET = new Set([
-  'RENEGE', 'BATCH', 'RENEGE_OLDEST', 'MATCH', 'FAIL', 'REPAIR', 'PREEMPT',
+  'RENEGE', 'BATCH', 'RENEGE_OLDEST', 'MATCH', 'FAIL', 'REPAIR', 'PREEMPT', 'RELEASE_COSEIZED',
 ]);
 
 // ── Public API ────────────────────────────────────────────────────────────────

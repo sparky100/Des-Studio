@@ -282,6 +282,109 @@ describe('BEventEditor — COSEIZE multi-resource awareness', () => {
     expect(options).toContain('Release Anesthetist and route Patient to WardQueue');
   });
 
+  it('shows a combined RELEASE_COSEIZED option for all co-seized resources', () => {
+    const bEvents = [
+      { id: 'b_surgery_done', name: 'Surgery Complete', scheduledTime: '9999',
+        effect: 'COMPLETE()', schedules: [] },
+    ];
+    const cEvents = [
+      { id: 'c_surgery', name: 'Perform Surgery', priority: 1,
+        condition: 'queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0',
+        effect: 'COSEIZE(SurgeryQueue, Surgeon, Anesthetist)',
+        cSchedules: [{ eventId: 'b_surgery_done', dist: 'Triangular',
+          distParams: { min: '10', mode: '20', max: '40' }, useEntityCtx: true }] },
+    ];
+    render(
+      <BEventEditor
+        events={bEvents}
+        onChange={vi.fn()}
+        entityTypes={[
+          { id: 'surgeon', name: 'Surgeon', role: 'server', count: 2, attrDefs: [] },
+          { id: 'anesthetist', name: 'Anesthetist', role: 'server', count: 2, attrDefs: [] },
+          { id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] },
+        ]}
+        queues={[
+          { id: 'surgery_q', name: 'SurgeryQueue', customerType: 'Patient', discipline: 'FIFO' },
+          { id: 'ward_q', name: 'WardQueue', customerType: 'Patient', discipline: 'FIFO' },
+        ]}
+        cEvents={cEvents}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    fireEvent.click(screen.getByText('+ Add Effect'));
+
+    const options = screen.getAllByRole('option').map(o => o.getAttribute('aria-label') || o.textContent);
+    expect(options).toContain('Release Surgeon & Anesthetist (entity stays in current stage)');
+    expect(options).toContain('Release Surgeon & Anesthetist and route Patient to WardQueue');
+  });
+
+  it('warns inline when separate RELEASE() calls are stacked for co-seized types', () => {
+    const bEvents = [
+      { id: 'b_surgery_done', name: 'Surgery Complete', scheduledTime: '9999',
+        effect: ['RELEASE(Surgeon)', 'RELEASE(Anesthetist)'], schedules: [] },
+    ];
+    const cEvents = [
+      { id: 'c_surgery', name: 'Perform Surgery', priority: 1,
+        condition: 'queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0',
+        effect: 'COSEIZE(SurgeryQueue, Surgeon, Anesthetist)',
+        cSchedules: [{ eventId: 'b_surgery_done', dist: 'Triangular',
+          distParams: { min: '10', mode: '20', max: '40' }, useEntityCtx: true }] },
+    ];
+    render(
+      <BEventEditor
+        events={bEvents}
+        onChange={vi.fn()}
+        entityTypes={[
+          { id: 'surgeon', name: 'Surgeon', role: 'server', count: 2, attrDefs: [] },
+          { id: 'anesthetist', name: 'Anesthetist', role: 'server', count: 2, attrDefs: [] },
+          { id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] },
+        ]}
+        queues={[
+          { id: 'surgery_q', name: 'SurgeryQueue', customerType: 'Patient', discipline: 'FIFO' },
+        ]}
+        cEvents={cEvents}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
+    expect(screen.getByText(/stacks separate RELEASE\(\) calls for co-seized resources/i)).toBeInTheDocument();
+  });
+
+  it('does not show the stacked-RELEASE warning for a single RELEASE() or RELEASE_COSEIZED', () => {
+    const bEvents = [
+      { id: 'b_surgery_done', name: 'Surgery Complete', scheduledTime: '9999',
+        effect: ['RELEASE_COSEIZED([Surgeon, Anesthetist])'], schedules: [] },
+    ];
+    const cEvents = [
+      { id: 'c_surgery', name: 'Perform Surgery', priority: 1,
+        condition: 'queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0',
+        effect: 'COSEIZE(SurgeryQueue, Surgeon, Anesthetist)',
+        cSchedules: [{ eventId: 'b_surgery_done', dist: 'Triangular',
+          distParams: { min: '10', mode: '20', max: '40' }, useEntityCtx: true }] },
+    ];
+    render(
+      <BEventEditor
+        events={bEvents}
+        onChange={vi.fn()}
+        entityTypes={[
+          { id: 'surgeon', name: 'Surgeon', role: 'server', count: 2, attrDefs: [] },
+          { id: 'anesthetist', name: 'Anesthetist', role: 'server', count: 2, attrDefs: [] },
+          { id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] },
+        ]}
+        queues={[
+          { id: 'surgery_q', name: 'SurgeryQueue', customerType: 'Patient', discipline: 'FIFO' },
+        ]}
+        cEvents={cEvents}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
+    expect(screen.queryByText(/stacks separate RELEASE\(\) calls for co-seized resources/i)).not.toBeInTheDocument();
+  });
+
   it('does not over-prune RELEASE options when B-event is NOT scheduled by COSEIZE', () => {
     const bEvents = [
       { id: 'b_done', name: 'Service Complete', scheduledTime: '9999',

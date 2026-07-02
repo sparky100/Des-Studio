@@ -588,6 +588,161 @@ describe('COSEIZE macro', () => {
       expect(releaseLogs.length).toBeGreaterThan(0);
     }
   });
+
+  test('RELEASE_COSEIZED releases both servers and routes the entity to the target queue', () => {
+    const model = {
+      entityTypes: [
+        { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "surgeon", name: "Surgeon", role: "server", count: 1, attrDefs: [] },
+        { id: "anesthetist", name: "Anesthetist", role: "server", count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [
+        { id: "surgery_q", name: "SurgeryQueue", discipline: "FIFO" },
+        { id: "ward_q", name: "WardQueue", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "arrive", name: "Patient Arrival", scheduledTime: "0",
+          effect: "ARRIVE(Patient, SurgeryQueue)",
+          schedules: [{ eventId: "arrive", dist: "Fixed", distParams: { value: "4" } }] },
+        { id: "surgery_done", name: "Surgery Complete", scheduledTime: "9999",
+          effect: ["RELEASE_COSEIZED([Surgeon, Anesthetist], WardQueue)"], schedules: [] },
+      ],
+      cEvents: [
+        { id: "ce_surgery", name: "Perform Surgery", priority: 1,
+          condition: "queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0",
+          effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+          cSchedules: [{ eventId: "surgery_done", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }] },
+      ],
+    };
+
+    const engine = buildEngine(model, 42, 0, 20);
+    const result = engine.runAll();
+
+    const releaseLogs = result.log.filter(e => e.message?.includes("released [#") && e.message?.includes("Surgeon") && e.message?.includes("Anesthetist"));
+    expect(releaseLogs.length).toBeGreaterThan(1);
+
+    const inWard = result.entitySummary.filter(e => e.role === "customer" && (e.queue === "WardQueue" || e.lastQueue === "WardQueue"));
+    expect(inWard.length).toBeGreaterThan(1);
+
+    // No leaked/orphaned claims — a busy server always has a currentCustId, and vice versa.
+    const servers = result.entitySummary.filter(e => e.role === "server");
+    servers.forEach(s => {
+      if (s.status === "idle") expect(s.currentCustId).toBeUndefined();
+    });
+  });
+
+  test('RELEASE_COSEIZED aborts without partial release when a listed type was not actually co-seized', () => {
+    const model = {
+      entityTypes: [
+        { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "surgeon", name: "Surgeon", role: "server", count: 1, attrDefs: [] },
+        { id: "anesthetist", name: "Anesthetist", role: "server", count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [
+        { id: "surgery_q", name: "SurgeryQueue", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "arrive", name: "Patient Arrival", scheduledTime: "0",
+          effect: "ARRIVE(Patient, SurgeryQueue)",
+          schedules: [{ eventId: "arrive", dist: "Fixed", distParams: { value: "100" } }] },
+        // Mismatched: COSEIZE only claims Surgeon + Anesthetist, but the release lists a
+        // type ("Nurse") that was never claimed for this customer.
+        { id: "surgery_done", name: "Surgery Complete", scheduledTime: "9999",
+          effect: ["RELEASE_COSEIZED([Surgeon, Nurse])"], schedules: [] },
+      ],
+      cEvents: [
+        { id: "ce_surgery", name: "Perform Surgery", priority: 1,
+          condition: "queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0",
+          effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+          cSchedules: [{ eventId: "surgery_done", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }] },
+      ],
+    };
+
+    const engine = buildEngine(model, 42, 0, 20);
+    const result = engine.runAll();
+
+    const errorLogs = result.log.filter(e => e.message?.includes("no claimed Nurse server"));
+    expect(errorLogs.length).toBeGreaterThan(0);
+
+    // Neither server was released — the Surgeon claim from before the failed call is untouched.
+    const surgeon = result.entitySummary.find(e => e.type === "Surgeon");
+    const anesthetist = result.entitySummary.find(e => e.type === "Anesthetist");
+    expect(surgeon.status).toBe("busy");
+    expect(anesthetist.status).toBe("busy");
+  });
+
+  test('PREEMPT on one co-seized resource also releases the other co-seized resource', () => {
+    const model = {
+      entityTypes: [
+        { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "surgeon", name: "Surgeon", role: "server", count: 1, attrDefs: [] },
+        { id: "anesthetist", name: "Anesthetist", role: "server", count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [{ id: "surgery_q", name: "SurgeryQueue", discipline: "FIFO" }],
+      bEvents: [
+        { id: "arrive", name: "Patient Arrival", scheduledTime: "0",
+          effect: "ARRIVE(Patient, SurgeryQueue)",
+          schedules: [{ eventId: "arrive", dist: "Fixed", distParams: { value: "100" } }] },
+        { id: "surgery_done", name: "Surgery Complete", scheduledTime: "9999",
+          effect: "COMPLETE()", schedules: [] },
+        { id: "preempt_it", name: "Preempt", scheduledTime: "1", effect: "PREEMPT(Surgeon)", schedules: [] },
+      ],
+      cEvents: [
+        { id: "ce_surgery", name: "Perform Surgery", priority: 1,
+          condition: "queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0",
+          effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+          cSchedules: [{ eventId: "surgery_done", dist: "Fixed", distParams: { value: "20" }, useEntityCtx: true }] },
+      ],
+    };
+
+    const engine = buildEngine(model, 42, 0, 5);
+    const result = engine.runAll();
+
+    // The preempted Surgeon frees up too, so the same waiting patient is immediately
+    // re-coseized and both servers end up busy again by run end — that's correct, not a
+    // leak. The proof that the fix actually released the Anesthetist (rather than leaving
+    // it permanently claimed by the preempted patient) is this explicit release log line.
+    const releaseLog = result.log.find(e => e.message?.includes("Anesthetist") && e.message?.includes("COSEIZE release on preempt/fail"));
+    expect(releaseLog).toBeDefined();
+  });
+
+  test('FAIL on one co-seized resource also releases the other co-seized resource', () => {
+    const model = {
+      entityTypes: [
+        { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "surgeon", name: "Surgeon", role: "server", count: 1, attrDefs: [] },
+        { id: "anesthetist", name: "Anesthetist", role: "server", count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [{ id: "surgery_q", name: "SurgeryQueue", discipline: "FIFO" }],
+      bEvents: [
+        { id: "arrive", name: "Patient Arrival", scheduledTime: "0",
+          effect: "ARRIVE(Patient, SurgeryQueue)",
+          schedules: [{ eventId: "arrive", dist: "Fixed", distParams: { value: "100" } }] },
+        { id: "surgery_done", name: "Surgery Complete", scheduledTime: "9999",
+          effect: "COMPLETE()", schedules: [] },
+        { id: "fail_it", name: "Fail", scheduledTime: "1", effect: "FAIL(Surgeon)", schedules: [] },
+      ],
+      cEvents: [
+        { id: "ce_surgery", name: "Perform Surgery", priority: 1,
+          condition: "queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0",
+          effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+          cSchedules: [{ eventId: "surgery_done", dist: "Fixed", distParams: { value: "20" }, useEntityCtx: true }] },
+      ],
+    };
+
+    const engine = buildEngine(model, 42, 0, 5);
+    const result = engine.runAll();
+
+    const surgeon = result.entitySummary.find(e => e.type === "Surgeon");
+    const anesthetist = result.entitySummary.find(e => e.type === "Anesthetist");
+    expect(surgeon.status).toBe("failed");
+    expect(anesthetist.status).toBe("idle");
+    expect(anesthetist.currentCustId).toBeUndefined();
+  });
 });
 
 // ============================================================================

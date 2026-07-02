@@ -397,6 +397,8 @@ Patients arrive every 10 minutes on average. Surgery takes Triangular(10, 20, 40
 
 **Macro:** `COSEIZE(SurgeryQueue, Surgeon, Anesthetist)` — atomically seizes both resource types
 
+**Completion pattern:** the surgery-complete B-event uses `COMPLETE()`, which releases both the surgeon and anesthetist automatically and ends the patient's journey. To keep the patient in the system afterward (e.g. routing to a recovery queue) use `RELEASE_COSEIZED([Surgeon, Anesthetist], RecoveryQueue)` instead — it releases both resources atomically in one call. Never write separate `RELEASE(Surgeon)` + `RELEASE(Anesthetist)` calls on the same B-event: each resolves against the same cached server context, so only the first actually releases anything and the other resource is left stuck busy.
+
 **Discipline:** PRIORITY(urgency) on SurgeryQueue
 
 **State variables:** `surgeriesCompleted`

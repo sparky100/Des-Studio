@@ -67,6 +67,7 @@ is replaced with commented `# TODO` stubs you must complete manually.
 | `FAIL` | Set `resource._capacity = 0` to simulate breakdown |
 | `REPAIR` | Restore capacity after a FAIL |
 | `PREEMPT` | Switch resource to `simpy.PreemptiveResource` |
+| `RELEASE_COSEIZED` | Release each co-seized resource's `simpy.Request` individually |
 
 Each stub includes a **Pattern** comment showing the idiomatic SimPy approach.
 
