@@ -238,7 +238,13 @@ function extractBEvents(model = {}, results = {}) {
     )];
     const hasCond = Array.isArray(ev.routing) && ev.routing.length > 0;
     const hasProb = Array.isArray(ev.probabilisticRouting) && ev.probabilisticRouting.length > 0;
-    const routingType = hasProb ? "probabilistic" : hasCond ? "conditional" : ev.defaultQueueName ? "fixed" : "none";
+    // A bare defaultQueueName with no routing[]/probabilisticRouting[] is INERT — the
+    // engine only consults defaultQueueName as a fallback inside the routing[] block
+    // (see fireBEvent in src/engine/phases.js). Never label this "fixed" routing: that
+    // implies it moves the entity, and it does not — the entity is left stuck forever.
+    const routingType = hasProb ? "probabilistic" : hasCond ? "conditional"
+      : ev.defaultQueueName ? "BROKEN — defaultQueueName with no routing[]/probabilisticRouting[] does nothing"
+      : "none";
     const entry = {
       name: ev.name || ev.id || "Event",
       effectTypes: effectTypes.length ? effectTypes : ["(none)"],
