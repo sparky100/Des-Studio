@@ -410,6 +410,60 @@ describe('SPLIT macro', () => {
     );
     expect(splitLogs.length).toBeGreaterThan(0);
   });
+
+  test('SPLIT clone children can be seized and completed downstream, not just parked in the queue', () => {
+    const model = {
+      entityTypes: [
+        { id: "item", name: "Item", role: "customer", attrDefs: [] },
+        { id: "worker", name: "Worker", role: "server", count: 1, attrDefs: [] },
+        { id: "packer", name: "Packer", role: "server", count: 3, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [
+        { id: "q1", name: "Input", discipline: "FIFO" },
+        { id: "q2", name: "Output", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: "ARRIVE(Item, Input)", scheduledTime: "0", schedules: [] },
+        { id: "complete", name: "Complete", effect: "COMPLETE()", scheduledTime: "9999", schedules: [] },
+        { id: "split-b", name: "Split", effect: "SPLIT(Item, 3, Output)", scheduledTime: "9999", schedules: [] },
+        { id: "pack-complete", name: "Pack Complete", effect: "COMPLETE()", scheduledTime: "9999", schedules: [] },
+      ],
+      cEvents: [
+        {
+          id: "c1",
+          name: "Assign and Split",
+          priority: 1,
+          condition: "queue(Input).length > 0",
+          effect: "ASSIGN(Input, Worker)",
+          cSchedules: [
+            { eventId: "complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true },
+            { eventId: "split-b", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true },
+          ],
+        },
+        {
+          id: "c2",
+          name: "Pack Clones",
+          priority: 2,
+          condition: "queue(Output).length > 0 AND idle(Packer).count > 0",
+          effect: "ASSIGN(Output, Packer)",
+          cSchedules: [{ eventId: "pack-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+        },
+      ],
+    };
+
+    const engine = buildEngine(model, 42, 0, 10);
+    const result = engine.runAll();
+
+    const clones = result.entitySummary.filter(e => e._splitFrom != null);
+    expect(clones.length).toBeGreaterThan(0);
+
+    for (const clone of clones) {
+      const seizeLog = result.log.some(e => e.message?.includes(`#${clone.id} (Output) → serving`));
+      expect(seizeLog).toBe(true);
+      expect(clone.status).toBe("done");
+    }
+  });
 });
 
 // ============================================================================
@@ -807,6 +861,57 @@ describe('MATCH macro', () => {
     // Original entities should be marked as done with _matchedInto
     const matchedEntities = result.entitySummary.filter(e => e._matchedInto != null);
     expect(matchedEntities.length).toBeGreaterThan(0);
+  });
+
+  test('MATCH-produced parent entity can be seized and completed downstream, not just parked in the queue', () => {
+    const model = {
+      entityTypes: [
+        { id: "typeA", name: "TypeA", role: "customer", attrDefs: [] },
+        { id: "typeB", name: "TypeB", role: "customer", attrDefs: [] },
+        { id: "worker", name: "Worker", role: "server", count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [
+        { id: "qA", name: "QueueA", discipline: "FIFO" },
+        { id: "qB", name: "QueueB", discipline: "FIFO" },
+        { id: "qOut", name: "Output", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "arrivalA", name: "Arrival A", effect: "ARRIVE(TypeA, QueueA)", scheduledTime: "0", schedules: [] },
+        { id: "arrivalB", name: "Arrival B", effect: "ARRIVE(TypeB, QueueB)", scheduledTime: "0", schedules: [] },
+        { id: "complete", name: "Complete", effect: "COMPLETE()", scheduledTime: "9999", schedules: [] },
+      ],
+      cEvents: [
+        {
+          id: "c1",
+          name: "Match",
+          priority: 1,
+          condition: "queue(QueueA).length > 0 AND queue(QueueB).length > 0",
+          effect: "MATCH(TypeA, QueueA, TypeB, QueueB, Output)",
+          cSchedules: [],
+        },
+        {
+          id: "c2",
+          name: "Process Matched Pair",
+          priority: 2,
+          condition: "queue(Output).length > 0 AND idle(Worker).count > 0",
+          effect: "ASSIGN(Output, Worker)",
+          cSchedules: [{ eventId: "complete", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }],
+        },
+      ],
+    };
+
+    const engine = buildEngine(model, 42, 0, 10);
+    const result = engine.runAll();
+
+    const matchedParent = result.entitySummary.find(e => e.role === "batch" && e._matchedFrom);
+    expect(matchedParent).toBeDefined();
+
+    // Proves the parent was actually seized from Output (not just sitting there).
+    const seizeLog = result.log.some(e => e.message?.includes(`#${matchedParent.id} (Output) → serving`));
+    expect(seizeLog).toBe(true);
+
+    expect(matchedParent.status).toBe("done");
   });
 
   test('MATCH waits when one queue is empty', () => {

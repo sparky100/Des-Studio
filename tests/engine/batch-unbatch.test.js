@@ -227,7 +227,10 @@ describe('UNBATCH macro', () => {
 });
 
 describe('BATCH + UNBATCH end-to-end flow', () => {
-  test('full batch and unbatch cycle runs with SEIZE and RELEASE in between', () => {
+  test('batched entities are seized as a group, unbatched, then individually re-seized and completed', () => {
+    // Full lifecycle: ARRIVE (x2) → BATCH → ASSIGN seizes the batch parent as a unit →
+    // COMPLETE releases the worker + UNBATCH restores the two children → each child is
+    // individually re-seized from Output Queue and completes on its own.
     const model = {
       entityTypes: [
         { id: "part", name: "Part", role: "customer", attrDefs: [] },
@@ -239,43 +242,71 @@ describe('BATCH + UNBATCH end-to-end flow', () => {
         { id: "q2", name: "Output Queue", discipline: "FIFO" },
       ],
       bEvents: [
-        { id: "arrival", name: "Arrival", effect: "ARRIVE(Part, Accum Queue)", scheduledTime: "0", schedules: [{ eventId: "arrival", dist: "Fixed", distParams: { value: "1" } }] },
-        { id: "complete", name: "Service Complete", effect: "COMPLETE()", scheduledTime: "9999", schedules: [] },
+        // Both arrivals fire in the same tick so BATCH's condition is already true
+        // before ASSIGN gets a chance to seize either part individually.
+        { id: "arrival1", name: "Arrival 1", effect: "ARRIVE(Part, Accum Queue)", scheduledTime: "0", schedules: [] },
+        { id: "arrival2", name: "Arrival 2", effect: "ARRIVE(Part, Accum Queue)", scheduledTime: "0", schedules: [] },
+        { id: "parent-complete", name: "Complete", effect: "COMPLETE()", scheduledTime: "9999", schedules: [] },
         { id: "unbatch-event", name: "Unbatch", effect: "UNBATCH(Output Queue)", scheduledTime: "9999", schedules: [] },
       ],
       cEvents: [
         {
           id: "c1",
           name: "Batch Parts",
+          priority: 1,
           condition: "queue(Accum Queue).length >= 2",
           effect: "BATCH(Accum Queue, 2)",
-          cSchedules: [{ eventId: "process-batch", dist: "Fixed", distParams: { value: "0" }, useEntityCtx: true }],
+          cSchedules: [],
         },
         {
           id: "c2",
-          name: "Process Batch",
+          name: "Seize Batch",
+          priority: 2,
           condition: "queue(Accum Queue).length > 0 AND idle(Worker).count > 0",
           effect: "ASSIGN(Accum Queue, Worker)",
-          cSchedules: [{ eventId: "complete", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }],
+          cSchedules: [
+            { eventId: "parent-complete", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true },
+            { eventId: "unbatch-event", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true },
+          ],
+        },
+        {
+          id: "c3",
+          name: "Process Restored Children",
+          priority: 3,
+          condition: "queue(Output Queue).length > 0 AND idle(Worker).count > 0",
+          effect: "ASSIGN(Output Queue, Worker)",
+          cSchedules: [{ eventId: "parent-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
         },
       ],
-      // Override bEvents to include the process-batch which does RELEASE
     };
 
-    // We need to build a model with the proper flow:
-    // 1. ARRIVE → Accum Queue
-    // 2. BATCH when >= 2 entities (C-Event) → creates batch parent
-    // 3. SEIZE batch (C-Event with ASSIGN)
-    // 4. Process batch (B-Event: RELEASE to Output Queue)
-    // 5. UNBATCH (B-Event: restore children)
-    // 6. SEIZE individual children (C-Event)
-    // 7. COMPLETE each child (B-Event)
-
-    // For simplicity, test that the engine does not crash with batch/unbatch flow
-    const engine = buildEngine(model, 42, 0, 20);
+    const engine = buildEngine(model, 42, 0, 8);
     const result = engine.runAll();
 
-    expect(result.finalTime).toBeGreaterThan(0);
-    expect(result.summary).toBeDefined();
+    // The batch parent itself completed (was seized as a single unit, then released).
+    const batchParent = result.entitySummary.find(e => e.role === "batch");
+    expect(batchParent).toBeDefined();
+    expect(batchParent.status).toBe("done");
+
+    // Recover the original child IDs from the BATCH log line rather than hard-coding them.
+    const batchLogMsg = result.log.find(e => e.message?.includes("BATCH:"))?.message;
+    expect(batchLogMsg).toBeDefined();
+    const batchPart = batchLogMsg.slice(batchLogMsg.indexOf("BATCH:"));
+    const ids = [...batchPart.matchAll(/#(\d+)/g)].map(m => Number(m[1]));
+    const childIds = ids.slice(0, -1);
+    expect(childIds.length).toBe(2);
+
+    // Both children must have been individually re-seized from Output Queue after
+    // UNBATCH restored them — not just left sitting in the queue.
+    for (const childId of childIds) {
+      const reseizeLog = result.log.some(e =>
+        e.message?.includes(`#${childId} (Output Queue) → serving`)
+      );
+      expect(reseizeLog).toBe(true);
+
+      const child = result.entitySummary.find(e => e.id === childId);
+      expect(child).toBeDefined();
+      expect(child.status).toBe("done");
+    }
   });
 });
