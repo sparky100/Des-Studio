@@ -56,6 +56,11 @@ function buildAllFedQueues(bEvents) {
   for (const bEvent of bEvents) {
     for (const m of effectString(bEvent).matchAll(/RELEASE\s*\([^,)]+,\s*([^)]+)/gi))
       queues.add(m[1].trim().toLowerCase());
+    // RELEASE_COSEIZED([Type1, Type2, ...], TargetQueue) names its destination after the
+    // bracketed type list — the plain RELEASE regex above can't span that comma-separated
+    // bracket content, so it needs its own bracket-aware pattern.
+    for (const m of effectString(bEvent).matchAll(/RELEASE_COSEIZED\s*\(\s*\[[^\]]+\]\s*,\s*([^)]+)/gi))
+      queues.add(m[1].trim().toLowerCase());
     for (const branch of bEvent.routing || [])
       if (branch.queueName) queues.add(branch.queueName.trim().toLowerCase());
     for (const branch of bEvent.probabilisticRouting || [])
