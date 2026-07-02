@@ -1596,6 +1596,90 @@ export function validateModel(model) {
     });
   });
 
+  // V-SKILL-2b: ASSIGN(Queue, ANY, "Skill") — skill must exist on at least one server type,
+  // otherwise the cross-type pool is guaranteed empty and the effect will never match.
+  [...bEvents, ...cEvents].forEach(ev => {
+    const text = effectText(ev.effect);
+    const anyAssignMatch = text.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*ANY\s*,\s*"([^"]+)"\s*\)/gi);
+    if (anyAssignMatch) {
+      anyAssignMatch.forEach(m => {
+        const parts = m.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*ANY\s*,\s*"([^"]+)"\s*\)/i);
+        if (!parts) return;
+        const skill = parts[2].trim();
+        const coveredByAnyType = entityTypes.some(et => {
+          if (et.role !== 'server') return false;
+          if (Array.isArray(et.skills) && et.skills.includes(skill)) return true;
+          return (et.skillProfiles || []).some(p => (p.skills || []).includes(skill));
+        });
+        if (!coveredByAnyType) {
+          warn('V-SKILL-2',
+            `Effect '${m.trim()}' uses ASSIGN(..., ANY, "${skill}") but no server type has skill '${skill}' assigned. This will never match.`,
+            ev.effect ? 'cevents' : 'bevents',
+            { eventIds: [ev.id] });
+        }
+      });
+    }
+  });
+
+  // V62: Entity type literally named "ANY" collides with the ASSIGN cross-type-pooling sentinel
+  entityTypes.filter(et => et.role === 'server' && (et.name || '').trim().toUpperCase() === 'ANY').forEach(et => {
+    warn('V62',
+      `Server type '${et.name}' is named 'ANY', which collides with the reserved ASSIGN(..., ANY, ...) cross-type pooling token. Rename this server type to avoid ambiguous ASSIGN behavior.`,
+      'entities',
+      { entityTypeIds: [et.id] });
+  });
+
+  // V63: CANCEL(EventName) must reference a real B-Event or C-Event name
+  const knownEventNames = new Set([...bEvents, ...cEvents].map(e => (e.name || '').trim()).filter(Boolean));
+  [...bEvents, ...cEvents].forEach(ev => {
+    const text = effectText(ev.effect);
+    const cancelMatches = text.match(/CANCEL\s*\(\s*(\w+)\s*\)/gi);
+    if (cancelMatches) {
+      cancelMatches.forEach(m => {
+        const parts = m.match(/CANCEL\s*\(\s*(\w+)\s*\)/i);
+        if (!parts) return;
+        const eventName = parts[1].trim();
+        if (!knownEventNames.has(eventName)) {
+          err('V63',
+            `Effect '${m.trim()}' references event '${eventName}' which does not match any B-Event or C-Event name in this model.`,
+            ev.effect ? 'cevents' : 'bevents',
+            { eventIds: [ev.id] });
+        }
+      });
+    }
+  });
+
+  // V64: ROUND_ROBIN(StateVar, N) — N must be a positive integer
+  [...bEvents, ...cEvents].forEach(ev => {
+    const text = effectText(ev.effect);
+    const rrMatches = text.match(/ROUND_ROBIN\s*\(\s*\w+\s*,\s*(-?\d+)\s*\)/gi);
+    if (rrMatches) {
+      rrMatches.forEach(m => {
+        const parts = m.match(/ROUND_ROBIN\s*\(\s*\w+\s*,\s*(-?\d+)\s*\)/i);
+        if (!parts) return;
+        const n = parseInt(parts[1], 10);
+        if (!Number.isFinite(n) || n <= 0) {
+          err('V64',
+            `Effect '${m.trim()}' — ROUND_ROBIN's N must be a positive integer, got '${parts[1]}'.`,
+            ev.effect ? 'cevents' : 'bevents',
+            { eventIds: [ev.id] });
+        }
+      });
+    }
+  });
+
+  // V65: SkillProfile.priority, if present, must be numeric
+  entityTypes.filter(et => et.role === 'server' && Array.isArray(et.skillProfiles)).forEach(et => {
+    et.skillProfiles.forEach((profile, pi) => {
+      if (profile.priority != null && !Number.isFinite(Number(profile.priority))) {
+        err('V65',
+          `Entity class '${et.name}' profile '${profile.name || `#${pi + 1}`}' has a non-numeric priority '${profile.priority}'.`,
+          'entities',
+          { entityTypeIds: [et.id] });
+      }
+    });
+  });
+
   // V-CAL-1: Calendar conditions require epoch
   const calendarVars = ['isWeekday', 'isWeekend', 'hourOfDay', 'dayOfWeek'];
   const hasEpoch = !!(model.epoch && model.epoch.trim());

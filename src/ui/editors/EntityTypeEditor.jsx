@@ -529,6 +529,22 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                                     opacity:hasWeight?1:0.4,
                                   }}/>%
                               </label>
+                              <label title="ASSIGN prefers higher-priority profiles when multiple idle servers match a skill (default 0)."
+                                style={{display:"flex",alignItems:"center",gap:3,fontFamily:FONT,fontSize:10,color:C.muted,cursor:"help"}}>
+                                Priority:
+                                <input type="number" value={profile.priority ?? ""} placeholder="0"
+                                  onChange={e=>{
+                                    const n=[...et.skillProfiles];
+                                    const raw = e.target.value;
+                                    n[pi]={...n[pi],priority: raw===""?undefined:Number(raw)};
+                                    upd(i,"skillProfiles",n);
+                                  }}
+                                  style={{
+                                    background:"transparent",border:`1px solid ${C.border}`,width:40,
+                                    borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,
+                                    padding:"2px 4px",outline:"none",textAlign:"center",
+                                  }}/>
+                              </label>
                             </div>
                           </div>
                         );

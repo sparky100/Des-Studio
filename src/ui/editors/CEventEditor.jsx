@@ -325,7 +325,8 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                             options={assignOptions(entityTypes, stateVariables, queues, ev.name, containerTypes, contextServer, skills)}
                             expressionContext={{
                               stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
-                              attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean))
+                              attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean)),
+                              eventNames: [...(bEvents||[]),...(events||[])].map(e=>e.name).filter(Boolean)
                             }}
                             onChange={arr=>upd(i,'effect',arr)}
                           />

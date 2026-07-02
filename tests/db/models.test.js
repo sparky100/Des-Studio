@@ -1344,6 +1344,63 @@ describe('Sprint 71 — persistence layer', () => {
       const undefinedKeys = Object.keys(json).filter(k => json[k] === undefined);
       expect(undefinedKeys).toHaveLength(0);
     });
+
+    // Skill-based server preference (ASSIGN cross-type pooling) adds an optional
+    // `priority` field to entityTypes[].skillProfiles[] entries. It rides along
+    // inside the already-whitelisted `entityTypes` array, but per this repo's
+    // schema contract every model_json field addition needs an explicit
+    // round-trip assertion.
+    it('round-trips entityTypes[].skillProfiles[].priority through saveModel and norm', async () => {
+      const model = {
+        name: 'Skill priority test',
+        entityTypes: [
+          {
+            id: 'et-doctor', name: 'Doctor', role: 'server', count: 2,
+            skills: ['Surgery'],
+            skillProfiles: [
+              { name: 'Specialist', skills: ['Surgery'], count: 1, priority: 10 },
+              { name: 'Generalist', skills: ['Surgery'], count: 1, priority: 1 },
+            ],
+          },
+        ],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'skill-priority-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      // entityTypes is stored both as the dedicated `entity_types` column (what
+      // norm() actually reads back) and duplicated inside model_json — assert
+      // priority survives in both places.
+      expect(insertArg.entity_types[0].skillProfiles[0].priority).toBe(10);
+      expect(insertArg.entity_types[0].skillProfiles[1].priority).toBe(1);
+      expect(insertArg.model_json.entityTypes[0].skillProfiles[0].priority).toBe(10);
+
+      // Round trip back out through norm(), simulating a row fetched from Supabase —
+      // entityTypes comes from the `entity_types` column, not model_json.
+      const dbRow = {
+        id: 'skill-priority-id',
+        name: model.name,
+        owner_id: 'u1',
+        entity_types: insertArg.entity_types,
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: insertArg.model_json,
+      };
+      const normalized = norm(dbRow);
+      expect(normalized.entityTypes[0].skillProfiles[0].priority).toBe(10);
+      expect(normalized.entityTypes[0].skillProfiles[1].priority).toBe(1);
+    });
   });
 
   // ── 71.1.2  norm() structural validity ───────────────────────────────────

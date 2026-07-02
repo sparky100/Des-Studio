@@ -105,6 +105,22 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       });
     }));
   }
+  // Cross-type pooling: ASSIGN(Queue|Type, ANY, "Skill") — seize an idle server
+  // of any type that has the skill, rather than a fixed server type.
+  if(modelSkills.length > 0) {
+    opts.push({label:'── ASSIGN (any type with skill) ──', value:'', disabled:true});
+    modelSkills.forEach(skill => {
+      if (queues.length > 0) {
+        queues.forEach(q => {
+          opts.push({label:`Start ${cName} with any type (${skill}) and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`, value:`ASSIGN(${q.name}, ANY, "${skill}")`});
+        });
+      } else {
+        custs.forEach(c => {
+          opts.push({label:`Start ${cName} with any type (${skill}) and ${c}`, value:`ASSIGN(${c}, ANY, "${skill}")`});
+        });
+      }
+    });
+  }
   // BATCH options — C-Event macro
   if(queues.length > 0) {
     opts.push({label:'── BATCH (accumulate entities, fire when queue >= batchSize) ──',value:'',disabled:true});
@@ -357,9 +373,9 @@ const DropField = ({value, onChange, options, color}) => {
 const categorizeEffect = (value) => {
   const v = String(value||"").trim();
   if (!v) return 'other';
-  if (/^ARRIVE\s*\(/i.test(v)||/^BATCH\s*\(/i.test(v)||/^UNBATCH\s*\(/i.test(v)||/^SPLIT\s*\(/i.test(v)||/^MATCH\s*\(/i.test(v)||/^RENEGE/i.test(v)) return 'queue';
+  if (/^ARRIVE\s*\(/i.test(v)||/^BATCH\s*\(/i.test(v)||/^UNBATCH\s*\(/i.test(v)||/^SPLIT\s*\(/i.test(v)||/^MATCH\s*\(/i.test(v)||/^RENEGE/i.test(v)||/^CANCEL\s*\(/i.test(v)) return 'queue';
   if (/^(COMPLETE|RELEASE|ASSIGN|COSEIZE)\s*\(/i.test(v)) return 'service';
-  if (/^SET_ATTR\s*\(/i.test(v)||/^SET\s*\(/i.test(v)||/(\+\+|--|[+\-]=\s*\d|=\s*\d)/.test(v)) return 'state';
+  if (/^SET_ATTR\s*\(/i.test(v)||/^SET\s*\(/i.test(v)||/^ROUND_ROBIN\s*\(/i.test(v)||/(\+\+|--|[+\-]=\s*\d|=\s*\d)/.test(v)) return 'state';
   if (/^COST\s*\(/i.test(v)) return 'cost';
   if (/^(PREEMPT|FAIL|REPAIR)\s*\(/i.test(v)) return 'server';
   if (/^(DRAIN|FILL)\s*\(/i.test(v)) return 'container';
@@ -373,6 +389,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const { C, FONT } = useTheme();
   const stateVars = expressionContext?.stateVars || [];
   const attrs = expressionContext?.attrs || [];
+  const eventNames = expressionContext?.eventNames || [];
   const CATEGORY_CONFIG = {
     queue:     {label:'Queue',     color:C.cEvent},
     service:   {label:'Service',   color:C.green},
@@ -397,11 +414,18 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
     setExprValue('');
   };
   const addExpr = () => {
+    if (exprMacro === 'CANCEL') {
+      if (!exprName) return;
+      add(`CANCEL(${exprName})`);
+      setExprName('');
+      return;
+    }
     if (!exprValue.trim()) return;
     let val;
     if (exprMacro === 'COST') val = `COST(${exprValue.trim()})`;
     else if (exprMacro === 'SET' && exprName) val = `SET(${exprName}, ${exprValue.trim()})`;
     else if (exprMacro === 'SET_ATTR' && exprName) val = `SET_ATTR(${exprName}, ${exprValue.trim()})`;
+    else if (exprMacro === 'ROUND_ROBIN' && exprName) val = `ROUND_ROBIN(${exprName}, ${exprValue.trim()})`;
     if (!val) return;
     add(val);
     setExprName('');
@@ -494,9 +518,23 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   border:`1px solid ${exprMacro==='COST'?C.server:C.border}`,
                   borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
                   color:exprMacro==='COST'?C.server:C.muted,cursor:'pointer',fontWeight:700}}>COST</button>
+              {stateVars.length>0&&(
+                <button onClick={()=>{setExprMacro('ROUND_ROBIN');if(!exprName&&stateVars[0])setExprName(stateVars[0]);}}
+                  style={{background:exprMacro==='ROUND_ROBIN'?C.amber+'22':'transparent',
+                    border:`1px solid ${exprMacro==='ROUND_ROBIN'?C.amber:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='ROUND_ROBIN'?C.amber:C.muted,cursor:'pointer',fontWeight:700}}>ROUND_ROBIN</button>
+              )}
+              {eventNames.length>0&&(
+                <button onClick={()=>{setExprMacro('CANCEL');setExprValue('');if(!exprName&&eventNames[0])setExprName(eventNames[0]);}}
+                  style={{background:exprMacro==='CANCEL'?C.red+'22':'transparent',
+                    border:`1px solid ${exprMacro==='CANCEL'?C.red:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='CANCEL'?C.red:C.muted,cursor:'pointer',fontWeight:700}}>CANCEL</button>
+              )}
             </div>
             <div style={{display:'flex',gap:6,alignItems:'center'}}>
-              {exprMacro==='SET'&&stateVars.length>0&&(
+              {(exprMacro==='SET'||exprMacro==='ROUND_ROBIN')&&stateVars.length>0&&(
                 <select value={exprName||stateVars[0]} onChange={e=>setExprName(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
                     color:C.amber,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:120,flexShrink:0}}>
@@ -510,16 +548,25 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   {attrs.map(a=><option key={a} value={a}>{a}</option>)}
                 </select>
               )}
-              <input
-                value={exprValue}
-                onChange={e=>setExprValue(e.target.value)}
-                onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
-                placeholder={exprMacro==='COST'?'e.g. Entity.priority * 2.5':`e.g. ${exprName||stateVars[0]||'x'} + 1`}
-                style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
-                  color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}
-              />
+              {exprMacro==='CANCEL'&&eventNames.length>0&&(
+                <select value={exprName||eventNames[0]} onChange={e=>setExprName(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.red}55`,borderRadius:4,
+                    color:C.red,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:160,flexShrink:0}}>
+                  {eventNames.map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+              )}
+              {exprMacro!=='CANCEL'&&(
+                <input
+                  value={exprValue}
+                  onChange={e=>setExprValue(e.target.value)}
+                  onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
+                  placeholder={exprMacro==='COST'?'e.g. Entity.priority * 2.5':exprMacro==='ROUND_ROBIN'?'e.g. 3 (number of destinations)':`e.g. ${exprName||stateVars[0]||'x'} + 1`}
+                  style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                    color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}
+                />
+              )}
               <Btn small variant="ghost" onClick={addExpr}
-                disabled={!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0]))}>Add</Btn>
+                disabled={exprMacro==='CANCEL'?!exprName:(!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0])))}>Add</Btn>
             </div>
           </div>
         </div>

@@ -157,7 +157,7 @@ export function applyShiftChange(ev, ctx) {
 // Returns { msgs, felEntries }
 // lastCustId / lastSrvId are returned via the context refs object
 export function applyEffect(effect, ctx) {
-  const { entities, state, model, clock, felRef, helpers } = ctx;
+  const { entities, state, model, clock, felRef, helpers, fel } = ctx;
   if (!effect || !effect.trim()) {
     // No macros ran, so carry the scheduled context straight through — callers
     // (e.g. fireBEvent's routing block) rely on ctx._lastCustId/_lastSrvId to
@@ -173,7 +173,7 @@ export function applyEffect(effect, ctx) {
   let lastSrvId    = felRef?._contextSrvId  ?? null;
 
   const macroCtx = {
-    entities, state, model, clock, felRef, helpers,
+    entities, state, model, clock, felRef, helpers, fel,
     nextId: ctx.nextId,
     rng:    ctx.rng,
     entityFilter: ctx.entityFilter ?? null,

@@ -56,6 +56,8 @@ export interface SkillProfile {
   count?: number | string;
   /** Percent (0-100) chance per server instance of receiving this profile's skills (mutually exclusive with `count`). */
   weight?: number;
+  /** Preference tier for ASSIGN skill matching — higher values are preferred over lower ones (default 0). */
+  priority?: number;
 }
 
 // `time` and `when` are mutually exclusive — enforced by validator rule V48

@@ -280,18 +280,23 @@ export const MACROS = [
     },
   },
 
-// ── ASSIGN(CustomerType|QueueName, ServerType[, "Skill"|Entity.attrName]) ───────
+// ── ASSIGN(CustomerType|QueueName, ServerType|ANY[, "Skill"|Entity.attrName]) ──
   // Optional 3rd parameter: a skill name (quoted string) OR Entity.attrName
   // (unquoted, resolves from the entity's attribute at runtime). When a skill is
   // specified, only idle servers whose server type has that skill are considered.
   // When Entity.attrName is used, the skill is read from the first waiting entity;
   // if the attribute is null/empty, no skill filter is applied.
+  // ServerType may be the reserved token ANY (case-insensitive) to pool idle
+  // servers across every server type, filtered by the given skill. When
+  // multiple candidates match, servers with a higher SkillProfile.priority
+  // are preferred; ties keep FIFO-by-idle-time order.
   {
     name:    "ASSIGN",
     pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"([^"]+)"|\s*,\s*Entity\.(\w+))?\)$/i,
     apply(match, ctx) {
       const cType = match[1].trim();
       const sType = match[2].trim();
+      const isAnyType = sType.toUpperCase() === "ANY";
       const skillLiteral = match[3] ? match[3].trim() : null;
       const skillAttrName = match[4] ? match[4].trim() : null;
       const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs, _arbitration } = ctx;
@@ -306,7 +311,9 @@ export const MACROS = [
         : null;
 
       const candidates = listWaiting(queueToken, discipline, entities, filterFn, !!matchedQ, true, ctx.index);
-      const allIdleServers = helpers.idleOf(sType) || [];
+      const allIdleServers = isAnyType
+        ? (helpers.allServers ? helpers.allServers().filter(s => s.status === "idle" && !s._suspended) : [])
+        : (helpers.idleOf(sType) || []);
 
       const cust = candidates[0] ?? null;
 
@@ -317,10 +324,19 @@ export const MACROS = [
         skill = (raw !== null && raw !== undefined && raw !== '') ? String(raw) : null;
       }
 
-      // Filter by skill
+      // Filter by skill (cross-type pooling uses the dedicated helper so it
+      // stays consistent with per-type skill resolution)
       const idleServers = skill
-        ? allIdleServers.filter(s => helpers.hasSkillType(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill)))
+        ? (isAnyType
+            ? (helpers.idleOfAnySkill ? helpers.idleOfAnySkill(skill) : []) || []
+            : allIdleServers.filter(s => helpers.hasSkillType(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill))))
         : allIdleServers;
+
+      // Skill-based preference: higher SkillProfile.priority wins; stable
+      // sort preserves FIFO-by-idle-time order within the same tier.
+      const rankedServers = skill
+        ? [...idleServers].sort((a, b) => (b._skillPriority || 0) - (a._skillPriority || 0))
+        : idleServers;
 
       const arbitration = {
         type: "server",
@@ -334,10 +350,10 @@ export const MACROS = [
           key: "arrivalTime",
           value: e.arrivalTime || 0,
         })),
-        idleServers: idleServers.map(s => ({ serverId: s.id, type: s.type, skill: skill || undefined })),
+        idleServers: rankedServers.map(s => ({ serverId: s.id, type: s.type, skill: skill || undefined, priority: s._skillPriority || 0 })),
       };
 
-      const srv = idleServers[0] ?? null;
+      const srv = rankedServers[0] ?? null;
 
       if (cust && srv) {
         const queuedAt = cust.queue;
@@ -349,14 +365,15 @@ export const MACROS = [
         cust.ceventName    = ctx.ceventName;
         setLastCustId(cust.id);
         setLastSrvId(srv.id);
-        arbitration.winner = { entityId: cust.id, serverId: srv.id, skill: skill || undefined, skillSource: skillAttrName || undefined };
+        arbitration.winner = { entityId: cust.id, serverId: srv.id, serverType: srv.type, skill: skill || undefined, skillSource: skillAttrName || undefined };
         arbitration.losers = candidates
           .filter(e => e.id !== cust.id)
           .map(e => ({ entityId: e.id, reason: "lower priority or later arrival" }));
         if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
         const skillSuffix = skill ? ` (skill: ${skill}${skillAttrName ? ` ← Entity.${skillAttrName}` : ''})` : '';
+        const servedByType = isAnyType ? srv.type : sType;
         msgs.push(
-          `#${cust.id} (${cType}) → serving by #${srv.id} (${sType})${skillSuffix} ` +
+          `#${cust.id} (${cType}) → serving by #${srv.id} (${servedByType})${skillSuffix} ` +
           `[waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
         );
       } else {
@@ -1250,6 +1267,61 @@ export const MACROS = [
       const value   = evalEntityExpr(expr, { state, clock, entity });
       state[varName] = value;
       msgs.push(`SET ${varName} = ${value}`);
+    },
+  },
+
+  // ── CANCEL(EventName) ──────────────────────────────────────────────────────
+  // Removes the pending FEL entry named EventName that was scheduled for the
+  // current context entity (e.g. a competing timeout scheduled by a prior
+  // effect). No-op with a log message if no such entry is pending.
+  {
+    name:    "CANCEL",
+    pattern: /^CANCEL\((\w+)\)$/i,
+    apply(match, ctx) {
+      const eventName = match[1].trim();
+      const { fel, msgs } = ctx;
+      const entity = resolveContextEntity(ctx);
+      if (!entity) {
+        msgs.push(`CANCEL(${eventName}): no context entity — use after ARRIVE, ASSIGN, or COSEIZE`);
+        return;
+      }
+      if (!Array.isArray(fel)) {
+        msgs.push(`CANCEL(${eventName}): no scheduling context available`);
+        return;
+      }
+      let removed = 0;
+      for (let i = fel.length - 1; i >= 0; i--) {
+        const entry = fel[i];
+        if ((entry.name === eventName || entry.id === eventName) && entry._contextCustId === entity.id) {
+          fel.splice(i, 1);
+          removed++;
+        }
+      }
+      msgs.push(removed > 0
+        ? `CANCEL(${eventName}): removed ${removed} pending event(s) for #${entity.id}`
+        : `CANCEL(${eventName}): no pending event found for #${entity.id}`);
+    },
+  },
+
+  // ── ROUND_ROBIN(StateVar, N) ───────────────────────────────────────────────
+  // Advances StateVar to the next index in a 0..N-1 rotation (wrapping back to
+  // 0 after N-1). Pair with routing[] rows that compare StateVar to each
+  // literal index to cycle entities across N destinations.
+  {
+    name:    "ROUND_ROBIN",
+    pattern: /^ROUND_ROBIN\((\w+)\s*,\s*(\d+)\)$/i,
+    apply(match, ctx) {
+      const varName = match[1].trim();
+      const n = parseInt(match[2], 10);
+      const { state, msgs } = ctx;
+      if (!Number.isFinite(n) || n <= 0) {
+        msgs.push(`ROUND_ROBIN(${varName}): N must be a positive integer`);
+        return;
+      }
+      const current = Number.isFinite(state[varName]) ? state[varName] : -1;
+      const next = (current + 1) % n;
+      state[varName] = next;
+      msgs.push(`ROUND_ROBIN ${varName} = ${next}`);
     },
   },
 

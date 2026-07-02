@@ -230,7 +230,7 @@ function normalizeCEventSchedule(schedule = {}) {
 }
 
 function assignParts(effect) {
-  const match = effectText(effect).match(/ASSIGN\(([^,]+)\s*,\s*([^)]+)\)/i);
+  const match = effectText(effect).match(/ASSIGN\(([^,]+)\s*,\s*([^,)]+)(?:\s*,.*)?\)/i);
   return match ? { queueOrCustomer: match[1].trim(), server: match[2].trim() } : null;
 }
 

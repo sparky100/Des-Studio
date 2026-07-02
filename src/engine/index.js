@@ -921,6 +921,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     model: runtimeModel,
     clock,
     felRef,
+    fel,
     helpers: makeHelpers(entities, runtimeModel, queueIndex),
     index: queueIndex,
     nextId,
