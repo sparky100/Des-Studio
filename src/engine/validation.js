@@ -661,6 +661,33 @@ export function validateModel(model) {
     }
   });
 
+  // ── V61: defaultQueueName is only consulted as a fallback inside a routing[] table
+  // (see fireBEvent in engine/phases.js) — a bare defaultQueueName with no routing[]
+  // or probabilisticRouting[] does nothing at runtime. If nothing else resolves the
+  // entity (no COMPLETE()/RENEGE(ctx)/RELEASE with an explicit queue arg), the entity
+  // is left stuck in "serving"/"waiting" status forever — a silent, total pathway
+  // blockage past this event.
+  bEvents.forEach(b => {
+    if (!b.defaultQueueName) return;
+    const hasConditionalRouting = Array.isArray(b.routing) && b.routing.some(isMeaningfulRoutingBranch);
+    const hasProbabilisticRouting = Array.isArray(b.probabilisticRouting) && b.probabilisticRouting.length > 0;
+    if (hasConditionalRouting || hasProbabilisticRouting) return; // legitimate fallback usage
+    const bLabel = `B-Event '${b.name || b.id}'`;
+    const effectStr = effectText(b.effect);
+    const resolvesEntity = hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr) || hasReleaseTargetQueue(effectStr);
+    if (!resolvesEntity) {
+      err('V61',
+        `${bLabel} sets defaultQueueName ('${b.defaultQueueName}') but has no routing[] or probabilisticRouting[] table — defaultQueueName only takes effect as a fallback inside one of those, so it does nothing here. The entity is never routed anywhere and is stuck forever. Use probabilisticRouting: [{ probability: 1.0, queueName: '${b.defaultQueueName}' }] for a single fixed destination, add a routing[] table, or RELEASE(Server, '${b.defaultQueueName}') if a server is held.`,
+        'bevents',
+        { eventIds: [b.id] });
+    } else {
+      warn('V61',
+        `${bLabel} sets defaultQueueName ('${b.defaultQueueName}') but has no routing[] or probabilisticRouting[] table, so the field is unused dead configuration (the entity is already resolved another way). Remove defaultQueueName, or add a routing[] table that uses it.`,
+        'bevents',
+        { eventIds: [b.id] });
+    }
+  });
+
   // ── V19: Server entity type count must be integer >= 1 (F10.3) ─────────────
   entityTypes.forEach(et => {
     if (et.role !== "server") return;

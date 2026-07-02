@@ -1110,6 +1110,75 @@ describe("V47 — DELAY queue reference and useEntityCtx nudge", () => {
   });
 });
 
+describe("V61 — bare defaultQueueName with no routing[]/probabilisticRouting[]", () => {
+  it("errors when defaultQueueName is set with an empty effect and no routing table (the stuck-entity case)", () => {
+    const model = {
+      ...baseModel,
+      queues: [{ id: "q", name: "Next Queue", discipline: "FIFO" }],
+      bEvents: [{ id: "b1", name: "Delay Complete", effect: [], defaultQueueName: "Next Queue", schedules: [] }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V61")).toBe(true);
+  });
+
+  it("passes when defaultQueueName is paired with a routing[] table", () => {
+    const model = {
+      ...baseModel,
+      queues: [
+        { id: "q", name: "Urgent Queue", discipline: "FIFO" },
+        { id: "q2", name: "Standard Queue", discipline: "FIFO" },
+      ],
+      bEvents: [{
+        id: "b1", name: "Assess Complete", effect: [],
+        routing: [{ condition: { variable: "Entity.severity", operator: "<=", value: 2 }, queueName: "Urgent Queue" }],
+        defaultQueueName: "Standard Queue",
+        schedules: [],
+      }],
+    };
+    const { errors, warnings } = validateModel(model);
+    expect(errors.filter(e => e.code === "V61")).toHaveLength(0);
+    expect(warnings.filter(w => w.code === "V61")).toHaveLength(0);
+  });
+
+  it("passes when defaultQueueName is paired with probabilisticRouting", () => {
+    const model = {
+      ...baseModel,
+      queues: [{ id: "q", name: "Next Queue", discipline: "FIFO" }],
+      bEvents: [{
+        id: "b1", name: "Delay Complete", effect: [],
+        probabilisticRouting: [{ probability: 1.0, queueName: "Next Queue" }],
+        defaultQueueName: "Next Queue",
+        schedules: [],
+      }],
+    };
+    const { errors, warnings } = validateModel(model);
+    expect(errors.filter(e => e.code === "V61")).toHaveLength(0);
+    expect(warnings.filter(w => w.code === "V61")).toHaveLength(0);
+  });
+
+  it("warns (not errors) when defaultQueueName is unused dead config but the entity is otherwise resolved via COMPLETE()", () => {
+    const model = {
+      ...baseModel,
+      queues: [{ id: "q", name: "Next Queue", discipline: "FIFO" }],
+      bEvents: [{ id: "b1", name: "Delay Complete", effect: ["COMPLETE()"], defaultQueueName: "Next Queue", schedules: [] }],
+    };
+    const { errors, warnings } = validateModel(model);
+    expect(errors.filter(e => e.code === "V61")).toHaveLength(0);
+    expect(warnings.some(w => w.code === "V61")).toBe(true);
+  });
+
+  it("passes when defaultQueueName is unset", () => {
+    const model = {
+      ...baseModel,
+      queues: [{ id: "q", name: "Next Queue", discipline: "FIFO" }],
+      bEvents: [{ id: "b1", name: "Delay Complete", effect: [], schedules: [] }],
+    };
+    const { errors, warnings } = validateModel(model);
+    expect(errors.filter(e => e.code === "V61")).toHaveLength(0);
+    expect(warnings.filter(w => w.code === "V61")).toHaveLength(0);
+  });
+});
+
 // ── S40.1 — EntityAttr skips distribution parameter validation ────────────────
 
 describe("V5 — EntityAttr skips dist validation", () => {
