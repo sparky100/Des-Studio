@@ -813,12 +813,52 @@ C-events fire whenever their condition becomes true. They represent service star
 }
 ```
 
+#### COSEIZE — Multi-resource start
+
+When a task requires multiple resource types simultaneously (e.g. a surgery needs a surgeon AND an anesthetist), use `COSEIZE` instead of `ASSIGN`.
+
+```jsonc
+// C-event: seize multiple server types atomically
+{
+  "id": "c_surgery",
+  "name": "Perform Surgery",
+  "priority": 1,
+  "condition": "queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0",
+  "effect": ["COSEIZE(SurgeryQueue, Surgeon, Anesthetist)"],
+  "cSchedules": [
+    {
+      "eventId": "b_surgery_done",
+      "dist": "Triangular",
+      "distParams": { "min": "10", "mode": "20", "max": "40" },
+      "useEntityCtx": true
+    }
+  ]
+}
+
+// Corresponding B-event: COMPLETE() releases ALL seized servers automatically
+{
+  "id": "b_surgery_done",
+  "name": "Surgery Complete",
+  "scheduledTime": "9999",
+  "effect": ["COMPLETE()"],
+  "schedules": []
+}
+```
+
+**Key rules for COSEIZE:**
+
+- The B-event scheduled by a COSEIZE C-event MUST use `COMPLETE()` — this automatically releases all co-seized servers. Do NOT use individual `RELEASE(Surgeon)` + `RELEASE(Anesthetist)`.
+- The condition MUST check `idle(<Type>).count > 0` for **every** server type — otherwise Phase C will waste passes on COSEIZE attempts that always fail.
+- `cSchedules[].useEntityCtx` MUST be `true` so the B-event knows which entity and servers to release.
+- The B-event's `scheduledTime` should be a high placeholder (e.g. `"9999"`) since it is only fired via the `cSchedules` entry, not by the clock.
+- `"schedules": []` on the completion B-event — it has no self-scheduling; the C-event drives it.
+
 ### Rules
 
 - `id` must be unique across all C-events.
 - `priority`: integer, lower value = fires first when multiple conditions are simultaneously true. ⚠ **Starvation risk:** if C-events A (priority=1) and B (priority=2) share a resource and A's queue is always non-empty, B will never fire — entities accumulate, `served=0`. Give terminal C-events (discharge, exit) priority=0 so completions are not deferred behind new arrivals.
 - `condition`: predicate expression (see §6.1 below).
-- `effect` must use `ASSIGN` for standard service start.
+- `effect` must use `ASSIGN` for single-resource service start, or `COSEIZE` for multi-resource (see example above).
 - `cSchedules[].eventId` must reference a valid B-event `id`.
 - `cSchedules[].useEntityCtx`: **must be `true`** for service completion events so the engine associates the scheduled B-event with the specific entity being served. Omitting it means the B-event fires with no entity context and `COMPLETE()`/`RELEASE()` will not know which entity to remove.
 

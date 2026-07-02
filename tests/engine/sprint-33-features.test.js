@@ -503,6 +503,91 @@ describe('COSEIZE macro', () => {
     );
     expect(warnings.length).toBeGreaterThan(0);
   });
+
+  test('full round-trip: entity arrives → COSEIZE seizes two servers → service elapses → COMPLETE releases both → entity served', () => {
+    const model = {
+      entityTypes: [
+        { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "surgeon", name: "Surgeon", role: "server", count: 1, attrDefs: [] },
+        { id: "anesthetist", name: "Anesthetist", role: "server", count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [
+        { id: "surgery_q", name: "SurgeryQueue", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "arrive", name: "Patient Arrival", scheduledTime: "0",
+          effect: "ARRIVE(Patient, SurgeryQueue)",
+          schedules: [{ eventId: "arrive", dist: "Fixed", distParams: { value: "6" } }] },
+        { id: "surgery_done", name: "Surgery Complete", scheduledTime: "9999",
+          effect: "COMPLETE()", schedules: [] },
+      ],
+      cEvents: [
+        { id: "ce_surgery", name: "Perform Surgery", priority: 1,
+          condition: "queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0",
+          effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+          cSchedules: [{ eventId: "surgery_done", dist: "Fixed", distParams: { value: "3" }, useEntityCtx: true }] },
+      ],
+    };
+
+    const engine = buildEngine(model, 42, 0, 30);
+    const result = engine.runAll();
+
+    const served = result.entitySummary.filter(e => e.role === "customer" && e.status === "done");
+    expect(served.length).toBeGreaterThan(0);
+
+    const coseizeLogs = result.log.filter(e => e.message?.includes("COSEIZE"));
+    expect(coseizeLogs.length).toBeGreaterThan(0);
+
+    const servingAtEnd = result.entitySummary.filter(e => e.role === "customer" && e.status === "serving");
+    const busyServersAtEnd = result.entitySummary.filter(e => e.role === "server" && e.status === "busy");
+    if (servingAtEnd.length === 0) {
+      expect(busyServersAtEnd.length).toBe(0);
+    }
+
+    expect(result.summary?.served).toBeGreaterThan(0);
+  });
+
+  test('round-trip: both servers released after COMPLETE — multiple patients can be served', () => {
+    const model = {
+      entityTypes: [
+        { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "surgeon", name: "Surgeon", role: "server", count: 1, attrDefs: [] },
+        { id: "anesthetist", name: "Anesthetist", role: "server", count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [
+        { id: "surgery_q", name: "SurgeryQueue", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "arrive", name: "Patient Arrival", scheduledTime: "0",
+          effect: "ARRIVE(Patient, SurgeryQueue)",
+          schedules: [{ eventId: "arrive", dist: "Fixed", distParams: { value: "4" } }] },
+        { id: "surgery_done", name: "Surgery Complete", scheduledTime: "9999",
+          effect: "COMPLETE()", schedules: [] },
+      ],
+      cEvents: [
+        { id: "ce_surgery", name: "Perform Surgery", priority: 1,
+          condition: "queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0",
+          effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+          cSchedules: [{ eventId: "surgery_done", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }] },
+      ],
+    };
+
+    const engine = buildEngine(model, 42, 0, 20);
+    const result = engine.runAll();
+
+    const served = result.entitySummary.filter(e => e.role === "customer" && e.status === "done");
+    expect(served.length).toBeGreaterThan(1);
+
+    const coseizeLogs = result.log.filter(e => e.message?.includes("COSEIZE"));
+    expect(coseizeLogs.length).toBeGreaterThan(0);
+
+    const releaseLogs = result.log.filter(e => e.message?.includes("COSEIZE release"));
+    if (served.length > 1) {
+      expect(releaseLogs.length).toBeGreaterThan(0);
+    }
+  });
 });
 
 // ============================================================================

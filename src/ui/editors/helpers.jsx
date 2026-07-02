@@ -206,10 +206,12 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
   return opts;
 };
 
-const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerTypes=[], contextServer=null) => {
+const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerTypes=[], contextServers=null) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
-  const activeServers = contextServer ? servers.filter(s=>s===contextServer) : servers;
+  const activeServers = contextServers != null
+    ? servers.filter(s => (Array.isArray(contextServers) ? contextServers : [contextServers]).filter(Boolean).includes(s))
+    : servers;
   const opts = [{label:'— select effect —',value:''}];
   if(queues.length > 0) {
     opts.push({label:'── Add arriving entity to queue ──', value:'', disabled:true});

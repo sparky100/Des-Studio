@@ -208,3 +208,105 @@ describe('BEventEditor — routing mode selector', () => {
     expect(screen.getByText('IF')).toBeInTheDocument();
   });
 });
+
+describe('BEventEditor — COSEIZE multi-resource awareness', () => {
+  it('shows RELEASE options for all server types when B-event is scheduled by a COSEIZE C-event', () => {
+    const bEvents = [
+      { id: 'b_surgery_done', name: 'Surgery Complete', scheduledTime: '9999',
+        effect: 'COMPLETE()', schedules: [] },
+    ];
+    const cEvents = [
+      { id: 'c_surgery', name: 'Perform Surgery', priority: 1,
+        condition: 'queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0',
+        effect: 'COSEIZE(SurgeryQueue, Surgeon, Anesthetist)',
+        cSchedules: [{ eventId: 'b_surgery_done', dist: 'Triangular',
+          distParams: { min: '10', mode: '20', max: '40' }, useEntityCtx: true }] },
+    ];
+    render(
+      <BEventEditor
+        events={bEvents}
+        onChange={vi.fn()}
+        entityTypes={[
+          { id: 'surgeon', name: 'Surgeon', role: 'server', count: 2, attrDefs: [] },
+          { id: 'anesthetist', name: 'Anesthetist', role: 'server', count: 2, attrDefs: [] },
+          { id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] },
+        ]}
+        queues={[
+          { id: 'surgery_q', name: 'SurgeryQueue', customerType: 'Patient', discipline: 'FIFO' },
+        ]}
+        cEvents={cEvents}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    fireEvent.click(screen.getByText('+ Add Effect'));
+
+    expect(screen.getByRole('option', { name: 'Release Surgeon (entity stays in current stage)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Release Anesthetist (entity stays in current stage)' })).toBeInTheDocument();
+  });
+
+  it('shows routing combos for COSEIZE server types (Release X and route to Y)', () => {
+    const bEvents = [
+      { id: 'b_surgery_done', name: 'Surgery Complete', scheduledTime: '9999',
+        effect: 'COMPLETE()', schedules: [] },
+    ];
+    const cEvents = [
+      { id: 'c_surgery', name: 'Perform Surgery', priority: 1,
+        condition: 'queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0',
+        effect: 'COSEIZE(SurgeryQueue, Surgeon, Anesthetist)',
+        cSchedules: [{ eventId: 'b_surgery_done', dist: 'Triangular',
+          distParams: { min: '10', mode: '20', max: '40' }, useEntityCtx: true }] },
+    ];
+    render(
+      <BEventEditor
+        events={bEvents}
+        onChange={vi.fn()}
+        entityTypes={[
+          { id: 'surgeon', name: 'Surgeon', role: 'server', count: 2, attrDefs: [] },
+          { id: 'anesthetist', name: 'Anesthetist', role: 'server', count: 2, attrDefs: [] },
+          { id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] },
+        ]}
+        queues={[
+          { id: 'surgery_q', name: 'SurgeryQueue', customerType: 'Patient', discipline: 'FIFO' },
+          { id: 'ward_q', name: 'WardQueue', customerType: 'Patient', discipline: 'FIFO' },
+        ]}
+        cEvents={cEvents}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    fireEvent.click(screen.getByText('+ Add Effect'));
+
+    const options = screen.getAllByRole('option').map(o => o.getAttribute('aria-label') || o.textContent);
+    expect(options).toContain('Release Surgeon and route Patient to WardQueue');
+    expect(options).toContain('Release Anesthetist and route Patient to WardQueue');
+  });
+
+  it('does not over-prune RELEASE options when B-event is NOT scheduled by COSEIZE', () => {
+    const bEvents = [
+      { id: 'b_done', name: 'Service Complete', scheduledTime: '9999',
+        effect: 'COMPLETE()', schedules: [] },
+    ];
+    render(
+      <BEventEditor
+        events={bEvents}
+        onChange={vi.fn()}
+        entityTypes={[
+          { id: 'surgeon', name: 'Surgeon', role: 'server', count: 2, attrDefs: [] },
+          { id: 'anesthetist', name: 'Anesthetist', role: 'server', count: 2, attrDefs: [] },
+          { id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] },
+        ]}
+        queues={[
+          { id: 'surgery_q', name: 'SurgeryQueue', customerType: 'Patient', discipline: 'FIFO' },
+        ]}
+        cEvents={[]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    fireEvent.click(screen.getByText('+ Add Effect'));
+
+    expect(screen.getByRole('option', { name: 'Release Surgeon (entity stays in current stage)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Release Anesthetist (entity stays in current stage)' })).toBeInTheDocument();
+  });
+});

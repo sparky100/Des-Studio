@@ -211,10 +211,17 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 {(()=>{
                   const releaseMatch=effects.map(eff=>typeof eff==='string'?eff.match(/^RELEASE\s*\(\s*(\S+?)[\s,)]/i):null).find(Boolean);
                   const contextServer=releaseMatch?normTypeName(releaseMatch[1]):null;
+                  const coseizeServers=schedulingCEvents.flatMap(c=>{
+                    const eff=Array.isArray(c.effect)?c.effect.join(";"):String(c.effect??"");
+                    const m=eff.match(/COSEIZE\s*\(([^)]+)\)/i);
+                    return m?m[1].split(",").slice(1).map(s=>normTypeName(s.trim())):[];
+                  });
                   return (
                 <EffectPicker
                   effects={effects}
-                  options={bEffectOptions(entityTypes,queues,stateVariables,containerTypes,contextServer)}
+                  options={bEffectOptions(entityTypes,queues,stateVariables,containerTypes,
+                    coseizeServers.length>0?[contextServer,...coseizeServers].filter(Boolean):contextServer
+                  )}
                   expressionContext={{
                     stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
                     attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean))
