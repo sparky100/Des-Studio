@@ -124,6 +124,8 @@ function compileEffectImpactTemplate(effectStr) {
       actions.push({ kind: "complete" });
     } else if ((m = part.match(/^RELEASE\(([^,)]+)(?:\s*,\s*([^,)]+))?\)$/i))) {
       actions.push({ kind: "release", resourceName: m[1].trim(), targetQueue: m[2]?.trim() || null });
+    } else if ((m = part.match(/^RELEASE_COSEIZED\(\s*\[([^\]]+)\]\s*(?:,\s*([^,)]+))?\)$/i))) {
+      actions.push({ kind: "releaseCoseized", resourceNames: m[1].split(",").map(s => s.trim()).filter(Boolean), targetQueue: m[2]?.trim() || null });
     } else if ((m = part.match(/^RENEGE(?:_OLDEST)?\(([^)]*)\)$/i))) {
       actions.push({ kind: "renege", queueHint: m[1]?.trim() || null });
     } else if ((m = part.match(/^COSEIZE\(([^,)]+)\s*,\s*(.+)\)$/i))) {
@@ -213,6 +215,14 @@ function deriveDirtyFromTemplate(template, event, ctx) {
       case "release": {
         const customer = currentCustomer();
         markDirtyResource(dirty, action.resourceName);
+        markDirtyQueue(dirty, customer?.type);
+        markDirtyQueue(dirty, customer?.lastQueue || customer?.queue);
+        markDirtyQueue(dirty, action.targetQueue);
+        break;
+      }
+      case "releaseCoseized": {
+        const customer = currentCustomer();
+        action.resourceNames.forEach(resourceName => markDirtyResource(dirty, resourceName));
         markDirtyQueue(dirty, customer?.type);
         markDirtyQueue(dirty, customer?.lastQueue || customer?.queue);
         markDirtyQueue(dirty, action.targetQueue);

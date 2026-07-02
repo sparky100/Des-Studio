@@ -2101,4 +2101,22 @@ describe("V38c/V38d — RELEASE / RELEASE_COSEIZED consistency with scheduling C
     const { warnings } = validateModel(model);
     expect(warnings.filter(w => w.code === "V38c" || w.code === "V38d")).toHaveLength(0);
   });
+
+  it("V45: does not flag a queue as orphaned when it's only reachable via RELEASE_COSEIZED([...], Queue)", () => {
+    const model = coseizeModel(["RELEASE_COSEIZED([Surgeon, Anesthetist], WardQueue)"]);
+    model.queues.push({ id: "ward_q", name: "WardQueue", discipline: "FIFO" });
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V45")).toHaveLength(0);
+  });
+
+  it("V45: still flags a genuinely orphaned queue alongside a RELEASE_COSEIZED-reached one", () => {
+    const model = coseizeModel(["RELEASE_COSEIZED([Surgeon, Anesthetist], WardQueue)"]);
+    model.queues.push({ id: "ward_q", name: "WardQueue", discipline: "FIFO" });
+    model.queues.push({ id: "orphan_q", name: "OrphanQueue", discipline: "FIFO" });
+    const { errors } = validateModel(model);
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V45", message: expect.stringContaining("OrphanQueue") }),
+    ]));
+    expect(errors.filter(e => e.code === "V45" && e.message.includes("WardQueue"))).toHaveLength(0);
+  });
 });

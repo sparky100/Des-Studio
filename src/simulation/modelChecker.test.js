@@ -181,6 +181,57 @@ describe("CHK-006 Queue checked in C-event but nothing feeds it", () => {
   });
 });
 
+describe("CHK-013 Queue fed via RELEASE_COSEIZED but nothing consumes it", () => {
+  const coseizeModel = (surgeryDoneEffect, extraCEvents = []) => ({
+    name: "Coseize",
+    entityTypes: [
+      { id: "et1", name: "Patient", role: "customer", attrDefs: [] },
+      { id: "et2", name: "Surgeon", role: "server", count: "1", attrDefs: [] },
+      { id: "et3", name: "Anesthetist", role: "server", count: "1", attrDefs: [] },
+    ],
+    queues: [
+      { id: "q1", name: "SurgeryQueue" },
+      { id: "q2", name: "WardQueue" },
+    ],
+    bEvents: [
+      { id: "arrive1", name: "Arrive", scheduledTime: 0, effect: "ARRIVE(Patient, SurgeryQueue)",
+        schedules: [{ eventId: "arrive1", dist: "fixed", distParams: { value: 1 } }] },
+      { id: "surgery_done", name: "Surgery Complete", scheduledTime: 9999, effect: surgeryDoneEffect, schedules: [] },
+    ],
+    cEvents: [
+      {
+        id: "ce_surgery", name: "Perform Surgery", priority: 1,
+        condition: { clauses: [{ variable: "Queue.SurgeryQueue.length", operator: ">", value: 0 }], logic: "AND" },
+        effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+        cSchedules: [{ eventId: "surgery_done", dist: "fixed", distParams: { value: 2 } }],
+      },
+      ...extraCEvents,
+    ],
+    stateVariables: [],
+  });
+
+  test("triggers when a queue is fed only via RELEASE_COSEIZED([...], Queue) and no C-event consumes it", () => {
+    const model = coseizeModel("RELEASE_COSEIZED([Surgeon, Anesthetist], WardQueue)");
+    const issues = checkModel(model);
+    const chk = issues.filter(i => i.code === "CHK-013");
+    expect(chk).toHaveLength(1);
+    expect(chk[0].message).toContain("WardQueue");
+  });
+
+  test("does not trigger when a C-event consumes the RELEASE_COSEIZED destination queue", () => {
+    const model = coseizeModel("RELEASE_COSEIZED([Surgeon, Anesthetist], WardQueue)", [
+      {
+        id: "ce_discharge", name: "Discharge", priority: 1,
+        condition: { clauses: [{ variable: "Queue.WardQueue.length", operator: ">", value: 0 }], logic: "AND" },
+        effect: "DELAY(WardQueue)",
+        cSchedules: [],
+      },
+    ]);
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-013")).toHaveLength(0);
+  });
+});
+
 describe("CHK-007 Model has no events defined", () => {
   test("triggers when entity types exist but no events", () => {
     const model = {
