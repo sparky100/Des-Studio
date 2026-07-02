@@ -242,6 +242,31 @@ describe("CHK-008 Server defined but never used in C-event", () => {
     expect(chk).toHaveLength(0);
   });
 
+  test("does not trigger for server types seized via a skill-qualified COSEIZE (Type[Skill] brackets)", () => {
+    const model = {
+      ...wellFormedModel,
+      entityTypes: [
+        ...wellFormedModel.entityTypes,
+        { id: "et3", name: "Surgeon", role: "server", count: "2", attrDefs: [] },
+        { id: "et4", name: "Anesthetist", role: "server", count: "2", attrDefs: [] },
+      ],
+      cEvents: [
+        ...wellFormedModel.cEvents,
+        {
+          id: "surgery1",
+          name: "Perform Surgery",
+          priority: 1,
+          condition: { clauses: [{ variable: "Queue.ServiceQueue.length", operator: ">", value: 0 }], logic: "AND" },
+          effect: ["COSEIZE(ServiceQueue, Surgeon[Surgery], Anesthetist[Anaesthesia])"],
+          cSchedules: [],
+        },
+      ],
+    };
+    const issues = checkModel(model);
+    const chk = issues.filter(i => i.code === "CHK-008");
+    expect(chk).toHaveLength(0);
+  });
+
   test("does not trigger for a server only referenced via a skill-qualified ASSIGN (quoted skill literal)", () => {
     const model = {
       ...wellFormedModel,

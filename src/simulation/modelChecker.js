@@ -320,11 +320,13 @@ function chk008(model) {
     for (const m of effectString(cEvent).matchAll(/ASSIGN\s*\([^,)]+,\s*([^,)]+)(?:,[^)]*)?\)/gi)) {
       usedServers.add(m[1].trim().toLowerCase());
     }
-    // COSEIZE(queue, type1, type2, ...) — every arg after the queue is a server type
+    // COSEIZE(queue, type1[Skill1], type2[Skill2], ...) — every arg after the queue is a
+    // server type, optionally skill-qualified with a trailing [Skill] bracket that must be
+    // stripped before matching against the plain entity-type name.
     for (const m of effectString(cEvent).matchAll(/COSEIZE\s*\(([^)]+)\)/gi)) {
       const args = m[1].split(",").map(a => a.trim()).filter(Boolean);
       for (const serverType of args.slice(1)) {
-        usedServers.add(serverType.toLowerCase());
+        usedServers.add(serverType.replace(/\[[^\]]*\]/, '').trim().toLowerCase());
       }
     }
   }
