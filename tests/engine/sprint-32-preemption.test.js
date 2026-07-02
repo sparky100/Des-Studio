@@ -87,13 +87,31 @@ describe('G01 — Resource Preemption', () => {
     expect(preemptLog[0].message).toContain('re-queued');
   });
 
-  test('Preempted customer resumes with remaining service time', () => {
+  test('Preempted customer resumes with remaining service time and completes with the correct total duration', () => {
     const model = makeHospitalModel();
     const engine = buildEngine(model, 42, 0, 50);
     const result = engine.runAll();
 
-    const served = result.entitySummary.filter(e => e.role === 'customer' && e.status === 'done');
-    expect(served.length).toBeGreaterThan(0);
+    const preemptIdx = result.log.findIndex(e => e.message?.includes('PREEMPT'));
+    expect(preemptIdx).toBeGreaterThanOrEqual(0);
+    const match = result.log[preemptIdx].message.match(/interrupted #(\d+) \[remaining ([\d.]+) t\]/);
+    expect(match).toBeTruthy();
+    const preemptedId = Number(match[1]);
+    const remaining = Number(match[2]);
+    const preemptTime = result.log[preemptIdx].time;
+
+    // The exact same customer — not just "some" customer — must be re-seized
+    // from the queue after being preempted.
+    const reseizedAfterPreempt = result.log.some((e, i) =>
+      i > preemptIdx && e.message?.includes(`#${preemptedId} (Waiting Room) → serving`)
+    );
+    expect(reseizedAfterPreempt).toBe(true);
+
+    const preemptedCustomer = result.entitySummary.find(e => e.id === preemptedId);
+    expect(preemptedCustomer.status).toBe('done');
+    // Can't complete before its remaining service is actually consumed post-resume.
+    expect(preemptedCustomer.completionTime).toBeGreaterThanOrEqual(preemptTime + remaining);
+    expect(preemptedCustomer.sojournTime).toBeCloseTo(preemptedCustomer.completionTime - preemptedCustomer.arrivalTime, 4);
   });
 
   test('PREEMPT with no busy server logs a message', () => {
@@ -157,6 +175,41 @@ describe('G04 — Resource Breakdowns / Failures', () => {
 
     const failureLog = result.log.filter(e => e.message?.includes('FAILURE'));
     expect(failureLog.length).toBeGreaterThan(0);
+  });
+
+  test('the exact customer displaced by a server failure is later re-served to completion', () => {
+    // Identify the customer riding the machine at the moment it fails by watching
+    // snapshots directly (the FAILURE log line itself doesn't name the customer),
+    // then confirm that same entity — not just "some" entity — eventually completes.
+    // Uses mtbf=6 (not 8, like makeFactoryModel) so the failure lands strictly
+    // mid-service rather than coinciding with a service's natural completion tick.
+    const model = { ...makeFactoryModel() };
+    model.entityTypes = model.entityTypes.map(et =>
+      et.name === 'Machine' ? { ...et, mtbfDistParams: { value: '6' } } : et
+    );
+    const engine = buildEngine(model, 42, 0, 30);
+
+    let displacedId = null;
+    for (let i = 0; i < 1000; i++) {
+      const before = engine.getSnap();
+      const busyMachine = before.entities.find(e => e.role === 'server' && (e.status === 'busy' || e.status === 'serving'));
+      const beforeCustId = busyMachine?.currentCustId ?? null;
+
+      const r = engine.step();
+      if (r.done) break;
+
+      const machine = engine.getSnap().entities.find(e => e.role === 'server');
+      if (machine.status === 'failed' && beforeCustId != null && displacedId == null) {
+        displacedId = beforeCustId;
+      }
+    }
+    expect(displacedId).not.toBeNull();
+
+    const engine2 = buildEngine(model, 42, 0, 30);
+    const result = engine2.runAll();
+    const displaced = result.entitySummary.find(e => e.id === displacedId);
+    expect(displaced).toBeDefined();
+    expect(displaced.status).toBe('done');
   });
 
   test('Repair restores server to idle pool', () => {
