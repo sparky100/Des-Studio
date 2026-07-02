@@ -615,8 +615,10 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | Macro | Syntax | Meaning |
 |-------|--------|---------|
 | `ARRIVE` | `ARRIVE(EntityType, QueueName)` | Creates an entity of type `EntityType` and places it in `QueueName`. |
-| `RELEASE` | `RELEASE(ServerType, QueueName)` | **Intermediate stage only.** Releases a server of type `ServerType`, moves served entity to `QueueName` for the next stage. Sets entity status to `"waiting"`. **Do NOT follow with `COMPLETE()` in the same effect — use `COMPLETE()` alone for terminal events.** |
-| `COMPLETE` | `COMPLETE()` | Marks current entity as served and removes it from the system. Also releases the server automatically — no preceding `RELEASE()` needed. Use this alone as the terminal effect on the final service B-event. |
+| `RELEASE` | `RELEASE(ServerType, QueueName)` | **Intermediate stage only.** Releases a server of type `ServerType`, moves served entity to `QueueName` for the next stage. Sets entity status to `"waiting"`. **Do NOT follow with `COMPLETE()` in the same effect — use `COMPLETE()` alone for terminal events.** Do not use for a COSEIZE-scheduled B-event — see `RELEASE_COSEIZED` below. |
+| `COSEIZE` | `COSEIZE(QueueName, Type1, Type2, ...)` | Atomically seizes one server of each listed type for the same entity. Requires `idle(<Type>).count > 0` for every listed type in the C-event condition. See §"COSEIZE — Multi-resource start". |
+| `RELEASE_COSEIZED` | `RELEASE_COSEIZED([Type1, Type2, ...], QueueName)` | Releases all listed co-seized servers atomically for the context entity and moves it to `QueueName` for the next stage (queue argument optional; omit to use a routing table instead). The **only** correct way to release co-seized resources without ending the entity's lifecycle — never stack separate `RELEASE(Type)` calls for co-seized types. |
+| `COMPLETE` | `COMPLETE()` | Marks current entity as served and removes it from the system. Also releases the server automatically — no preceding `RELEASE()` needed. For a COSEIZE-scheduled B-event, this releases **all** co-seized servers. Use this alone as the terminal effect on the final service B-event. |
 | `RENEGE` | `RENEGE(ctx)` | Marks current entity as reneged (abandoned). Always use `ctx` as the argument. |
 | `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch entity, sends each member to `QueueName`. `QueueName` must reference a defined queue (V23). Every UNBATCH should be paired with a corresponding BATCH that created the batch entity being unbatched. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id`. `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
@@ -836,6 +838,7 @@ When a task requires multiple resource types simultaneously (e.g. a surgery need
 }
 
 // Corresponding B-event: COMPLETE() releases ALL seized servers automatically
+// and ends the entity's lifecycle (use this when the entity leaves the system here).
 {
   "id": "b_surgery_done",
   "name": "Surgery Complete",
@@ -845,13 +848,32 @@ When a task requires multiple resource types simultaneously (e.g. a surgery need
 }
 ```
 
+If the entity needs to **continue** after the co-seized resources are released (e.g. move on to recovery), use `RELEASE_COSEIZED` instead of `COMPLETE()`:
+
+```jsonc
+// Corresponding B-event: RELEASE_COSEIZED releases ALL listed servers atomically
+// and returns the entity to "waiting" so it can be routed onward.
+{
+  "id": "b_surgery_done",
+  "name": "Surgery Complete",
+  "scheduledTime": "9999",
+  "effect": ["RELEASE_COSEIZED([Surgeon, Anesthetist], WardQueue)"],
+  "schedules": []
+}
+```
+
+The target queue argument is optional — omit it (`RELEASE_COSEIZED([Surgeon, Anesthetist])`) and pair the B-event with a conditional or probabilistic routing table (`routing`/`probabilisticRouting`) instead when the destination depends on entity attributes or randomness, exactly as you would with a single-resource `RELEASE(Type)`.
+
 **Key rules for COSEIZE:**
 
-- The B-event scheduled by a COSEIZE C-event MUST use `COMPLETE()` — this automatically releases all co-seized servers. Do NOT use individual `RELEASE(Surgeon)` + `RELEASE(Anesthetist)`.
+- The B-event scheduled by a COSEIZE C-event must resolve **all** co-seized resources in a single call: `COMPLETE()` to release everyone and end the entity's lifecycle, or `RELEASE_COSEIZED([Type1, Type2, ...])` (optionally with a target queue) to release everyone and continue the entity.
+- **Do NOT** issue separate single `RELEASE(Surgeon)` + `RELEASE(Anesthetist)` calls for co-seized types on the same B-event — each resolves against the same cached primary-server context, so only the first call actually releases anything and the rest silently leave that resource stuck busy forever. The model validator flags this pattern (V38c).
+- The `RELEASE_COSEIZED([...])` type list must exactly match (or be a subset of) the types in the scheduling C-event's `COSEIZE(...)` call, or the release will fail at runtime (validator rule V38d catches mismatches ahead of time).
 - The condition MUST check `idle(<Type>).count > 0` for **every** server type — otherwise Phase C will waste passes on COSEIZE attempts that always fail.
 - `cSchedules[].useEntityCtx` MUST be `true` so the B-event knows which entity and servers to release.
 - The B-event's `scheduledTime` should be a high placeholder (e.g. `"9999"`) since it is only fired via the `cSchedules` entry, not by the clock.
 - `"schedules": []` on the completion B-event — it has no self-scheduling; the C-event drives it.
+- `PREEMPT(Type)` / `FAIL(Type)` on a co-seized resource automatically release the other co-seized resources for that entity too, so interruption logic doesn't need special-casing.
 
 ### Rules
 
@@ -1289,6 +1311,8 @@ All generated model JSON MUST pass every blocking rule below.
 | V29 | A C-event whose `cSchedules` entries all have a `when` predicate with no fallback entry — entities not matching any condition receive no service |
 | V33 | `probabilisticRouting` with a single 100% null-exit branch and `COMPLETE()` — valid but unusual. Prefer plain `COMPLETE()` without routing for simple terminal completions. |
 | V38 | `RELEASE()` immediately followed by `COMPLETE()` in the same B-event effect. `RELEASE` sets entity to `"waiting"` so `COMPLETE` skips silently. Use `COMPLETE()` alone — it releases the server automatically. |
+| V38c | A COSEIZE-scheduled B-event stacks two or more separate `RELEASE(Type)` calls for co-seized types — only the first actually releases anything. Use `RELEASE_COSEIZED([...])` or `COMPLETE()` instead. |
+| V38d | A `RELEASE_COSEIZED([...])` type list includes a type that isn't part of the scheduling C-event's `COSEIZE(...)` types — will fail at runtime with "no claimed ... server". |
 | V40 | `SET_ATTR(attrName, ...)` targets an attribute that isn't declared on any entity class — likely a typo. The engine still applies the effect. |
 | V42 | A queue uses `discipline: "SPT"` but the customer entity type reaching it has no `serviceTime`/`processingTime` attribute — SPT can't rank entities and falls back to arrival order. |
 | V43 | A queue uses `discipline: "EDD"` but the customer entity type reaching it has no `dueDate` attribute — EDD can't rank entities and falls back to arrival order. |

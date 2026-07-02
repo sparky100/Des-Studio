@@ -233,6 +233,22 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerType
   custs.forEach(c=>{
     opts.push({label:`Cancel oldest waiting ${c} from its queue`,value:`RENEGE_OLDEST(${c})`});
   });
+  const isCoseized = Array.isArray(contextServers) && activeServers.length >= 2;
+  if (isCoseized) {
+    const coseizedList = activeServers.join(', ');
+    const coseizedLabel = activeServers.join(' & ');
+    opts.push({label:'── Release all co-seized resources (recommended) ──',value:'',disabled:true});
+    opts.push({label:`Release ${coseizedLabel} (entity stays in current stage)`,value:`RELEASE_COSEIZED([${coseizedList}])`});
+    if (queues.length > 0) {
+      queues.forEach(q => {
+        const entityLabel = q.customerType ? normTypeName(q.customerType) : 'entity';
+        opts.push({
+          label: `Release ${coseizedLabel} and route ${entityLabel} to ${queueDisplayName(q.name)}`,
+          value: `RELEASE_COSEIZED([${coseizedList}], ${q.name})`
+        });
+      });
+    }
+  }
   if(activeServers.length>0){
     opts.push({label:'── Release server (multi-stage routing) ──',value:'',disabled:true});
     activeServers.forEach(s=>{

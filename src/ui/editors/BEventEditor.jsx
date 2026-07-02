@@ -111,10 +111,23 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const showTimeInput=!isStart&&!isTmpl;
         const effects=Array.isArray(ev.effect)?ev.effect:(ev.effect?[ev.effect]:[]);
         const updEffects=(newEffects)=>{const n=[...events];n[i]={...n[i],effect:newEffects};onChange(n);};
-        const hasRelease=effects.some(eff=>typeof eff==='string'&&/^RELEASE\s*\(/i.test(eff));
+        const hasRelease=effects.some(eff=>typeof eff==='string'&&/^RELEASE(?:_COSEIZED)?\s*\(/i.test(eff));
         const hasArriveEffect=effects.some(eff=>typeof eff==='string'&&/^ARRIVE\s*\(/i.test(eff));
         const schedulingCEvents=cEvents.filter(c=>(c.cSchedules||[]).some(s=>s.eventId===ev.id));
         const isCScheduleTarget=schedulingCEvents.length>0;
+        const coseizeServers=schedulingCEvents.flatMap(c=>{
+          const eff=Array.isArray(c.effect)?c.effect.join(";"):String(c.effect??"");
+          const m=eff.match(/COSEIZE\s*\(([^)]+)\)/i);
+          return m?m[1].split(",").slice(1).map(s=>normTypeName(s.trim())):[];
+        });
+        // Stacking separate RELEASE(TypeA)/RELEASE(TypeB) calls for co-seized types is a
+        // trap: each resolves against the same cached server context, so only the first
+        // actually releases anything (mirrors validation rule V38c).
+        const stackedCoseizeReleases=coseizeServers.length>=2&&effects.filter(eff=>{
+          if(typeof eff!=='string')return false;
+          const m=eff.match(/^RELEASE\(([^,)]+)/i);
+          return m&&coseizeServers.includes(normTypeName(m[1].trim()));
+        }).length>=2;
         const hasCompletionEffect=effects.some(eff=>typeof eff==='string'&&(/^COMPLETE\s*\(\s*\)/i.test(eff)||/^RENEGE\s*\(\s*ctx\s*\)/i.test(eff)));
         // ARRIVE alongside RELEASE()/COMPLETE()/routing is a legitimate multi-stage pattern
         // (e.g. spawning a derived audit/log entity while the scheduled entity is separately
@@ -129,6 +142,8 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
             if(am)return am[2]?.trim()||(am[1].trim()+'Queue');
             const rm=eff.match(/^RELEASE\(([^,)]+)(?:\s*,\s*([^,)]+))?\)/i);
             if(rm&&rm[2])return rm[2].trim();
+            const rcm=eff.match(/^RELEASE_COSEIZED\(\s*\[[^\]]+\]\s*(?:,\s*([^,)]+))?\)/i);
+            if(rcm&&rcm[1])return rcm[1].trim();
           }
           return null;
         })();
@@ -142,7 +157,9 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const setRoutingMode=(mode)=>{
           const n=[...events];
           const{routing:_r,defaultQueueName:_d,probabilisticRouting:_pr,...rest}=n[i];
-          const cleanEff=effects.map(eff=>typeof eff==='string'?eff.replace(/^(RELEASE\s*\([^,)]+),\s*[^)]+\)/i,'$1)'):eff);
+          const cleanEff=effects.map(eff=>typeof eff==='string'?eff
+            .replace(/^(RELEASE\s*\([^,)]+),\s*[^)]+\)/i,'$1)')
+            .replace(/^(RELEASE_COSEIZED\(\s*\[[^\]]+\]\s*),\s*[^)]+\)/i,'$1)'):eff);
           // Seed one empty row (mirroring the probabilistic branch below) — an empty routing[]
           // array reads as hasRouting=false, which would immediately fall back to "none".
           if(mode==="conditional") n[i]={...rest,routing:[{condition:{variable:'',operator:'==',value:''},queueName:''}],defaultQueueName:'',effect:cleanEff};
@@ -211,11 +228,6 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 {(()=>{
                   const releaseMatch=effects.map(eff=>typeof eff==='string'?eff.match(/^RELEASE\s*\(\s*(\S+?)[\s,)]/i):null).find(Boolean);
                   const contextServer=releaseMatch?normTypeName(releaseMatch[1]):null;
-                  const coseizeServers=schedulingCEvents.flatMap(c=>{
-                    const eff=Array.isArray(c.effect)?c.effect.join(";"):String(c.effect??"");
-                    const m=eff.match(/COSEIZE\s*\(([^)]+)\)/i);
-                    return m?m[1].split(",").slice(1).map(s=>normTypeName(s.trim())):[];
-                  });
                   return (
                 <EffectPicker
                   effects={effects}
@@ -230,6 +242,11 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 />
                   );
                 })()}
+                {stackedCoseizeReleases&&(
+                  <div style={{fontSize:10,color:C.amber,fontFamily:FONT,lineHeight:1.5}}>
+                    ⚠ This event stacks separate RELEASE() calls for co-seized resources ({coseizeServers.join(', ')}) — each resolves against the same cached server context, so only the first release actually happens and the rest leave their resource stuck busy forever. Use the combined "Release {coseizeServers.join(' & ')}" option instead, or COMPLETE() to end the entity's lifecycle.
+                  </div>
+                )}
                 {isCScheduleTarget&&arriveLeavesContextEntityUnresolved&&(
                   <div style={{fontSize:10,color:C.amber,fontFamily:FONT,lineHeight:1.5}}>
                     ⚠ This event is scheduled as a follow-on (referenced by a C-event's schedule), but ARRIVE is its only effect — ARRIVE always creates a brand-new entity and never resolves the entity being completed, which is left stuck in "serving" status forever. Add COMPLETE(), RELEASE(), or the Routing panel below to resolve it (ARRIVE is fine alongside one of those, e.g. to also spawn a derived entity).

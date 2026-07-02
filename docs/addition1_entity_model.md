@@ -785,7 +785,7 @@ The following must be added to `CLAUDE.md` before Sprint 1 begins. Copy this sec
 - allowedValues is only valid for string valueType
 
 ### Action Vocabulary — Open Set (as of Sprint 33+)
-- The currently implemented macros are: ARRIVE, SEIZE/ASSIGN, COMPLETE, DELAY, RENEGE, BATCH, UNBATCH, RENEGE_OLDEST, FILL, DRAIN, SET, SET_ATTR, COST, PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, MATCH
+- The currently implemented macros are: ARRIVE, SEIZE/ASSIGN, COMPLETE, DELAY, RENEGE, BATCH, UNBATCH, RENEGE_OLDEST, FILL, DRAIN, SET, SET_ATTR, COST, PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, RELEASE_COSEIZED, MATCH
 - SEIZE and ASSIGN are engine synonyms for the resource-claiming action (C-Event phase)
 - BATCH is a C-Event only macro; UNBATCH is a B-Event only macro
 - FILL and DRAIN operate on container levels; containers must be declared in containerTypes
@@ -900,6 +900,7 @@ The complete macro set implemented in the engine. This is the authoritative list
 | REPAIR | B-Event | 32 | Restores failed servers to idle |
 | SPLIT | C/B-Event | 33 | `SPLIT(EntityType, N, Queue)` — exactly 3 args. Creates N-1 clones of the context entity and routes them to Queue; records `_splitParent`/`_splitChildren`. Trigger from a one-shot context only (e.g. a cSchedule-fired B-event) — a recurring C-event condition on the same entity/queue will refire unboundedly since SPLIT doesn't change the context entity's status. |
 | COSEIZE | C-Event | 33 | Atomically seizes multiple server types simultaneously |
+| RELEASE_COSEIZED | B-Event | post-33 | `RELEASE_COSEIZED([Type1, Type2, ...], Queue?)` — atomically releases all servers claimed by a COSEIZE for the context entity and routes/re-queues it. The correct multi-resource counterpart to RELEASE; never stack separate RELEASE(Type) calls for co-seized types, since each resolves against the same cached primary-server context and only the first actually releases anything. Use COMPLETE() instead if the entity's lifecycle should end here (it also releases all co-seized servers). PREEMPT/FAIL on a co-seized resource likewise release the other co-seized resources automatically. |
 | MATCH | C-Event | 33 | `MATCH(TypeA, QueueA, TypeB, QueueB, Target)` — pairs one entity from each queue into a batch entity in Target. Merged attrs = `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — QueueB's value overwrites QueueA's on any name collision. |
 | RENEGE_OLDEST | C-Event | post-33 | Removes the oldest waiting entity of a given type per queue discipline |
 | FILL | B or C-Event | post-33 | Adds amount to a declared container level (clamped to capacity) |

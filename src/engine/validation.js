@@ -40,8 +40,9 @@ export function validateModel(model) {
   const hasCompleteEffect = text => /COMPLETE\s*\(/i.test(text);
   const hasAnyRenegeEffect = text => /\bRENEGE\(\s*([^)]+)\s*\)/i.test(text);
   const hasExactRenegeCtxEffect = text => /\bRENEGE\(\s*ctx\s*\)/i.test(text);
-  const hasReleaseEffect = text => /RELEASE\s*\(/i.test(text);
-  const hasReleaseTargetQueue = text => /RELEASE\s*\([^,)]+,\s*[^)]+\)/i.test(text);
+  const hasReleaseEffect = text => /RELEASE(?:_COSEIZED)?\s*\(/i.test(text);
+  const hasReleaseTargetQueue = text => /RELEASE\s*\([^,)]+,\s*[^)]+\)/i.test(text)
+    || /RELEASE_COSEIZED\(\s*\[[^\]]+\]\s*,\s*[^)]+\)/i.test(text);
   const countTerminalSinkEffects = text => {
     let sinks = 0;
     if (hasCompleteEffect(text)) sinks += 1;
@@ -508,6 +509,65 @@ export function validateModel(model) {
         break;
       }
     }
+  });
+
+  // ── V38c / V38d: RELEASE / RELEASE_COSEIZED consistency with scheduling COSEIZE ──
+  // Map each B-event id to the co-seized server types of any C-event whose cSchedules
+  // fire it via a COSEIZE(...) effect — the same detection BEventEditor.jsx uses to
+  // build the effect-picker dropdown.
+  const coseizeTypesByBEventId = new Map();
+  cEvents.forEach(c => {
+    const cText = effectText(c.effect);
+    const m = cText.match(/COSEIZE\s*\(([^)]+)\)/i);
+    if (!m) return;
+    const types = m[1].split(",").map(s => s.trim()).filter(Boolean).slice(1)
+      .map(s => s.replace(/\[[^\]]*\]/, '').trim())
+      .filter(Boolean);
+    if (types.length === 0) return;
+    (c.cSchedules || []).forEach(cs => {
+      if (!cs.eventId) return;
+      const existing = coseizeTypesByBEventId.get(cs.eventId) || new Set();
+      types.forEach(t => existing.add(t.toLowerCase()));
+      coseizeTypesByBEventId.set(cs.eventId, existing);
+    });
+  });
+
+  bEvents.forEach(b => {
+    const coseizeTypes = coseizeTypesByBEventId.get(b.id);
+    if (!coseizeTypes || coseizeTypes.size < 2) return;
+    const bLabel = `B-Event '${b.name || b.id}'`;
+    const text = effectText(b.effect);
+    const parts = text.split(';').map(s => s.trim()).filter(Boolean);
+
+    // V38c: stacked separate RELEASE(Type) calls for co-seized types all resolve
+    // against the same cached context server, so only the first actually releases
+    // anything and the rest silently leave their resource stuck busy.
+    const releasedSingleTypes = parts
+      .map(p => p.match(/^RELEASE\(([^,)]+)/i))
+      .filter(Boolean)
+      .map(m => m[1].trim().toLowerCase())
+      .filter(t => coseizeTypes.has(t));
+    if (releasedSingleTypes.length >= 2) {
+      warn('V38c',
+        `${bLabel} is scheduled by a COSEIZE(...) C-event but stacks separate RELEASE() calls for co-seized types (${releasedSingleTypes.join(', ')}) — each resolves against the same cached server context, so only the first release actually happens and the rest leave their resource stuck busy forever. Use a single RELEASE_COSEIZED([${releasedSingleTypes.join(', ')}]) call, or COMPLETE() to end the entity's lifecycle.`,
+        'bevents',
+        { eventIds: [b.id] });
+    }
+
+    // V38d: RELEASE_COSEIZED([...]) whose bracketed types aren't part of the
+    // scheduling COSEIZE(...) types will fail to find a claimed server at runtime.
+    parts.forEach(p => {
+      const rcMatch = p.match(/^RELEASE_COSEIZED\(\s*\[([^\]]+)\]/i);
+      if (!rcMatch) return;
+      const listedTypes = rcMatch[1].split(",").map(s => s.trim()).filter(Boolean);
+      const mismatched = listedTypes.filter(t => !coseizeTypes.has(t.toLowerCase()));
+      if (mismatched.length > 0) {
+        warn('V38d',
+          `${bLabel} calls RELEASE_COSEIZED([${listedTypes.join(', ')}]) but '${mismatched.join(', ')}' ${mismatched.length === 1 ? 'is' : 'are'} not among the types co-seized by the scheduling COSEIZE(...) C-event (${[...coseizeTypes].join(', ')}) — this will fail at runtime with "no claimed ... server".`,
+          'bevents',
+          { eventIds: [b.id] });
+      }
+    });
   });
 
   // ── V9: C-Event conditions must reference defined queues ────────────────────

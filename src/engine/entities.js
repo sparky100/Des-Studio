@@ -415,6 +415,18 @@ export function preemptCustomer(cust, srv, clock, ctx) {
   const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
   cust._remainingService  = remainingService;
   releaseServerClaim(cust, srv, clock);
+  // Release any other co-seized servers still claimed by this customer (COSEIZE pattern) —
+  // otherwise a PREEMPT/FAIL on one co-seized resource leaves the others stuck "busy" forever.
+  const auxiliaryBusy = (ctx?.entities || []).filter(e =>
+    e.role === "server" &&
+    e.currentCustId === cust.id &&
+    e.id !== srv.id &&
+    (e.status === "busy" || e.status === "serving")
+  );
+  for (const auxSrv of auxiliaryBusy) {
+    releaseServerClaim(null, auxSrv, clock);
+    ctx?.msgs?.push(`Server #${auxSrv.id} (${auxSrv.type}) → idle (COSEIZE release on preempt/fail)`);
+  }
   clearWaitingState(cust, ctx?.index);
   attemptQueueJoin(cust, cust.lastQueue || cust.queue, clock, ctx, { skipBalk: true });
   return remainingService;

@@ -106,7 +106,7 @@ Performance targets. Defined in `goals[]` array.
 
 ## Macros
 
-All 20 effect macros. Syntax is exact — case-sensitive, parentheses required.
+All 21 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 ### Flow Control Macros
 
@@ -114,7 +114,8 @@ All 20 effect macros. Syntax is exact — case-sensitive, parentheses required.
 |-------|--------|---------|--------------|-----------------|
 | ARRIVE | `ARRIVE(EntityType)` or `ARRIVE(EntityType, QueueName)` | Creates entity instance, places in queue | Increments queue depth; schedules reneging if configured | Omitting QueueName when entity type name ≠ queue name |
 | COMPLETE | `COMPLETE()` | Marks context entity as served, releases server | Increments served count; records sojourn time | Using without preceding RELEASE |
-| RELEASE | `RELEASE(ServerType)` or `RELEASE(ServerType, QueueName)` | Frees server unit, routes entity onward | Sets server to idle; updates service stats | Combining with routing table (mutually exclusive) |
+| RELEASE | `RELEASE(ServerType)` or `RELEASE(ServerType, QueueName)` | Frees server unit, routes entity onward | Sets server to idle; updates service stats | Combining with routing table (mutually exclusive); using on a COSEIZE-scheduled B-event instead of RELEASE_COSEIZED (see below) |
+| RELEASE_COSEIZED | `RELEASE_COSEIZED([Type1, Type2, ...])` or `RELEASE_COSEIZED([Type1, Type2, ...], QueueName)` | Frees all listed co-seized server units atomically, routes entity onward | Sets all listed servers to idle; updates service stats for each | Stacking separate `RELEASE(Type)` calls instead — each resolves against the same cached server, so only the first release actually happens (V38c); listing a type not part of the scheduling COSEIZE(...) (V38d) |
 | ASSIGN | `ASSIGN(QueueName, ServerType)` | Seizes server, starts serving front entity from queue | Sets server to busy; sets entity to inService | Using in B-event (C-event only) |
 | ASSIGN (skilled) | `ASSIGN(QueueName, ServerType, "Skill")` | Seizes server, only considers idle servers whose type has the named skill | Sets server to busy with skill tracking | Skill not in model registry (V-SKILL-2) |
 | ASSIGN (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Reads skill from entity attribute at runtime; null = any server | Supports per-entity skill variation from one C-event | Attribute undefined on customer type (V-SKILL-3) |
@@ -125,8 +126,8 @@ All 20 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 | Macro | Syntax | Purpose | Side Effects | Common Mistakes |
 |-------|--------|---------|--------------|-----------------|
-| PREEMPT | `PREEMPT(ServerType)` | Interrupts in-service entity, replaces with higher-priority entity | Displaced entity re-queues with remaining service preserved | Using without priority queue discipline |
-| FAIL | `FAIL(ServerType)` | Places server into failed (unavailable) state; interrupts any in-progress service | Sets server to failed; in-progress entity re-queues with remaining service time | For pool scope, all servers fail at once; prefer unit scope for realistic modelling |
+| PREEMPT | `PREEMPT(ServerType)` | Interrupts in-service entity, replaces with higher-priority entity | Displaced entity re-queues with remaining service preserved; if the entity was co-seized (COSEIZE), any other claimed servers are released too | Using without priority queue discipline |
+| FAIL | `FAIL(ServerType)` | Places server into failed (unavailable) state; interrupts any in-progress service | Sets server to failed; in-progress entity re-queues with remaining service time; if the entity was co-seized (COSEIZE), any other claimed servers are released too | For pool scope, all servers fail at once; prefer unit scope for realistic modelling |
 | REPAIR | `REPAIR(ServerType)` | Restores failed server to idle | Sets server to idle; triggers C-scan | Repairing non-failed server (no effect) |
 
 ### Resource-Free Activity Macros
@@ -143,7 +144,7 @@ All 20 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | BATCH | `BATCH(QueueName, N)` or `BATCH(QueueName, Entity.attrName)` | Collects N entities into single batch entity | N-1 originals marked done; one batch replaces them | Using N < 2 |
 | UNBATCH | `UNBATCH(QueueName)` | Splits batch entity back into constituents | Batch marked done; original entities restored | Using on non-batch entity |
 | MATCH | `MATCH(TypeA, QueueA, TypeB, QueueB, QueueName)` | Pairs one entity from each queue into combined batch | Originals marked with _matchedInto; merged attrs = `{...A.attrs, ...B.attrs}` — QueueB overwrites QueueA on name collision | Queues must both have eligible entities; relying on attribute overwrite order without naming attrs distinctly |
-| COSEIZE | `COSEIZE(QueueName, ServerType1, ServerType2, ...)` | Atomically seizes entity and multiple server types | All servers set to busy; fails cleanly if any unavailable | Partial seizure never occurs |
+| COSEIZE | `COSEIZE(QueueName, ServerType1, ServerType2, ...)` | Atomically seizes entity and multiple server types | All servers set to busy; fails cleanly if any unavailable | Partial seizure never occurs; the completion B-event must release all seized types together — use `COMPLETE()` (terminal) or `RELEASE_COSEIZED([...])` (continues), never separate `RELEASE()` calls per type |
 
 ### State Manipulation Macros
 
@@ -1011,7 +1012,7 @@ Exports any model as a runnable Python SimPy script, or runs it directly in the 
 
 **Category 1 supported macros:** `ARRIVE`, `ASSIGN`, `COSEIZE`, `COMPLETE`, `RELEASE`, `FILL`, `DRAIN`, `SPLIT`, `SET`, `SET_ATTR`, `COST`, `UNBATCH`.
 
-**Category 2 macros (stubs generated):** `RENEGE`, `BATCH`, `RENEGE_OLDEST`, `MATCH`, `FAIL`, `REPAIR`, `PREEMPT`. Note: all of these are fully implemented in the JS Three-Phase engine — they appear as stubs only because their Python translation is non-trivial to auto-generate.
+**Category 2 macros (stubs generated):** `RENEGE`, `BATCH`, `RENEGE_OLDEST`, `MATCH`, `FAIL`, `REPAIR`, `PREEMPT`, `RELEASE_COSEIZED`. Note: all of these are fully implemented in the JS Three-Phase engine — they appear as stubs only because their Python translation is non-trivial to auto-generate.
 
 ### Run in Browser
 
