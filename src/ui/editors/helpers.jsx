@@ -219,6 +219,15 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       }
     });
   }
+  // FINISH(ServerType) — ends an in-progress service the instant this C-event's
+  // condition becomes true, for "activity of unknown duration" patterns where
+  // completion isn't driven by a sampled/scheduled delay.
+  if(servers.length>0){
+    opts.push({label:'── FINISH (end in-progress service now, on condition) ──',value:'',disabled:true});
+    servers.forEach(s=>{
+      opts.push({label:`Finish ${s}'s current service immediately`,value:`FINISH(${s})`});
+    });
+  }
   return opts;
 };
 
@@ -374,7 +383,7 @@ const categorizeEffect = (value) => {
   const v = String(value||"").trim();
   if (!v) return 'other';
   if (/^ARRIVE\s*\(/i.test(v)||/^BATCH\s*\(/i.test(v)||/^UNBATCH\s*\(/i.test(v)||/^SPLIT\s*\(/i.test(v)||/^MATCH\s*\(/i.test(v)||/^RENEGE/i.test(v)||/^CANCEL\s*\(/i.test(v)) return 'queue';
-  if (/^(COMPLETE|RELEASE|ASSIGN|COSEIZE)\s*\(/i.test(v)) return 'service';
+  if (/^(COMPLETE|RELEASE|ASSIGN|COSEIZE|FINISH)\s*\(/i.test(v)) return 'service';
   if (/^SET_ATTR\s*\(/i.test(v)||/^SET\s*\(/i.test(v)||/^ROUND_ROBIN\s*\(/i.test(v)||/(\+\+|--|[+\-]=\s*\d|=\s*\d)/.test(v)) return 'state';
   if (/^COST\s*\(/i.test(v)) return 'cost';
   if (/^(PREEMPT|FAIL|REPAIR)\s*\(/i.test(v)) return 'server';
@@ -390,6 +399,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const stateVars = expressionContext?.stateVars || [];
   const attrs = expressionContext?.attrs || [];
   const eventNames = expressionContext?.eventNames || [];
+  const matchQueues = expressionContext?.matchQueues || [];
   const CATEGORY_CONFIG = {
     queue:     {label:'Queue',     color:C.cEvent},
     service:   {label:'Service',   color:C.green},
@@ -404,6 +414,9 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const [exprMacro, setExprMacro] = useState('COST');
   const [exprName,  setExprName]  = useState('');
   const [exprValue, setExprValue] = useState('');
+  const [matchQueueA, setMatchQueueA] = useState('');
+  const [matchQueueB, setMatchQueueB] = useState('');
+  const [matchTarget, setMatchTarget] = useState('');
 
   const remove = (j) => onChange(effects.filter((_,i)=>i!==j));
   const add = (val) => {
@@ -418,6 +431,15 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
       if (!exprName) return;
       add(`CANCEL(${exprName})`);
       setExprName('');
+      return;
+    }
+    if (exprMacro === 'MATCH') {
+      if (!matchQueueA || !matchQueueB || !matchTarget || !exprValue.trim()) return;
+      const qa = matchQueues.find(q => q.name === matchQueueA);
+      const qb = matchQueues.find(q => q.name === matchQueueB);
+      if (!qa || !qb) return;
+      add(`MATCH(${qa.type}, ${qa.name}, ${qb.type}, ${qb.name}, ${matchTarget}, "${exprValue.trim()}")`);
+      setExprValue('');
       return;
     }
     if (!exprValue.trim()) return;
@@ -532,7 +554,41 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
                     color:exprMacro==='CANCEL'?C.red:C.muted,cursor:'pointer',fontWeight:700}}>CANCEL</button>
               )}
+              {matchQueues.length>=2&&(
+                <button onClick={()=>{
+                    setExprMacro('MATCH');setExprValue('');
+                    if(!matchQueueA)setMatchQueueA(matchQueues[0].name);
+                    if(!matchQueueB)setMatchQueueB(matchQueues[1].name);
+                    if(!matchTarget)setMatchTarget(matchQueues[0].name);
+                  }}
+                  style={{background:exprMacro==='MATCH'?C.cEvent+'22':'transparent',
+                    border:`1px solid ${exprMacro==='MATCH'?C.cEvent:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='MATCH'?C.cEvent:C.muted,cursor:'pointer',fontWeight:700}}>MATCH (compatible pair)</button>
+              )}
             </div>
+            {exprMacro==='MATCH'&&matchQueues.length>=2&&(
+              <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>A:</span>
+                <select value={matchQueueA} onChange={e=>setMatchQueueA(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+                    color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}>
+                  {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name} ({q.type})</option>)}
+                </select>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>B:</span>
+                <select value={matchQueueB} onChange={e=>setMatchQueueB(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+                    color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}>
+                  {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name} ({q.type})</option>)}
+                </select>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
+                <select value={matchTarget} onChange={e=>setMatchTarget(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+                    color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}>
+                  {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name}</option>)}
+                </select>
+              </div>
+            )}
             <div style={{display:'flex',gap:6,alignItems:'center'}}>
               {(exprMacro==='SET'||exprMacro==='ROUND_ROBIN')&&stateVars.length>0&&(
                 <select value={exprName||stateVars[0]} onChange={e=>setExprName(e.target.value)}
@@ -560,13 +616,13 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   value={exprValue}
                   onChange={e=>setExprValue(e.target.value)}
                   onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
-                  placeholder={exprMacro==='COST'?'e.g. Entity.priority * 2.5':exprMacro==='ROUND_ROBIN'?'e.g. 3 (number of destinations)':`e.g. ${exprName||stateVars[0]||'x'} + 1`}
+                  placeholder={exprMacro==='COST'?'e.g. Entity.priority * 2.5':exprMacro==='ROUND_ROBIN'?'e.g. 3 (number of destinations)':exprMacro==='MATCH'?'e.g. Entity.bloodType == Other.bloodType':`e.g. ${exprName||stateVars[0]||'x'} + 1`}
                   style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
                     color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}
                 />
               )}
               <Btn small variant="ghost" onClick={addExpr}
-                disabled={exprMacro==='CANCEL'?!exprName:(!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0])))}>Add</Btn>
+                disabled={exprMacro==='CANCEL'?!exprName:exprMacro==='MATCH'?(!matchQueueA||!matchQueueB||!matchTarget||!exprValue.trim()):(!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0])))}>Add</Btn>
             </div>
           </div>
         </div>

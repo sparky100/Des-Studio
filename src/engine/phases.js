@@ -311,7 +311,26 @@ export function fireBEvent(ev, ctx) {
     const isDelayCompletion = cust?.status === "serving" && ev._contextCustId != null && !ev._contextSrvId;
     if (cust && (cust.status === "waiting" || isDelayCompletion)) {
       let routed;
-      const routingPredicateState = { currentEntity: cust, resources: {}, queues: {}, ...ctx.state };
+      // NOTE: previously this omitted `model`/`helpers`/`scalars`, so queue(...)/
+      // idle(...)/busy(...)/attr(...) tokens silently resolved to undefined in
+      // routing[] conditions (only Entity.<attr> and bare state-var comparisons ever
+      // worked here) — a pre-existing gap, not something introduced by this change.
+      // Fixed to match the canonical predicate-state shape used for C-event/termination
+      // conditions (see `predicateState` in index.js), which is what makes dynamic
+      // RHS comparisons like queue(A).length < queue(B).length usable in routing.
+      const routingPredicateState = {
+        currentEntity: cust,
+        resources: {},
+        queues: {},
+        helpers: ctx.helpers,
+        model,
+        entities: ctx.entities,
+        scalars: ctx.state,
+        clock,
+        __served: ctx.state.__served ?? 0,
+        __reneged: ctx.state.__reneged ?? 0,
+        __loopCount: ctx.state.__loopCount ?? 0,
+      };
       for (const branch of routingBranches) {
         if (branch.condition && evaluatePredicate(branch.condition, routingPredicateState)) {
           routed = branch.queueName;

@@ -660,15 +660,24 @@ Predicate object fields:
 
 | Field | Type | Description |
 |---|---|---|
-| `variable` | string | Must use `Entity.<attrName>` to reference an entity attribute |
+| `variable` | string | Typically `Entity.<attrName>`, but may also be `queue(Name).length`, `idle(Type).count`, `busy(Type).count`, `container(Id).level`, or `attr(Type, attrName)` — see shortest-queue example below. |
 | `operator` | string | One of `==`, `!=`, `<`, `>`, `<=`, `>=` |
-| `value` | string \| number \| boolean | The comparison value; must match the attribute's `valueType` |
+| `value` | string \| number \| boolean | The comparison value. Usually a literal matching the attribute's `valueType` — but if `value` is itself one of the five dynamic patterns above (`queue(...)`, `idle(...)`, `busy(...)`, `container(...)`, `attr(...)`), it is resolved dynamically instead of treated as a literal string (this works in any condition, not just `routing[]` — see §6.1 below). A bare state-variable name or `Entity.<attr>` on the RHS is still always treated as a literal. |
 
 - `routing` and `probabilisticRouting` are mutually exclusive.
 - `routing` cannot be combined with a queue argument in `RELEASE(Server, Queue)`.
 - `probabilisticRouting` cannot be combined with a queue argument in `RELEASE(Server, Queue)`. Use `RELEASE(Server)` (no queue arg) — the routing table controls where the entity goes. `RELEASE(Server, Queue)` hard-routes to a single queue and conflicts with the routing table (V18).
 - `defaultQueueName` must reference a valid queue name.
 - **Do not use a string condition** (e.g. `"entity.priority < 2"`) — the engine only evaluates predicate objects in routing; a string will cause an error.
+
+**Shortest-queue routing example** — route to whichever of two queues currently has fewer entities waiting:
+
+```json
+"routing": [
+  { "condition": { "variable": "queue(Queue B).length", "operator": "<", "value": "queue(Queue A).length" }, "queueName": "Queue B" }
+],
+"defaultQueueName": "Queue A"
+```
 
 ### Optional: Probabilistic Routing
 
@@ -940,6 +949,7 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `COSEIZE` | `COSEIZE(QueueName, Srv1, Srv2, ...)` | Atomically seizes one entity and multiple server types simultaneously. Fails cleanly if any server is unavailable. All server type names must reference defined server entity types. |
 | `COSEIZE` (skilled) | `COSEIZE(QueueName, Doctor[Surgery], Nurse[Triage])` | Per-type bracket syntax: each server type may be followed by `[Skill]` in brackets to require that skill for that role. Only idle servers whose `skills[]` contains the specified skill are considered for that position. The skill name must be a valid entry in the model's top-level `skills` registry (V-SKILL-2). Any server type without brackets defaults to unskilled matching (same as the base COSEIZE). |
 | `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each of `QueueA` and `QueueB` into a combined batch in `TargetQueue`. All queue names must reference defined queues. `TypeA` and `TypeB` must match defined customer entity type names. The resulting batch entity's attrs are `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — on any attribute name collision, `QueueB`'s value overwrites `QueueA`'s. Order the two source queues deliberately when both define an attribute with the same name. |
+| `MATCH` (compatibility predicate) | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue, "Entity.bloodType == Other.bloodType")` | Optional 6th argument: a quoted predicate evaluated against both candidates — `Entity.<attr>` refers to the `QueueA` candidate being tested, `Other.<attr>` refers to the `QueueB` candidate. When present, scans both queues for the first compatible pair (front-to-back on `QueueA`, then `QueueB`) instead of always taking the front of each — use for blood-type/skill-requirement-style compatibility matching. No compatible pair found → no-op, same as an empty queue. A malformed predicate is caught and treated as no-match rather than crashing the run, but is flagged at design time (V66). |
 | `SET` | `SET(variableName, expression)` | Sets a state variable to an arithmetic expression. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost`. |
@@ -949,6 +959,7 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2. `QueueName` must reference a defined queue. |
 | `CANCEL` | `CANCEL(EventName)` | Removes the pending FEL entry named `EventName` scheduled for the **current context entity only**. See the B-Event macro table above and TOP LLM MISTAKES #22 for full semantics — identical behavior in C-events. |
 | `ROUND_ROBIN` | `ROUND_ROBIN(StateVar, N)` | Advances `StateVar` through a `0..N-1` rotation. See the B-Event macro table above for full semantics — identical behavior in C-events. |
+| `FINISH` | `FINISH(ServerType)` | Ends the in-progress service of the entity currently held by the first busy server of `ServerType` — **right now**, not at a scheduled/sampled time. For "activity of unknown duration": pair with a C-event condition that determines when service should end (e.g. a state variable crossing a threshold), instead of a `cSchedules` delay. Targets the server directly (like `PREEMPT`) rather than via a preceding macro's context, so it works as the sole effect of its own C-event. No busy server of that type → logs and no-ops. |
 
 ### 6.2 Resource-Free Activities (`DELAY`)
 
@@ -1072,17 +1083,22 @@ strings — malformed syntax there throws at evaluation time instead). A string 
 parses successfully is silently converted to the canonical object form the next time the
 model is saved — nothing further to do.
 
-> **Comparisons are variable-vs-literal only — NEVER variable-vs-variable.** The right-hand side of
-> every clause in the string shorthand is parsed as a fixed literal at save time
-> (`migrateLegacyCondition`); it is never resolved as a queue length, server count, or state
-> variable. A condition like `"queue(TraumaQueue).length > traumaInService"` parses the right side
-> as a non-numeric literal (`NaN`) and silently evaluates to `false` forever — no error, no
-> warning, the C-event simply never fires. To gate logic on a dynamic threshold, compare each
-> dynamic token against its own literal constant in a separate `AND` clause instead of comparing
-> two dynamic tokens to each other:
+> **Variable-vs-variable comparisons work only for the five function-call-style patterns on
+> the right-hand side — never for a bare state-variable name or `Entity.<attr>`.** The RHS of
+> every clause is parsed at save time; if it exactly matches `queue(...)`, `idle(...)`,
+> `busy(...)`, `container(...)`, or `attr(...)`, it is resolved dynamically at evaluation
+> time (this is what makes `"queue(A).length < queue(B).length"` work as a genuine live
+> comparison, in any condition — C-event, `routing[]`, `balkCondition`, `cSchedules[].when`).
+> Anything else on the RHS — a bare state-variable name, `Entity.<attr>`, or `Other.<attr>`
+> outside `MATCH`'s compatibility predicate — is still always parsed as a fixed literal, never
+> re-resolved. A condition like `"queue(TraumaQueue).length > traumaInService"` parses the right
+> side as a non-numeric literal (`NaN`) and silently evaluates to `false` forever — no error, no
+> warning, the C-event simply never fires. To gate logic on a state-variable threshold, compare
+> it against its own literal constant in a separate `AND` clause instead:
 >
-> ✓ `"queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"`
-> ✗ `"queue(TraumaQueue).length > traumaInService"` — right side is a literal, not the state variable
+> ✓ `"queue(TraumaQueue).length > idle(Doctor).count"` — both sides are function-call tokens, resolves dynamically
+> ✓ `"queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"` — state variable compared to its own literal
+> ✗ `"queue(TraumaQueue).length > traumaInService"` — right side is a bare state-variable name, still parsed as a literal
 
 ---
 
@@ -1314,6 +1330,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V63 | `CANCEL(EventName)` references an event name that does not match any defined B-Event or C-Event `name` in the model. Blocking error. |
 | V64 | `ROUND_ROBIN(StateVar, N)`'s `N` must be a positive integer (N ≥ 1). `N ≤ 0` would produce a division-by-zero rotation at runtime. Blocking error. |
 | V65 | `skillProfiles[].priority`, when present, must be numeric. Blocking error. |
+| V66 | `MATCH`'s optional 6th argument (compatibility predicate) must parse and evaluate without throwing — e.g. an unrecognized variable namespace like `Foo.bar`. The engine catches the error defensively at runtime (treated as no compatible pair), but this rule surfaces the mistake at design time. Blocking error. |
 
 ### Warnings (run proceeds, banner shown)
 

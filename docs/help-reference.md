@@ -106,7 +106,7 @@ Performance targets. Defined in `goals[]` array.
 
 ## Macros
 
-All 23 effect macros. Syntax is exact — case-sensitive, parentheses required.
+All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 ### Flow Control Macros
 
@@ -131,6 +131,7 @@ All 23 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | PREEMPT | `PREEMPT(ServerType)` | Interrupts in-service entity, replaces with higher-priority entity | Displaced entity re-queues with remaining service preserved; if the entity was co-seized (COSEIZE), any other claimed servers are released too | Using without priority queue discipline |
 | FAIL | `FAIL(ServerType)` | Places server into failed (unavailable) state; interrupts any in-progress service | Sets server to failed; in-progress entity re-queues with remaining service time; if the entity was co-seized (COSEIZE), any other claimed servers are released too | For pool scope, all servers fail at once; prefer unit scope for realistic modelling |
 | REPAIR | `REPAIR(ServerType)` | Restores failed server to idle | Sets server to idle; triggers C-scan | Repairing non-failed server (no effect) |
+| FINISH | `FINISH(ServerType)` | Ends the in-progress service of whichever entity a busy server of ServerType is currently serving — right now, not at a scheduled time | Marks the entity done, releases the server, records the stage — same outcome as COMPLETE() but triggered by a condition instead of a delay | Use for "activity of unknown duration" (service ends when a condition becomes true); no busy server of that type → logs and no-ops |
 
 ### Resource-Free Activity Macros
 
@@ -146,6 +147,7 @@ All 23 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | BATCH | `BATCH(QueueName, N)` or `BATCH(QueueName, Entity.attrName)` | Collects N entities into single batch entity | N-1 originals marked done; one batch replaces them | Using N < 2 |
 | UNBATCH | `UNBATCH(QueueName)` | Splits batch entity back into constituents | Batch marked done; original entities restored | Using on non-batch entity |
 | MATCH | `MATCH(TypeA, QueueA, TypeB, QueueB, QueueName)` | Pairs one entity from each queue into combined batch | Originals marked with _matchedInto; merged attrs = `{...A.attrs, ...B.attrs}` — QueueB overwrites QueueA on name collision | Queues must both have eligible entities; relying on attribute overwrite order without naming attrs distinctly |
+| MATCH (compatible pair) | `MATCH(TypeA, QueueA, TypeB, QueueB, QueueName, "Entity.bloodType == Other.bloodType")` | Optional 6th argument: scans both queues for the first pair satisfying the predicate instead of always taking the front of each | Same as plain MATCH once a pair is found; `Entity.<attr>` is the QueueA candidate, `Other.<attr>` is the QueueB candidate | No compatible pair found → no-op, same as an empty queue; a malformed predicate is caught gracefully at runtime but flagged at design time (V66) |
 | COSEIZE | `COSEIZE(QueueName, ServerType1, ServerType2, ...)` | Atomically seizes entity and multiple server types | All servers set to busy; fails cleanly if any unavailable | Partial seizure never occurs; the completion B-event must release all seized types together — use `COMPLETE()` (terminal) or `RELEASE_COSEIZED([...])` (continues), never separate `RELEASE()` calls per type |
 
 ### State Manipulation Macros
@@ -446,6 +448,11 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | V58 | Multiplier mode period capacity out of range | In multiplier mode, period capacity must be between 0.0 and 1.0 |
 | V59 | Multiplier mode defaultCapacity out of range | In multiplier mode, defaultCapacity must be between 0.0 and 1.0 |
 | V60 | Multiplier mode exception capacity out of range | In multiplier mode, exception period capacity must be between 0.0 and 1.0 |
+| V61 | `defaultQueueName` set with no `routing[]`/`probabilisticRouting[]` and nothing else resolves the entity | Add a routing table, or use `probabilisticRouting: [{probability: 1.0, queueName: '...'}]` for a single fixed destination |
+| V63 | `CANCEL(EventName)` references an event name that doesn't match any B-Event or C-Event | Correct the event name, or add the missing event |
+| V64 | `ROUND_ROBIN(StateVar, N)`'s N is not a positive integer | Set N to a positive integer ≥ 1 |
+| V65 | `skillProfiles[].priority`, if present, must be numeric | Set priority to a number, or remove it |
+| V66 | `MATCH`'s compatibility predicate (6th argument) fails to parse or evaluate | Fix the predicate syntax — check for unknown variable namespaces or malformed operators |
 
 Gaps in the numbering (e.g. no V7) are intentional — codes were retired or renumbered during development and are not reused.
 
@@ -466,6 +473,8 @@ Gaps in the numbering (e.g. no V7) are intentional — codes were retired or ren
 | V43 | EDD discipline but entity class has no dueDate attribute | Discipline falls back to FIFO |
 | V44 | SET_ATTR has no preceding ARRIVE/ASSIGN/COSEIZE | Write will be skipped at runtime |
 | V47 | DELAY's cSchedule doesn't have "Pass entity context" enabled, or samples the delay from "Server attribute" | Falls back to a fixed delay of 1 |
+| V62 | A server entity type is named `ANY` | Collides with the reserved `ASSIGN(..., ANY, ...)` cross-type-pooling sentinel — rename the server type |
+| V-SKILL-2 (ANY variant) | `ASSIGN(Q, ANY, "Skill")` references a skill no registered server type actually has | The cross-type pool is guaranteed empty — add the skill to a server type, or correct the skill name |
 | W-CAP-01 | Two or more C-events SEIZE/ASSIGN the same server type | Results may be sensitive to C-event priority ordering |
 | W-CAP-02 | B-event schedule has an Exponential mean interval < 0.001 | simmodlr models discrete entities — consider SD Studio for continuous flow |
 
@@ -597,6 +606,14 @@ First-match semantics: engine evaluates `when` in order, uses first match. Last 
 ---
 
 ## Common Problems
+
+### Comparing Two Queues (Shortest-Queue Routing)
+
+**Goal:** Route an entity to whichever of two queues currently has fewer entities waiting, instead of a fixed destination.
+
+**How:** In the Condition Builder, a number-type clause has a small "Number / Dynamic" toggle next to its value field. Switch it to **Dynamic** to compare against another `queue(...).length`, `idle(...).count`, `busy(...).count`, `container(...).level`, or `attr(...)` value instead of typing a fixed number. This works in C-event conditions, `routing[]` tables, `balkCondition`, and `cSchedules[].when`.
+
+**Gotcha:** Only those five function-style values resolve dynamically on the right-hand side. A plain state-variable name or `Entity.<attr>` typed into the value field is still always treated as a literal — see the Validation Rules and Common Mistakes sections above.
 
 ### Queue Growing Without Bound
 

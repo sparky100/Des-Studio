@@ -11,6 +11,7 @@
 import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
 import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
 import { getPatternInitialCapacity } from "./schedule-pattern.js";
+import { evaluatePredicate } from "./conditions.js";
 
 export const DEFAULT_MAX_SIM_TIME = 500;
 
@@ -1676,6 +1677,30 @@ export function validateModel(model) {
           `Entity class '${et.name}' profile '${profile.name || `#${pi + 1}`}' has a non-numeric priority '${profile.priority}'.`,
           'entities',
           { entityTypeIds: [et.id] });
+      }
+    });
+  });
+
+  // V66: MATCH's optional compatibility predicate (6th arg) must parse and evaluate
+  // without throwing. Unlike routing[].condition/C-event condition (built by the
+  // structured UI), this text is typed directly into an effect string, so a typo'd
+  // variable namespace would otherwise only surface as a silent "no match" at
+  // runtime (the engine catches the throw defensively, but gives no design-time signal).
+  [...bEvents, ...cEvents].forEach(ev => {
+    const text = effectText(ev.effect);
+    const matchCalls = text.match(/MATCH\s*\([^)]*\)/gi);
+    if (!matchCalls) return;
+    matchCalls.forEach(m => {
+      const parts = m.match(/MATCH\s*\(\s*[^,)]+\s*,\s*[^,)]+\s*,\s*[^,)]+\s*,\s*[^,)]+\s*,\s*[^,)]+\s*,\s*"([^"]+)"\s*\)/i);
+      if (!parts) return;
+      const predicateText = parts[1].trim();
+      try {
+        evaluatePredicate(predicateText, { currentEntity: {}, otherEntity: {} });
+      } catch (e) {
+        err('V66',
+          `Effect '${m.trim()}' — MATCH's compatibility predicate '${predicateText}' failed to evaluate: ${e.message}`,
+          ev.effect ? 'cevents' : 'bevents',
+          { eventIds: [ev.id] });
       }
     });
   });

@@ -164,18 +164,23 @@ pattern, consult §10 directly.`,
     ✗ WRONG — COMPLETE() blocks the routing, entity exits immediately and never routes:
       "effect": ["COMPLETE()"], "probabilisticRouting": [{"queueName": "Voucher Queue", "probability": 0.9}, {"queueName": null, "probability": 0.1}]
 
-12. C-event/B-event condition strings only support "variable OPERATOR literal" comparisons —
-    NEVER compare two dynamic tokens against each other (queue(...)/idle(...)/busy(...)/attr(...)
-    calls or state variable names on both sides). The runtime evaluator (compilePredicate) parses
-    the right-hand side as a fixed literal at model-load time — it is never re-resolved as a state
-    variable. A condition comparing a dynamic left side against a state-variable right side silently
-    evaluates to false forever (the literal parses as NaN) — no error, no warning, the C-event
-    just never fires. To gate on an accumulated/dynamic quantity, add a dedicated state variable and
-    compare it against a literal constant in its own AND-clause, never against another dynamic token.
+12. Condition strings only resolve the right-hand side dynamically for the five
+    function-call-style patterns — queue(...)/idle(...)/busy(...)/container(...)/attr(...) — never
+    for a bare state-variable name or Entity.<attr>. Comparing two of those five patterns to each
+    other (e.g. shortest-queue routing) works correctly in any condition (C-event, routing[],
+    balkCondition, cSchedules[].when). But a bare state-variable name or Entity.<attr> on the
+    right-hand side is still always parsed as a fixed literal at model-load time — it is never
+    re-resolved. A condition comparing a dynamic left side against a state-variable right side
+    silently evaluates to false forever (the literal parses as NaN) — no error, no warning, the
+    C-event just never fires. To gate on a state-variable threshold, compare it against its own
+    literal constant in its own AND-clause instead.
 
+    ✓ CORRECT: "condition": "queue(TraumaQueue).length > idle(Doctor).count"  — both sides are
+               function-call tokens, resolves dynamically
     ✓ CORRECT: "condition": "queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"
-    ✗ WRONG:   "condition": "queue(TraumaQueue).length > traumaInService"  — right side treated as a
-               literal token, parses to NaN, comparison is always false, C-event never fires
+    ✗ WRONG:   "condition": "queue(TraumaQueue).length > traumaInService"  — right side is a bare
+               state-variable name, always treated as a literal, parses to NaN, comparison is
+               always false, C-event never fires
 
 13. C-event name MUST NOT start with the word "Start".
     The effect picker prepends "Start" automatically — a C-event named "Start Triage"

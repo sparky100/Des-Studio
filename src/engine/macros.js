@@ -235,6 +235,56 @@ function setOutcome(entity, { status, routeId, routeLabel, endedBy, endedAt, sou
   };
 }
 
+// Shared completion logic for COMPLETE() and FINISH(ServerType) — marks the
+// customer done, records the service stage, releases the primary server (and any
+// COSEIZE auxiliary servers still claimed by this customer). Callers are
+// responsible for validating cust/srv beforehand (status checks, claim matching).
+function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLETE" } = {}) {
+  const { entities, state, clock, msgs } = ctx;
+
+  if (cust.status === "serving" || cust.role === "batch") {
+    if (!cust.stages) cust.stages = [];
+    cust.stages.push(buildStageRecord(cust, srv, clock));
+    clearWaitingState(cust, ctx.index);
+    cust.status        = "done";
+    cust.completionTime = clock;
+    cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
+    setOutcome(cust, {
+      status: "completed",
+      routeId: `event:${felRef?.id || felRef?.name || endedBy.toLowerCase()}`,
+      routeLabel: felRef?.name || endedBy,
+      endedBy,
+      endedAt: clock,
+      sourceEventId: felRef?.id || null,
+      sourceEventName: felRef?.name || null,
+    });
+    state.__served      = (state.__served || 0) + 1;
+    state.__completedSinceSample = (state.__completedSinceSample || 0) + 1;
+    msgs.push(`#${cust.id} done [sojourn ${cust.sojournTime.toFixed(2)} t, ${cust.stages.length} stage(s)]`);
+  }
+  if (srv) {
+    releaseServerClaim(cust, srv, clock);
+    msgs.push(`Server #${srv.id} → idle`);
+    const retired = retireIdleExcessServers(ctx, srv.type);
+    if (retired > 0) {
+      msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
+    }
+  }
+  // Release any auxiliary servers that were co-seized with this customer (COSEIZE pattern).
+  // They have currentCustId pointing to the now-done customer but were not tracked in
+  // the primary server context, so completion would otherwise leave them permanently busy.
+  const auxiliaryBusy = entities.filter(e =>
+    e.role === "server" &&
+    e.currentCustId === cust.id &&
+    e.id !== srv?.id &&
+    (e.status === "busy" || e.status === "serving")
+  );
+  for (const auxSrv of auxiliaryBusy) {
+    releaseServerClaim(null, auxSrv, clock);
+    msgs.push(`Server #${auxSrv.id} (${auxSrv.type}) → idle (COSEIZE release)`);
+  }
+}
+
 export const MACROS = [
 
   // ── ARRIVE(Type[, QueueName]) ──────────────────────────────────────────────
@@ -447,7 +497,7 @@ export const MACROS = [
     name:    "COMPLETE",
     pattern: /^COMPLETE\(\)$/i,
     apply(_match, ctx) {
-      const { entities, state, clock, felRef, getLastCustId, getLastSrvId, msgs } = ctx;
+      const { entities, felRef, getLastCustId, getLastSrvId, msgs } = ctx;
       const custId = felRef?._contextCustId ?? getLastCustId();
       const srvId  = felRef?._contextSrvId  ?? getLastSrvId();
       const cust   = findEntityById(ctx.index, entities, custId);
@@ -472,47 +522,47 @@ export const MACROS = [
         }
       }
 
-      if (cust.status === "serving" || cust.role === "batch") {
-        if (!cust.stages) cust.stages = [];
-        cust.stages.push(buildStageRecord(cust, srv, clock));
-        clearWaitingState(cust, ctx.index);
-        cust.status        = "done";
-        cust.completionTime = clock;
-        cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
-        setOutcome(cust, {
-          status: "completed",
-          routeId: `event:${felRef?.id || felRef?.name || "complete"}`,
-          routeLabel: felRef?.name || "Complete",
-          endedBy: "COMPLETE",
-          endedAt: clock,
-          sourceEventId: felRef?.id || null,
-          sourceEventName: felRef?.name || null,
-        });
-        state.__served      = (state.__served || 0) + 1;
-        state.__completedSinceSample = (state.__completedSinceSample || 0) + 1;
-        msgs.push(`#${cust.id} done [sojourn ${cust.sojournTime.toFixed(2)} t, ${cust.stages.length} stage(s)]`);
-      }
-      if (srv) {
-        releaseServerClaim(cust, srv, clock);
-        msgs.push(`Server #${srv.id} → idle`);
-        const retired = retireIdleExcessServers(ctx, srv.type);
-        if (retired > 0) {
-          msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
-        }
-      }
-      // Release any auxiliary servers that were co-seized with this customer (COSEIZE pattern).
-      // They have currentCustId pointing to the now-done customer but were not tracked in
-      // the primary server context, so COMPLETE would otherwise leave them permanently busy.
-      const auxiliaryBusy = entities.filter(e =>
-        e.role === "server" &&
-        e.currentCustId === cust.id &&
-        e.id !== srv?.id &&
-        (e.status === "busy" || e.status === "serving")
+      finishServiceForPair(cust, srv, ctx, { felRef, endedBy: "COMPLETE" });
+    },
+  },
+
+  // ── FINISH(ServerType) ─────────────────────────────────────────────────────
+  // Ends the in-progress service of the entity currently held by a busy server of
+  // ServerType, right now — for "activity of unknown duration" C-events where a
+  // condition (not a sampled/scheduled B-event delay) determines when service ends.
+  // Targets the server directly (like PREEMPT) rather than via felRef/getLastCustId,
+  // since a bare C-event effect has no B-event context to inherit those from.
+  {
+    name:    "FINISH",
+    pattern: /^FINISH\(([^,)]+)\)$/i,
+    apply(match, ctx) {
+      const sType = match[1].trim();
+      const { entities, msgs, setLastCustId, setLastSrvId } = ctx;
+      const key = normName(sType);
+
+      const busyServers = entities.filter(e =>
+        e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving")
       );
-      for (const auxSrv of auxiliaryBusy) {
-        releaseServerClaim(null, auxSrv, clock);
-        msgs.push(`Server #${auxSrv.id} (${auxSrv.type}) → idle (COSEIZE release)`);
+      if (busyServers.length === 0) {
+        msgs.push(`FINISH(${sType}): no busy server found`);
+        return;
       }
+
+      const srv = busyServers[0];
+      const cust = findEntityById(ctx.index, entities, srv.currentCustId);
+      if (!cust) {
+        msgs.push(`FINISH(${sType}): server #${srv.id} has no customer`);
+        return;
+      }
+      if (cust.status !== "serving" && !(cust.role === "batch" && cust.status === "waiting")) {
+        msgs.push(`FINISH(${sType}): #${cust.id} is ${cust.status}, not serving`);
+        return;
+      }
+
+      finishServiceForPair(cust, srv, ctx, { endedBy: "FINISH" });
+      setLastCustId(cust.id);
+      setLastSrvId(srv.id);
+      msgs.push(`FINISH(${sType}): #${cust.id} service ended early by server #${srv.id}`);
     },
   },
 
@@ -1175,17 +1225,23 @@ export const MACROS = [
     },
   },
 
-  // ── MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue) ───────────────────────
-  // Waits for one entity from each queue, pairs them, routes to TargetQueue
+  // ── MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue[, "compatibility predicate"]) ──
+  // Waits for one entity from each queue, pairs them, routes to TargetQueue.
+  // Optional 6th argument: a quoted predicate string evaluated against both
+  // candidates (Entity.<attr> = the QueueA candidate, Other.<attr> = the QueueB
+  // candidate) — when present, scans for the first compatible pair instead of
+  // always taking the front of each queue (e.g. blood-type or skill-requirement
+  // compatibility matching).
   {
     name:    "MATCH",
-    pattern: /^MATCH\(([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\)$/i,
+    pattern: /^MATCH\(([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"([^"]+)")?\)$/i,
     apply(match, ctx) {
       const typeA = match[1].trim();
       const queueA = match[2].trim();
       const typeB = match[3].trim();
       const queueB = match[4].trim();
       const targetQueue = match[5].trim();
+      const compatPredicate = match[6] ? match[6].trim() : null;
       const { entities, helpers, clock, msgs, nextId, noteEntityCreated } = ctx;
 
       const disciplineA = helpers.findQueueConfig?.(queueA)?.discipline || "FIFO";
@@ -1194,11 +1250,38 @@ export const MACROS = [
       const candidatesA = helpers.waitingInQueue?.(queueA, disciplineA) || [];
       const candidatesB = helpers.waitingInQueue?.(queueB, disciplineB) || [];
 
-      const entityA = candidatesA[0];
-      const entityB = candidatesB[0];
+      let entityA = null;
+      let entityB = null;
+      let predicateError = null;
+      if (compatPredicate) {
+        // Unlike other predicate call sites (routing[].condition, C-event condition),
+        // this text is free-form and typed directly into an effect string rather than
+        // built by the structured condition UI — a malformed token (e.g. an unknown
+        // variable namespace) would otherwise throw out of evaluatePredicate and crash
+        // the whole run, since macro.apply() isn't wrapped in a try/catch upstream.
+        // Treat a malformed predicate as "no compatible pair" instead.
+        try {
+          scanPairs:
+          for (const a of candidatesA) {
+            for (const b of candidatesB) {
+              if (evaluatePredicate(compatPredicate, { currentEntity: a, otherEntity: b })) {
+                entityA = a;
+                entityB = b;
+                break scanPairs;
+              }
+            }
+          }
+        } catch (e) {
+          predicateError = e.message;
+        }
+      } else {
+        entityA = candidatesA[0];
+        entityB = candidatesB[0];
+      }
 
       if (!entityA || !entityB) {
-        msgs.push(`MATCH(${typeA},${queueA},${typeB},${queueB},${targetQueue}): no match — A=${candidatesA.length} B=${candidatesB.length}`);
+        const reason = predicateError ? `predicate error: ${predicateError}` : compatPredicate ? "no compatible pair" : "";
+        msgs.push(`MATCH(${typeA},${queueA},${typeB},${queueB},${targetQueue}): no match — A=${candidatesA.length} B=${candidatesB.length}${reason ? ` (${reason})` : ""}`);
         return;
       }
 

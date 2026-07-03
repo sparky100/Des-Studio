@@ -226,15 +226,38 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
               style={{...sel(),width:60}}>
               {allowedOps.map(op=><option key={op} value={op}>{op}</option>)}
             </select>
-            {/* Value input — widget depends on valueType */}
-            {valueType==='number' && (
-              <input type="number" value={row.value}
-                onChange={e=>updRow(idx,{value:e.target.value})}
-                placeholder="0"
-                style={{width:60,background:'transparent',border:`1px solid ${C.border}`,
-                  borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,
-                  padding:'5px 8px',outline:'none'}}/>
-            )}
+            {/* Value input — widget depends on valueType. Number-type rows can compare
+                against either a literal or another dynamic token (e.g. queue(A).length <
+                queue(B).length for shortest-queue routing) — see conditions.js RHS resolution. */}
+            {valueType==='number' && (() => {
+              const numberTokens = tokens.filter(t => t.valueType === 'number');
+              const isDynamic = numberTokens.some(t => t.value === row.value);
+              return (
+                <>
+                  {numberTokens.length > 0 && (
+                    <select value={isDynamic ? '__dynamic__' : '__literal__'}
+                      onChange={e => updRow(idx, { value: e.target.value === '__dynamic__' ? (numberTokens[0]?.value || '0') : '0' })}
+                      style={{...sel(), width:75}}>
+                      <option value="__literal__">Number</option>
+                      <option value="__dynamic__">Dynamic</option>
+                    </select>
+                  )}
+                  {isDynamic ? (
+                    <select value={row.value} onChange={e=>updRow(idx,{value:e.target.value})}
+                      style={{...sel(), flex:1, minWidth:160}}>
+                      {numberTokens.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  ) : (
+                    <input type="number" value={row.value}
+                      onChange={e=>updRow(idx,{value:e.target.value})}
+                      placeholder="0"
+                      style={{width:60,background:'transparent',border:`1px solid ${C.border}`,
+                        borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,
+                        padding:'5px 8px',outline:'none'}}/>
+                  )}
+                </>
+              );
+            })()}
             {valueType==='string' && (
               <input type="text" value={row.value}
                 onChange={e=>updRow(idx,{value:e.target.value})}

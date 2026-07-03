@@ -93,16 +93,41 @@ function resolveContainerValue(containerName, property, state) {
   return property === "capacity" ? (value ?? Infinity) : value;
 }
 
+// Shared regexes for the small set of function-call-style tokens
+// (`queue(...)`, `idle(...)`, `busy(...)`, `container(...)`, `attr(...)`) that are
+// resolved as dynamic references on either side of a predicate. These are
+// syntactically distinctive enough to never collide with a genuine literal string
+// value (e.g. "urgent" or "Doctor"), which is why RHS resolution (see
+// isResolvableExpression) is scoped to just these five — unlike a bare state-variable
+// name, which is genuinely ambiguous with a literal string of the same text.
+const QUEUE_TOKEN_RE = /^queue\(([^)]+)\)\.(length|count|size)$/i;
+const IDLE_TOKEN_RE = /^idle\(([^,)]+)(?:\s*,\s*"([^"]+)")?\)\.count$/i;
+const BUSY_TOKEN_RE = /^busy\(([^,)]+)(?:\s*,\s*"([^"]+)")?\)\.count$/i;
+const ATTR_TOKEN_RE = /^attr\(([^,]+)\s*,\s*([^)]+)\)$/i;
+const CONTAINER_TOKEN_RE = /^container\(([^)]+)\)\.(level|capacity|min|max)$/i;
+
+// `Other.<attr>` is the second-entity namespace used by MATCH's compatibility
+// predicate (see the MATCH macro in macros.js) — as distinctive/unambiguous a
+// prefix as the function-call tokens above, so it's safe to resolve on the RHS too.
+const OTHER_ATTR_RE = /^Other\.\w+$/;
+
+function isResolvableExpression(value) {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  return QUEUE_TOKEN_RE.test(text) || IDLE_TOKEN_RE.test(text) || BUSY_TOKEN_RE.test(text)
+    || ATTR_TOKEN_RE.test(text) || CONTAINER_TOKEN_RE.test(text) || OTHER_ATTR_RE.test(text);
+}
+
 function resolveVariable(ref, state) {
   if (typeof ref !== "string" || !ref.trim()) return undefined;
   const text = ref.trim();
 
-  const queueToken = text.match(/^queue\(([^)]+)\)\.(length|count|size)$/i);
+  const queueToken = text.match(QUEUE_TOKEN_RE);
   if (queueToken) {
     return resolveQueueValue(queueToken[1].trim(), queueToken[2], state);
   }
 
-  const idleToken = text.match(/^idle\(([^,)]+)(?:\s*,\s*"([^"]+)")?\)\.count$/i);
+  const idleToken = text.match(IDLE_TOKEN_RE);
   if (idleToken) {
     const type = idleToken[1].trim();
     const skill = idleToken[2] ? idleToken[2].trim() : null;
@@ -112,7 +137,7 @@ function resolveVariable(ref, state) {
     return state.helpers?.idleOf?.(type)?.length ?? 0;
   }
 
-  const busyToken = text.match(/^busy\(([^,)]+)(?:\s*,\s*"([^"]+)")?\)\.count$/i);
+  const busyToken = text.match(BUSY_TOKEN_RE);
   if (busyToken) {
     const type = busyToken[1].trim();
     const skill = busyToken[2] ? busyToken[2].trim() : null;
@@ -122,12 +147,12 @@ function resolveVariable(ref, state) {
     return state.helpers?.busyOf?.(type)?.length ?? 0;
   }
 
-  const attrToken = text.match(/^attr\(([^,]+)\s*,\s*([^)]+)\)$/i);
+  const attrToken = text.match(ATTR_TOKEN_RE);
   if (attrToken) {
     return resolveAttrValue(attrToken[1].trim(), attrToken[2].trim(), state);
   }
 
-  const containerToken = text.match(/^container\(([^)]+)\)\.(level|capacity|min|max)$/i);
+  const containerToken = text.match(CONTAINER_TOKEN_RE);
   if (containerToken) {
     return resolveContainerValue(containerToken[1].trim(), containerToken[2].toLowerCase(), state);
   }
@@ -165,6 +190,16 @@ function resolveVariable(ref, state) {
     }
     // Entity.<attributeName>
     return state.currentEntity?.attrs?.[parts[1]] ?? state.currentEntity?.[parts[1]];
+  }
+  if (parts[0] === 'Other') {
+    // Other.<attributeName> — the second entity in a two-entity comparison, e.g.
+    // MATCH's compatibility predicate (`state.otherEntity`, set by the MATCH macro).
+    // Only meaningful where a caller explicitly supplies otherEntity; undefined
+    // everywhere else, same as Entity.* when there's no currentEntity.
+    if (parts[1] === 'loopCount') {
+      return state.otherEntity?.loopCount ?? 0;
+    }
+    return state.otherEntity?.attrs?.[parts[1]] ?? state.otherEntity?.[parts[1]];
   }
   if (parts[0] === 'Resource') {
     // Resource.<id>.<property>
@@ -217,6 +252,47 @@ export function evaluatePredicate(predicate, state) {
   return compilePredicate(predicate)(state);
 }
 
+function addLeafDependency(deps, rawVariable) {
+  const variable = String(rawVariable || "").trim();
+  const queueToken = variable.match(QUEUE_TOKEN_RE);
+  const idleToken = variable.match(IDLE_TOKEN_RE);
+  const busyToken = variable.match(BUSY_TOKEN_RE);
+  const attrToken = variable.match(ATTR_TOKEN_RE);
+  const containerToken = variable.match(CONTAINER_TOKEN_RE);
+  if (queueToken) {
+    deps.queues.add(normalizeDependencyName(queueToken[1]));
+  } else if (idleToken || busyToken) {
+    deps.resources.add(normalizeDependencyName((idleToken || busyToken)[1]));
+  } else if (attrToken) {
+    deps.resources.add(normalizeDependencyName(attrToken[1]));
+    deps.entityAttrs.add(attrToken[2].trim());
+  } else if (containerToken) {
+    deps.containers.add(normalizeDependencyName(containerToken[1]));
+  } else if (variable === "served" || variable === "reneged" || variable === "loopCount") {
+    deps.builtins.add(variable);
+  } else if (variable === "clock") {
+    deps.clock = true;
+    deps.builtins.add("clock");
+  } else if (variable === "isWeekday" || variable === "isWeekend" || variable === "hourOfDay" || variable === "dayOfWeek") {
+    deps.clock = true;
+    deps.builtins.add(variable);
+  } else if (variable.startsWith("Entity.")) {
+    deps.entityAttrs.add(variable.slice("Entity.".length));
+  } else if (variable.startsWith("Queue.")) {
+    const parts = variable.split(".");
+    deps.queues.add(normalizeDependencyName(parts[1]));
+  } else if (variable.startsWith("Resource.")) {
+    const parts = variable.split(".");
+    deps.resources.add(normalizeDependencyName(parts[1]));
+  } else if (variable.startsWith("state.")) {
+    deps.stateVars.add(variable.slice("state.".length));
+  } else if (variable && !variable.includes(".")) {
+    deps.stateVars.add(variable);
+  } else {
+    deps.unknown = true;
+  }
+}
+
 export function getPredicateDependencies(predicate) {
   if (predicate && typeof predicate === "object" && predicate[PREDICATE_DEPS]) {
     return predicate[PREDICATE_DEPS];
@@ -231,43 +307,13 @@ export function getPredicateDependencies(predicate) {
       mergeDependencySets(deps, getPredicateDependencies(clause));
     }
   } else {
-    const variable = String(normalized.variable || "").trim();
-    const queueToken = variable.match(/^queue\(([^)]+)\)\.(length|count|size)$/i);
-    const idleToken = variable.match(/^idle\(([^,)]+)(?:\s*,\s*"[^"]+")?\)\.count$/i);
-    const busyToken = variable.match(/^busy\(([^,)]+)(?:\s*,\s*"[^"]+")?\)\.count$/i);
-    const attrToken = variable.match(/^attr\(([^,]+)\s*,\s*([^)]+)\)$/i);
-    const containerToken = variable.match(/^container\(([^)]+)\)\.(level|capacity|min|max)$/i);
-    if (queueToken) {
-      deps.queues.add(normalizeDependencyName(queueToken[1]));
-    } else if (idleToken || busyToken) {
-      deps.resources.add(normalizeDependencyName((idleToken || busyToken)[1]));
-    } else if (attrToken) {
-      deps.resources.add(normalizeDependencyName(attrToken[1]));
-      deps.entityAttrs.add(attrToken[2].trim());
-    } else if (containerToken) {
-      deps.containers.add(normalizeDependencyName(containerToken[1]));
-    } else if (variable === "served" || variable === "reneged" || variable === "loopCount") {
-      deps.builtins.add(variable);
-    } else if (variable === "clock") {
-      deps.clock = true;
-      deps.builtins.add("clock");
-    } else if (variable === "isWeekday" || variable === "isWeekend" || variable === "hourOfDay" || variable === "dayOfWeek") {
-      deps.clock = true;
-      deps.builtins.add(variable);
-    } else if (variable.startsWith("Entity.")) {
-      deps.entityAttrs.add(variable.slice("Entity.".length));
-    } else if (variable.startsWith("Queue.")) {
-      const parts = variable.split(".");
-      deps.queues.add(normalizeDependencyName(parts[1]));
-    } else if (variable.startsWith("Resource.")) {
-      const parts = variable.split(".");
-      deps.resources.add(normalizeDependencyName(parts[1]));
-    } else if (variable.startsWith("state.")) {
-      deps.stateVars.add(variable.slice("state.".length));
-    } else if (variable && !variable.includes(".")) {
-      deps.stateVars.add(variable);
-    } else {
-      deps.unknown = true;
+    addLeafDependency(deps, normalized.variable);
+    // RHS resolution (see isResolvableExpression in compilePredicate) only covers the
+    // five function-call-style tokens — track those as dependencies too so the
+    // filtered-Phase-C dirty-tracking optimization re-evaluates when only the RHS's
+    // referenced queue/resource/container changes.
+    if (isResolvableExpression(normalized.value)) {
+      addLeafDependency(deps, normalized.value);
     }
   }
 
@@ -308,9 +354,17 @@ export function compilePredicate(predicate) {
     const variable = normalized.variable;
     const operator = normalized.operator;
     const value = normalized.value;
+    // RHS resolution: a value string matching one of the same function-call-style
+    // tokens the LHS resolves (queue(...)/idle(...)/busy(...)/container(...)/attr(...))
+    // is treated as a dynamic reference instead of a literal — enables comparisons
+    // like `queue(A).length < queue(B).length` (shortest-queue routing). Deliberately
+    // scoped to just these five patterns; see isResolvableExpression for why a bare
+    // state-variable name is excluded (ambiguous with a literal string of the same text).
+    const rhsResolvable = isResolvableExpression(value);
     compiled = (state) => {
       const left = resolveVariable(variable, state || {});
-      return !!applyOperator(left, operator, value);
+      const right = rhsResolvable ? resolveVariable(value, state || {}) : value;
+      return !!applyOperator(left, operator, right);
     };
   }
 
