@@ -8,13 +8,22 @@ export const MS_PER_WEEK = 604800000;
 
 const UNIT_MS = { seconds: 1000, minutes: 60000, hours: 3600000, days: 86400000 };
 
+// Cap on how many weeks of a recurring pattern to expand when maxSimTime is null/unbounded
+// (a terminationCondition-driven run) — without this, maxWeeks becomes Infinity and the
+// per-week loop below never terminates, hanging the engine. ~10 years is far beyond any
+// realistic simulation horizon.
+const MAX_WEEKS_CAP = 520;
+
 // Parse HH:MM string to minutes from midnight.
 // Returns NaN for invalid input.
 export function parseHHMM(str) {
   if (str == null) return NaN;
   const parts = String(str).match(/^(\d{1,2}):(\d{2})$/);
   if (!parts) return NaN;
-  return Number(parts[1]) * 60 + Number(parts[2]);
+  const hour = Number(parts[1]);
+  const minute = Number(parts[2]);
+  if (hour > 23 || minute > 59) return NaN;
+  return hour * 60 + minute;
 }
 
 // Convert a calendar date string (YYYY-MM-DD) to simulation time offset from epoch.
@@ -130,7 +139,7 @@ export function expandWeeklyPatternToEvents(pattern, epoch, maxSimTime = null, t
     return { events: mergeConsecutive(rawEvents), warnings };
   }
 
-  const maxWeeks = Math.ceil(maxTime / simWeek) + 1;
+  const maxWeeks = Number.isFinite(maxTime) ? Math.ceil(maxTime / simWeek) + 1 : MAX_WEEKS_CAP;
 
   for (let week = 0; week < maxWeeks; week++) {
     const weekStart = week * simWeek;

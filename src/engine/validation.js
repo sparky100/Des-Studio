@@ -11,6 +11,8 @@
 import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
 import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
 import { getPatternInitialCapacity } from "./schedule-pattern.js";
+import { evaluatePredicate } from "./conditions.js";
+import { applyEntityInheritance } from "./entity-inheritance.js";
 
 export const DEFAULT_MAX_SIM_TIME = 500;
 
@@ -21,6 +23,12 @@ export function validateModel(model) {
   const warn = (code, message, tab, affectedIds) => warnings.push({ code, message, tab, affectedIds });
 
   const entityTypes = model.entityTypes    || [];
+  // Skill/attribute lookups (V-SKILL-*) must see a child entity type's inherited
+  // attrDefs/skills/skillProfiles, not just its own — otherwise a valid model
+  // using ASSIGN with a skill declared only on the parent type would be
+  // incorrectly blocked. Structural checks on a type's own declarations (V1-V3)
+  // deliberately keep using the raw `entityTypes` above.
+  const mergedEntityTypes = applyEntityInheritance(model).entityTypes || [];
   const bEvents     = model.bEvents        || [];
   const cEvents     = model.cEvents        || [];
   const queues      = model.queues         || [];
@@ -1009,6 +1017,29 @@ export function validateModel(model) {
             { eventIds: [ev.id] });
         }
       });
+
+      const assignHits = text.match(/\bASSIGN\([^)]+\)/gi) || [];
+      assignHits.forEach(hit => {
+        const inner = hit.match(/^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"[^"]+"|\s*,\s*Entity\.\w+)?(?:\s*,\s*([A-Za-z_]\w*):([^)]+))?\)$/i);
+        if (!inner || !inner[3]) return;
+        const name = inner[3].trim();
+        const amountRaw = inner[4].trim();
+        if (!containerIdsLower.has(name.toLowerCase())) {
+          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ASSIGN references undeclared container '${name}'.`, tab,
+            { eventIds: [ev.id] });
+        }
+        const isBareNumeric = /^-?\d+(\.\d+)?$/.test(amountRaw);
+        const looksLikeExpression = /[\s+\-*/()]/.test(amountRaw);
+        if (isBareNumeric) {
+          if (parseFloat(amountRaw) <= 0) {
+            err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ASSIGN container amount (${amountRaw}) must be a positive number.`, tab,
+              { eventIds: [ev.id] });
+          }
+        } else if (!looksLikeExpression && !stateVarNamesLower.has(amountRaw.toLowerCase())) {
+          warn('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ASSIGN container amount '${amountRaw}' is not a number and not a declared state variable reference — verify this is intentional.`, tab,
+            { eventIds: [ev.id] });
+        }
+      });
     });
   };
   checkContainerRefs(bEvents, 'bevents');
@@ -1200,6 +1231,98 @@ export function validateModel(model) {
     }
   }
 
+  // ── V68: Service sequence enforcement (requiredSequence) ───────────────────
+  // An entity type's requiredSequence declares the queues it should visit in
+  // order. This reuses V45's destination-extraction idea plus a parallel
+  // source-extraction pass, then traces C-event → scheduled B-event edges
+  // (via cSchedules) to approximate the model's actual queue-to-queue flow —
+  // most services are an ASSIGN in a C-event followed by a RELEASE/routing
+  // table in the B-event it schedules, so source and destination usually live
+  // on two different events. Warning-only: rework/retry loops that
+  // intentionally revisit an earlier stage are a legitimate DES pattern, so
+  // this must never block a run — it's a nudge to double-check, not a rule.
+  {
+    const SOURCE_QUEUE_G  = /\b(?:ASSIGN|DELAY|COSEIZE|BATCH)\s*\(\s*([^,)]+)/gi;
+    const MATCH_SOURCES_G = /\bMATCH\s*\(\s*[^,)]+,\s*([^,)]+)\s*,\s*[^,)]+,\s*([^,)]+)\s*,/gi;
+    const QUEUE_TOKEN_G   = /\bqueue\(\s*([^)]+?)\s*\)/gi;
+    const ARRIVE_QUEUE_G2  = /ARRIVE\s*\([^,)]+,\s*([^)]+)\)/gi;
+    const RELEASE_QUEUE_G2 = /RELEASE\s*\([^,)]+,\s*([^)]+)\)/gi;
+    const RELEASE_COSEIZED_QUEUE_G2 = /RELEASE_COSEIZED\s*\(\s*\[[^\]]+\]\s*,\s*([^)]+)\)/gi;
+    const MATCH_QUEUE_G2 = /MATCH\s*\([^,)]+,\s*[^,)]+,\s*[^,)]+,\s*[^,)]+,\s*([^)]+)\)/gi;
+    const SPLIT_QUEUE_G2 = /SPLIT\s*\([^,)]+,\s*\d+\s*,\s*([^)]+)\)/gi;
+
+    const extractSources = (ev) => {
+      const names = new Set();
+      const text = effectText(ev.effect);
+      for (const m of text.matchAll(SOURCE_QUEUE_G)) names.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(MATCH_SOURCES_G)) { names.add(m[1].trim().toLowerCase()); names.add(m[2].trim().toLowerCase()); }
+      const condText = typeof ev.condition === 'string' ? ev.condition : JSON.stringify(ev.condition || {});
+      for (const m of condText.matchAll(QUEUE_TOKEN_G)) names.add(m[1].trim().toLowerCase());
+      return names;
+    };
+    const extractDestinations = (ev) => {
+      const names = new Set();
+      const text = effectText(ev.effect);
+      for (const m of text.matchAll(ARRIVE_QUEUE_G2))  names.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(RELEASE_QUEUE_G2)) names.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(RELEASE_COSEIZED_QUEUE_G2)) names.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(MATCH_QUEUE_G2))   names.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(SPLIT_QUEUE_G2))   names.add(m[1].trim().toLowerCase());
+      (ev.routing || []).forEach(r => r.queueName && names.add(r.queueName.toLowerCase()));
+      (ev.probabilisticRouting || []).forEach(r => r.queueName && names.add(r.queueName.toLowerCase()));
+      if (ev.defaultQueueName) names.add(ev.defaultQueueName.toLowerCase());
+      if (ev.loopConfig?.exitQueueName) names.add(ev.loopConfig.exitQueueName.toLowerCase());
+      return names;
+    };
+
+    const bEventById = new Map(bEvents.map(b => [b.id, b]));
+    const bEventIds = new Set(bEvents.map(b => b.id));
+    const edges = []; // { from, to, eventId, eventName }
+    const addEdges = (srcSet, destSet, ev) => {
+      for (const src of srcSet) for (const dest of destSet) {
+        if (src && dest && src !== dest) edges.push({ from: src, to: dest, eventId: ev.id, eventName: ev.name });
+      }
+    };
+
+    [...bEvents, ...cEvents].forEach(ev => addEdges(extractSources(ev), extractDestinations(ev), ev));
+    cEvents.forEach(ce => {
+      const src = extractSources(ce);
+      if (src.size === 0) return;
+      (ce.cSchedules || []).forEach(cs => {
+        const be = bEventById.get(cs.eventId);
+        if (be) addEdges(src, extractDestinations(be), be);
+      });
+    });
+
+    entityTypes
+      .filter(et => et.role === 'customer' && Array.isArray(et.requiredSequence) && et.requiredSequence.length > 0)
+      .forEach(et => {
+        const sequence = et.requiredSequence.map(s => String(s || '').trim());
+        sequence.forEach((qName, idx) => {
+          if (!qName) return;
+          const exists = queues.some(q => (q.name || '').trim().toLowerCase() === qName.toLowerCase());
+          if (!exists) {
+            err('V68', `Entity class '${et.name}' requiredSequence[${idx + 1}] ('${qName}') does not match any defined queue.`, 'entities',
+              { entityTypeIds: [et.id] });
+          }
+        });
+        const indexOf = new Map(sequence.map((q, i) => [q.toLowerCase(), i]));
+        const seenWarnings = new Set();
+        edges.forEach(edge => {
+          const i = indexOf.get(edge.from);
+          const j = indexOf.get(edge.to);
+          if (i == null || j == null || j >= i) return;
+          const dedupeKey = `${edge.eventId}:${edge.from}:${edge.to}`;
+          if (seenWarnings.has(dedupeKey)) return;
+          seenWarnings.add(dedupeKey);
+          warn('V68',
+            `Entity class '${et.name}': event '${edge.eventName || edge.eventId}' routes from '${sequence[i]}' (stage ${i + 1}) backward to '${sequence[j]}' (stage ${j + 1}) in the declared sequence [${sequence.join(' → ')}]. If this is an intentional rework/retry loop, this warning can be ignored.`,
+            bEventIds.has(edge.eventId) ? 'bevents' : 'cevents',
+            { entityTypeIds: [et.id], eventIds: [edge.eventId] });
+        });
+      });
+  }
+
   // ── V50–V56: Weekly Schedule Pattern validation ───────────────────────────
   {
     const parseHHMM = (str) => {
@@ -1382,7 +1505,7 @@ export function validateModel(model) {
   // ── Skills validation ──────────────────────────────────────────────────────
   const modelSkills = model.skills || [];
   const serverTypeMap = {};
-  entityTypes.filter(et => et.role === 'server').forEach(et => {
+  mergedEntityTypes.filter(et => et.role === 'server').forEach(et => {
     serverTypeMap[(et.name || '').trim().toLowerCase()] = et;
   });
 
@@ -1449,7 +1572,7 @@ export function validateModel(model) {
   // V-SKILL-3: ASSIGN(QueueName, ServerType, Entity.attrName) — attrName must exist
   // on a customer entity type reachable via the queue
   const customerTypeMap = {};
-  entityTypes.filter(et => et.role === 'customer').forEach(et => {
+  mergedEntityTypes.filter(et => et.role === 'customer').forEach(et => {
     customerTypeMap[(et.name || '').trim().toLowerCase()] = et;
   });
 
@@ -1594,6 +1717,150 @@ export function validateModel(model) {
         }
       });
     });
+  });
+
+  // V-SKILL-2b: ASSIGN(Queue, ANY, "Skill") — skill must exist on at least one server type,
+  // otherwise the cross-type pool is guaranteed empty and the effect will never match.
+  [...bEvents, ...cEvents].forEach(ev => {
+    const text = effectText(ev.effect);
+    const anyAssignMatch = text.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*ANY\s*,\s*"([^"]+)"\s*\)/gi);
+    if (anyAssignMatch) {
+      anyAssignMatch.forEach(m => {
+        const parts = m.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*ANY\s*,\s*"([^"]+)"\s*\)/i);
+        if (!parts) return;
+        const skill = parts[2].trim();
+        const coveredByAnyType = mergedEntityTypes.some(et => {
+          if (et.role !== 'server') return false;
+          if (Array.isArray(et.skills) && et.skills.includes(skill)) return true;
+          return (et.skillProfiles || []).some(p => (p.skills || []).includes(skill));
+        });
+        if (!coveredByAnyType) {
+          warn('V-SKILL-2',
+            `Effect '${m.trim()}' uses ASSIGN(..., ANY, "${skill}") but no server type has skill '${skill}' assigned. This will never match.`,
+            ev.effect ? 'cevents' : 'bevents',
+            { eventIds: [ev.id] });
+        }
+      });
+    }
+  });
+
+  // V62: Entity type literally named "ANY" collides with the ASSIGN cross-type-pooling sentinel
+  entityTypes.filter(et => et.role === 'server' && (et.name || '').trim().toUpperCase() === 'ANY').forEach(et => {
+    warn('V62',
+      `Server type '${et.name}' is named 'ANY', which collides with the reserved ASSIGN(..., ANY, ...) cross-type pooling token. Rename this server type to avoid ambiguous ASSIGN behavior.`,
+      'entities',
+      { entityTypeIds: [et.id] });
+  });
+
+  // V63: CANCEL(EventName) must reference a real B-Event or C-Event name
+  const knownEventNames = new Set([...bEvents, ...cEvents].map(e => (e.name || '').trim()).filter(Boolean));
+  [...bEvents, ...cEvents].forEach(ev => {
+    const text = effectText(ev.effect);
+    const cancelMatches = text.match(/CANCEL\s*\(\s*(\w+)\s*\)/gi);
+    if (cancelMatches) {
+      cancelMatches.forEach(m => {
+        const parts = m.match(/CANCEL\s*\(\s*(\w+)\s*\)/i);
+        if (!parts) return;
+        const eventName = parts[1].trim();
+        if (!knownEventNames.has(eventName)) {
+          err('V63',
+            `Effect '${m.trim()}' references event '${eventName}' which does not match any B-Event or C-Event name in this model.`,
+            ev.effect ? 'cevents' : 'bevents',
+            { eventIds: [ev.id] });
+        }
+      });
+    }
+  });
+
+  // V64: ROUND_ROBIN(StateVar, N) — N must be a positive integer
+  [...bEvents, ...cEvents].forEach(ev => {
+    const text = effectText(ev.effect);
+    const rrMatches = text.match(/ROUND_ROBIN\s*\(\s*\w+\s*,\s*(-?\d+)\s*\)/gi);
+    if (rrMatches) {
+      rrMatches.forEach(m => {
+        const parts = m.match(/ROUND_ROBIN\s*\(\s*\w+\s*,\s*(-?\d+)\s*\)/i);
+        if (!parts) return;
+        const n = parseInt(parts[1], 10);
+        if (!Number.isFinite(n) || n <= 0) {
+          err('V64',
+            `Effect '${m.trim()}' — ROUND_ROBIN's N must be a positive integer, got '${parts[1]}'.`,
+            ev.effect ? 'cevents' : 'bevents',
+            { eventIds: [ev.id] });
+        }
+      });
+    }
+  });
+
+  // V65: SkillProfile.priority, if present, must be numeric
+  entityTypes.filter(et => et.role === 'server' && Array.isArray(et.skillProfiles)).forEach(et => {
+    et.skillProfiles.forEach((profile, pi) => {
+      if (profile.priority != null && !Number.isFinite(Number(profile.priority))) {
+        err('V65',
+          `Entity class '${et.name}' profile '${profile.name || `#${pi + 1}`}' has a non-numeric priority '${profile.priority}'.`,
+          'entities',
+          { entityTypeIds: [et.id] });
+      }
+    });
+  });
+
+  // V66: MATCH's optional compatibility predicate (6th arg) must parse and evaluate
+  // without throwing. Unlike routing[].condition/C-event condition (built by the
+  // structured UI), this text is typed directly into an effect string, so a typo'd
+  // variable namespace would otherwise only surface as a silent "no match" at
+  // runtime (the engine catches the throw defensively, but gives no design-time signal).
+  [...bEvents, ...cEvents].forEach(ev => {
+    const text = effectText(ev.effect);
+    const matchCalls = text.match(/MATCH\s*\([^)]*\)/gi);
+    if (!matchCalls) return;
+    matchCalls.forEach(m => {
+      const parts = m.match(/MATCH\s*\(\s*[^,)]+\s*,\s*[^,)]+\s*,\s*[^,)]+\s*,\s*[^,)]+\s*,\s*[^,)]+\s*,\s*"([^"]+)"\s*\)/i);
+      if (!parts) return;
+      const predicateText = parts[1].trim();
+      try {
+        evaluatePredicate(predicateText, { currentEntity: {}, otherEntity: {} });
+      } catch (e) {
+        err('V66',
+          `Effect '${m.trim()}' — MATCH's compatibility predicate '${predicateText}' failed to evaluate: ${e.message}`,
+          ev.effect ? 'cevents' : 'bevents',
+          { eventIds: [ev.id] });
+      }
+    });
+  });
+
+  // V67: parentTypeId must reference a real, same-role, non-self entity type,
+  // and the inheritance chain must not contain a cycle. Build-time inheritance
+  // merge (applyEntityInheritance in engine/index.js) assumes an acyclic,
+  // role-consistent chain — a cycle would otherwise infinite-loop at load time.
+  const entityTypeById = new Map(entityTypes.map(et => [et.id, et]));
+  entityTypes.forEach(et => {
+    if (!et.parentTypeId) return;
+    if (et.parentTypeId === et.id) {
+      err('V67', `Entity class '${et.name || et.id}' cannot set itself as its own parent type.`, 'entities',
+        { entityTypeIds: [et.id] });
+      return;
+    }
+    const parent = entityTypeById.get(et.parentTypeId);
+    if (!parent) {
+      err('V67', `Entity class '${et.name || et.id}' has parentTypeId '${et.parentTypeId}' which does not match any defined entity type.`, 'entities',
+        { entityTypeIds: [et.id] });
+      return;
+    }
+    if (parent.role !== et.role) {
+      err('V67', `Entity class '${et.name}' (role '${et.role}') cannot inherit from '${parent.name}' (role '${parent.role}') — parent and child must have the same role.`, 'entities',
+        { entityTypeIds: [et.id, parent.id] });
+    }
+    // Walk the chain looking for a cycle.
+    const seen = new Set([et.id]);
+    let current = parent;
+    while (current?.parentTypeId) {
+      if (seen.has(current.id)) {
+        err('V67', `Entity class '${et.name || et.id}' has a circular parentTypeId chain (through '${current.name || current.id}').`, 'entities',
+          { entityTypeIds: [et.id, current.id] });
+        break;
+      }
+      seen.add(current.id);
+      current = entityTypeById.get(current.parentTypeId);
+    }
   });
 
   // V-CAL-1: Calendar conditions require epoch

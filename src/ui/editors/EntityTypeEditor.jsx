@@ -37,6 +37,24 @@ const shiftWhenVariableLabel=(variable,stateVariables,queues)=>{
   return variable;
 };
 
+// Would setting `candidateParentId` as `childId`'s parentTypeId create a cycle?
+// True for self-reference, or if candidateParentId's own ancestor chain already
+// passes through childId (candidateParentId depends on childId, so childId
+// depending back on candidateParentId would close the loop).
+const wouldCreateInheritanceCycle=(childId,candidateParentId,allTypes)=>{
+  if(childId===candidateParentId)return true;
+  const byId=new Map(allTypes.map(t=>[t.id,t]));
+  let cur=byId.get(candidateParentId);
+  const seen=new Set();
+  while(cur?.parentTypeId){
+    if(seen.has(cur.id))break;
+    seen.add(cur.id);
+    if(cur.parentTypeId===childId)return true;
+    cur=byId.get(cur.parentTypeId);
+  }
+  return false;
+};
+
 const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=null,timeUnit="minutes",errorFilter=null,onClearErrorFilter,skills=[],onChange})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
@@ -46,6 +64,24 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(types.map(e=>e.id)));
   const collapseAll=()=>setExpandedIds(new Set());
+
+  const setSequence=(i,seq)=>{const n=[...types];n[i]={...n[i],requiredSequence:seq};onChange(n);};
+  const addSequenceStage=(i,qName)=>{
+    const current=Array.isArray(types[i].requiredSequence)?types[i].requiredSequence:[];
+    if(!qName||current.includes(qName))return;
+    setSequence(i,[...current,qName]);
+  };
+  const removeSequenceStage=(i,idx)=>{
+    const current=types[i].requiredSequence||[];
+    setSequence(i,current.filter((_,j)=>j!==idx));
+  };
+  const moveSequenceStage=(i,idx,dir)=>{
+    const current=[...(types[i].requiredSequence||[])];
+    const target=idx+dir;
+    if(target<0||target>=current.length)return;
+    [current[idx],current[target]]=[current[target],current[idx]];
+    setSequence(i,current);
+  };
 
   const add=()=>{
     const id="et"+Date.now();
@@ -243,6 +279,45 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                 role={et.role||'customer'}
                 onChange={v=>upd(i,'attrDefs',v)}
               />
+              {(() => {
+                const candidates = types.filter(t => t.id !== et.id && (t.role || 'customer') === (et.role || 'customer') && !wouldCreateInheritanceCycle(et.id, t.id, types));
+                if (candidates.length === 0 && !et.parentTypeId) return null;
+                return (
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Inherits from:</span>
+                    <select value={et.parentTypeId||""} onChange={e=>upd(i,"parentTypeId",e.target.value||undefined)}
+                      style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                      <option value="">— none —</option>
+                      {candidates.map(t=><option key={t.id} value={t.id}>{t.name||"(unnamed)"}</option>)}
+                    </select>
+                    {et.parentTypeId&&<span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>attributes, skills, and skill profiles are merged in from the parent at run time</span>}
+                  </div>
+                );
+              })()}
+              {et.role!=="server"&&queues.length>0&&(
+                <SectionPanel
+                  label="Required Sequence"
+                  status={Array.isArray(et.requiredSequence)&&et.requiredSequence.length>0?`${et.requiredSequence.length} stage${et.requiredSequence.length!==1?"s":""}`:"off"}
+                  color={C.cEvent}>
+                  <div style={{fontSize:10,color:C.muted,fontFamily:FONT}}>
+                    Declare the queues this entity type should visit in order. This is a design-time check only — validation flags routing that jumps backward through these stages, but the engine does not otherwise enforce the order.
+                  </div>
+                  {(et.requiredSequence||[]).map((qName,idx)=>(
+                    <div key={idx} style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT,width:16,textAlign:"right"}}>{idx+1}.</span>
+                      <span style={{flex:1,fontSize:11,color:C.text,fontFamily:FONT,background:`${C.cEvent}15`,border:`1px solid ${C.cEvent}44`,borderRadius:4,padding:"4px 8px"}}>{qName}</span>
+                      <Btn small variant="ghost" ariaLabel={`Move ${qName} earlier in sequence`} disabled={idx===0} onClick={()=>moveSequenceStage(i,idx,-1)}>↑</Btn>
+                      <Btn small variant="ghost" ariaLabel={`Move ${qName} later in sequence`} disabled={idx===(et.requiredSequence.length-1)} onClick={()=>moveSequenceStage(i,idx,1)}>↓</Btn>
+                      <Btn small variant="danger" ariaLabel={`Remove ${qName} from sequence`} onClick={()=>removeSequenceStage(i,idx)}>✕</Btn>
+                    </div>
+                  ))}
+                  <select aria-label={`Add queue to sequence for ${et.name||"entity type"}`} value="" onChange={e=>{if(e.target.value)addSequenceStage(i,e.target.value);}}
+                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none",alignSelf:"flex-start"}}>
+                    <option value="">+ add queue to sequence…</option>
+                    {queues.filter(q=>!(et.requiredSequence||[]).includes(q.name)).map(q=><option key={q.id} value={q.name}>{q.name}</option>)}
+                  </select>
+                </SectionPanel>
+              )}
               {et.role==="server"&&(
                 <SectionPanel
                   label="Shift Schedule"
@@ -528,6 +603,22 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                                     padding:"2px 4px",outline:"none",textAlign:"center",
                                     opacity:hasWeight?1:0.4,
                                   }}/>%
+                              </label>
+                              <label title="ASSIGN prefers higher-priority profiles when multiple idle servers match a skill (default 0)."
+                                style={{display:"flex",alignItems:"center",gap:3,fontFamily:FONT,fontSize:10,color:C.muted,cursor:"help"}}>
+                                Priority:
+                                <input type="number" value={profile.priority ?? ""} placeholder="0"
+                                  onChange={e=>{
+                                    const n=[...et.skillProfiles];
+                                    const raw = e.target.value;
+                                    n[pi]={...n[pi],priority: raw===""?undefined:Number(raw)};
+                                    upd(i,"skillProfiles",n);
+                                  }}
+                                  style={{
+                                    background:"transparent",border:`1px solid ${C.border}`,width:40,
+                                    borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,
+                                    padding:"2px 4px",outline:"none",textAlign:"center",
+                                  }}/>
                               </label>
                             </div>
                           </div>

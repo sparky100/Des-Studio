@@ -27,6 +27,7 @@ function effectToText(effect) {
 
 // Extract all server types a c-event's effect seizes.
 // ASSIGN(Queue, ServerType) -> [ServerType]
+// ASSIGN(Queue, ANY, "Skill") -> ["ANY"] — resolved to the real pool by buildServerTypeIndex
 // COSEIZE(Queue, ServerType1, ServerType2, ...) -> [ServerType1, ServerType2, ...] (variadic)
 export function extractServerTypes(effect) {
   const text = effectToText(effect);
@@ -41,13 +42,34 @@ export function extractServerTypes(effect) {
   return [];
 }
 
+// Extract the skill literal from a cross-type ASSIGN(Queue, ANY, "Skill") effect, if any.
+export function extractAssignAnySkill(effect) {
+  const text = effectToText(effect);
+  const m = text.match(/ASSIGN\s*\(\s*[^,)]+,\s*ANY\s*,\s*"([^"]+)"\s*\)/i);
+  return m ? m[1].trim() : null;
+}
+
 // Build c-event id -> { serverTypes, capacities, ceventName } for activity node enrichment.
 // capacity per type comes from model.entityTypes[role=server].count (defaults to 1).
 export function buildServerTypeIndex(cEvents, entityTypes) {
   const index = new Map();
   for (const ce of cEvents || []) {
-    const serverTypes = extractServerTypes(ce.effect);
+    let serverTypes = extractServerTypes(ce.effect);
     if (!serverTypes.length) continue;
+    // Cross-type pooling: ASSIGN(Queue, ANY, "Skill") has no single real server
+    // type — expand to every server type carrying the skill so live stats
+    // aggregate across the actual pool instead of a literal "ANY" that matches
+    // no real entities.
+    if (serverTypes.length === 1 && serverTypes[0].toUpperCase() === "ANY") {
+      const skill = extractAssignAnySkill(ce.effect);
+      const pool = (entityTypes || [])
+        .filter(et => et.role === "server" && skill && (
+          (Array.isArray(et.skills) && et.skills.includes(skill)) ||
+          (et.skillProfiles || []).some(p => (p.skills || []).includes(skill))
+        ))
+        .map(et => et.name);
+      if (pool.length) serverTypes = pool;
+    }
     const capacities = serverTypes.map(serverType => {
       const et = (entityTypes || []).find(
         e => e.role === "server" && e.name?.trim().toLowerCase() === serverType.trim().toLowerCase()

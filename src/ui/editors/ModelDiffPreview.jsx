@@ -228,7 +228,7 @@ function deriveSimulationSummary(proposedModel = {}) {
     if (assignEvent) {
       // Extract server type from ASSIGN(queue, server)
       const eff = Array.isArray(assignEvent.effect) ? assignEvent.effect.join(";") : String(assignEvent.effect || "");
-      const assignMatch = eff.match(/ASSIGN\([^,]+,\s*([^)]+)\)/i);
+      const assignMatch = eff.match(/ASSIGN\([^,]+,\s*([^,)]+)(?:\s*,.*)?\)/i);
       if (assignMatch) {
         const serverName = assignMatch[1].trim();
         const serverEntity = serverTypes.find(s => s.name === serverName);

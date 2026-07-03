@@ -45,6 +45,22 @@ export interface EntityTypeDefinition {
   /** Per-instance skill assignment (count- or weight-based); overrides `skills` per server. */
   skillProfiles?: SkillProfile[];
   description?: string;
+  /**
+   * Id of another entity type (same `role`) this type inherits from. At
+   * model-load time the child's attrDefs/skills/skillProfiles are merged
+   * with its ancestors' (child overrides parent on name collision) to
+   * produce a flat runtime record — see engine/entity-inheritance.js.
+   * Must not be self-referential or create a cycle (V67).
+   */
+  parentTypeId?: string;
+  /**
+   * Ordered list of queue names a customer type is expected to visit in
+   * sequence (e.g. `["Triage Queue", "Treatment Queue", "Discharge Queue"]`).
+   * Design-time only — validation rule V68 warns when routing sends this
+   * type's entities backward through the declared stages; the engine does
+   * not enforce it at run time. Only meaningful for `role: "customer"`.
+   */
+  requiredSequence?: string[];
 }
 
 /** One row of a server type's per-instance skill assignment (V-SKILL-4/5/6). */
@@ -56,6 +72,8 @@ export interface SkillProfile {
   count?: number | string;
   /** Percent (0-100) chance per server instance of receiving this profile's skills (mutually exclusive with `count`). */
   weight?: number;
+  /** Preference tier for ASSIGN skill matching — higher values are preferred over lower ones (default 0). */
+  priority?: number;
 }
 
 // `time` and `when` are mutually exclusive — enforced by validator rule V48

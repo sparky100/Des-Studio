@@ -273,6 +273,10 @@ rng(); // → number in [0, 1)
       ],
       mtbf: string | null,           // Optional: mean time between failures
       mttr: string | null,           // Optional: mean time to repair
+      parentTypeId: string | null,   // Optional: id of a same-role entity type to inherit
+                                      // attrDefs/skills/skillProfiles from (build-time merge, V67)
+      requiredSequence: string[] | null, // Optional, customer types only: ordered queue names
+                                          // this type should visit (design-time check only, V68)
     }
   ],
   stateVariables: [
@@ -322,6 +326,9 @@ rng(); // → number in [0, 1)
 |-------|-------------|
 | `ARRIVE(Type[, Queue])` | Create entity of Type, place in Queue |
 | `ASSIGN(Queue, Server)` | Seize idle Server for first waiting entity in Queue |
+| `ASSIGN(Queue, Server, "Skill")` | Same, filtered to idle servers with the named skill. Prefers higher `skillProfiles[].priority` when multiple match; ties resolve FIFO by idle-since time. |
+| `ASSIGN(Queue, ANY, "Skill")` | Same skill filter, but pools idle servers across every server type instead of one fixed type. Reserved token `ANY`; requires a skill argument. |
+| `ASSIGN(Queue, Server, ContainerId:amount)` | Gates the assignment on a declared container having level ≥ `amount`; server claim and container deduction commit atomically (no partial seizure). Combine with a skill by putting the container clause last. |
 | `COMPLETE()` | End service for context entity; release server; increment served count |
 | `RELEASE(Server[, Queue])` | Release server without completing; re-queue entity if Queue given |
 | `RENEGE(ctx)` | Remove context entity from queue (abandonment) |
@@ -329,15 +336,19 @@ rng(); // → number in [0, 1)
 | `PREEMPT(Server)` | Interrupt mid-service; entity re-queues with remaining service |
 | `FAIL(Server)` | Mark Server as failed; interrupt any in-progress service |
 | `REPAIR(Server)` | Restore failed Server to idle; trigger C-scan |
+| `FINISH(Server)` | End the in-progress service of whichever entity a busy Server is currently serving, right now — for condition-triggered completion ("activity of unknown duration") instead of a scheduled delay. No busy server of that type → no-op. |
 | `SPLIT(Type, N, Queue)` | Clone context entity N-1 times; place clones in Queue. Requires exactly 3 args — a 2-arg `SPLIT(N, Queue)` is invalid and silently does nothing. Trigger from a one-shot context (a cSchedule-fired B-event), never a recurring C-event condition on the entity's own queue: SPLIT doesn't change the context entity's status, so a condition that stays true refires it unboundedly. |
 | `BATCH(Queue[, Size\|Entity.attr])` | Accumulate N entities from Queue into one batch entity |
 | `UNBATCH(Queue)` | Release batch members back as individual entities |
 | `MATCH(TypeA, QueueA, TypeB, QueueB, Target)` | Pair one entity from each queue into a batch. Merged attrs = `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — QueueB's value wins on any name collision with QueueA. |
+| `MATCH(TypeA, QueueA, TypeB, QueueB, Target, "predicate")` | Same, but scans both queues for the first pair satisfying the quoted predicate instead of always taking the front of each. `Entity.<attr>` = the QueueA candidate, `Other.<attr>` = the QueueB candidate. No compatible pair → no-op. |
 | `COSEIZE(Queue, Srv1[, Srv2, ...])` | Atomically seize one customer and multiple server types |
 | `RELEASE_COSEIZED([Srv1, Srv2, ...][, Queue])` | Atomically release all servers claimed by a COSEIZE for the context entity; re-queue to Queue if given. Never stack separate `RELEASE(Srv)` calls per co-seized type — use this instead. |
 | `SET(varName, expr)` | Set state variable to arithmetic expression result |
 | `SET_ATTR(attr, expr)` | Set context entity attribute to expression result |
 | `COST(expr)` | Accumulate expression result to `summary.totalCost` |
+| `CANCEL(EventName)` | Remove the pending FEL entry named EventName scheduled for the context entity only (not a global cancel-all) |
+| `ROUND_ROBIN(varName, N)` | Advance a state variable through a 0..N-1 rotation; pair with `routing[]` branches keyed on the variable to cycle destinations |
 
 **Expression syntax** (for `SET`, `SET_ATTR`, `COST`):
 - Entity attribute: `Entity.attrName`
@@ -347,13 +358,15 @@ rng(); // → number in [0, 1)
 - Functions: `min(a,b)`, `max(a,b)`, `abs(a)`, `round(a)`, `floor(a)`, `ceil(a)`
 
 **C-event/B-event `condition` string syntax** — `queue(Name).length`, `idle(Type).count`,
-`busy(Type).count`, `state.varName`, combined with `AND`/`OR`/`NOT` and a comparison operator.
-Every clause compares one dynamic token against a **literal constant only** — the right-hand side
-is parsed once at model-load time and never re-resolved as another dynamic token. A clause such as
+`busy(Type).count`, `container(Id).level`, `attr(Type, attrName)`, `state.varName`, combined with
+`AND`/`OR`/`NOT` and a comparison operator. The right-hand side resolves dynamically only when it
+is itself one of those five function-call-style tokens — e.g. `queue(A).length < queue(B).length`
+works correctly (shortest-queue routing), in any condition (C-event, `routing[]`, `balkCondition`,
+`cSchedules[].when`). A bare state-variable name or `Entity.<attr>` on the right-hand side is still
+always parsed as a **literal constant** at model-load time, never re-resolved. A clause such as
 `queue(Q).length > someStateVar` treats `someStateVar` as a literal (NaN) and is always false, with
-no error. To gate on a dynamic quantity, add a dedicated state variable and compare it to a literal
-in its own `AND` clause (e.g. `queue(Q).length > 0 AND someStateVar == 0`), never to another
-queue/idle/busy/state token directly.
+no error. To gate on a state-variable's dynamic value, compare it to a literal in its own `AND`
+clause instead (e.g. `queue(Q).length > 0 AND someStateVar == 0`).
 
 ---
 

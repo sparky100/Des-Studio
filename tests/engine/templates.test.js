@@ -21,7 +21,13 @@ describe('All template models', () => {
     }, 10000);
 
     it(`${template.name} — serves at least one entity (non-trivial output)`, () => {
-      const engine = buildEngine(template, 42, 0, 100);
+      // Use the template's own declared simulation horizon rather than a fixed 100
+      // time units — templates with a genuinely longer end-to-end pipeline (e.g. RASE
+      // Service Request's assess -> schedule -> execute chain has a realistic minimum
+      // latency well over 100 minutes) can never serve anyone within a too-short window
+      // regardless of correctness.
+      const maxSimTime = template.experimentDefaults?.maxSimTime ?? 100;
+      const engine = buildEngine(template, 42, 0, maxSimTime);
       const result = engine.runAll();
       // Batch templates (factory, warehouse) count batched groups as departures
       const output = (result.summary?.served ?? 0) + (result.summary?.departures ?? 0);

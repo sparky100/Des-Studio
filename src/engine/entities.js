@@ -652,12 +652,14 @@ export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
       // Assign instance skills from profiles
       if (profiles) {
         const instanceSkills = new Set();
+        let skillPriority = 0;
 
         // Count-based: servers 0..N get assigned profiles in order
         let slot = i;
         for (const { profile, count: c } of countAssignments) {
           if (slot < c) {
             (profile.skills || []).forEach(s => instanceSkills.add(s));
+            skillPriority = Math.max(skillPriority, Number(profile.priority) || 0);
             break;
           }
           slot -= c;
@@ -669,11 +671,13 @@ export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
             const w = Math.max(0, Math.min(100, Number(p.weight) || 0));
             if (w > 0 && rng() < w / 100) {
               (p.skills || []).forEach(s => instanceSkills.add(s));
+              skillPriority = Math.max(skillPriority, Number(p.priority) || 0);
             }
           }
         }
 
         server.skills = instanceSkills.size > 0 ? [...instanceSkills] : undefined;
+        server._skillPriority = skillPriority;
       }
 
       entities.push(server);
@@ -719,6 +723,15 @@ export function makeHelpers(entities, model = null, index = null) {
     return sortWaitingEntities(pool, discipline);
   }
 
+  // A server "has" a skill either via its type's static skills[] or its own
+  // per-instance skills[] (from skillProfiles) — shared by hasSkillType and
+  // idleOfAnySkill (cross-type ASSIGN pooling).
+  function entityHasSkill(entity, skill) {
+    if (Array.isArray(entity.skills) && entity.skills.includes(skill)) return true;
+    const et = (model?.entityTypes || []).find(t => t.role === "server" && match(t.name, entity.type));
+    return !!(et && Array.isArray(et.skills) && et.skills.includes(skill));
+  }
+
   return {
     entities,
     model,
@@ -737,6 +750,11 @@ export function makeHelpers(entities, model = null, index = null) {
 
     idleOf: (type) =>
       sortResourceEntities(serverPool().filter(e => match(e.type, type) && e.status === "idle" && !e._suspended)),
+
+    // Cross-type pooling for ASSIGN(Queue, ANY, "Skill") — idle servers of any
+    // type that carry the given skill, still sorted FIFO by idle-since time.
+    idleOfAnySkill: (skill) =>
+      sortResourceEntities(serverPool().filter(e => e.status === "idle" && !e._suspended && entityHasSkill(e, skill))),
 
     busyOf: (type) =>
       sortResourceEntities(serverPool().filter(e => match(e.type, type) && (e.status === "busy" || e.status === "serving") && !e._suspended)),

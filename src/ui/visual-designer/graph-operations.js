@@ -167,7 +167,7 @@ function queueForAnchor(model, anchorNode) {
 function serverNameFromActivity(model, anchorNode) {
   if (anchorNode?.type !== VISUAL_NODE_TYPES.ACTIVITY || !anchorNode.refId) return "";
   const event = (model.cEvents || []).find(item => item.id === anchorNode.refId);
-  return String(event?.effect || "").match(/ASSIGN\([^,)]+,\s*([^)]+)\)/i)?.[1]?.trim() || "";
+  return String(event?.effect || "").match(/ASSIGN\([^,)]+,\s*([^,)]+)(?:\s*,.*)?\)/i)?.[1]?.trim() || "";
 }
 
 function relayoutModel(model) {
@@ -1357,7 +1357,7 @@ export function updateVisualNode(model, node, patch = {}) {
         ...(patch.entityFilter !== undefined ? { entityFilter: patch.entityFilter } : {}),
       };
       if (patch.serverType) {
-        const oldServer = String(nextEvent.effect || "").match(/ASSIGN\([^,)]+,\s*([^)]+)\)/i)?.[1]?.trim() || "";
+        const oldServer = String(nextEvent.effect || "").match(/ASSIGN\([^,)]+,\s*([^,)]+)(?:\s*,.*)?\)/i)?.[1]?.trim() || "";
         nextEvent.condition = replaceServerName(nextEvent.condition || "", oldServer, patch.serverType);
         nextEvent.effect = replaceServerName(nextEvent.effect || "", oldServer, patch.serverType);
       }

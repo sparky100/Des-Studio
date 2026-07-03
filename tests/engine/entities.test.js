@@ -434,4 +434,110 @@ describe('createServerEntities — skillProfiles', () => {
     expect(serverEntities[1].skills).toContain('Surgery');
     expect(serverEntities[1].skills).toContain('Triage');
   });
+
+  test('count-based profile priority propagates to server._skillPriority', () => {
+    const entityTypes = [{
+      name: 'Doctor', role: 'server', count: 2,
+      skills: ['Surgery'],
+      skillProfiles: [
+        { name: 'Specialist', skills: ['Surgery'], count: 1, priority: 10 },
+        { name: 'Generalist', skills: ['Surgery'], count: 1, priority: 1 },
+      ],
+    }];
+    const serverEntities = createServerEntities(entityTypes, () => ({}), mulberry32(1));
+    expect(serverEntities[0]._skillPriority).toBe(10);
+    expect(serverEntities[1]._skillPriority).toBe(1);
+  });
+
+  test('missing priority defaults server._skillPriority to 0', () => {
+    const entityTypes = [{
+      name: 'Doctor', role: 'server', count: 1,
+      skills: ['Surgery'],
+      skillProfiles: [{ name: 'Generalist', skills: ['Surgery'], count: 1 }],
+    }];
+    const serverEntities = createServerEntities(entityTypes, () => ({}), mulberry32(1));
+    expect(serverEntities[0]._skillPriority).toBe(0);
+  });
+});
+
+// ── ASSIGN — skill-based preference and cross-type (ANY) pooling ─────────────
+describe('ASSIGN — skill priority and ANY cross-type pooling', () => {
+  beforeEach(() => { resetSeq(); });
+
+  function makePriorityModel() {
+    return {
+      entityTypes: [
+        { id: 'J', name: 'Job', role: 'customer', attrDefs: [] },
+        {
+          id: 'D', name: 'Doctor', role: 'server', count: 2,
+          skills: ['Surgery'],
+          skillProfiles: [
+            { name: 'Generalist', skills: ['Surgery'], count: 1, priority: 1 },
+            { name: 'Specialist', skills: ['Surgery'], count: 1, priority: 10 },
+          ],
+        },
+      ],
+      queues: [{ id: 'q', name: 'Queue', customerType: 'Job', discipline: 'FIFO' }],
+      stateVariables: [],
+      bEvents: [
+        { id: 'arr', name: 'Arrive', scheduledTime: '0', effect: 'ARRIVE(Job, Queue)', schedules: [] },
+        { id: 'done', name: 'Done', scheduledTime: '9999', effect: 'COMPLETE()', schedules: [] },
+      ],
+      cEvents: [{
+        id: 'c1', name: 'Start', priority: 1,
+        condition: 'queue(Queue).length > 0 AND idle(Doctor).count > 0',
+        effect: 'ASSIGN(Queue, Doctor, "Surgery")',
+        cSchedules: [{ eventId: 'done', dist: 'Fixed', distParams: { value: '5' }, useEntityCtx: true }],
+      }],
+    };
+  }
+
+  test('prefers the higher-priority server even though it was created after (same idle-since time)', () => {
+    // Service takes 5 time units; stop the run mid-service (t=2) so the
+    // claimed server is still busy at snapshot time instead of having
+    // already finished and gone back to idle.
+    const engine = buildEngine(makePriorityModel(), 1, 0, 2);
+    const result = engine.runAll();
+    const server = result.snap.entities.find(e => e.role === 'server' && e._skillPriority === 10);
+    // The Specialist (priority 10) must have been the one claimed for service.
+    expect(server.status).toBe('busy');
+    const generalist = result.snap.entities.find(e => e.role === 'server' && e._skillPriority === 1);
+    expect(generalist.status).toBe('idle');
+  });
+
+  function makeAnyTypeModel() {
+    return {
+      entityTypes: [
+        { id: 'J', name: 'Job', role: 'customer', attrDefs: [] },
+        { id: 'D', name: 'Doctor', role: 'server', count: 1, skills: ['Surgery'] },
+        { id: 'N', name: 'Nurse', role: 'server', count: 1, skills: ['Surgery'] },
+      ],
+      queues: [{ id: 'q', name: 'Queue', customerType: 'Job', discipline: 'FIFO' }],
+      stateVariables: [],
+      bEvents: [
+        { id: 'arr', name: 'Arrive', scheduledTime: '0', effect: 'ARRIVE(Job, Queue)', schedules: [] },
+        { id: 'done', name: 'Done', scheduledTime: '9999', effect: 'COMPLETE()', schedules: [] },
+      ],
+      cEvents: [{
+        id: 'c1', name: 'Start', priority: 1,
+        condition: 'queue(Queue).length > 0',
+        effect: 'ASSIGN(Queue, ANY, "Surgery")',
+        cSchedules: [{ eventId: 'done', dist: 'Fixed', distParams: { value: '5' }, useEntityCtx: true }],
+      }],
+    };
+  }
+
+  test('ASSIGN(Queue, ANY, "Skill") pools idle servers across every server type', () => {
+    const engine = buildEngine(makeAnyTypeModel(), 1, 0, 20);
+    const result = engine.runAll();
+    const served = result.entitySummary.filter(e => e.role === 'customer' && e.status === 'done');
+    expect(served.length).toBe(1);
+    // One of the two cross-type servers (Doctor or Nurse) must have served it —
+    // confirmed via the ASSIGN log message, since by run end the server has
+    // already finished and returned to idle.
+    const assignMsg = result.log
+      .map(e => e.message)
+      .find(m => typeof m === 'string' && m.includes('serving by'));
+    expect(assignMsg).toMatch(/serving by #\d+ \((Doctor|Nurse)\)/);
+  });
 });

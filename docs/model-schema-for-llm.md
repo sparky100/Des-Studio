@@ -95,6 +95,9 @@ Read this before writing any model JSON.
 | 19 | A `DELAY` completion B-event whose **only** effect is `ARRIVE(...)` | `ARRIVE` always creates a brand-new entity — it never resolves the entity that was delayed, which is left stuck in `"serving"` status forever (a permanent leak). The completion B-event must include `COMPLETE()`, `RELEASE()`, or a routing table (`routing[]`/`probabilisticRouting[]`) to resolve the delayed entity. `ARRIVE` may still appear *alongside* one of those (e.g. to also spawn a separate derived/log entity) — only a *bare* `ARRIVE` with nothing else is the error. Blocked by V47. See §6.2. |
 | 20 | `overflowDestination` set to a queue's `id` instead of its `name` | Unlike most id-style cross-references, `overflowDestination` is a name-style reference — same family as `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, and routing `queueName`. Set it to the target queue's exact `name` string. Setting it to the queue's `id` (e.g. `"q_unofficial"` instead of `"Unofficial Crossing Queue"`) never matches a defined queue name and is blocked by V20. See §16 for the full id-vs-name reference list. |
 | 21 | `defaultQueueName` set with **no** `routing[]` or `probabilisticRouting[]` table on the same B-event | `defaultQueueName` is **only** consulted as the fallback destination *inside* a `routing[]` table (see `fireBEvent` in `engine/phases.js`) — it does nothing at all on its own. A B-event with `"effect": []` and only `"defaultQueueName": "Next Queue"` never routes the entity anywhere; it is left in `"serving"`/`"waiting"` status permanently, silently stalling every downstream stage. This is the single most consequential mistake in this document — it produces a model that saves and loads cleanly but stalls 100% of entities at that point during an actual run. For a single fixed next queue, use `"probabilisticRouting": [{ "probability": 1.0, "queueName": "Next Queue" }]` instead (or a `routing: [{ "queueName": "Next Queue" }]` catch-all branch plus matching `defaultQueueName`). Blocked by V61. See §6.2. |
+| 22 | Assuming `CANCEL(EventName)` cancels every pending instance of that event | `CANCEL` is **entity-scoped** — it only removes the pending FEL entry belonging to the entity currently in context (matched by `_contextCustId`), never a global "cancel all" for that event name. It is meant for racing a timeout against normal completion for the *same* entity (e.g. `"effect": ["CANCEL(TimeoutCheck)", "COMPLETE()"]` on the normal-completion B-event, where `TimeoutCheck` was scheduled for the same entity via a second `cSchedules` entry). Do not use it to try to stop a recurring/self-scheduling B-event model-wide. |
+| 23 | `ASSIGN(QueueName, ANY)` with no skill argument | The `ANY` cross-type-pooling sentinel only makes sense paired with a skill filter — `ASSIGN(QueueName, ANY, "Skill")`. Without a skill argument there is no basis to decide which servers across types are eligible. Always supply a skill literal (or `Entity.attrName`) when using `ANY`. |
+| 24 | Arithmetic expression used as a condition's entire `variable` — e.g. `(clock - state.lastSlotTime) >= 60` | The condition grammar has **no arithmetic evaluator** at all — `variable` must be a single resolvable token (`queue(...)`, `idle(...)`, `Entity.attr`, a bare state-variable name, etc.), never a parenthesized expression. `(clock - state.lastSlotTime)` is parsed as one opaque literal token, matches no known namespace, and throws `Unknown variable namespace in predicate` at runtime — with no validation-time warning, since string conditions aren't statically checked against the resolvable-token list. For "N time units since the last event," use a self-rescheduling timer B-event that sets a boolean flag instead — see §6.2 "DELAY with slot capacity" for the full pattern. |
 
 ---
 
@@ -213,6 +216,8 @@ In this example, 40% of arriving entities have `requiredSkill = "Surgery"`, 30% 
 - `role` is `"customer"` or `"server"`.
 - `skills` (optional, string[]): names of skills this server type possesses. Only meaningful for `role: "server"` — ignored if set on a customer type. Each skill name must appear in the top-level `skills` registry (V-SKILL-1). A server type with no `skills` field is considered "unskilled" and will match any ASSIGN/COSEIZE that does not specify a required skill. See §2.
 - `skillProfiles` (optional, array): per-instance skill assignment for servers. Each profile is a `{name, skills[], count?, weight?}` object. See below for details. When absent or empty, all servers share the type-level `skills[]` identically. When present, each server instance is independently assigned a union of matching profile skills. See §2.
+- `parentTypeId` (optional, string): id of another entity type **of the same role** this type inherits from. See "Entity Family / Inheritance" below.
+- `requiredSequence` (optional, string[], customer types only): ordered list of queue names this type should visit in sequence. Design-time only — see "Service Sequence Enforcement" below.
 - Customer `count` must be `0` (or omitted) — arrivals are generated by `ARRIVE()`, not by a pre-populated count. Setting a non-zero `count` on a customer entity is a modelling error; the field is ignored for customers.
 - Server `count` must be an integer ≥ 1 (V19). This is the initial pool size; use `shiftSchedule` for time-varying capacity.
 - `count` must be a **JSON integer** — never a string (e.g. `2`, not `"2"`). Blocked by V19.
@@ -266,13 +271,57 @@ This produces:
 | `skills` | string[] | Yes | Skills this profile grants. Each must be in the model-level `skills[]` registry (V-SKILL-4). |
 | `count` | integer | One of `count` or `weight` | Exact number of servers assigned this profile as index 0, 1, ... N-1. Counts must not sum to more than `count` (V-SKILL-5). **Count takes precedence over weight** when both are set on the same profile. |
 | `weight` | number (0–100) | One of `count` or `weight` | Each server independently gets this profile with this % probability. Only used when `count` is absent or zero. Good for large pools where exact counts don't matter. |
+| `priority` | number | No | Preference tier for `ASSIGN`'s skill matching. Default 0. When multiple idle servers match a requested skill, `ASSIGN` prefers the one whose profile has the **highest** `priority` — e.g. a "Specialist" profile with `priority: 10` is picked over a "Generalist" profile with `priority: 1` even if the generalist has been idle longer. Ties (equal priority, including the default 0) resolve FIFO by idle-since time, same as before this field existed. Applies to both same-type `ASSIGN(Queue, ServerType, "Skill")` and cross-type `ASSIGN(Queue, ANY, "Skill")` (see Effect Macros for C-Events). |
 
 **Assignment order:**
 1. Count-based profiles are assigned first, in profile list order, to servers 0, 1, 2...
 2. After all count-based profiles, each server independently rolls for each weight-based profile using the seeded PRNG
 3. Each server's final `skills[]` = union of all matched profile skills
+4. Each server's final skill `priority` = the max `priority` across every profile that matched it
 
 **Fallback:** If `skillProfiles` is absent, `undefined`, or `[]`, all servers share the type-level `skills[]` — existing behaviour is fully backward compatible.
+
+### Entity Family / Inheritance (`parentTypeId`)
+
+A child entity type can inherit `attrDefs`, `skills`, and `skillProfiles` from another entity type of the **same role**, instead of redeclaring them. This is a build-time merge — every other part of the model (ASSIGN skill matching, ARRIVE attribute sampling, etc.) sees the merged, flattened result and has no separate awareness of inheritance.
+
+```json
+[
+  { "id": "et_nurse", "name": "Nurse", "role": "server", "count": 3, "skills": ["Triage"] },
+  { "id": "et_senior_nurse", "name": "Senior Nurse", "role": "server", "count": 1, "parentTypeId": "et_nurse", "skills": ["Surgery"] }
+]
+```
+
+`Senior Nurse` effectively has `skills: ["Triage", "Surgery"]` at run time — the union of its own `skills` plus its parent's. The same union/override merge applies to `attrDefs` (matched by `name`; a child's own `attrDefs` entry with the same name as a parent's entirely replaces it — this is how a child overrides an inherited default) and `skillProfiles` (matched by `name`).
+
+**Rules (V67):**
+- `parentTypeId` must reference another entity type's `id` in the same model.
+- An entity type cannot set itself as its own `parentTypeId`.
+- Parent and child must have the same `role` — a customer type cannot inherit from a server type or vice versa.
+- The inheritance chain must not contain a cycle (A → B → A).
+- Chains longer than one hop are supported (a grandchild inherits from its parent's entire resolved chain, not just the immediate parent).
+
+**When to use this vs. duplicating fields:** Use `parentTypeId` when several entity types share a common set of attributes or skills and should stay in sync when that common set changes (e.g. several patient sub-types all needing the same base intake attributes, or several nurse grades all sharing a base skill set plus their own specialty). If the types are unrelated or only coincidentally similar, just declare `attrDefs`/`skills` directly on each — inheritance adds a layer of indirection that isn't worth it for a one-off overlap.
+
+### Service Sequence Enforcement (`requiredSequence`)
+
+A customer entity type can declare `requiredSequence`, an ordered list of **queue names** it is expected to visit in sequence:
+
+```json
+{
+  "id": "et_patient", "name": "Patient", "role": "customer",
+  "requiredSequence": ["Triage Queue", "Treatment Queue", "Discharge Queue"]
+}
+```
+
+This is a **design-time check only** (validation rule V68) — the engine does not enforce the order at run time, and routing tables, `RELEASE`, `MATCH`, etc. behave exactly as they would without `requiredSequence`. What it buys you: the validator traces the model's actual queue-to-queue routing (the same events/effects that would run) and, for any routing edge whose source and destination queues are both named in `requiredSequence`, warns if the destination is **earlier** in the list than the source — i.e. entities of this type are being routed backward through the declared stages. This catches routing-table typos and copy-paste mistakes (e.g. a completion event accidentally pointing back at an earlier queue) without blocking legitimate rework/retry loops, which is why it is a warning, not a blocking error, and can be ignored when the backward routing is intentional.
+
+**Rules (V68):**
+- Every name in `requiredSequence` must match a declared queue's `name` — a typo is a blocking error (since it silently disables the check for that stage).
+- The check only fires for a specific entity type's own declared sequence — queues not listed in a `requiredSequence` are unaffected, and other entity types sharing the same queues are checked against their own (possibly absent) sequence, not this one's.
+- Rework/retry loops (an entity intentionally revisiting an earlier queue) are not blocked — this rule cannot distinguish "accidental typo" from "intentional loop" and always emits a warning rather than an error for a backward edge, by design.
+
+**When to use this:** A multi-stage process (a clinical pathway, an approval workflow, a manufacturing line) where the queues have a natural required order and you want early warning if a routing change accidentally violates it. Skip it for models where queues don't have a strict linear order, or where backward movement is the normal case (e.g. most rework loops) — the warning would just be noise.
 
 ### Optional: Server Shift Schedule
 
@@ -631,6 +680,8 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | `SET` | `SET(varName, expression)` | Sets a state variable to an arithmetic expression. Supports `Entity.attrName`, state variables, `clock`, +−×÷, `min`/`max`/`abs`/`round`/`floor`/`ceil`. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to the result of an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost` and the entity's `__cost` attribute. |
+| `CANCEL` | `CANCEL(EventName)` | Removes the pending FEL entry named `EventName` that was scheduled for the **current context entity only** (never a global cancel-all). `EventName` must match a real B-Event or C-Event `name` in the model. No-op with a log message if nothing matches. Typical use: race a timeout against normal completion, then cancel the loser — e.g. `["CANCEL(TimeoutCheck)", "COMPLETE()"]`. See TOP LLM MISTAKES #22. |
+| `ROUND_ROBIN` | `ROUND_ROBIN(StateVar, N)` | Advances `StateVar` through a `0..N-1` rotation (wraps back to 0 after N-1). `N` must be a positive integer literal. Pair with a `routing[]` table whose branches compare `StateVar` to each literal index (`== 0`, `== 1`, ...) to cycle entities across N destination queues. There is no modulo operator elsewhere in expressions — this is the only way to build a rotation. |
 
 > ⚠ **SET_ATTR ordering — V44:** `SET_ATTR` requires a context entity established by a preceding `ARRIVE`, `ASSIGN`, `COSEIZE`, `SEIZE`, `BATCH`, or `SPLIT` macro in the same effect array. A `SET_ATTR` appearing before any such macro is silently skipped at runtime.
 > 
@@ -654,15 +705,24 @@ Predicate object fields:
 
 | Field | Type | Description |
 |---|---|---|
-| `variable` | string | Must use `Entity.<attrName>` to reference an entity attribute |
+| `variable` | string | Typically `Entity.<attrName>`, but may also be `queue(Name).length`, `idle(Type).count`, `busy(Type).count`, `container(Id).level`, or `attr(Type, attrName)` — see shortest-queue example below. |
 | `operator` | string | One of `==`, `!=`, `<`, `>`, `<=`, `>=` |
-| `value` | string \| number \| boolean | The comparison value; must match the attribute's `valueType` |
+| `value` | string \| number \| boolean | The comparison value. Usually a literal matching the attribute's `valueType` — but if `value` is itself one of the five dynamic patterns above (`queue(...)`, `idle(...)`, `busy(...)`, `container(...)`, `attr(...)`), it is resolved dynamically instead of treated as a literal string (this works in any condition, not just `routing[]` — see §6.1 below). A bare state-variable name or `Entity.<attr>` on the RHS is still always treated as a literal. |
 
 - `routing` and `probabilisticRouting` are mutually exclusive.
 - `routing` cannot be combined with a queue argument in `RELEASE(Server, Queue)`.
 - `probabilisticRouting` cannot be combined with a queue argument in `RELEASE(Server, Queue)`. Use `RELEASE(Server)` (no queue arg) — the routing table controls where the entity goes. `RELEASE(Server, Queue)` hard-routes to a single queue and conflicts with the routing table (V18).
 - `defaultQueueName` must reference a valid queue name.
 - **Do not use a string condition** (e.g. `"entity.priority < 2"`) — the engine only evaluates predicate objects in routing; a string will cause an error.
+
+**Shortest-queue routing example** — route to whichever of two queues currently has fewer entities waiting:
+
+```json
+"routing": [
+  { "condition": { "variable": "queue(Queue B).length", "operator": "<", "value": "queue(Queue A).length" }, "queueName": "Queue B" }
+],
+"defaultQueueName": "Queue A"
+```
 
 ### Optional: Probabilistic Routing
 
@@ -928,11 +988,14 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `ASSIGN` | `ASSIGN(QueueName, ServerType)` | Seizes a server of `ServerType`, starts serving the front entity from `QueueName`. Schedules `cSchedules` B-events. Both `QueueName` and `ServerType` must reference defined objects. |
 | `ASSIGN` (skilled) | `ASSIGN(QueueName, ServerType, "Skill")` | Same as ASSIGN above but only idle servers whose `skills[]` contains `"Skill"` are considered. The skill name must be a valid entry in the model's top-level `skills` registry (V-SKILL-2). The skill string is case-sensitive and must exactly match the declared skill name. |
 | `ASSIGN` (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Same as ASSIGN above but the required skill is read from the entity's `attrs[attrName]` at runtime. If the attribute value is `null`, `undefined`, or `""`, no skill filter is applied — any idle server of `ServerType` is eligible. The engine takes the first waiting entity by queue discipline and filters servers by **that entity's** resolved skill; if no matching server is idle, the ASSIGN fails (it does not scan subsequent entities). Use entity filters (`entityFilter`) on the C-event to pre-scope the queue when multiple entity types share a queue. `attrName` must be a defined attribute on at least one customer entity type reachable from `QueueName` (V-SKILL-3). |
+| `ASSIGN` (any type, cross-type pooling) | `ASSIGN(QueueName, ANY, "Skill")` | Reserved token `ANY` (case-insensitive) in the server-type position pools idle servers **across every server type** that has the given skill (type-level `skills[]` or any `skillProfiles[].skills`), instead of one named type. Requires a skill argument — see TOP LLM MISTAKES #23. Use for "seize any resource with skill X" without duplicating one C-event per server type. When multiple cross-type candidates match, `skillProfiles[].priority` preference (see §2) still applies. |
+| `ASSIGN` (consumable-gated) | `ASSIGN(QueueName, ServerType, ContainerId:amount)` | Optional trailing `ContainerId:amount` clause gates the assignment on a declared container (§8) having a level ≥ `amount`. The server claim and the container deduction happen **atomically** — if either the server or the container check fails, neither is committed (no partial seizure). `ContainerId` must match a declared container `id` (V27); `amount` accepts the same literal/state-variable/expression forms as `DRAIN`. Combine with a skill clause by putting the container clause last: `ASSIGN(QueueName, ServerType, "Skill", ContainerId:amount)`. Use for "this activity also consumes a physical/consumable resource" (a test kit, a dose, a part) in addition to seizing staff/equipment. |
 | `DELAY` | `DELAY(QueueName)` | Holds the front entity from `QueueName` for the duration sampled by the `cSchedules` entry, **without seizing any server**. Use for resource-free waits (cooling period, mandatory hold, recovery, paperwork delay). `DELAY` must be the entire effect — never combine with `ASSIGN`/`RELEASE` in the same C-event. The completion B-event needs `"useEntityCtx": true` to know which entity to route, and may use `COMPLETE()` or routing-table exit, same as a normal service completion. `QueueName` must reference a defined queue (V47). See §6.2. |
 | `BATCH` | `BATCH(QueueName, N)` | Accumulates N entities from `QueueName` into a parent batch entity. N ≥ 2 (V22). `QueueName` must reference a defined queue. |
 | `COSEIZE` | `COSEIZE(QueueName, Srv1, Srv2, ...)` | Atomically seizes one entity and multiple server types simultaneously. Fails cleanly if any server is unavailable. All server type names must reference defined server entity types. |
 | `COSEIZE` (skilled) | `COSEIZE(QueueName, Doctor[Surgery], Nurse[Triage])` | Per-type bracket syntax: each server type may be followed by `[Skill]` in brackets to require that skill for that role. Only idle servers whose `skills[]` contains the specified skill are considered for that position. The skill name must be a valid entry in the model's top-level `skills` registry (V-SKILL-2). Any server type without brackets defaults to unskilled matching (same as the base COSEIZE). |
 | `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each of `QueueA` and `QueueB` into a combined batch in `TargetQueue`. All queue names must reference defined queues. `TypeA` and `TypeB` must match defined customer entity type names. The resulting batch entity's attrs are `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — on any attribute name collision, `QueueB`'s value overwrites `QueueA`'s. Order the two source queues deliberately when both define an attribute with the same name. |
+| `MATCH` (compatibility predicate) | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue, "Entity.bloodType == Other.bloodType")` | Optional 6th argument: a quoted predicate evaluated against both candidates — `Entity.<attr>` refers to the `QueueA` candidate being tested, `Other.<attr>` refers to the `QueueB` candidate. When present, scans both queues for the first compatible pair (front-to-back on `QueueA`, then `QueueB`) instead of always taking the front of each — use for blood-type/skill-requirement-style compatibility matching. No compatible pair found → no-op, same as an empty queue. A malformed predicate is caught and treated as no-match rather than crashing the run, but is flagged at design time (V66). |
 | `SET` | `SET(variableName, expression)` | Sets a state variable to an arithmetic expression. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost`. |
@@ -940,6 +1003,9 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id` (V27). `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
 | `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not) (V27). `amount` accepts the same literal/state-variable/expression forms as `FILL`. |
 | `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2. `QueueName` must reference a defined queue. |
+| `CANCEL` | `CANCEL(EventName)` | Removes the pending FEL entry named `EventName` scheduled for the **current context entity only**. See the B-Event macro table above and TOP LLM MISTAKES #22 for full semantics — identical behavior in C-events. |
+| `ROUND_ROBIN` | `ROUND_ROBIN(StateVar, N)` | Advances `StateVar` through a `0..N-1` rotation. See the B-Event macro table above for full semantics — identical behavior in C-events. |
+| `FINISH` | `FINISH(ServerType)` | Ends the in-progress service of the entity currently held by the first busy server of `ServerType` — **right now**, not at a scheduled/sampled time. For "activity of unknown duration": pair with a C-event condition that determines when service should end (e.g. a state variable crossing a threshold), instead of a `cSchedules` delay. Targets the server directly (like `PREEMPT`) rather than via a preceding macro's context, so it works as the sole effect of its own C-event. No busy server of that type → logs and no-ops. |
 
 ### 6.2 Resource-Free Activities (`DELAY`)
 
@@ -952,14 +1018,26 @@ Use `DELAY` instead of `ASSIGN` whenever the activity does not actually claim a 
   "cSchedules": [{ "eventId": "b_recovery_done", "useEntityCtx": true, "dist": "Exponential", "distParams": { "mean": "180" } }] }
 ```
 
-**DELAY with slot capacity:** `DELAY(QueueName, N)` drains at most N entities from the queue per firing. Remaining entities stay in the queue for the next firing. Combined with a state variable timer and calendar conditions, this models periodic batch scheduling:
+**DELAY with slot capacity:** `DELAY(QueueName, N)` drains at most N entities from the queue per firing. Remaining entities stay in the queue for the next firing. Combined with a self-rescheduling timer B-event, a boolean state-variable flag, and calendar conditions, this models periodic batch scheduling:
+
+> ⚠ **Do not gate this on `(clock - state.lastSlotTime) >= 60`-style arithmetic.** The condition grammar has no arithmetic evaluator — `variable` must be a single resolvable token (see §6.1), never a parenthesized expression. `(clock - state.lastSlotTime)` is parsed as one literal token that matches no known namespace and throws `Unknown variable namespace in predicate` at runtime. Use a recurring timer B-event that sets a flag instead:
+
+```json
+"stateVariables": [{ "name": "slotReady", "initialValue": "0" }],
+"bEvents": [
+  { "id": "b_slot_ready", "name": "Slot Ready", "scheduledTime": "60", "effect": ["SET(slotReady, 1)"],
+    "schedules": [{ "eventId": "b_slot_ready", "dist": "Fixed", "distParams": { "value": "60" } }] }
+]
+```
 
 ```json
 { "id": "c_schedule", "name": "Schedule Appointment", "priority": 1,
-  "condition": "queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND (clock - state.lastSlotTime) >= 60",
-  "effect": ["DELAY(BookingQueue, 3)", "SET(lastSlotTime, clock)"],
+  "condition": "queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND slotReady == 1",
+  "effect": ["DELAY(BookingQueue, 3)", "SET(slotReady, 0)"],
   "cSchedules": [{ "eventId": "b_slot_done", "useEntityCtx": true, "dist": "Fixed", "distParams": { "value": "1" } }] }
 ```
+
+The timer fires every 60 minutes and sets `slotReady`. `c_schedule` consumes the flag (resets it to 0) each time it fires, so at most one batch opens per 60-minute window; the flag simply waits (staying at 1, redundantly re-set by later ticks) through any period the condition's other clauses (queue empty, outside business hours) keep it from firing.
 
 **Per-entity delay times:** Use `EntityAttr` distribution in `cSchedules` to read the delay duration from an entity attribute. Combined with `cSchedules[].when` predicates, different entity types can get different delay durations:
 
@@ -1063,17 +1141,22 @@ strings — malformed syntax there throws at evaluation time instead). A string 
 parses successfully is silently converted to the canonical object form the next time the
 model is saved — nothing further to do.
 
-> **Comparisons are variable-vs-literal only — NEVER variable-vs-variable.** The right-hand side of
-> every clause in the string shorthand is parsed as a fixed literal at save time
-> (`migrateLegacyCondition`); it is never resolved as a queue length, server count, or state
-> variable. A condition like `"queue(TraumaQueue).length > traumaInService"` parses the right side
-> as a non-numeric literal (`NaN`) and silently evaluates to `false` forever — no error, no
-> warning, the C-event simply never fires. To gate logic on a dynamic threshold, compare each
-> dynamic token against its own literal constant in a separate `AND` clause instead of comparing
-> two dynamic tokens to each other:
+> **Variable-vs-variable comparisons work only for the five function-call-style patterns on
+> the right-hand side — never for a bare state-variable name or `Entity.<attr>`.** The RHS of
+> every clause is parsed at save time; if it exactly matches `queue(...)`, `idle(...)`,
+> `busy(...)`, `container(...)`, or `attr(...)`, it is resolved dynamically at evaluation
+> time (this is what makes `"queue(A).length < queue(B).length"` work as a genuine live
+> comparison, in any condition — C-event, `routing[]`, `balkCondition`, `cSchedules[].when`).
+> Anything else on the RHS — a bare state-variable name, `Entity.<attr>`, or `Other.<attr>`
+> outside `MATCH`'s compatibility predicate — is still always parsed as a fixed literal, never
+> re-resolved. A condition like `"queue(TraumaQueue).length > traumaInService"` parses the right
+> side as a non-numeric literal (`NaN`) and silently evaluates to `false` forever — no error, no
+> warning, the C-event simply never fires. To gate logic on a state-variable threshold, compare
+> it against its own literal constant in a separate `AND` clause instead:
 >
-> ✓ `"queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"`
-> ✗ `"queue(TraumaQueue).length > traumaInService"` — right side is a literal, not the state variable
+> ✓ `"queue(TraumaQueue).length > idle(Doctor).count"` — both sides are function-call tokens, resolves dynamically
+> ✓ `"queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"` — state variable compared to its own literal
+> ✗ `"queue(TraumaQueue).length > traumaInService"` — right side is a bare state-variable name, still parsed as a literal
 
 ---
 
@@ -1120,6 +1203,7 @@ Continuous-level resources (tanks, buffers, stock).
 - `initialLevel` (optional, default 0): must be ≥ 0 and ≤ `capacity` (V26).
 - Manipulated by `FILL(id, amount)` and `DRAIN(id, amount)` in both B-events and C-events — the first argument must match the container's `id` exactly (case-insensitive) (V27).
 - `DRAIN` is a no-op (with error log) if the current level < amount — levels never go negative.
+- `ASSIGN` can also gate on and deduct from a container via its optional trailing `ContainerId:amount` clause (§6, `ASSIGN` (consumable-gated) row) — use this when a service both seizes a server/skill **and** consumes a physical/consumable resource (a test kit, a dose, a part) in one atomic step, instead of a separate `DRAIN` alongside `ASSIGN`.
 
 > **Reading container levels in conditions:** Use `container(Id).level`, `.capacity`, `.min`, or `.max` directly inside any `cEvents[].condition` (or routing/balk) string — see §6.1 Format A. There is no need to fall back to a raw `state` key. This is what makes a "blocking DRAIN" possible: give a C-event a condition like `"container(Tank).level >= 10"` and effect `["DRAIN(Tank, 10)"]`, and the Three-Phase engine's per-cycle C-event re-scan will simply leave it un-fired until the level condition is met — no special blocking syntax required.
 
@@ -1271,7 +1355,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V24 | `loopConfig.maxLoopCount` must be an integer ≥ 1. `loopConfig.exitQueueName`, when set, must reference a defined queue. |
 | V25 | `RENEGE` must always use `(ctx)` as its argument — never an entity type name like `RENEGE(Patient)` |
 | V26 | Container `id` must be unique and non-empty; `capacity` > 0 when set; `initialLevel` ≥ 0 and ≤ `capacity`. Also: B-event `scheduledTime` must be numeric. |
-| V27 | `FILL` and `DRAIN` macros must reference a declared container `id`. A bare numeric `amount` ≤ 0 is a blocking error. A bare non-numeric `amount` that doesn't match a declared state variable name is a warning (likely a typo). `amount` expressions containing operators/parens (e.g. `RefillRate * 2`) can't be statically validated and are accepted without a check. |
+| V27 | `FILL`, `DRAIN`, and `ASSIGN`'s optional `ContainerId:amount` clause must reference a declared container `id`. A bare numeric `amount` ≤ 0 is a blocking error. A bare non-numeric `amount` that doesn't match a declared state variable name is a warning (likely a typo). `amount` expressions containing operators/parens (e.g. `RefillRate * 2`) can't be statically validated and are accepted without a check. |
 | V28 | `epoch`, when set, must be a valid ISO 8601 datetime string (e.g. `"2026-05-18T08:00:00"`) |
 | V30 | If `probabilisticRouting` contains a `null` (exit) branch, the B-event's effect **must** include `COMPLETE()`, `RENEGE(ctx)`, or `RELEASE()` — otherwise entities routed to exit aren't counted as served. Use `RELEASE()` for mid-network events that free a server; use `COMPLETE()` for terminal events. |
 | V31 | If `routing` (conditional) contains a `null` (exit) branch, the B-event's effect **must** include `COMPLETE()`, `RENEGE(ctx)`, or `RELEASE()`. |
@@ -1294,7 +1378,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V55 | A server entity type with `schedulePattern` requires the model to have `epoch` set — without a real-world anchor the engine cannot resolve weekly periods to simulation time. Blocking error; when it fires, no further `schedulePattern` checks run for that entity type. |
 | V-SKILL-1 | Every skill name declared in a server entity type's `skills[]` must appear in the model-level `skills` array. A server type referencing a skill that is not registered at the model level is a blocking error. |
 | V-SKILL-2 | Every skill reference in an ASSIGN 3-arg, COSEIZE bracket syntax, or idle/busy condition predicate must be a valid entry in the model-level `skills` array. A reference to an unregistered skill name is a blocking error. |
-| V-SKILL-3 | When ASSIGN uses `Entity.attrName` as its skill source, `attrName` must be a defined attribute on at least one customer entity type reachable by the specified queue. The attribute should have `valueType: "string"` (warning, same code V-SKILL-3, if not — non-string values can never match server skill names). |
+| V-SKILL-3 | When ASSIGN uses `Entity.attrName` as its skill source, `attrName` must be a defined attribute on at least one customer entity type reachable by the specified queue. The attribute should have `valueType: "string"` (warning, same code V-SKILL-3, if not — non-string values can never match server skill names). All V-SKILL-* checks resolve `skills`/`attrDefs`/`skillProfiles` through `parentTypeId` inheritance first, so a child type relying on a skill or attribute declared only on its parent is not incorrectly flagged. |
 | V-SKILL-4 | Every skill in a `skillProfiles[].skills` must exist in the model-level `skills[]` array. A profile referencing an unregistered skill is a blocking error. |
 | V-SKILL-5 | Count-based profile totals must not exceed the server type's `count`. Sum > count is a blocking error; sum < count is a warning (remaining servers get no instance skills). |
 | V57 | `schedulePattern` with `mode: "multiplier"` requires `baseCapacity` to be a positive number. |
@@ -1302,6 +1386,12 @@ All generated model JSON MUST pass every blocking rule below.
 | V59 | In multiplier mode, `defaultCapacity` must be a number between 0.0 and 1.0 (inclusive). |
 | V60 | In multiplier mode, exception period capacities must be between 0.0 and 1.0 (inclusive). |
 | V61 | A B-event sets `defaultQueueName` but has neither a meaningful `routing[]` table nor `probabilisticRouting[]`, and nothing else in its effect resolves the entity (no `COMPLETE()`, `RENEGE(ctx)`, or `RELEASE`/`RELEASE_COSEIZED` with an explicit target queue) — `defaultQueueName` alone does nothing at runtime, so the entity is never routed anywhere and is stuck forever. Blocking error. See TOP LLM MISTAKES #21. (If the entity *is* otherwise resolved, e.g. by `COMPLETE()`, this drops to a non-blocking warning — see §10 Warnings — since `defaultQueueName` is then just unused dead configuration, not a stuck-entity bug.) |
+| V63 | `CANCEL(EventName)` references an event name that does not match any defined B-Event or C-Event `name` in the model. Blocking error. |
+| V64 | `ROUND_ROBIN(StateVar, N)`'s `N` must be a positive integer (N ≥ 1). `N ≤ 0` would produce a division-by-zero rotation at runtime. Blocking error. |
+| V65 | `skillProfiles[].priority`, when present, must be numeric. Blocking error. |
+| V66 | `MATCH`'s optional 6th argument (compatibility predicate) must parse and evaluate without throwing — e.g. an unrecognized variable namespace like `Foo.bar`. The engine catches the error defensively at runtime (treated as no compatible pair), but this rule surfaces the mistake at design time. Blocking error. |
+| V67 | `parentTypeId` must reference a real entity type of the same `role`, must not be self-referential, and the inheritance chain must not contain a cycle. Blocking error. |
+| V68 | Every entry in `requiredSequence` must match a declared queue's `name`. Blocking error (an unmatched name silently disables the backward-routing check for that stage). The backward-routing check itself (routing that jumps to an earlier stage) is a warning, not a blocking error — see the Warnings table. |
 
 ### Warnings (run proceeds, banner shown)
 
@@ -1332,6 +1422,9 @@ All generated model JSON MUST pass every blocking rule below.
 | V-SKILL-5 | (warning variant) Count-based profile sum is less than the server type's `count` — the remaining servers will have no instance skills and will fall back to the type-level `skills[]` check. Emitted with the same code as the blocking V-SKILL-5 rule above. |
 | V-SKILL-6 | All weight-based profiles on a server type have weight 0 — no servers will receive instance skills from weight-based profiles. Warning-only code (no blocking counterpart). |
 | V-SKILL-7 | An entity-side `Categorical` attribute feeding `ASSIGN(Q, ServerType, Entity.attrName)` has a required value with no server instance — neither type-level `skills[]` nor any `skillProfiles[].skills` — that covers it. Entities requiring that value will queue indefinitely with no server ever able to serve them. Warning-only code. |
+| V-SKILL-2 | (ANY variant) `ASSIGN(Q, ANY, "Skill")` references a skill that no registered server type actually has (neither type-level `skills[]` nor any `skillProfiles[].skills`, across every server type). The cross-type pool is guaranteed empty and the effect will never match. Emitted with the same code as the blocking V-SKILL-2 rule above — severity is distinguished by which list it appears in. |
+| V62 | A server entity type is literally named `ANY` (case-insensitive) — this collides with the reserved `ASSIGN(..., ANY, ...)` cross-type-pooling sentinel and makes any `ANY`-based ASSIGN in the model ambiguous. Rename the server type. |
+| V68 | An entity type's `requiredSequence` has a routing edge (traced through ASSIGN/DELAY/COSEIZE/BATCH/MATCH sources and RELEASE/routing-table/ARRIVE/MATCH/SPLIT destinations, including C-event → scheduled B-event links via `cSchedules`) whose destination queue is an **earlier** stage than its source queue. Likely a routing-table typo or a copy-paste mistake — but also matches an intentional rework/retry loop, so this is a warning, not a blocking error, and can be ignored when the backward routing is deliberate. |
 | V-SLOT-1 | `DELAY(QueueName, N)` capacity must be a positive integer. |
 | V-CAL-1 | Calendar conditions (`isWeekday`, `isWeekend`, `hourOfDay`, `dayOfWeek`) are used but the model has no `epoch` set. Calendar variables will return defaults (isWeekday=true, hourOfDay=0). Set a Real-world start date in Model Settings. |
 | V-CAL-2 | `hourOfDay` comparison value is outside the valid range 0-23. |
