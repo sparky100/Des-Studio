@@ -11,7 +11,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
 
 // ── Private helpers shared across multiple macros ────────────────────────────
 
@@ -173,6 +173,7 @@ function retireIdleExcessServers(ctx, serverTypeName) {
       entity.currentCustId == null
     ) {
       ctx.entities.splice(i, 1);
+      flushRetiredServerStats(entity, ctx.state);
       indexRemoveServer(ctx.index, entity);
       indexUntrackEntity(ctx.index, entity);
       excess--;

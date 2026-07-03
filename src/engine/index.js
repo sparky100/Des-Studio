@@ -1787,6 +1787,15 @@ const cycleLog = [];
 
     const perResource = {};
     const perShiftBuckets = {}; // { type: { label: { busyTimeSum, completions } } }
+    // Seed every server-role type up front, not just ones with a currently-alive
+    // instance — a calendar-closed resource legitimately has 0 current entities
+    // at snapshot time, but its utilisation/perShiftUtil history (accumulated in
+    // state.__shiftTimeline, independent of current population) must still be
+    // reported rather than silently vanishing from the summary.
+    for (const et of runtimeModel.entityTypes || []) {
+      if (et.role !== "server") continue;
+      perResource[et.name] = { total: 0, busyTimeSum: 0, starvationTimeSum: 0, maxContStarvDur: 0, downtimeSum: 0, failureCount: 0 };
+    }
     for (const srv of servers) {
       if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyTimeSum: 0, starvationTimeSum: 0, maxContStarvDur: 0, downtimeSum: 0, failureCount: 0 };
       perResource[srv.type].total++;
@@ -1828,6 +1837,32 @@ const cycleLog = [];
         if (srv._starvationTime > perResource[srv.type].maxContStarvDur) perResource[srv.type].maxContStarvDur = srv._starvationTime;
       }
     }
+    // Fold in stats flushed from servers already retired during the run (see
+    // flushRetiredServerStats) — without this, a resource that opens/closes
+    // every day (any weekly schedulePattern) loses all its historical busy
+    // time from the summary the moment its last-open-period servers retire.
+    for (const [type, acc] of Object.entries(state.__retiredResourceStats || {})) {
+      if (!perResource[type]) perResource[type] = { total: 0, busyTimeSum: 0, starvationTimeSum: 0, maxContStarvDur: 0, downtimeSum: 0, failureCount: 0 };
+      const r = perResource[type];
+      r.busyTimeSum      += acc.busyTimeSum;
+      r.starvationTimeSum += acc.starvationTimeSum;
+      r.downtimeSum      += acc.downtimeSum;
+      r.failureCount     += acc.failureCount;
+      if (acc.maxContStarvDur > r.maxContStarvDur) r.maxContStarvDur = acc.maxContStarvDur;
+      if (Object.keys(acc.skillBusyTimeSum).length) {
+        r.skillBusyTimeSum = r.skillBusyTimeSum || {};
+        for (const [skill, bt] of Object.entries(acc.skillBusyTimeSum)) {
+          r.skillBusyTimeSum[skill] = (r.skillBusyTimeSum[skill] || 0) + bt;
+        }
+      }
+      if (Object.keys(acc.perShiftBusyTimeSum).length) {
+        if (!perShiftBuckets[type]) perShiftBuckets[type] = {};
+        for (const [label, bt] of Object.entries(acc.perShiftBusyTimeSum)) {
+          if (!perShiftBuckets[type][label]) perShiftBuckets[type][label] = { busyTimeSum: 0, completions: 0 };
+          perShiftBuckets[type][label].busyTimeSum += bt;
+        }
+      }
+    }
     for (const type of Object.keys(perResource)) {
       const r = perResource[type];
       const denominator = elapsed * r.total;
@@ -1852,7 +1887,13 @@ const cycleLog = [];
           r.perShiftUtil = timeline.map(period => {
             const label = `shift_${period.startTime}_cap${period.capacity}`;
             const bucket = buckets[label] || { busyTimeSum: 0 };
-            const pElapsed = (period.endTime ?? clock) - period.startTime;
+            // Clip to the post-warmup window: busyTimeSum only ever accrues after
+            // _statsResetTime (server _busyTime is zeroed at warmup), so a period
+            // that spans the warmup boundary must not count its pre-warmup span
+            // in elapsed, or utilisation for that period is understated.
+            const periodStart = Math.max(period.startTime, _statsResetTime);
+            const periodEnd = period.endTime ?? clock;
+            const pElapsed = Math.max(0, periodEnd - periodStart);
             const pDenom = pElapsed * period.capacity;
             return {
               label: `T=${period.startTime} cap=${period.capacity}`,
@@ -1865,6 +1906,14 @@ const cycleLog = [];
               completions: bucket.completions || 0,
             };
           });
+          // Calendar-aware overall utilisation: aggregate the same per-period
+          // open-capacity-time the per-shift breakdown above already computes,
+          // instead of the plain wall-clock elapsed*headcount denominator used
+          // for `r.utilisation`. Only meaningful for schedulePattern resources,
+          // so this is additive — `r.utilisation` is left untouched for everyone.
+          const busySum = r.perShiftUtil.reduce((s, p) => s + p.busyTimeSum, 0);
+          const denomSum = r.perShiftUtil.reduce((s, p) => s + p.elapsed * p.plannedCapacity, 0);
+          r.calendarUtilisation = denomSum > 0 ? +(busySum / denomSum).toFixed(4) : 0;
         }
         // Schedule adherence (F86.5)
         const adhSamples = state.__scheduleAdherenceSamples?.[type.toLowerCase()];

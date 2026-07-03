@@ -73,7 +73,7 @@ function extractResources(model = {}, summary = {}) {
     const result = {
       name: server.name || server.id || "Server",
       count: finiteOrNull(server.count),
-      utilisation: (() => { const v = pr?.utilisation ?? summary.resourceUtilisation?.[server.name] ?? summary.utilisation; return Number.isFinite(v) ? Math.round(v * 100) : null; })(),
+      utilisation: (() => { const v = pr?.calendarUtilisation ?? pr?.utilisation ?? summary.resourceUtilisation?.[server.name] ?? summary.utilisation; return Number.isFinite(v) ? Math.round(v * 100) : null; })(),
       busyCount: finiteOrNull(pr?.busyCount ?? summary.busyCount),
       idleCount: finiteOrNull(pr?.idleCount),
       totalServers: finiteOrNull(pr?.total),
@@ -744,7 +744,12 @@ function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}
     if (aggregateStats[`resource.utilisation.${rName}`]?.mean != null) {
       return aggregateStats[`resource.utilisation.${rName}`].mean;
     }
-    return summary.perResource?.[rName]?.utilisation ?? null;
+    // Prefer the calendar-aware figure (open-hours-only denominator) for any
+    // resource with a weekly schedulePattern — the plain `utilisation` field's
+    // wall-clock denominator understates true busy-while-open utilisation.
+    return summary.perResource?.[rName]?.calendarUtilisation
+        ?? summary.perResource?.[rName]?.utilisation
+        ?? null;
   }
   if (scope?.type === "container") {
     const cName = scope.name || scope.id;

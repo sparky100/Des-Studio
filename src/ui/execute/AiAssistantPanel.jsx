@@ -45,7 +45,9 @@ function resolveGoalValue(g, stats, waitDist, summary) {
   }
   if (g.scope?.type === "resource") {
     const rName = g.scope.name || g.scope.id;
-    return summary?.perResource?.[rName]?.utilisation ?? null;
+    return summary?.perResource?.[rName]?.calendarUtilisation
+        ?? summary?.perResource?.[rName]?.utilisation
+        ?? null;
   }
   return stats?.[g.metric]?.mean ?? null;
 }

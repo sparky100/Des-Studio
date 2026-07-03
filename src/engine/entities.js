@@ -432,6 +432,37 @@ export function preemptCustomer(cust, srv, clock, ctx) {
   return remainingService;
 }
 
+// Fold a server's lifetime stats into a persistent per-type accumulator before
+// it's removed from `entities` (capacity retiring below headcount — shift
+// close, preemption, or reactive excess retirement). Without this, a
+// server's entire busy/starvation/downtime/per-shift history disappears from
+// the run summary the moment it's retired — which happens routinely for any
+// calendar-constrained resource that opens and closes every day. Always
+// called on an idle server (releaseServerClaim/preemptCustomer already ran),
+// so there is no in-progress busy segment left to compute here.
+export function flushRetiredServerStats(srv, state) {
+  if (!srv || srv.role !== "server" || !state) return;
+  state.__retiredResourceStats = state.__retiredResourceStats || {};
+  const acc = state.__retiredResourceStats[srv.type] || (state.__retiredResourceStats[srv.type] = {
+    busyTimeSum: 0, starvationTimeSum: 0, maxContStarvDur: 0, downtimeSum: 0, failureCount: 0,
+    skillBusyTimeSum: {}, perShiftBusyTimeSum: {},
+  });
+  acc.busyTimeSum   += srv._busyTime      || 0;
+  acc.downtimeSum   += srv._totalDowntime || 0;
+  acc.failureCount  += srv._failureCount  || 0;
+  const starv = srv._starvationTime || 0;
+  acc.starvationTimeSum += starv;
+  if (starv > acc.maxContStarvDur) acc.maxContStarvDur = starv;
+  if (srv._skillBusyTime) {
+    for (const [skill, bt] of Object.entries(srv._skillBusyTime)) {
+      acc.skillBusyTimeSum[skill] = (acc.skillBusyTimeSum[skill] || 0) + bt;
+    }
+  }
+  if (srv._shiftLabel && srv._busyTime) {
+    acc.perShiftBusyTimeSum[srv._shiftLabel] = (acc.perShiftBusyTimeSum[srv._shiftLabel] || 0) + srv._busyTime;
+  }
+}
+
 export function repairServers(failedServers, clock) {
   let count = 0;
   for (const srv of failedServers) {
@@ -622,7 +653,12 @@ export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
   const entities = [];
   for (const et of entityTypes) {
     if (et.role !== "server") continue;
-    const count = Math.max(1, parseInt(et.count) || 1);
+    // A schedulePattern-closed resource legitimately starts at count 0
+    // (modelWithShiftInitialCapacity resolves this before entities are built) —
+    // only fall back to 1 when count is missing/invalid, not when it's a valid 0.
+    // (`parseInt(et.count) || 1` previously treated a real 0 the same as NaN.)
+    const parsedCount = parseInt(et.count, 10);
+    const count = Number.isInteger(parsedCount) && parsedCount >= 0 ? parsedCount : 1;
     const profiles = Array.isArray(et.skillProfiles) ? et.skillProfiles : null;
 
     // Pre-calculate count-based profile assignments

@@ -119,7 +119,7 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | ARRIVE | `ARRIVE(EntityType)` or `ARRIVE(EntityType, QueueName)` | Creates entity instance, places in queue | Increments queue depth; schedules reneging if configured | Omitting QueueName when entity type name ≠ queue name |
 | COMPLETE | `COMPLETE()` | Marks context entity as served, releases server | Increments served count; records sojourn time | Using without preceding RELEASE |
 | RELEASE | `RELEASE(ServerType)` or `RELEASE(ServerType, QueueName)` | Frees server unit, routes entity onward | Sets server to idle; updates service stats | Combining with routing table (mutually exclusive); using on a COSEIZE-scheduled B-event instead of RELEASE_COSEIZED (see below) |
-| RELEASE_COSEIZED | `RELEASE_COSEIZED([Type1, Type2, ...])` or `RELEASE_COSEIZED([Type1, Type2, ...], QueueName)` | Frees all listed co-seized server units atomically, routes entity onward | Sets all listed servers to idle; updates service stats for each | Stacking separate `RELEASE(Type)` calls instead — each resolves against the same cached server, so only the first release actually happens (V38c); listing a type not part of the scheduling COSEIZE(...) (V38d) |
+| RELEASE_COSEIZED | `RELEASE_COSEIZED([Type1, Type2, ...])` or `RELEASE_COSEIZED([Type1, Type2, ...], QueueName)` | Frees all listed co-seized server units atomically, routes entity onward | Sets all listed servers to idle; updates service stats for each | Stacking separate `RELEASE(Type)` calls instead — each resolves against the same cached server, so only the first release actually happens (V38c); listing a type not part of the scheduling COSEIZE(...) (V38d); misspelling it `RELEASE_COSEIZE` without the trailing "D" — not a real macro, silently no-ops at runtime (V38e) |
 | ASSIGN | `ASSIGN(QueueName, ServerType)` | Seizes server, starts serving front entity from queue | Sets server to busy; sets entity to inService | Using in B-event (C-event only) |
 | ASSIGN (skilled) | `ASSIGN(QueueName, ServerType, "Skill")` | Seizes server, only considers idle servers whose type has the named skill | Sets server to busy with skill tracking | Skill not in model registry (V-SKILL-2) |
 | ASSIGN (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Reads skill from entity attribute at runtime; null = any server | Supports per-entity skill variation from one C-event | Attribute undefined on customer type (V-SKILL-3) |
@@ -475,6 +475,9 @@ Gaps in the numbering (e.g. no V7) are intentional — codes were retired or ren
 | V33 | probabilisticRouting used with a single 100% null exit | Prefer explicit COMPLETE() without routing |
 | V38 | RELEASE() immediately followed by COMPLETE() | COMPLETE() will always be skipped |
 | V38b | COMPLETE() immediately followed by RELEASE() | RELEASE() re-queues the completed entity, causing an infinite loop |
+| V38c | Stacked separate RELEASE(Type) calls for co-seized types | Only the first release actually happens; use RELEASE_COSEIZED([...]) instead |
+| V38d | RELEASE_COSEIZED([...]) lists a type not in the scheduling COSEIZE(...) | Fails at runtime with "no claimed ... server" |
+| V38e | RELEASE_COSEIZE(...) — missing the trailing "D" | Not a real macro; silently no-ops as an "Unknown effect", servers never release |
 | V40 | SET_ATTR targets an attribute not declared on any entity class | Declare the attribute, or correct the name |
 | V42 | SPT discipline but entity class has no serviceTime/processingTime attribute | Discipline falls back to FIFO |
 | V43 | EDD discipline but entity class has no dueDate attribute | Discipline falls back to FIFO |

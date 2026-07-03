@@ -576,6 +576,19 @@ export function validateModel(model) {
           { eventIds: [b.id] });
       }
     });
+
+    // V38e: `RELEASE_COSEIZE(...)` (missing the trailing "D") is not a registered
+    // macro — an easy typo since COSEIZE itself has no trailing D. It silently
+    // falls through to "Unknown effect" at runtime, so the co-seized servers are
+    // never released and the entity never routes onward.
+    parts.forEach(p => {
+      if (/RELEASE_COSEIZE\(/i.test(p) && !/RELEASE_COSEIZED\(/i.test(p)) {
+        warn('V38e',
+          `${bLabel} calls RELEASE_COSEIZE(...) — this macro doesn't exist (missing the trailing "D"). It will silently no-op at runtime as an "Unknown effect": the co-seized servers (${[...coseizeTypes].join(', ')}) will never be released and the entity will never route onward. Did you mean RELEASE_COSEIZED(...)?`,
+          'bevents',
+          { eventIds: [b.id] });
+      }
+    });
   });
 
   // ── V9: C-Event conditions must reference defined queues ────────────────────

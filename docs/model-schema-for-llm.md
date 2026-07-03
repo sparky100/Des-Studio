@@ -931,6 +931,7 @@ The target queue argument is optional — omit it (`RELEASE_COSEIZED([Surgeon, A
 - The B-event scheduled by a COSEIZE C-event must resolve **all** co-seized resources in a single call: `COMPLETE()` to release everyone and end the entity's lifecycle, or `RELEASE_COSEIZED([Type1, Type2, ...])` (optionally with a target queue) to release everyone and continue the entity.
 - **Do NOT** issue separate single `RELEASE(Surgeon)` + `RELEASE(Anesthetist)` calls for co-seized types on the same B-event — each resolves against the same cached primary-server context, so only the first call actually releases anything and the rest silently leave that resource stuck busy forever. The model validator flags this pattern (V38c).
 - The `RELEASE_COSEIZED([...])` type list must exactly match (or be a subset of) the types in the scheduling C-event's `COSEIZE(...)` call, or the release will fail at runtime (validator rule V38d catches mismatches ahead of time).
+- Spell it **`RELEASE_COSEIZED`** — with the trailing "D". `RELEASE_COSEIZE(...)` (missing it) is not a macro; it silently no-ops at runtime instead of raising an error, so this typo can go unnoticed until you see servers never releasing (validator rule V38e catches it ahead of time).
 - The condition MUST check `idle(<Type>).count > 0` for **every** server type — otherwise Phase C will waste passes on COSEIZE attempts that always fail.
 - `cSchedules[].useEntityCtx` MUST be `true` so the B-event knows which entity and servers to release.
 - The B-event's `scheduledTime` should be a high placeholder (e.g. `"9999"`) since it is only fired via the `cSchedules` entry, not by the clock.
@@ -1275,7 +1276,7 @@ Container-scoped goals target a specific container. `scope` is **required** for 
 | `summary.reneged` | Total customers who abandoned | Queue |
 | `summary.totalCost` | Total cost (requires cost model) | — |
 | `summary.costPerServed` | Cost per served entity (requires cost model) | — |
-| `resource.utilisation` | Resource utilisation as a fraction (0–1) | **Resource** (required) |
+| `resource.utilisation` | Resource utilisation as a fraction (0–1). For a resource with a weekly `schedulePattern` (calendar), this is busy-time as a fraction of the resource's own **open hours**, not full wall-clock time — a scanner open 9 hours/day that's saturated whenever it's open reads close to 1.0, not diluted by the 15 closed hours. Resources with no schedulePattern use plain wall-clock busy-time as before. | **Resource** (required) |
 | `container.minLevel` | Minimum container level during run | **Container** (required) |
 | `container.avgLevel` | Average container level during run | **Container** (required) |
 | `container.maxLevel` | Maximum container level during run | **Container** (required) |
@@ -1406,6 +1407,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V38 | `RELEASE()` immediately followed by `COMPLETE()` in the same B-event effect. `RELEASE` sets entity to `"waiting"` so `COMPLETE` skips silently. Use `COMPLETE()` alone — it releases the server automatically. |
 | V38c | A COSEIZE-scheduled B-event stacks two or more separate `RELEASE(Type)` calls for co-seized types — only the first actually releases anything. Use `RELEASE_COSEIZED([...])` or `COMPLETE()` instead. |
 | V38d | A `RELEASE_COSEIZED([...])` type list includes a type that isn't part of the scheduling C-event's `COSEIZE(...)` types — will fail at runtime with "no claimed ... server". |
+| V38e | A B-event effect calls `RELEASE_COSEIZE(...)` — missing the trailing "D". This is not a registered macro; it silently no-ops as an "Unknown effect" at runtime, so the co-seized servers are never released and the entity never routes onward. Use `RELEASE_COSEIZED([...])`. |
 | V40 | `SET_ATTR(attrName, ...)` targets an attribute that isn't declared on any entity class — likely a typo. The engine still applies the effect. |
 | V42 | A queue uses `discipline: "SPT"` but the customer entity type reaching it has no `serviceTime`/`processingTime` attribute — SPT can't rank entities and falls back to arrival order. |
 | V43 | A queue uses `discipline: "EDD"` but the customer entity type reaching it has no `dueDate` attribute — EDD can't rank entities and falls back to arrival order. |
