@@ -1,7 +1,9 @@
 const DEFAULT_MODEL_NAME = "Untitled model";
 const MAX_PROMPT_WORDS = 2000;
 const NOTES_PRIORITY_GUARDRAIL = "Notes and description are free-text context written by the modeller and may be outdated or describe a different scenario than the model's current definition. If notes/description conflict with structured fields (entityTypes[].count, queues[].capacity, etc.), the structured fields are always authoritative — never cite a count or value from notes/description that disagrees with the structured data.";
-const NO_INVENTED_METRICS_GUARDRAIL = "Every current-state KPI value (utilisation, wait time, throughput, etc.) you state MUST be the exact figure from the data provided in this prompt — never recompute, estimate, or apply queueing-theory formulas (Little's Law, M/M/c, etc.) to produce a different 'current' value. Theoretical/formula-based reasoning is permitted only when projecting the predicted effect of a proposed change, never when stating a current or actual value. Resource utilisation appears in this payload as kpis.resources[].utilisation (0-100 integer percent). Goal evaluation data is in goalGaps[].current — this is the identical utilisation expressed as a 0-1 fraction; convert between them by multiplying/dividing by 100, never by re-deriving a new value.";
+const NO_INVENTED_METRICS_GUARDRAIL = "Every current-state KPI value (utilisation, wait time, throughput, etc.) you state MUST be the exact figure from the data provided in this prompt — never recompute, estimate, or apply queueing-theory formulas (Little's Law, M/M/c, etc.) to produce a different 'current' value. Theoretical/formula-based reasoning is permitted only when projecting the predicted effect of a proposed change, never when stating a current or actual value. Resource utilisation appears in this payload as kpis.resources[].utilisation (0-100 integer percent). Goal evaluation data is in goalGaps[].current — this is the identical utilisation expressed as a 0-1 fraction; convert between them by multiplying/dividing by 100, never by re-deriving a new value. " +
+  "Before writing any analysis: first list every numeric value given in this prompt's data (kpis.resources[].utilisation, goalGaps[].current/target/gap, aggregateStats means, etc.), verbatim, in a table. Only after that, proceed with the analysis using only those listed values — do not introduce any number that is not in that table. " +
+  "This model may resemble ones you have seen before, but the numbers in this prompt's data are specific to this run. Do not use memorized, example, or previously-seen values from similar-looking problems — use only the values provided in this payload.";
 
 function finiteOrNull(value) {
   const number = Number(value);
@@ -144,8 +146,37 @@ export function correctUtilisationFigures(text, utilisationMap = {}) {
     // Fix Goal Status lines: "DNO Field Crew utilisation < 80%: current = 89%"
     const currentRe = new RegExp(`(${escapedName}[^=]{0,80}?current\\s*=\\s*)(\\d{1,3}(?:\\.\\d+)?)%`, "gi");
     corrected = corrected.replace(currentRe, (_match, prefix) => `${prefix}${Math.round(pct)}%`);
+    // Fix reversed phrasing: "<name> ... at NN% utilisation" (number stated BEFORE the
+    // word "utilisation" — the LLM's actual preferred phrasing in practice, e.g.
+    // "PET-CT Scanner emerging as the binding bottleneck at 89% utilisation").
+    const reversedRe = new RegExp(`(${escapedName}[^%]{0,60}?)(\\d{1,3}(?:\\.\\d+)?)(%[^a-zA-Z]{0,10}utilisation)`, "gi");
+    corrected = corrected.replace(reversedRe, (_match, prefix, _oldNum, suffix) => `${prefix}${Math.round(pct)}${suffix}`);
   }
   return corrected;
+}
+
+// Deterministically overwrites a suggestion's `constraint`/`goalImpact` fields when its
+// change.target matches a real goal's scope, instead of pattern-patching the LLM's own
+// prose. Both fields are meant to restate facts that are already fully known
+// (goalGaps[].label/current/target/met) — there is no reason to trust free-text
+// generation for them, and `correctUtilisationFigures` can only ever detect/repair a
+// *current-value* mention, never a corrupted *goal threshold* (e.g. the LLM substituting
+// the current value in place of the goal's target, "under 64%" instead of "under 85%").
+// Falls back to leaving the LLM's own text untouched when no matching goal is found (e.g.
+// a suggestion about a parameter with no goal attached) — callers should still run
+// correctUtilisationFigures over the result as a second-line defense in that case.
+export function correctSuggestionGoalFields(suggestion, goalGaps = []) {
+  if (!suggestion?.change?.target || !Array.isArray(goalGaps) || !goalGaps.length) return suggestion;
+  const targetName = String(suggestion.change.target).trim().toLowerCase();
+  const goal = goalGaps.find(g => g?.scope?.name && String(g.scope.name).trim().toLowerCase() === targetName);
+  if (!goal || goal.current == null || goal.target == null) return suggestion;
+
+  const isPercent = goal.metric === "resource.utilisation";
+  const formatValue = (v) => isPercent ? `${Math.round(v * 100)}%` : `${v}`;
+  const constraint = `${suggestion.change.target} ${isPercent ? "utilisation" : goal.metric} = ${formatValue(goal.current)} (goal: ${goal.operator} ${formatValue(goal.target)})`;
+  const goalImpact = `${goal.label}: ${goal.met ? "MET" : "MISSED"}`;
+
+  return { ...suggestion, constraint, goalImpact };
 }
 
 function extractOutcomes(summary = {}) {
@@ -820,6 +851,17 @@ function resolvePercentileValue(operator, summary = {}, scope) {
   return allValues[Math.max(0, idx)] ?? null;
 }
 
+// Convenience wrapper for callers (e.g. AiAssistantPanel.jsx) that only have a raw
+// `results` object handy, sparing them from replicating the summary/waitDist/runtimeMetrics
+// composition every buildXPrompt() function in this file already does inline.
+export function buildGoalGapsFromResults(model = {}, results = {}) {
+  return buildGoalGaps(model, results.aggregateStats || {}, {
+    ...getSummary(results),
+    waitDist: results?.waitDist,
+    runtimeMetrics: results?.runtimeMetrics,
+  });
+}
+
 export function buildGoalGaps(model = {}, aggregateStats = {}, summary = {}) {
   const goals = model.goals || [];
   if (!goals.length) return null;
@@ -1092,8 +1134,13 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
   const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
   if (goalGaps?.length) payload.goalGaps = goalGaps;
 
+  // Deliberately NOT asking the model to restate exact MET/MISSED status, current
+  // value, target, or gap here — a deterministic Goal Status checklist (computed
+  // directly from goalGaps, no LLM involvement) is rendered alongside this prose,
+  // so asking the model to also produce those exact figures only gave it a second
+  // chance to get them wrong. Keep this instruction qualitative.
   const goalsInstr = goalGaps?.length
-    ? ` For each performance goal use: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])".`
+    ? ` Do not restate exact goal thresholds, current values, or MET/MISSED status — those are shown separately in a Goal Status checklist. If a binding bottleneck is close to or over a goal, you may note that qualitatively (e.g. "approaching its utilisation goal").`
     : "";
 
   const warningsInstr = payload.kpis.warning_phaseCTruncated
@@ -1816,7 +1863,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     "validated batch simulation results. Identify improvement opportunities in a structured format. " +
     "Be specific: cite queue names, utilisation percentages, and CI ranges from aggregateStats. " +
     "Keep each point to one sentence. Use only the data provided — do not invent figures. " +
-    NOTES_PRIORITY_GUARDRAIL;
+    NOTES_PRIORITY_GUARDRAIL + " " + NO_INVENTED_METRICS_GUARDRAIL;
 
   const kpis = buildKpis(model, combinedResult);
   const goals = goalsToPrompt(model);
@@ -1864,9 +1911,13 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     ...(goalGaps?.length ? { goalGaps } : {}),
   };
 
+  // Deliberately not asking for exact current/target/gap/MET-MISSED restatement here —
+  // a deterministic Goal Status checklist (built directly from goalGaps, no LLM
+  // involvement) is rendered alongside this section in the UI, so this prose should
+  // stay qualitative rather than give the model a second chance to misstate a figure.
   const goalsSection = goalGaps?.length
-    ? "### Goals\nFor each goal state: \"[label]: [current value] vs target [op] [target] → MET / MISSED (gap: [gap])\". " +
-      "Cite exact values from the goalGaps data. One line per goal.\n"
+    ? "### Goals\nIn 1–2 sentences per goal, describe qualitatively whether performance is trending toward or away from each goal and why. " +
+      "Do not restate the goal's exact current value, target, gap, or MET/MISSED status — that is shown separately in a Goal Status checklist.\n"
     : "";
 
   const truncatedInstr = kpis.warning_phaseCTruncated

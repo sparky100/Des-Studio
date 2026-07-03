@@ -5,7 +5,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Btn, MicIcon, ArrowUpIcon, TypingIndicator } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
-import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt, buildKpis, buildUtilisationMap, correctUtilisationFigures } from "../../llm/prompts.js";
+import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt, buildKpis, buildUtilisationMap, correctUtilisationFigures, buildGoalGapsFromResults, correctSuggestionGoalFields } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -461,6 +461,7 @@ export const AiAssistantPanel = ({
   const lastQueryModelRef = useRef(null);
   const lastQueryResultsModelRef = useRef(null);
   const utilisationMapRef = useRef({});
+  const goalGapsRef = useRef([]);
   const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
   const sensitivityReady = ciResults.some(item => item.n >= 5);
   const isStreaming = status === "loading" || status === "streaming";
@@ -532,16 +533,28 @@ export const AiAssistantPanel = ({
           }
           setRetryLabel("");
           const utilMap = utilisationMapRef.current;
-          const corrected = (Object.keys(utilMap).length)
+          const goalGaps = goalGapsRef.current;
+          const corrected = (Object.keys(utilMap).length || goalGaps.length)
             ? {
                 analysis: correctUtilisationFigures(parsed.analysis, utilMap),
-                suggestions: parsed.suggestions.map(s => ({
-                  ...s,
-                  constraint: correctUtilisationFigures(s.constraint, utilMap),
-                  cause: correctUtilisationFigures(s.cause, utilMap),
-                  predicted: correctUtilisationFigures(s.predicted, utilMap),
-                  goalImpact: correctUtilisationFigures(s.goalImpact, utilMap),
-                })),
+                suggestions: parsed.suggestions.map(s => {
+                  // correctSuggestionGoalFields deterministically rebuilds constraint/goalImpact
+                  // from goalGaps when it finds a match — returns the same object reference
+                  // untouched otherwise. Only fall back to the regex-based corrector on those
+                  // two fields when no deterministic match was found, since re-running the regex
+                  // over an already-correct deterministic string ("...under 85%: MET") would
+                  // match its own "utilisation ... NN%" pattern and overwrite it right back to
+                  // the (wrong) current-value figure.
+                  const withGoalFields = correctSuggestionGoalFields(s, goalGaps);
+                  const goalFieldsWereSet = withGoalFields !== s;
+                  return {
+                    ...withGoalFields,
+                    constraint: goalFieldsWereSet ? withGoalFields.constraint : correctUtilisationFigures(withGoalFields.constraint, utilMap),
+                    cause: correctUtilisationFigures(withGoalFields.cause, utilMap),
+                    predicted: correctUtilisationFigures(withGoalFields.predicted, utilMap),
+                    goalImpact: goalFieldsWereSet ? withGoalFields.goalImpact : correctUtilisationFigures(withGoalFields.goalImpact, utilMap),
+                  };
+                }),
               }
             : parsed;
           setParsedSuggestion(corrected);
@@ -714,6 +727,7 @@ export const AiAssistantPanel = ({
     // its own via queueing-theory reasoning instead of citing it verbatim — keep
     // the verified figures so the response can be corrected after parsing.
     utilisationMapRef.current = buildUtilisationMap(buildKpis(analysisModel, mergedResults).resources);
+    goalGapsRef.current = buildGoalGapsFromResults(analysisModel, mergedResults) || [];
     runPrompt(buildExplainResultsPrompt(analysisModel, exportConfig, mergedResults, ciResults), "explainResults");
   };
 
@@ -875,10 +889,38 @@ export const AiAssistantPanel = ({
         .replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "")
         .replace(/<json>[\s\S]*?<\/json>/gi, "")
         .trim();
+      const goalGaps = goalGapsRef.current;
       return (
         <div>
           {analysisText && (
             <MarkdownContent text={analysisText} style={{ marginBottom: 10 }} />
+          )}
+          {goalGaps.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 4 }}>
+                GOAL STATUS
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {goalGaps.map(g => {
+                  const pass = g.current != null && g.met;
+                  const chipColor = g.current == null ? C.muted : pass ? C.green : C.red;
+                  const chipLabel = g.current == null ? "UNKNOWN" : pass ? "✓ MET" : "✗ MISSED";
+                  const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
+                  const opLabel = isPercentile ? `${g.operator.replace("p", "")}th %ile <` : g.operator;
+                  return (
+                    <div key={g.metric + (g.scope?.id || "")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
+                      <div style={{ flex: 1, fontFamily: FONT, fontSize: 11, color: C.text }}>{g.label}</div>
+                      <div style={{ fontFamily: FONT, fontSize: 11, color: C.muted }}>
+                        {g.current != null ? `${Number(g.current).toFixed(1)} ${opLabel} ${g.target}` : "n/a"}
+                      </div>
+                      <div style={{ padding: "1px 7px", borderRadius: 4, background: chipColor + "22", border: `1px solid ${chipColor}55`, fontFamily: FONT, fontSize: 9, fontWeight: 700, color: chipColor, letterSpacing: 0.5 }}>
+                        {chipLabel}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
           {parsedSuggestion.suggestions.length === 0 && (
             <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>Could not generate structured suggestions — please try again later.</div>
