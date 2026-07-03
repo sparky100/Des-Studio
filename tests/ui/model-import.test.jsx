@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { extractImportedModelPayload } from '../../src/App.jsx';
@@ -232,7 +232,7 @@ describe('model JSON import', () => {
     );
   }, 10000);
 
-  it('opens directly in the AI workspace when Describe is chosen', async () => {
+  it('opens directly in the AI workspace when Model assistant is chosen', async () => {
     const user = userEvent.setup();
     mockFetchModels.mockReset();
     mockFetchModels.mockResolvedValueOnce([]).mockResolvedValue([
@@ -248,10 +248,12 @@ describe('model JSON import', () => {
     fireEvent.click(screen.getByRole('button', { name: /\+ new model/i }));
     await user.type(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), 'AI Draft');
     const newModelDialog = screen.getByRole('dialog', { name: /new model/i });
-    await user.click(within(newModelDialog).getByText(/^Describe$/i).closest('button'));
+    await user.click(within(newModelDialog).getByText('Model assistant').closest('button'));
 
-    expect(await screen.findByRole('button', { name: /^describe$/i })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByText(/Get started building your model/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(mockSaveModel).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'AI Draft' }),
+      'user-1'
+    ));
   }, 10000);
 
   it('applies entered name and description when starting from a template', async () => {

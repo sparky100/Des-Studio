@@ -35,6 +35,11 @@ export default defineConfig({
     ],
     globals: true,
     setupFiles: ['tests/setup.js'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.claude/**',
+    ],
     // Run heavy benchmark tests in their own single fork so they don't
     // starve the parallel UI test workers of CPU time.
     poolMatchGlobs: [

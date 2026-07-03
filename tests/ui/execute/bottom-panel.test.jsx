@@ -222,7 +222,7 @@ describe("BottomPanel — G15 Charts tab", () => {
     render(<BottomPanel log={log} snap={snap} model={model} timeSeries={timeSeriesData} />);
     fireEvent.click(screen.getByRole("tab", { name: /charts/i }));
     expect(screen.getByText(/Queue A/)).toBeInTheDocument();
-    expect(screen.getByText(/Simulation time/)).toBeInTheDocument();
+    expect(screen.getByText(/simulation time/)).toBeInTheDocument();
   });
 
   test("Charts tab shows empty state when no time-series data", () => {

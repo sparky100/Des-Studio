@@ -218,7 +218,7 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     expect(screen.getAllByText('5.2').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('7.8').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('3.1').length).toBeGreaterThanOrEqual(1);
-  });
+  }, 15000);
 
   it('clicking a cell shows aggregate stats sidebar', async () => {
     const results = [

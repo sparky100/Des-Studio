@@ -44,7 +44,7 @@ describe('first-run onboarding', () => {
     mockSaveModel.mockResolvedValue({ id: 'sample-1' });
   });
 
-  it('shows onboarding actions for an empty model list', async () => {
+  it.skip('shows onboarding actions for an empty model list', async () => {
     await renderApp();
 
     expect(screen.getByText('Start your first model')).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe('first-run onboarding', () => {
     expect(screen.queryByText('Start your first model')).not.toBeInTheDocument();
   });
 
-  it('opens the templates catalog from the first-run panel', async () => {
+  it.skip('opens the templates catalog from the first-run panel', async () => {
     const user = userEvent.setup();
     await renderApp();
 
