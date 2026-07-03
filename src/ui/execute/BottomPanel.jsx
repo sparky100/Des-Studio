@@ -658,6 +658,11 @@ function EntityInspector({ entity, snap, onClose }) {
   const clock = snap?.clock ?? 0;
   const waitingAge = entity.waitingSince != null ? clock - entity.waitingSince : null;
   const stages = entity.stages || [];
+  // A COSEIZE activity holds multiple servers for one entity simultaneously —
+  // entity.serverId only ever points at the primary claim, so look up every
+  // server currently claiming this entity (same reverse lookup ResourcesTab
+  // already uses via currentCustId) instead of relying on that single field.
+  const heldServers = (snap?.entities || []).filter(e => e.role === "server" && e.currentCustId === entity.id);
   const formatAttrValue = (value) => {
     if (typeof value === "number" && Number.isFinite(value)) {
       return value.toFixed(1).replace(/\.0$/, "");
@@ -721,10 +726,10 @@ function EntityInspector({ entity, snap, onClose }) {
           <span style={labelStyle}>Arrival</span>
           <span style={valueStyle}>{entity.arrivalTime != null ? `t=${entity.arrivalTime.toFixed(1)}` : "—"}</span>
         </div>
-        {entity.serverId != null && (
+        {heldServers.length > 0 && (
           <div style={rowStyle}>
-            <span style={labelStyle}>Server</span>
-            <span style={valueStyle}>#{entity.serverId}</span>
+            <span style={labelStyle}>{heldServers.length > 1 ? "Servers" : "Server"}</span>
+            <span style={valueStyle}>{heldServers.map(s => `#${s.id} (${s.type})`).join(", ")}</span>
           </div>
         )}
         {entity.queue != null && (
@@ -798,7 +803,7 @@ function EntityInspector({ entity, snap, onClose }) {
                     Stage {i + 1}: {s.queueName || "—"}
                   </span>
                   <span style={{ color: C.muted, fontFamily: FONT, fontSize: 9 }}>
-                    {s.serverType}
+                    {s.serverTypes ? s.serverTypes.join(", ") : s.serverType}
                   </span>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 12px" }}>
