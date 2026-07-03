@@ -36,7 +36,13 @@ export function extractServerTypes(effect) {
   const coseizeMatch = text.match(/COSEIZE\s*\(([^)]+)\)/i);
   if (coseizeMatch) {
     const args = coseizeMatch[1].split(",").map(s => s.trim()).filter(Boolean);
-    return args.slice(1);
+    // Strip the optional per-type skill filter (e.g. "Surgeon[Surgery]" -> "Surgeon")
+    // the same way the engine's own COSEIZE handler does, so the plain type name
+    // matches real entity.type values instead of comparing against a bracketed string.
+    return args.slice(1).map(arg => {
+      const bracketMatch = arg.match(/^([^[]+)\[([^\]]+)\]$/);
+      return bracketMatch ? bracketMatch[1].trim() : arg;
+    });
   }
   return [];
 }

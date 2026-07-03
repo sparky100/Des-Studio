@@ -11,7 +11,7 @@
 import { MACROS, applyScalar, buildStageRecord } from "./macros.js";
 import { evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
-import { clearWaitingState, attemptQueueJoin, preemptCustomer, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById } from "./entities.js";
+import { clearWaitingState, attemptQueueJoin, preemptCustomer, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
 import { hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
 
 function completeEntity(cust, ev, clock, state, index = null) {
@@ -40,7 +40,11 @@ function completeEntity(cust, ev, clock, state, index = null) {
 export function applyShiftChange(ev, ctx) {
   const serverTypeName = ev.serverTypeName || ev.payload?.serverTypeName;
   const target = parseInt(ev.newCapacity ?? ev.payload?.newCapacity, 10);
-  if (!serverTypeName || !Number.isInteger(target) || target < 1) {
+  // target === 0 is a legitimate "closed" period from a weekly schedulePattern
+  // (V56 validates capacity 0 as expected there) — only reject missing type,
+  // non-integers, and negatives. V14 already guarantees manually-authored
+  // shiftSchedule entries never produce target < 1 in the first place.
+  if (!serverTypeName || !Number.isInteger(target) || target < 0) {
     return [`SHIFT_CHANGE ignored: invalid capacity for ${serverTypeName || "unknown server type"}`];
   }
 
@@ -106,6 +110,7 @@ export function applyShiftChange(ev, ctx) {
         }
         const idx = ctx.entities.indexOf(srv);
         if (idx >= 0) ctx.entities.splice(idx, 1);
+        flushRetiredServerStats(srv, ctx.state);
         indexRemoveServer(ctx.index, srv);
         indexUntrackEntity(ctx.index, srv);
         excess--;
@@ -129,6 +134,7 @@ export function applyShiftChange(ev, ctx) {
       const entity = ctx.entities[i];
       if (entity.role === "server" && match(entity.type, serverTypeName) && entity.status === "idle" && !entity._suspended) {
         ctx.entities.splice(i, 1);
+        flushRetiredServerStats(entity, ctx.state);
         indexRemoveServer(ctx.index, entity);
         indexUntrackEntity(ctx.index, entity);
         excess--;

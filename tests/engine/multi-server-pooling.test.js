@@ -184,11 +184,20 @@ describe("count field parsing", () => {
     expect(snap.entities.filter(e => e.role === "server")).toHaveLength(2);
   });
 
-  test("count 0 or invalid defaults to 1 server (createServerEntities guard)", () => {
+  test("an explicit count of 0 creates 0 servers", () => {
+    // A genuinely-specified 0 must be respected — this is exactly what a
+    // schedulePattern-closed resource resolves to at t=0 (modelWithShiftInitialCapacity).
+    // Only a missing/non-numeric count should fall back to 1.
     const model = makePoolModel(1);
     model.entityTypes[1].count = "0";
     const snap = buildEngine(model, 1, 0, 0).getSnap();
-    // createServerEntities uses Math.max(1, parseInt(...)) so 0 → 1
+    expect(snap.entities.filter(e => e.role === "server")).toHaveLength(0);
+  });
+
+  test("missing/invalid count defaults to 1 server (createServerEntities guard)", () => {
+    const model = makePoolModel(1);
+    delete model.entityTypes[1].count;
+    const snap = buildEngine(model, 1, 0, 0).getSnap();
     expect(snap.entities.filter(e => e.role === "server")).toHaveLength(1);
   });
 });

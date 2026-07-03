@@ -779,16 +779,19 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
   let utilChartHtml = '', utilTableHtml = '';
   if (resourceTypes.length) {
     utilChartHtml = `<div class="chart-wrap">${horizBarChart({
-      items: resourceTypes.map(t => ({ label: t, value: perResource[t].utilisation ?? 0 })),
+      items: resourceTypes.map(t => ({ label: t, value: perResource[t].calendarUtilisation ?? perResource[t].utilisation ?? 0 })),
       title: 'Resource Utilisation',
     })}</div>`;
     const utilRows = resourceTypes.map(t => {
       const r = perResource[t];
-      const pct = Number.isFinite(r.utilisation) ? `${Math.round(r.utilisation * 100)}%` : '—';
+      const utilVal = r.calendarUtilisation ?? r.utilisation;
+      const pct = Number.isFinite(utilVal) ? `${Math.round(utilVal * 100)}%` : '—';
       const et = (model.entityTypes || []).find(e => e.name === t);
       const countCell = et?.shiftSchedule?.length
         ? `shift (${et.shiftSchedule.length} period${et.shiftSchedule.length !== 1 ? 's' : ''})`
-        : String(r.total ?? '—');
+        : et?.schedulePattern?.periods?.length
+          ? 'calendar (weekly pattern)'
+          : String(r.total ?? '—');
       return [t, countCell, pct];
     });
     utilTableHtml = `<p class="note">Percentage of time each resource was busy (averaged across the run, excluding warm-up). Green &lt;75%, amber 75–90%, red &gt;90%.</p>
@@ -1183,11 +1186,14 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     lines.push('');
     const utilRows = resourceTypes.map(t => {
       const r = summary.perResource[t];
-      const pct = Number.isFinite(r.utilisation) ? `${Math.round(r.utilisation * 100)}%` : '—';
+      const utilVal = r.calendarUtilisation ?? r.utilisation;
+      const pct = Number.isFinite(utilVal) ? `${Math.round(utilVal * 100)}%` : '—';
       const et = (model.entityTypes || []).find(e => e.name === t);
       const countCell = et?.shiftSchedule?.length
         ? `shift (${et.shiftSchedule.length} period${et.shiftSchedule.length !== 1 ? 's' : ''})`
-        : String(r.total ?? '—');
+        : et?.schedulePattern?.periods?.length
+          ? 'calendar (weekly pattern)'
+          : String(r.total ?? '—');
       return [t, countCell, pct];
     });
     lines.push(mdTable(['Resource', 'Capacity', '% Busy'], utilRows));

@@ -334,6 +334,102 @@ describe('deriveGraphFromModel — probabilistic routing edges', () => {
   });
 });
 
+// Model whose activity releases via RELEASE_COSEIZED([Type1, Type2], Queue)
+// instead of a plain RELEASE(Server, Queue) — regression coverage for the bug
+// where the bracketed multi-type list broke the target-queue extraction and
+// the activity got no outgoing edge at all.
+function makeCoseizeModel() {
+  return {
+    entityTypes: [
+      { id: 'customer-1', name: 'Customer', role: 'customer' },
+      { id: 'server-1', name: 'ServerA', role: 'server', count: 1 },
+      { id: 'server-2', name: 'ServerB', role: 'server', count: 1 },
+    ],
+    queues: [
+      { id: 'queue-1', name: 'Queue 1', customerType: 'Customer', discipline: 'FIFO' },
+      { id: 'queue-2', name: 'Queue 2', customerType: 'Customer', discipline: 'FIFO' },
+    ],
+    bEvents: [
+      {
+        id: 'arrival-1',
+        name: 'Arrivals',
+        scheduledTime: '0',
+        effect: 'ARRIVE(Customer, Queue 1)',
+        schedules: [{ eventId: 'arrival-1', dist: 'Exponential', distParams: { mean: '5' } }],
+      },
+      {
+        id: 'coseize-done',
+        name: 'Coseize Complete',
+        scheduledTime: '9999',
+        effect: 'RELEASE_COSEIZED([ServerA, ServerB], Queue 2)',
+        schedules: [],
+      },
+    ],
+    cEvents: [{
+      id: 'activity-1',
+      name: 'Coseize Activity',
+      priority: 1,
+      condition: 'queue(Queue 1).length > 0 AND idle(ServerA).count > 0 AND idle(ServerB).count > 0',
+      effect: 'COSEIZE(Queue 1, ServerA[SkillA], ServerB[SkillB])',
+      cSchedules: [{ eventId: 'coseize-done', dist: 'Fixed', distParams: { value: '1' }, useEntityCtx: true }],
+    }],
+  };
+}
+
+describe('deriveGraphFromModel — RELEASE_COSEIZED edges', () => {
+  test('derives an activity->queue edge from RELEASE_COSEIZED, same as RELEASE', () => {
+    const model = makeCoseizeModel();
+    const graph = deriveGraphFromModel(model);
+
+    const edge = graph.edges.find(e => e.from === 'activity:activity-1' && e.to === 'queue:queue-2');
+    expect(edge).toBeDefined();
+    expect(edge.source).toBe('routing');
+  });
+
+  test('does not also fall through to the DELAY-completion no-routing sink fallback', () => {
+    const model = makeCoseizeModel();
+    const graph = deriveGraphFromModel(model);
+
+    // Exactly one outgoing edge from the activity — no stray duplicate/sink edge.
+    const outgoing = graph.edges.filter(e => e.from === 'activity:activity-1');
+    expect(outgoing).toHaveLength(1);
+  });
+});
+
+describe('deriveGraphFromModel — loopConfig.exitQueueName edges', () => {
+  // A bEvent can loop back to one queue (via probabilisticRouting/routing) for
+  // up to maxLoopCount passes, then exit to a *different* queue named in
+  // loopConfig.exitQueueName. That exit queue is never inspected by the normal
+  // routing-edge derivation, so without dedicated handling it gets no incoming
+  // edge at all — same "disconnected queue" symptom as the RELEASE_COSEIZED bug,
+  // from an unrelated model field.
+  function makeLoopModel() {
+    const model = makeModel();
+    model.bEvents = model.bEvents.map(be =>
+      be.id === 'route-activity-1-queue-2'
+        ? {
+            ...be,
+            probabilisticRouting: [{ probability: 1, queueName: 'Queue 2' }],
+            loopConfig: { maxLoopCount: 2, exitQueueName: 'Queue 3' },
+          }
+        : be
+    );
+    return model;
+  }
+
+  test('derives both the normal loop-back edge and the loop-exit edge', () => {
+    const model = makeLoopModel();
+    const graph = deriveGraphFromModel(model);
+
+    const loopBackEdge = graph.edges.find(e => e.from === 'activity:activity-1' && e.to === 'queue:queue-2');
+    expect(loopBackEdge).toBeDefined();
+
+    const exitEdge = graph.edges.find(e => e.from === 'activity:activity-1' && e.to === 'queue:queue-3');
+    expect(exitEdge).toBeDefined();
+    expect(exitEdge.label).toContain('2');
+  });
+});
+
 describe('updateProbabilisticBranchProbability', () => {
   test('updates only the targeted branch, leaving the other branch untouched', () => {
     const model = makeProbabilisticModel();

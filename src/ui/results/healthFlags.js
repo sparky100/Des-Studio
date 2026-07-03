@@ -8,8 +8,11 @@ export function evaluateResultsHealth(results = {}, model = {}) {
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
 
   // H1 — Resource utilisation ≥ 85% / ≥ 90% / ≥ 95%
+  // Prefer the calendar-aware figure for scheduled resources — the plain
+  // wall-clock `utilisation` understates true busy-while-open load and would
+  // under-flag a genuinely saturated clinic-hours resource.
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
-    const util = Number(stats?.utilisation);
+    const util = Number(stats?.calendarUtilisation ?? stats?.utilisation);
     if (!Number.isFinite(util)) continue;
     if (util >= 0.95) {
       flags.push({ code: "H1", severity: "critical", resource: typeName,
@@ -224,7 +227,7 @@ export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
 
   // L1 — Resource utilisation ≥ 85% / ≥ 90% / ≥ 95%
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
-    const util = Number(stats?.utilisation);
+    const util = Number(stats?.calendarUtilisation ?? stats?.utilisation);
     if (!Number.isFinite(util)) continue;
     if (util >= 0.95) {
       flags.push({ code: "L1", severity: "critical", resource: typeName,

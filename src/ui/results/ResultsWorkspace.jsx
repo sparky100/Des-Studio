@@ -464,7 +464,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
   const utilPct = v => `${Math.round((v ?? 0) * 100)}%`;
   const utilColor = v => v > 0.9 ? C.red : v > 0.7 ? C.amber : C.green;
   const avgUtil = perResourceEntries.length > 0
-    ? perResourceEntries.reduce((sum, [, r]) => sum + (r.utilisation ?? 0), 0) / perResourceEntries.length
+    ? perResourceEntries.reduce((sum, [, r]) => sum + (r.calendarUtilisation ?? r.utilisation ?? 0), 0) / perResourceEntries.length
     : null;
 
   return (
@@ -601,7 +601,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
         serverTypes.forEach(et => {
           serverTypeMap[et.name] = {
             count: Math.max(1, parseInt(et.count || "1", 10) || 1),
-            hasShiftSchedule: Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0,
+            hasShiftSchedule: (Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) || !!et.schedulePattern?.periods?.length,
           };
         });
         return (
@@ -612,17 +612,18 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
             {perResourceEntries.map(([name, r]) => {
               const st = serverTypeMap[name] || { count: r.total ?? 1, hasShiftSchedule: false };
+              const util = r.calendarUtilisation ?? r.utilisation ?? 0;
               return (
               <div key={name} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
                 <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
                   {name.toUpperCase()}
                 </div>
-                <div style={{ fontSize: 18, color: utilColor(r.utilisation ?? 0), fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
-                  {utilPct(r.utilisation ?? 0)}
+                <div style={{ fontSize: 18, color: utilColor(util), fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
+                  {utilPct(util)}
                 </div>
                 <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
                   {st.hasShiftSchedule
-                    ? "Shift pattern enabled"
+                    ? "Shift pattern enabled · % of open hours in use"
                     : `${st.count} resource${st.count !== 1 ? "s" : ""}. Average % of capacity in use.`}
                 </div>
                 {r.failureCount > 0 && (

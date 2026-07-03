@@ -4,7 +4,7 @@
 // model.graph data is used only for layout metadata such as node positions.
 
 import dagre from "@dagrejs/dagre";
-import { clean, macroCalls } from "../../model/macroParser.js";
+import { clean, effectText, macroCalls } from "../../model/macroParser.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 
 const NODE_WIDTH = 142;
@@ -255,7 +255,7 @@ export function deriveGraphFromModel(model = {}) {
 
       const calls = macroCalls(bEvent.effect);
       calls.forEach((call, index) => {
-        if (call.macro === "RELEASE") {
+        if (call.macro === "RELEASE" || call.macro === "RELEASE_COSEIZED") {
           // Conditional routing table (F10.1)
           if (Array.isArray(bEvent.routing) && bEvent.routing.length > 0) {
             bEvent.routing.forEach((branch, branchIdx) => {
@@ -291,10 +291,19 @@ export function deriveGraphFromModel(model = {}) {
               }
             });
 
-          // Single fixed RELEASE(Server, Queue)
-          } else if (call.args[1]) {
-            const nextQueueId = queueNodeByName.get(norm(call.args[1]));
-            if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}`), from: id, to: nextQueueId, source: "routing" });
+          // Single fixed RELEASE(Server, Queue) / RELEASE_COSEIZED([Type1, Type2, ...], Queue)
+          } else {
+            // RELEASE_COSEIZED's bracketed type list contains commas, which
+            // macroCalls' naive comma-split breaks apart — call.args[1] would
+            // be the second bracketed type, not the target queue. Re-extract
+            // the trailing queue argument straight from the raw effect text.
+            const targetQueue = call.macro === "RELEASE_COSEIZED"
+              ? effectText(bEvent.effect).match(/RELEASE_COSEIZED\s*\(\s*\[[^\]]+\]\s*,\s*([^,)]+)\)/i)?.[1]?.trim()
+              : call.args[1];
+            if (targetQueue) {
+              const nextQueueId = queueNodeByName.get(norm(targetQueue));
+              if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}`), from: id, to: nextQueueId, source: "routing" });
+            }
           }
         }
         if (call.macro === "COMPLETE" || call.macro === "RENEGE") {
@@ -312,10 +321,27 @@ export function deriveGraphFromModel(model = {}) {
         }
       });
 
+      // Loop-exit routing (loopConfig.exitQueueName): after maxLoopCount passes
+      // through the normal routing/probabilisticRouting target, the entity is
+      // instead sent to exitQueueName. This is a distinct destination the
+      // calls.forEach loop above never inspects, so without this the exit
+      // queue gets no incoming edge at all — same symptom as an unrecognized
+      // release macro, but from a different, orthogonal model field.
+      if (bEvent.loopConfig?.exitQueueName) {
+        const exitQueueId = queueNodeByName.get(norm(bEvent.loopConfig.exitQueueName));
+        if (exitQueueId) {
+          edges.push({
+            id: edgeId(id, exitQueueId, `${schedule.eventId}-loopexit`),
+            from: id, to: exitQueueId, source: "routing",
+            label: `after ${bEvent.loopConfig.maxLoopCount ?? "N"}×`,
+          });
+        }
+      }
+
       // ── DELAY completion: B-events with no RELEASE but with routing or COMPLETE ──
       // Standard RELEASE routing is handled inside the calls.forEach above. For DELAY
       // completion B-events the effect has no RELEASE, so we process their routing here.
-      const hasRelease = calls.some(c => c.macro === "RELEASE");
+      const hasRelease = calls.some(c => c.macro === "RELEASE" || c.macro === "RELEASE_COSEIZED");
       if (!hasRelease) {
         if (Array.isArray(bEvent.routing) && bEvent.routing.length > 0) {
           bEvent.routing.forEach((branch, branchIdx) => {
