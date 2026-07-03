@@ -183,7 +183,12 @@ function retireIdleExcessServers(ctx, serverTypeName) {
   return retired;
 }
 
-export function buildStageRecord(cust, srv, clock) {
+// srvOrServers: a single server (existing single-resource callers) or an array
+// of servers (a COSEIZE hold releasing more than one type at once) — pass the
+// full array so the stage record retains every co-seized resource type, not
+// just the first.
+export function buildStageRecord(cust, srvOrServers, clock) {
+  const servers = Array.isArray(srvOrServers) ? srvOrServers.filter(Boolean) : (srvOrServers ? [srvOrServers] : []);
   const waitStartedAt = cust.lastStageStart ?? cust.arrivalTime;
   const serviceStartedAt = cust.serviceStart ?? null;
   const wait = serviceStartedAt != null
@@ -193,7 +198,8 @@ export function buildStageRecord(cust, srv, clock) {
     ? Math.max(0, clock - serviceStartedAt)
     : 0;
   return {
-    serverType: srv?.type || (cust._isDelay ? "delay" : "unknown"),
+    serverType: servers[0]?.type || (cust._isDelay ? "delay" : "unknown"),
+    ...(servers.length > 1 ? { serverTypes: servers.map(s => s.type) } : {}),
     queueName: cust.lastQueue || cust.queue || null,
     waitStartedAt,
     serviceStartedAt: serviceStartedAt ?? clock,
@@ -699,7 +705,7 @@ export const MACROS = [
       }
 
       if (!cust.stages) cust.stages = [];
-      cust.stages.push(buildStageRecord(cust, claimedServers[0], clock));
+      cust.stages.push(buildStageRecord(cust, claimedServers, clock));
       cust.lastStageStart = clock;
       const destQueue = targetQueue || cust.lastQueue || cust.queue;
       delete cust.serviceStart;

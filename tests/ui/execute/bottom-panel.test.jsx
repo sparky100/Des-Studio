@@ -164,6 +164,50 @@ describe("BottomPanel — inspector", () => {
     const queueLabels = screen.getAllByText("Queue A");
     expect(queueLabels.length).toBeGreaterThanOrEqual(1);
   });
+
+  test("shows every co-seized server for an entity mid-COSEIZE, not just the primary claim", () => {
+    const coseizeSnap = {
+      clock: 5, served: 0, reneged: 0,
+      entities: [
+        { id: 1, type: "Surgeon",     role: "server",   status: "busy", currentCustId: 3 },
+        { id: 4, type: "Anesthetist", role: "server",   status: "busy", currentCustId: 3 },
+        { id: 3, type: "Patient",     role: "customer", status: "serving", serverId: 1, arrivalTime: 0 },
+      ],
+    };
+    const coseizeModel = {
+      queues: [],
+      entityTypes: [
+        { id: "e1", name: "Patient",      role: "customer" },
+        { id: "e2", name: "Surgeon",      role: "server", count: "1" },
+        { id: "e3", name: "Anesthetist",  role: "server", count: "1" },
+      ],
+    };
+    render(<BottomPanel log={[]} snap={coseizeSnap} model={coseizeModel} selectedEntityId={3} />);
+    fireEvent.click(screen.getByRole("tab", { name: /entity details/i }));
+
+    expect(screen.getByText("Servers")).toBeInTheDocument();
+    expect(screen.getByText("#1 (Surgeon), #4 (Anesthetist)")).toBeInTheDocument();
+  });
+
+  test("Service Stages history lists all co-seized server types for a completed COSEIZE stage", () => {
+    const stageSnap = {
+      clock: 10, served: 0, reneged: 0,
+      entities: [
+        {
+          id: 3, type: "Patient", role: "customer", status: "waiting", queue: "WardQueue", arrivalTime: 0,
+          stages: [{
+            serverType: "Surgeon", serverTypes: ["Surgeon", "Anesthetist"],
+            queueName: "SurgeryQueue", waitStartedAt: 0, serviceStartedAt: 1, serviceEndedAt: 3,
+            stageWait: 1, stageService: 2,
+          }],
+        },
+      ],
+    };
+    render(<BottomPanel log={[]} snap={stageSnap} model={model} selectedEntityId={3} />);
+    fireEvent.click(screen.getByRole("tab", { name: /entity details/i }));
+
+    expect(screen.getByText("Surgeon, Anesthetist")).toBeInTheDocument();
+  });
 });
 
 describe("BottomPanel — G15 Charts tab", () => {

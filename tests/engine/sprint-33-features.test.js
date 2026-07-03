@@ -686,6 +686,45 @@ describe('COSEIZE macro', () => {
     });
   });
 
+  test('RELEASE_COSEIZED records every co-seized server type in the stage history, not just the first', () => {
+    const model = {
+      entityTypes: [
+        { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "surgeon", name: "Surgeon", role: "server", count: 1, attrDefs: [] },
+        { id: "anesthetist", name: "Anesthetist", role: "server", count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [
+        { id: "surgery_q", name: "SurgeryQueue", discipline: "FIFO" },
+        { id: "ward_q", name: "WardQueue", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "arrive", name: "Patient Arrival", scheduledTime: "0",
+          effect: "ARRIVE(Patient, SurgeryQueue)",
+          schedules: [{ eventId: "arrive", dist: "Fixed", distParams: { value: "10" } }] },
+        { id: "surgery_done", name: "Surgery Complete", scheduledTime: "9999",
+          effect: ["RELEASE_COSEIZED([Surgeon, Anesthetist], WardQueue)"], schedules: [] },
+      ],
+      cEvents: [
+        { id: "ce_surgery", name: "Perform Surgery", priority: 1,
+          condition: "queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0",
+          effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+          cSchedules: [{ eventId: "surgery_done", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }] },
+      ],
+    };
+
+    const engine = buildEngine(model, 42, 0, 10);
+    const result = engine.runAll();
+
+    const patient = result.entitySummary.find(e => e.role === "customer" && e.stages?.length > 0);
+    expect(patient).toBeDefined();
+    const stage = patient.stages[0];
+    expect(stage.serverTypes).toEqual(expect.arrayContaining(["Surgeon", "Anesthetist"]));
+    expect(stage.serverTypes).toHaveLength(2);
+    // serverType (singular, backward-compat) still holds the primary type
+    expect(stage.serverType).toBe("Surgeon");
+  });
+
   test('RELEASE_COSEIZED aborts without partial release when a listed type was not actually co-seized', () => {
     const model = {
       entityTypes: [
