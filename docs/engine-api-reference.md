@@ -322,6 +322,8 @@ rng(); // → number in [0, 1)
 |-------|-------------|
 | `ARRIVE(Type[, Queue])` | Create entity of Type, place in Queue |
 | `ASSIGN(Queue, Server)` | Seize idle Server for first waiting entity in Queue |
+| `ASSIGN(Queue, Server, "Skill")` | Same, filtered to idle servers with the named skill. Prefers higher `skillProfiles[].priority` when multiple match; ties resolve FIFO by idle-since time. |
+| `ASSIGN(Queue, ANY, "Skill")` | Same skill filter, but pools idle servers across every server type instead of one fixed type. Reserved token `ANY`; requires a skill argument. |
 | `COMPLETE()` | End service for context entity; release server; increment served count |
 | `RELEASE(Server[, Queue])` | Release server without completing; re-queue entity if Queue given |
 | `RENEGE(ctx)` | Remove context entity from queue (abandonment) |
@@ -338,6 +340,8 @@ rng(); // → number in [0, 1)
 | `SET(varName, expr)` | Set state variable to arithmetic expression result |
 | `SET_ATTR(attr, expr)` | Set context entity attribute to expression result |
 | `COST(expr)` | Accumulate expression result to `summary.totalCost` |
+| `CANCEL(EventName)` | Remove the pending FEL entry named EventName scheduled for the context entity only (not a global cancel-all) |
+| `ROUND_ROBIN(varName, N)` | Advance a state variable through a 0..N-1 rotation; pair with `routing[]` branches keyed on the variable to cycle destinations |
 
 **Expression syntax** (for `SET`, `SET_ATTR`, `COST`):
 - Entity attribute: `Entity.attrName`

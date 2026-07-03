@@ -106,7 +106,7 @@ Performance targets. Defined in `goals[]` array.
 
 ## Macros
 
-All 21 effect macros. Syntax is exact — case-sensitive, parentheses required.
+All 23 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 ### Flow Control Macros
 
@@ -119,8 +119,10 @@ All 21 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | ASSIGN | `ASSIGN(QueueName, ServerType)` | Seizes server, starts serving front entity from queue | Sets server to busy; sets entity to inService | Using in B-event (C-event only) |
 | ASSIGN (skilled) | `ASSIGN(QueueName, ServerType, "Skill")` | Seizes server, only considers idle servers whose type has the named skill | Sets server to busy with skill tracking | Skill not in model registry (V-SKILL-2) |
 | ASSIGN (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Reads skill from entity attribute at runtime; null = any server | Supports per-entity skill variation from one C-event | Attribute undefined on customer type (V-SKILL-3) |
+| ASSIGN (any type) | `ASSIGN(QueueName, ANY, "Skill")` | Seizes an idle server of **any** server type that has the named skill, instead of one fixed type | Pools candidates across every server type; still prefers higher `skillProfiles[].priority` when multiple match | Omitting the skill argument (ANY has no meaning without a skill filter); naming a real server type `ANY` (reserved word, V62) |
 | RENEGE | `RENEGE(ctx)` | Removes context entity from queue (abandonment) | Increments reneged count | Using entity type name instead of ctx |
 | RENEGE_OLDEST | `RENEGE_OLDEST(EntityType)` | Removes oldest entity of specified type from queue | Increments reneged count; used for max-queue policies | Confusing with RENEGE(ctx) |
+| CANCEL | `CANCEL(EventName)` | Removes a pending scheduled event for the current context entity only | Deletes the matching FEL entry so it never fires | Expecting it to cancel every entity's instance of that event — it is entity-scoped only, not global |
 
 ### Resource Management Macros
 
@@ -153,6 +155,7 @@ All 21 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | SET | `SET(varName, expr)` | Sets state variable to arithmetic expression result | Mutates state[varName] | Using undefined variable name |
 | SET_ATTR | `SET_ATTR(attrName, expr)` | Sets context entity attribute to expression result | Mutates entity.attrs[attrName] | Attribute must exist on entity type |
 | COST | `COST(expr)` | Adds expression result to cumulative cost total | Increments summary.totalCost and entity.__cost | Forgetting to set performance goal for cost |
+| ROUND_ROBIN | `ROUND_ROBIN(varName, N)` | Advances a state variable through a 0..N-1 rotation, wrapping back to 0 | Mutates state[varName] to the next index | Forgetting to pair it with routing[] branches that compare the variable to each literal index; N must be a positive integer |
 
 ### Container Macros
 
@@ -514,6 +517,7 @@ context (no suggestion text is shown live).
 1. **Register skills** in Model Settings / State tab / Skills section. Type a skill name and press Enter.
 2. **Assign to server types** in Entity Types tab. Expand a server type, tick skills in the Skills panel.
 3. **Use in C-Events** via ASSIGN with quoted skill: `ASSIGN(Queue, Doctor, "Surgery")` — only doctors with Surgery skill are considered.
+4. **Pool across server types** — use `ASSIGN(Queue, ANY, "Surgery")` instead of a fixed server type to seize any idle server, of any type, that has the skill. Requires a skill argument.
 
 ### Per-instance server skills
 
@@ -525,8 +529,9 @@ For server pools where individual servers have different skill sets (e.g., 4 doc
    - **Count** — exactly N servers get this profile, assigned in order to servers 0, 1, ... N-1
    - **Weight** (0-100%) — each server independently gets this profile with the given probability
 4. **Profiles are non-exclusive** — a server matches multiple profiles, final skills = union.
-5. **Check the counter** — count-based total must not exceed server count (V-SKILL-5).
-6. **Switch back to Shared** to remove all profiles and revert to identical servers.
+5. **Set a Priority** (optional, default 0) — when `ASSIGN` has multiple idle servers matching a skill, it prefers the one from the higher-priority profile (e.g. a Specialist profile at priority 10 is picked over a Generalist at priority 1, regardless of who's been idle longer). Ties still resolve FIFO by idle-since time. Applies to both same-type and `ANY` cross-type ASSIGN.
+6. **Check the counter** — count-based total must not exceed server count (V-SKILL-5).
+7. **Switch back to Shared** to remove all profiles and revert to identical servers.
 
 ### Setting skill requirements on arrival (entity-side)
 
