@@ -663,6 +663,12 @@ function EntityInspector({ entity, snap, onClose }) {
   // server currently claiming this entity (same reverse lookup ResourcesTab
   // already uses via currentCustId) instead of relying on that single field.
   const heldServers = (snap?.entities || []).filter(e => e.role === "server" && e.currentCustId === entity.id);
+  // Fall back to entity.serverId for snapshots that only carry the customer-side
+  // pointer without the matching server-side currentCustId back-reference.
+  if (entity.serverId != null && !heldServers.some(s => s.id === entity.serverId)) {
+    const primary = (snap?.entities || []).find(e => e.role === "server" && e.id === entity.serverId);
+    if (primary) heldServers.unshift(primary);
+  }
   const formatAttrValue = (value) => {
     if (typeof value === "number" && Number.isFinite(value)) {
       return value.toFixed(1).replace(/\.0$/, "");
@@ -729,7 +735,11 @@ function EntityInspector({ entity, snap, onClose }) {
         {heldServers.length > 0 && (
           <div style={rowStyle}>
             <span style={labelStyle}>{heldServers.length > 1 ? "Servers" : "Server"}</span>
-            <span style={valueStyle}>{heldServers.map(s => `#${s.id} (${s.type})`).join(", ")}</span>
+            <span style={valueStyle}>
+              {heldServers.length > 1
+                ? heldServers.map(s => `#${s.id} (${s.type})`).join(", ")
+                : `#${heldServers[0].id}`}
+            </span>
           </div>
         )}
         {entity.queue != null && (
