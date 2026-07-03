@@ -5,6 +5,8 @@ import {
   parseReportRecommendations,
   applySuggestionPatch,
   parseSuggestionResponse,
+  correctUtilisationFigures,
+  correctSuggestionGoalFields,
 } from '../prompts.js';
 
 const FORBIDDEN_TERMS = ['B-event', 'C-event', 'macro', 'ARRIVE', 'COMPLETE', 'ASSIGN', 'Phase'];
@@ -312,5 +314,94 @@ describe('parseSuggestionResponse — truncation recovery', () => {
     const input = '```json\n{ not: [valid, json at all <<<\n```';
     const result = parseSuggestionResponse(input);
     expect(result.suggestions).toEqual([]);
+  });
+});
+
+describe('correctUtilisationFigures — reversed phrasing', () => {
+  test('fixes "NN% utilisation" (number stated before the word)', () => {
+    const text = 'PET-CT Scanner emerging as the binding bottleneck at 89% utilisation (goal: <85%, MISSED).';
+    const corrected = correctUtilisationFigures(text, { 'PET-CT Scanner': 63.5 });
+    expect(corrected).toContain('64% utilisation');
+    expect(corrected).not.toContain('89% utilisation');
+  });
+
+  test('still fixes the original "utilisation ... NN%" phrasing', () => {
+    const text = 'PET-CT Scanner utilisation is 89%.';
+    const corrected = correctUtilisationFigures(text, { 'PET-CT Scanner': 63.5 });
+    expect(corrected).toContain('64%');
+    expect(corrected).not.toContain('89%');
+  });
+
+  test('leaves text untouched when no matching resource name is present', () => {
+    const text = 'Nuclear Medicine Physician at 88% utilisation.';
+    const corrected = correctUtilisationFigures(text, { 'PET-CT Scanner': 63.5 });
+    expect(corrected).toBe(text);
+  });
+});
+
+describe('correctSuggestionGoalFields', () => {
+  const goalGaps = [
+    {
+      metric: 'resource.utilisation',
+      label: 'PET-CT Scanner utilisation < 85%',
+      scope: { type: 'resource', name: 'PET-CT Scanner' },
+      operator: '<',
+      target: 0.85,
+      current: 0.635,
+      gap: -21.4,
+      met: true,
+    },
+  ];
+
+  test('overwrites a corrupted constraint/goalImpact when change.target matches a goal scope', () => {
+    const suggestion = {
+      rank: 1,
+      constraint: 'PET-CT Scanner utilisation = 64% (goal: <85%)',
+      cause: 'Single scanner serves all scan types.',
+      change: { type: 'entityTypeCount', target: 'PET-CT Scanner', from: 1, to: 2 },
+      predicted: 'Utilisation 44-64%',
+      goalImpact: 'PET-CT Scanner utilisation under 64% MET',
+      confidence: 'high',
+    };
+    const result = correctSuggestionGoalFields(suggestion, goalGaps);
+    expect(result.constraint).toBe('PET-CT Scanner utilisation = 64% (goal: < 85%)');
+    expect(result.goalImpact).toBe('PET-CT Scanner utilisation < 85%: MET');
+    expect(result.constraint).not.toContain('8500%');
+    // Untouched fields are preserved
+    expect(result.cause).toBe(suggestion.cause);
+    expect(result.predicted).toBe(suggestion.predicted);
+  });
+
+  test('reports MISSED when the goal is not met', () => {
+    const missedGaps = [{ ...goalGaps[0], met: false }];
+    const suggestion = {
+      rank: 1,
+      constraint: 'stale',
+      change: { type: 'entityTypeCount', target: 'PET-CT Scanner', from: 1, to: 2 },
+      goalImpact: 'stale',
+    };
+    const result = correctSuggestionGoalFields(suggestion, missedGaps);
+    expect(result.goalImpact).toContain('MISSED');
+  });
+
+  test('leaves the suggestion untouched when change.target does not match any goal scope', () => {
+    const suggestion = {
+      rank: 1,
+      constraint: 'Some other constraint',
+      change: { type: 'entityTypeCount', target: 'Nuclear Medicine Physician', from: 1, to: 2 },
+      goalImpact: 'Some other goal impact',
+    };
+    const result = correctSuggestionGoalFields(suggestion, goalGaps);
+    expect(result).toBe(suggestion);
+  });
+
+  test('leaves the suggestion untouched when goalGaps is empty', () => {
+    const suggestion = {
+      rank: 1,
+      change: { type: 'entityTypeCount', target: 'PET-CT Scanner', from: 1, to: 2 },
+      goalImpact: 'stale',
+    };
+    const result = correctSuggestionGoalFields(suggestion, []);
+    expect(result).toBe(suggestion);
   });
 });

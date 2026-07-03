@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { runAdaptiveBatch } from "../../engine/adaptive-batch.js";
 import { runReplications } from "../../engine/replication-runner.js";
-import { buildBatchAnalysisPrompt, buildApplyOpportunityPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
+import { buildBatchAnalysisPrompt, buildApplyOpportunityPrompt, parseSuggestionResponse, applySuggestionPatch, buildGoalGapsFromResults, buildKpis, buildUtilisationMap, correctUtilisationFigures } from "../../llm/prompts.js";
 import { streamNarrative, streamModelBuilder, callLLMOnce } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
 import { makeBatchResult, CI_METRICS, formatRunTimestamp, makeTimeSeriesAccumulator } from "./executeHelpers.js";
@@ -139,6 +139,7 @@ export function AdaptiveBatchPanel({
   const [combinedBatchResult, setCombinedBatchResult] = useState(null);
   const [replicationResults, setReplicationResults] = useState([]);
   const [streamedText, setStreamedText] = useState("");
+  const [goalGaps, setGoalGaps] = useState([]);
   const [savedRunId, setSavedRunId] = useState(null);
   const [error, setError] = useState(null);
   const [applyPhase, setApplyPhase] = useState("idle"); // "idle" | "generating" | "preview" | "apply-error"
@@ -283,6 +284,7 @@ export function AdaptiveBatchPanel({
       };
       setCombinedBatchResult(combinedResult);
       setReplicationResults(adaptiveResult.results);
+      setGoalGaps(buildGoalGapsFromResults(model, combinedResult) || []);
 
       let runId = null;
       if (onSave) {
@@ -339,11 +341,19 @@ export function AdaptiveBatchPanel({
           setStreamedText(accumulated);
         },
         onComplete: async () => {
+          // correctUtilisationFigures is the same deterministic post-processing
+          // AiAssistantPanel applies to its "What Happened" narrative — this prompt
+          // has no structured suggestion.goalImpact field to override instead, so
+          // free-text utilisation mentions in the markdown sections above need the
+          // same guard (a Goal Status checklist below covers the goal figures).
+          const utilMap = buildUtilisationMap(buildKpis(model, combinedResult).resources || []);
+          const corrected = Object.keys(utilMap).length ? correctUtilisationFigures(accumulated, utilMap) : accumulated;
+          if (corrected !== accumulated) setStreamedText(corrected);
           setPhase("done");
-          if (runId && onSaveInsights && accumulated) {
+          if (runId && onSaveInsights && corrected) {
             try {
               await onSaveInsights(runId, {
-                summary: accumulated.slice(0, 500),
+                summary: corrected.slice(0, 500),
                 savedAt: new Date().toISOString(),
               });
             } catch { /* non-fatal */ }
@@ -781,6 +791,33 @@ export function AdaptiveBatchPanel({
                         {phase === "analysing" && !streamedText && (
                           <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
                             Analysing results...
+                          </div>
+                        )}
+                        {phase === "done" && goalGaps.length > 0 && (
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 4 }}>
+                              GOAL STATUS
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              {goalGaps.map(g => {
+                                const pass = g.current != null && g.met;
+                                const chipColor = g.current == null ? C.muted : pass ? C.green : C.red;
+                                const chipLabel = g.current == null ? "UNKNOWN" : pass ? "✓ MET" : "✗ MISSED";
+                                const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
+                                const opLabel = isPercentile ? `${g.operator.replace("p", "")}th %ile <` : g.operator;
+                                return (
+                                  <div key={g.metric + (g.scope?.id || "")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
+                                    <div style={{ flex: 1, fontFamily: FONT, fontSize: 11, color: C.text }}>{g.label}</div>
+                                    <div style={{ fontFamily: FONT, fontSize: 11, color: C.muted }}>
+                                      {g.current != null ? `${Number(g.current).toFixed(1)} ${opLabel} ${g.target}` : "n/a"}
+                                    </div>
+                                    <div style={{ padding: "1px 7px", borderRadius: 4, background: chipColor + "22", border: `1px solid ${chipColor}55`, fontFamily: FONT, fontSize: 9, fontWeight: 700, color: chipColor, letterSpacing: 0.5 }}>
+                                      {chipLabel}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                         {streamedText && (
