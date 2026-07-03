@@ -652,23 +652,27 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 
 **How to set it up:**
 
-1. **Create a state variable** to track the last slot time (e.g., `lastSlotTime`, initial value 0).
-2. **Create a C-Event** with Activity Type **Delay (no resource)**. In the Source queue dropdown, pick the queue where entities wait for scheduling.
-3. **Set the Slot capacity** field to the maximum number of entities to process per firing (e.g., 3). Leave it blank to drain all waiting entities (default behavior).
-4. **Add a condition** that combines:
+Conditions have no arithmetic evaluator — `(clock - state.lastSlotTime) >= N` is not valid syntax and throws an error at runtime. Use a recurring timer B-Event plus a boolean flag instead:
+
+1. **Create a state variable** to act as a "ready" flag (e.g., `slotReady`, initial value 0).
+2. **Create a self-rescheduling B-Event** (the same way an arrival event reschedules itself) that fires every `slotInterval` minutes with effect `SET(slotReady, 1)`.
+3. **Create a C-Event** with Activity Type **Delay (no resource)**. In the Source queue dropdown, pick the queue where entities wait for scheduling.
+4. **Set the Slot capacity** field to the maximum number of entities to process per firing (e.g., 3). Leave it blank to drain all waiting entities (default behavior).
+5. **Add a condition** that combines:
    - `queue(QueueName).length >= 1` — there are entities waiting
-   - `(clock - state.lastSlotTime) >= slotInterval` — enough time has passed since the last slot (e.g., 60 minutes for hourly slots)
+   - `slotReady == 1` — the timer has ticked since the last slot opened
    - Optional calendar constraints: `isWeekday AND hourOfDay >= 9 AND hourOfDay < 17` — only during business hours
-5. **Add two effects:** `DELAY(QueueName, N)` and `SET(lastSlotTime, clock)` — drain up to N entities and reset the timer.
+6. **Add two effects:** `DELAY(QueueName, N)` and `SET(slotReady, 0)` — drain up to N entities and consume the flag until the next tick.
 
 **Example:** A clinic with 3 appointment slots per hour, weekdays 9am-5pm:
 
 ```
-Condition: queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND (clock - state.lastSlotTime) >= 60
-Effect: DELAY(BookingQueue, 3), SET(lastSlotTime, clock)
+Timer B-Event: fires every 60 min, effect: SET(slotReady, 1)
+Condition: queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND slotReady == 1
+Effect: DELAY(BookingQueue, 3), SET(slotReady, 0)
 ```
 
-The C-Event fires once per hour (when the condition is true), drains up to 3 entities from the queue, and resets the timer. Remaining entities wait for the next slot.
+The C-Event fires once per hour (when the condition is true), drains up to 3 entities from the queue, and consumes the flag. Remaining entities wait for the next slot.
 
 ### 5.6 "How do I make different entity types get different delay times?"
 

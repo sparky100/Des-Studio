@@ -579,13 +579,14 @@ Condition: queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND 
 
 ### Slot booking pattern
 
-Model periodic batch scheduling with DELAY capacity + state variable timer + calendar conditions:
+Model periodic batch scheduling with DELAY capacity + a recurring timer B-event + calendar conditions. **Conditions have no arithmetic evaluator** — `(clock - state.lastSlotTime) >= N` is not valid syntax (it throws `Unknown variable namespace in predicate` at runtime); use a timer + flag instead:
 
-1. Create a state variable `lastSlotTime` (initial 0)
-2. Create a C-event with condition: `queue(Queue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND (clock - state.lastSlotTime) >= slotInterval`
-3. Effect: `DELAY(Queue, N)` + `SET(lastSlotTime, clock)`
+1. Create a state variable `slotReady` (initial 0)
+2. Create a self-rescheduling B-event that fires every `slotInterval` minutes with effect `SET(slotReady, 1)` (schedule it to re-fire itself, the same way an arrival B-event self-reschedules)
+3. Create a C-event with condition: `queue(Queue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND slotReady == 1`
+4. Effect: `DELAY(Queue, N)` + `SET(slotReady, 0)`
 
-This drains up to N entities per firing, resets the timer, and only fires during business hours. Remaining entities wait for the next slot.
+This drains up to N entities per firing, consumes the ready flag until the next timer tick, and only fires during business hours. Remaining entities wait for the next slot.
 
 ### Per-entity delay times
 

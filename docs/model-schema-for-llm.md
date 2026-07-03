@@ -97,6 +97,7 @@ Read this before writing any model JSON.
 | 21 | `defaultQueueName` set with **no** `routing[]` or `probabilisticRouting[]` table on the same B-event | `defaultQueueName` is **only** consulted as the fallback destination *inside* a `routing[]` table (see `fireBEvent` in `engine/phases.js`) — it does nothing at all on its own. A B-event with `"effect": []` and only `"defaultQueueName": "Next Queue"` never routes the entity anywhere; it is left in `"serving"`/`"waiting"` status permanently, silently stalling every downstream stage. This is the single most consequential mistake in this document — it produces a model that saves and loads cleanly but stalls 100% of entities at that point during an actual run. For a single fixed next queue, use `"probabilisticRouting": [{ "probability": 1.0, "queueName": "Next Queue" }]` instead (or a `routing: [{ "queueName": "Next Queue" }]` catch-all branch plus matching `defaultQueueName`). Blocked by V61. See §6.2. |
 | 22 | Assuming `CANCEL(EventName)` cancels every pending instance of that event | `CANCEL` is **entity-scoped** — it only removes the pending FEL entry belonging to the entity currently in context (matched by `_contextCustId`), never a global "cancel all" for that event name. It is meant for racing a timeout against normal completion for the *same* entity (e.g. `"effect": ["CANCEL(TimeoutCheck)", "COMPLETE()"]` on the normal-completion B-event, where `TimeoutCheck` was scheduled for the same entity via a second `cSchedules` entry). Do not use it to try to stop a recurring/self-scheduling B-event model-wide. |
 | 23 | `ASSIGN(QueueName, ANY)` with no skill argument | The `ANY` cross-type-pooling sentinel only makes sense paired with a skill filter — `ASSIGN(QueueName, ANY, "Skill")`. Without a skill argument there is no basis to decide which servers across types are eligible. Always supply a skill literal (or `Entity.attrName`) when using `ANY`. |
+| 24 | Arithmetic expression used as a condition's entire `variable` — e.g. `(clock - state.lastSlotTime) >= 60` | The condition grammar has **no arithmetic evaluator** at all — `variable` must be a single resolvable token (`queue(...)`, `idle(...)`, `Entity.attr`, a bare state-variable name, etc.), never a parenthesized expression. `(clock - state.lastSlotTime)` is parsed as one opaque literal token, matches no known namespace, and throws `Unknown variable namespace in predicate` at runtime — with no validation-time warning, since string conditions aren't statically checked against the resolvable-token list. For "N time units since the last event," use a self-rescheduling timer B-event that sets a boolean flag instead — see §6.2 "DELAY with slot capacity" for the full pattern. |
 
 ---
 
@@ -972,14 +973,26 @@ Use `DELAY` instead of `ASSIGN` whenever the activity does not actually claim a 
   "cSchedules": [{ "eventId": "b_recovery_done", "useEntityCtx": true, "dist": "Exponential", "distParams": { "mean": "180" } }] }
 ```
 
-**DELAY with slot capacity:** `DELAY(QueueName, N)` drains at most N entities from the queue per firing. Remaining entities stay in the queue for the next firing. Combined with a state variable timer and calendar conditions, this models periodic batch scheduling:
+**DELAY with slot capacity:** `DELAY(QueueName, N)` drains at most N entities from the queue per firing. Remaining entities stay in the queue for the next firing. Combined with a self-rescheduling timer B-event, a boolean state-variable flag, and calendar conditions, this models periodic batch scheduling:
+
+> ⚠ **Do not gate this on `(clock - state.lastSlotTime) >= 60`-style arithmetic.** The condition grammar has no arithmetic evaluator — `variable` must be a single resolvable token (see §6.1), never a parenthesized expression. `(clock - state.lastSlotTime)` is parsed as one literal token that matches no known namespace and throws `Unknown variable namespace in predicate` at runtime. Use a recurring timer B-event that sets a flag instead:
+
+```json
+"stateVariables": [{ "name": "slotReady", "initialValue": "0" }],
+"bEvents": [
+  { "id": "b_slot_ready", "name": "Slot Ready", "scheduledTime": "60", "effect": ["SET(slotReady, 1)"],
+    "schedules": [{ "eventId": "b_slot_ready", "dist": "Fixed", "distParams": { "value": "60" } }] }
+]
+```
 
 ```json
 { "id": "c_schedule", "name": "Schedule Appointment", "priority": 1,
-  "condition": "queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND (clock - state.lastSlotTime) >= 60",
-  "effect": ["DELAY(BookingQueue, 3)", "SET(lastSlotTime, clock)"],
+  "condition": "queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND slotReady == 1",
+  "effect": ["DELAY(BookingQueue, 3)", "SET(slotReady, 0)"],
   "cSchedules": [{ "eventId": "b_slot_done", "useEntityCtx": true, "dist": "Fixed", "distParams": { "value": "1" } }] }
 ```
+
+The timer fires every 60 minutes and sets `slotReady`. `c_schedule` consumes the flag (resets it to 0) each time it fires, so at most one batch opens per 60-minute window; the flag simply waits (staying at 1, redundantly re-set by later ticks) through any period the condition's other clauses (queue empty, outside business hours) keep it from firing.
 
 **Per-entity delay times:** Use `EntityAttr` distribution in `cSchedules` to read the delay duration from an entity attribute. Combined with `cSchedules[].when` predicates, different entity types can get different delay durations:
 

@@ -176,12 +176,16 @@ describe('expandWeeklyPatternToEvents', () => {
       periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: '2' }],
       defaultCapacity: '0',
     };
-    // 15 days = 21600 minutes — should cover 2 Mondays
+    // 15 days = 21600 minutes. Epoch 2026-06-01 is a Monday, so day 14 (the start of
+    // the 3rd week) is ALSO a Monday — 14 days is exactly 2 full weeks later — and its
+    // 09:00-17:00 window (20700-21180 min) is genuinely within the 21600-minute horizon.
+    // So this correctly covers 3 Mondays (weeks 0, 1, and the start of week 2), not 2 —
+    // 3 * 2 events = 6.
     const r = expandWeeklyPatternToEvents(pattern, epoch, 21600, timeUnit);
-    // 2 weeks * 2 events = 4
-    expect(r.events.length).toBe(4);
-    expect(r.events[0].time).toBe(540);     // Week 1 Mon
-    expect(r.events[2].time).toBe(540 + 10080); // Week 2 Mon
+    expect(r.events.length).toBe(6);
+    expect(r.events[0].time).toBe(540);     // Week 1 Mon (day 0)
+    expect(r.events[2].time).toBe(540 + 10080); // Week 2 Mon (day 7)
+    expect(r.events[4].time).toBe(540 + 20160); // Week 3 Mon (day 14) — within the 15-day horizon
   });
 
   test('handles weekend-only schedule', () => {
