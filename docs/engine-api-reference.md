@@ -273,6 +273,10 @@ rng(); // → number in [0, 1)
       ],
       mtbf: string | null,           // Optional: mean time between failures
       mttr: string | null,           // Optional: mean time to repair
+      parentTypeId: string | null,   // Optional: id of a same-role entity type to inherit
+                                      // attrDefs/skills/skillProfiles from (build-time merge, V67)
+      requiredSequence: string[] | null, // Optional, customer types only: ordered queue names
+                                          // this type should visit (design-time check only, V68)
     }
   ],
   stateVariables: [

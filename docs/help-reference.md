@@ -34,6 +34,10 @@ Two roles. Defined in `entityTypes[]` array.
 
 **Attributes:** Customer entities carry named numeric attributes (priority, dueDate, etc.) set at arrival or updated mid-simulation via SET_ATTR.
 
+**Entity family / inheritance (`parentTypeId`):** An entity type can set `parentTypeId` to another entity type's `id` (same role) to inherit its `attrDefs`, `skills`, and `skillProfiles` at model-load time — a build-time merge, not a runtime concept the engine is otherwise aware of. Child values override the parent's on name collision. Must be same-role, non-self-referential, and acyclic (V67).
+
+**Service sequence enforcement (`requiredSequence`):** A customer entity type can set `requiredSequence` — an ordered list of queue names it should visit in order. Design-time only: the engine does not enforce it at run time, but validation (V68) traces the model's actual routing and warns if this entity type is ever routed backward through the declared stages. Not a blocking error, since rework/retry loops are a legitimate pattern.
+
 ### Queues
 
 Buffers where customer entities wait for service. Defined in `queues[]` array.
@@ -454,6 +458,8 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | V64 | `ROUND_ROBIN(StateVar, N)`'s N is not a positive integer | Set N to a positive integer ≥ 1 |
 | V65 | `skillProfiles[].priority`, if present, must be numeric | Set priority to a number, or remove it |
 | V66 | `MATCH`'s compatibility predicate (6th argument) fails to parse or evaluate | Fix the predicate syntax — check for unknown variable namespaces or malformed operators |
+| V67 | `parentTypeId` is self-referential, references an unknown entity type, references a different-role entity type, or creates a circular inheritance chain | Point `parentTypeId` at a real entity type of the same role, with no cycle |
+| V68 | An entry in `requiredSequence` doesn't match any declared queue (blocking), or the model's routing sends this entity type backward through the declared stages (warning — intentional rework loops can be ignored) | Correct the queue name; or review the routing edge and confirm the backward jump is intentional |
 
 Gaps in the numbering (e.g. no V7) are intentional — codes were retired or renumbered during development and are not reused.
 

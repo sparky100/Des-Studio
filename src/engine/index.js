@@ -17,6 +17,7 @@ import { fireBEvent, fireCEvent, applyShiftChange } from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
 import { nullRegistry }                        from "./adapters/index.js";
 import { expandWeeklyPatternToEvents, getPatternInitialCapacity, buildShiftPeriodLabels, resolveSchedulePattern } from "./schedule-pattern.js";
+import { applyEntityInheritance } from "./entity-inheritance.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
@@ -495,7 +496,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     runtimeModel = _cached.runtimeModel;
   } else {
     const resolvedModel = resolveInlineSchedules(model, schedulesMap);
-    runtimeModel = modelWithShiftInitialCapacity(resolvedModel);
+    runtimeModel = modelWithShiftInitialCapacity(applyEntityInheritance(resolvedModel));
     _runtimeModelCache.set(model, { schedulesMap, runtimeModel });
   }
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────

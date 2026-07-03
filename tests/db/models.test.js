@@ -1401,6 +1401,94 @@ describe('Sprint 71 — persistence layer', () => {
       expect(normalized.entityTypes[0].skillProfiles[0].priority).toBe(10);
       expect(normalized.entityTypes[0].skillProfiles[1].priority).toBe(1);
     });
+
+    // Entity family/inheritance (Phase 2, 2b) adds an optional `parentTypeId`
+    // field to entityTypes[] entries. Same as skillProfiles.priority above,
+    // it rides along inside the whitelisted `entityTypes` array but needs its
+    // own explicit round-trip assertion per this repo's schema contract.
+    it('round-trips entityTypes[].parentTypeId through saveModel and norm', async () => {
+      const model = {
+        name: 'Entity inheritance test',
+        entityTypes: [
+          { id: 'et-nurse', name: 'Nurse', role: 'server', count: 2, skills: ['Triage'] },
+          { id: 'et-senior-nurse', name: 'Senior Nurse', role: 'server', count: 1, parentTypeId: 'et-nurse' },
+        ],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'entity-inheritance-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.entity_types[1].parentTypeId).toBe('et-nurse');
+      expect(insertArg.model_json.entityTypes[1].parentTypeId).toBe('et-nurse');
+
+      const dbRow = {
+        id: 'entity-inheritance-id',
+        name: model.name,
+        owner_id: 'u1',
+        entity_types: insertArg.entity_types,
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: insertArg.model_json,
+      };
+      const normalized = norm(dbRow);
+      expect(normalized.entityTypes[1].parentTypeId).toBe('et-nurse');
+    });
+
+    // Service sequence enforcement (Phase 2, 2c) adds an optional
+    // `requiredSequence` field (ordered queue names) to entityTypes[]
+    // entries. Same rationale as parentTypeId above — needs its own
+    // round-trip assertion per this repo's schema contract.
+    it('round-trips entityTypes[].requiredSequence through saveModel and norm', async () => {
+      const model = {
+        name: 'Sequence enforcement test',
+        entityTypes: [
+          {
+            id: 'et-patient', name: 'Patient', role: 'customer',
+            requiredSequence: ['Triage Queue', 'Treatment Queue', 'Discharge Queue'],
+          },
+        ],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'sequence-enforcement-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.entity_types[0].requiredSequence).toEqual(['Triage Queue', 'Treatment Queue', 'Discharge Queue']);
+      expect(insertArg.model_json.entityTypes[0].requiredSequence).toEqual(['Triage Queue', 'Treatment Queue', 'Discharge Queue']);
+
+      const dbRow = {
+        id: 'sequence-enforcement-id',
+        name: model.name,
+        owner_id: 'u1',
+        entity_types: insertArg.entity_types,
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: insertArg.model_json,
+      };
+      const normalized = norm(dbRow);
+      expect(normalized.entityTypes[0].requiredSequence).toEqual(['Triage Queue', 'Treatment Queue', 'Discharge Queue']);
+    });
   });
 
   // ── 71.1.2  norm() structural validity ───────────────────────────────────
