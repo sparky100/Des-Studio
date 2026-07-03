@@ -1010,6 +1010,29 @@ export function validateModel(model) {
             { eventIds: [ev.id] });
         }
       });
+
+      const assignHits = text.match(/\bASSIGN\([^)]+\)/gi) || [];
+      assignHits.forEach(hit => {
+        const inner = hit.match(/^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"[^"]+"|\s*,\s*Entity\.\w+)?(?:\s*,\s*([A-Za-z_]\w*):([^)]+))?\)$/i);
+        if (!inner || !inner[3]) return;
+        const name = inner[3].trim();
+        const amountRaw = inner[4].trim();
+        if (!containerIdsLower.has(name.toLowerCase())) {
+          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ASSIGN references undeclared container '${name}'.`, tab,
+            { eventIds: [ev.id] });
+        }
+        const isBareNumeric = /^-?\d+(\.\d+)?$/.test(amountRaw);
+        const looksLikeExpression = /[\s+\-*/()]/.test(amountRaw);
+        if (isBareNumeric) {
+          if (parseFloat(amountRaw) <= 0) {
+            err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ASSIGN container amount (${amountRaw}) must be a positive number.`, tab,
+              { eventIds: [ev.id] });
+          }
+        } else if (!looksLikeExpression && !stateVarNamesLower.has(amountRaw.toLowerCase())) {
+          warn('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ASSIGN container amount '${amountRaw}' is not a number and not a declared state variable reference — verify this is intentional.`, tab,
+            { eventIds: [ev.id] });
+        }
+      });
     });
   };
   checkContainerRefs(bEvents, 'bevents');

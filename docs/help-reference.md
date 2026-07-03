@@ -120,6 +120,7 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | ASSIGN (skilled) | `ASSIGN(QueueName, ServerType, "Skill")` | Seizes server, only considers idle servers whose type has the named skill | Sets server to busy with skill tracking | Skill not in model registry (V-SKILL-2) |
 | ASSIGN (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Reads skill from entity attribute at runtime; null = any server | Supports per-entity skill variation from one C-event | Attribute undefined on customer type (V-SKILL-3) |
 | ASSIGN (any type) | `ASSIGN(QueueName, ANY, "Skill")` | Seizes an idle server of **any** server type that has the named skill, instead of one fixed type | Pools candidates across every server type; still prefers higher `skillProfiles[].priority` when multiple match | Omitting the skill argument (ANY has no meaning without a skill filter); naming a real server type `ANY` (reserved word, V62) |
+| ASSIGN (consumable-gated) | `ASSIGN(QueueName, ServerType, ContainerId:amount)` | Gates the assignment on a declared container having level ≥ `amount`; server claim and container deduction commit atomically together | Deducts `amount` from the container level (same clamping/logging as DRAIN); no-op (both server and container untouched) if either check fails | Referencing an undeclared container (V27); combine with a skill by putting the container clause last: `ASSIGN(Queue, Server, "Skill", ContainerId:amount)` |
 | RENEGE | `RENEGE(ctx)` | Removes context entity from queue (abandonment) | Increments reneged count | Using entity type name instead of ctx |
 | RENEGE_OLDEST | `RENEGE_OLDEST(EntityType)` | Removes oldest entity of specified type from queue | Increments reneged count; used for max-queue policies | Confusing with RENEGE(ctx) |
 | CANCEL | `CANCEL(EventName)` | Removes a pending scheduled event for the current context entity only | Deletes the matching FEL entry so it never fires | Expecting it to cancel every entity's instance of that event — it is entity-scoped only, not global |
@@ -423,7 +424,7 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | V24 | loopConfig.maxLoopCount < 1, or loopConfig.exitQueueName references an unknown queue | Set maxLoopCount ≥ 1; correct exit queue name |
 | V25 | RENEGE('TypeName') used instead of RENEGE(ctx) | Use exactly RENEGE(ctx) |
 | V26 | Container has an empty/duplicate id, capacity ≤ 0, or initialLevel < 0 or > capacity | Set a valid unique id, positive capacity, and initialLevel within [0, capacity] |
-| V27 | FILL/DRAIN references an undeclared container | Create container or correct id |
+| V27 | FILL/DRAIN, or ASSIGN's optional ContainerId:amount clause, references an undeclared container | Create container or correct id |
 | V28 | Model epoch is not a valid ISO 8601 datetime | Correct the epoch format |
 | V30 | B-event/C-event routes to exit (null queue) with no COMPLETE(), RENEGE(ctx), or RELEASE() effect | Add a terminal lifecycle effect so entities are counted as served |
 | V31 | Event routes to exit but doesn't explicitly end the lifecycle | Add COMPLETE(), RENEGE(ctx), or RELEASE() |

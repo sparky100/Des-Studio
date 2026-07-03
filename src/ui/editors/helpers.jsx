@@ -121,6 +121,34 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       }
     });
   }
+  // Consumable resource gating: ASSIGN(..., Container:amount) — the service
+  // only starts if the named container has at least `amount` available;
+  // the amount is deducted atomically alongside the server claim.
+  const ctNamesForAssign = (containerTypes||[]).map(ct=>ct.id).filter(Boolean);
+  if(ctNamesForAssign.length > 0 && activeServers.length > 0) {
+    opts.push({label:'── ASSIGN gated by consumable container ──', value:'', disabled:true});
+    ctNamesForAssign.forEach(ctn => {
+      if (queues.length > 0) {
+        queues.forEach(q => {
+          activeServers.forEach(s => {
+            opts.push({
+              label: `Start ${cName} with ${s} and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}, consuming 1 ${ctn}`,
+              value: `ASSIGN(${q.name}, ${s}, ${ctn}:1)`,
+            });
+          });
+        });
+      } else {
+        custs.forEach(c => {
+          activeServers.forEach(s => {
+            opts.push({
+              label: `Start ${cName} with ${s} and ${c}, consuming 1 ${ctn}`,
+              value: `ASSIGN(${c}, ${s}, ${ctn}:1)`,
+            });
+          });
+        });
+      }
+    });
+  }
   // BATCH options — C-Event macro
   if(queues.length > 0) {
     opts.push({label:'── BATCH (accumulate entities, fire when queue >= batchSize) ──',value:'',disabled:true});

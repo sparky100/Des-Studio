@@ -330,7 +330,7 @@ export const MACROS = [
     },
   },
 
-// ── ASSIGN(CustomerType|QueueName, ServerType|ANY[, "Skill"|Entity.attrName]) ──
+// ── ASSIGN(CustomerType|QueueName, ServerType|ANY[, "Skill"|Entity.attrName][, Container:amount]) ──
   // Optional 3rd parameter: a skill name (quoted string) OR Entity.attrName
   // (unquoted, resolves from the entity's attribute at runtime). When a skill is
   // specified, only idle servers whose server type has that skill are considered.
@@ -340,16 +340,22 @@ export const MACROS = [
   // servers across every server type, filtered by the given skill. When
   // multiple candidates match, servers with a higher SkillProfile.priority
   // are preferred; ties keep FIFO-by-idle-time order.
+  // Optional trailing Container:amount clause gates the assignment on a
+  // declared container having at least `amount` available — mirrors DRAIN's
+  // guard, but checked atomically alongside the server claim: if either the
+  // server or the container check fails, neither is committed.
   {
     name:    "ASSIGN",
-    pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"([^"]+)"|\s*,\s*Entity\.(\w+))?\)$/i,
+    pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"([^"]+)"|\s*,\s*Entity\.(\w+))?(?:\s*,\s*([A-Za-z_]\w*):([^)]+))?\)$/i,
     apply(match, ctx) {
       const cType = match[1].trim();
       const sType = match[2].trim();
       const isAnyType = sType.toUpperCase() === "ANY";
       const skillLiteral = match[3] ? match[3].trim() : null;
       const skillAttrName = match[4] ? match[4].trim() : null;
-      const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs, _arbitration } = ctx;
+      const containerName = match[5] ? match[5].trim() : null;
+      const rawContainerAmount = match[6] ? match[6].trim() : null;
+      const { entities, helpers, state, clock, setLastCustId, setLastSrvId, msgs, _arbitration } = ctx;
       const arbitrationTarget = _arbitration && typeof _arbitration === "object" ? _arbitration : null;
 
       const matchedQ = helpers.findQueueConfig?.(cType);
@@ -407,10 +413,42 @@ export const MACROS = [
 
       if (cust && srv) {
         const queuedAt = cust.queue;
+
+        // Container gate: check availability BEFORE claiming the server so
+        // neither the server nor the container level changes on failure.
+        let containerAmount = null;
+        if (containerName) {
+          const key = `__container_${containerName}`;
+          if (!(key in state)) {
+            msgs.push(`ASSIGN(${cType},${sType}): container '${containerName}' not declared in containerTypes`);
+            return;
+          }
+          containerAmount = evalEntityExpr(rawContainerAmount, { state, clock, entity: cust });
+          if (isNaN(containerAmount) || containerAmount <= 0) {
+            msgs.push(`ASSIGN(${cType},${sType}): container amount (${rawContainerAmount}) must be a positive number`);
+            return;
+          }
+          if (state[key] < containerAmount) {
+            msgs.push(`ASSIGN(${cType},${sType}): container '${containerName}' guard failed — level ${state[key].toFixed(4)} < ${containerAmount}`);
+            return;
+          }
+        }
+
         if (!claimServerForEntity(cust, srv, clock, ctx.index, ctx, skill)) {
           msgs.push(`ASSIGN(${cType},${sType}): claim failed`);
           return;
         }
+
+        if (containerName) {
+          flushContainerIntegral(state, clock, containerName);
+          const key = `__container_${containerName}`;
+          const newLevel = state[key] - containerAmount;
+          state[key] = newLevel;
+          updateContainerMinMax(state, containerName, newLevel);
+          msgs.push(`ASSIGN: container '${containerName}' → ${newLevel.toFixed(4)}`);
+          ctx.trace?.push?.({ event: "Drain", container: containerName, amount: containerAmount, level: newLevel, time: clock });
+        }
+
         cust.lastQueue     = queuedAt ?? cust.lastQueue;
         cust.ceventName    = ctx.ceventName;
         setLastCustId(cust.id);

@@ -324,6 +324,7 @@ rng(); // → number in [0, 1)
 | `ASSIGN(Queue, Server)` | Seize idle Server for first waiting entity in Queue |
 | `ASSIGN(Queue, Server, "Skill")` | Same, filtered to idle servers with the named skill. Prefers higher `skillProfiles[].priority` when multiple match; ties resolve FIFO by idle-since time. |
 | `ASSIGN(Queue, ANY, "Skill")` | Same skill filter, but pools idle servers across every server type instead of one fixed type. Reserved token `ANY`; requires a skill argument. |
+| `ASSIGN(Queue, Server, ContainerId:amount)` | Gates the assignment on a declared container having level ≥ `amount`; server claim and container deduction commit atomically (no partial seizure). Combine with a skill by putting the container clause last. |
 | `COMPLETE()` | End service for context entity; release server; increment served count |
 | `RELEASE(Server[, Queue])` | Release server without completing; re-queue entity if Queue given |
 | `RENEGE(ctx)` | Remove context entity from queue (abandonment) |
