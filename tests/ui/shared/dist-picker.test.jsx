@@ -210,3 +210,71 @@ describe('DistPicker — piecewise time-varying distributions (F7.5)', () => {
     expect(screen.getByText(/Periods must be sorted by start time/i)).toBeInTheDocument();
   });
 });
+
+describe('DistPicker — Distance distribution (transport time)', () => {
+  const queues = [{ id: 'q1', name: 'WarehouseQueue' }, { id: 'q2', name: 'DepotQueue' }];
+  const entityTypes = [
+    { id: 'S', name: 'Driver', role: 'server', attrDefs: [{ name: 'speed', valueType: 'number' }] },
+    { id: 'C', name: 'Package', role: 'customer', attrDefs: [] },
+  ];
+
+  it('does not offer Distance as a selectable option when allowDistance is not set', () => {
+    render(
+      <DistPicker value={{ dist: 'Empirical', distParams: {} }} onChange={vi.fn()} queues={queues} entityTypes={entityTypes} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /from data/i }));
+    const select = screen.getAllByRole('combobox')[0];
+    const options = Array.from(select.querySelectorAll('option')).map(o => o.value);
+    expect(options).not.toContain('Distance');
+  });
+
+  it('offers Distance and renders its dedicated editor when allowDistance is set', () => {
+    render(
+      <DistPicker value={{ dist: 'Distance', distParams: {} }} onChange={vi.fn()} allowDistance queues={queues} entityTypes={entityTypes} />
+    );
+    expect(screen.getByLabelText(/Distance from queue/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Distance to queue/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Distance speed source/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Distance speed attribute/i)).toBeInTheDocument();
+  });
+
+  it('the from/to dropdowns list the declared queues', () => {
+    render(
+      <DistPicker value={{ dist: 'Distance', distParams: {} }} onChange={vi.fn()} allowDistance queues={queues} entityTypes={entityTypes} />
+    );
+    const fromSelect = screen.getByLabelText(/Distance from queue/i);
+    const options = Array.from(fromSelect.querySelectorAll('option')).map(o => o.textContent);
+    expect(options).toContain('WarehouseQueue');
+    expect(options).toContain('DepotQueue');
+  });
+
+  it('the speed attribute dropdown sources from server attrDefs when speedSource is "server"', () => {
+    render(
+      <DistPicker value={{ dist: 'Distance', distParams: { speedSource: 'server' } }} onChange={vi.fn()} allowDistance queues={queues} entityTypes={entityTypes} />
+    );
+    const attrSelect = screen.getByLabelText(/Distance speed attribute/i);
+    const options = Array.from(attrSelect.querySelectorAll('option')).map(o => o.textContent);
+    expect(options).toContain('speed');
+  });
+
+  it('choosing a from-queue updates distParams via onChange', () => {
+    const handleChange = vi.fn();
+    render(
+      <DistPicker value={{ dist: 'Distance', distParams: {} }} onChange={handleChange} allowDistance queues={queues} entityTypes={entityTypes} />
+    );
+    fireEvent.change(screen.getByLabelText(/Distance from queue/i), { target: { value: 'WarehouseQueue' } });
+    expect(handleChange).toHaveBeenCalledOnce();
+    expect(handleChange.mock.calls[0][0].distParams.from).toBe('WarehouseQueue');
+    expect(handleChange.mock.calls[0][0].dist).toBe('Distance');
+  });
+
+  it('switching speedSource clears the previously selected speedAttr', () => {
+    const handleChange = vi.fn();
+    render(
+      <DistPicker value={{ dist: 'Distance', distParams: { speedSource: 'server', speedAttr: 'speed' } }} onChange={handleChange} allowDistance queues={queues} entityTypes={entityTypes} />
+    );
+    fireEvent.change(screen.getByLabelText(/Distance speed source/i), { target: { value: 'entity' } });
+    expect(handleChange.mock.calls[0][0].distParams.speedSource).toBe('entity');
+    expect(handleChange.mock.calls[0][0].distParams.speedAttr).toBe('');
+  });
+});

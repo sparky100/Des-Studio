@@ -98,6 +98,7 @@ Read this before writing any model JSON.
 | 22 | Assuming `CANCEL(EventName)` cancels every pending instance of that event | `CANCEL` is **entity-scoped** — it only removes the pending FEL entry belonging to the entity currently in context (matched by `_contextCustId`), never a global "cancel all" for that event name. It is meant for racing a timeout against normal completion for the *same* entity (e.g. `"effect": ["CANCEL(TimeoutCheck)", "COMPLETE()"]` on the normal-completion B-event, where `TimeoutCheck` was scheduled for the same entity via a second `cSchedules` entry). Do not use it to try to stop a recurring/self-scheduling B-event model-wide. |
 | 23 | `ASSIGN(QueueName, ANY)` with no skill argument | The `ANY` cross-type-pooling sentinel only makes sense paired with a skill filter — `ASSIGN(QueueName, ANY, "Skill")`. Without a skill argument there is no basis to decide which servers across types are eligible. Always supply a skill literal (or `Entity.attrName`) when using `ANY`. |
 | 24 | Arithmetic expression used as a condition's entire `variable` — e.g. `(clock - state.lastSlotTime) >= 60` | The condition grammar has **no arithmetic evaluator** at all — `variable` must be a single resolvable token (`queue(...)`, `idle(...)`, `Entity.attr`, a bare state-variable name, etc.), never a parenthesized expression. `(clock - state.lastSlotTime)` is parsed as one opaque literal token, matches no known namespace, and throws `Unknown variable namespace in predicate` at runtime — with no validation-time warning, since string conditions aren't statically checked against the resolvable-token list. For "N time units since the last event," use a self-rescheduling timer B-event that sets a boolean flag instead — see §6.2 "DELAY with slot capacity" for the full pattern. |
+| 25 | Putting a `Distance`-typed schedule on a B-event's own self-rescheduling `schedules[]` instead of a C-event's `cSchedules` | `Distance` reads a speed attribute from the matched server or arriving entity at the moment a service starts — that pairing only exists after a C-event's `ASSIGN` (or similar) has resolved a customer/server context for the current `cSchedules` entry. A B-event's `schedules[]` (used for e.g. `b_arrive` scheduling its own next arrival) has no such context, so `speedSource` has nothing to read and the leg silently falls back to a duration of 0. Use `Distance` only inside a C-event's `cSchedules`, immediately after the `ASSIGN` that starts the leg. |
 
 ---
 
@@ -501,6 +502,7 @@ Used in B-event schedules, C-event service times, and entity attribute defaults.
 | `Schedule`    | `{ "times": [10, 25, 40] }` or `{ "rows": [{ "time": 10, "attrs": { ... } }, ...] }` | Planned absolute arrival times; exhausts and stops. Empty rows/times array produces no arrivals (CHK-009). |
 | `ServerAttr`  | `{ "attr": "serviceTime" }`                  | Reads named attribute from matched server entity; returns max(0, value) or 1 if not found |
 | `EntityAttr`  | `{ "attr": "requestedDuration" }`            | Reads named attribute from arriving customer entity; returns value or 0 if not found |
+| `Distance`    | `{ "from": "WarehouseQueue", "to": "DepotQueue", "speedAttr": "speed", "speedSource": "entity" \| "server" }` | Duration = declared distance between the two named queues (§9 Distances) ÷ the named numeric attribute on the matched server or arriving entity (per `speedSource`). Meaningful only in a C-event's `cSchedules` (a completion following an `ASSIGN`/service start) — a B-event's own self-rescheduling `schedules[]` has no matched server/entity pair to read a speed from. Falls back to a duration of 0 (with a log message) when the pair isn't declared or the speed value is missing/non-positive (V70), rather than throwing. |
 | `Categorical` | `{ "options": [{ "value": "Surgery", "weight": 40 }, { "value": null, "weight": 30 }] }` | Weighted random selection from a list of values. At least one option with weight > 0. Weights are relative (auto-normalized). Each `value` can be any type or `null` ("no requirement"). Returns `null` when all weights sum to 0. Primarily used for string/boolean entity attributes — set via the AttrEditor's weighted options UI (string) or probability slider (boolean). Returns non-numeric values, so it must not be used for B-event delays or service-time durations. |
 
 **All numeric parameter values must be strings** (e.g. `"5"`, not `5`).
@@ -1210,6 +1212,29 @@ Continuous-level resources (tanks, buffers, stock).
 
 ---
 
+## 8.1 Distances
+
+Named distances between queue pairs, consumed by the `Distance` distribution type (§4) to compute travel time as distance ÷ speed instead of a flat sampled duration.
+
+> **UI note:** Distances are editable in the UI via the "Reference Data" tab (the same tab that holds Container Types), in a dedicated section below the container list — add, edit, and remove distances (`fromQueue`, `toQueue`, `distance`) via two queue-name dropdowns and a number field.
+
+```json
+{
+  "id": "d_warehouse_depot",
+  "fromQueue": "WarehouseQueue",
+  "toQueue": "DepotQueue",
+  "distance": 12
+}
+```
+
+- `id` must be unique and non-empty (V69). Used only for UI/CRUD identity — not a macro or distribution argument.
+- `fromQueue` / `toQueue`: queue **names** (matching how every macro references queues, not queue ids). Both must reference declared queues, and must be different from each other (V69).
+- `distance` must be a positive finite number (V69). Units are the modeler's responsibility — there is no unit system anywhere in the schema; keep `distance` and the referenced speed attribute in consistent units.
+- **Undirected:** one entry covers travel in either direction between the two queues. Declaring both `(A, B)` and `(B, A)` is a duplicate and is rejected (V69).
+- Consumed by setting a C-event schedule's `dist` to `"Distance"` with `distParams: { from, to, speedAttr, speedSource }` — see §4's `Distance` row and §12 for a worked example. Referencing an undeclared pair is a warning, not an error (V70) — the run falls back to a duration of 0 for that leg rather than being blocked, since the pair may be intentionally incomplete during authoring.
+
+---
+
 ## 9. Goals (Optional)
 
 Performance targets for the AI analysis and optimisation features.
@@ -1393,6 +1418,8 @@ All generated model JSON MUST pass every blocking rule below.
 | V66 | `MATCH`'s optional 6th argument (compatibility predicate) must parse and evaluate without throwing — e.g. an unrecognized variable namespace like `Foo.bar`. The engine catches the error defensively at runtime (treated as no compatible pair), but this rule surfaces the mistake at design time. Blocking error. |
 | V67 | `parentTypeId` must reference a real entity type of the same `role`, must not be self-referential, and the inheritance chain must not contain a cycle. Blocking error. |
 | V68 | Every entry in `requiredSequence` must match a declared queue's `name`. Blocking error (an unmatched name silently disables the backward-routing check for that stage). The backward-routing check itself (routing that jumps to an earlier stage) is a warning, not a blocking error — see the Warnings table. |
+| V69 | Each `distances[]` entry must have a non-empty/unique `id`; `fromQueue`/`toQueue` must each reference a declared queue and be different from each other; `distance` must be a positive finite number; no duplicate entry for the same unordered `(fromQueue, toQueue)` pair. Blocking error. |
+| V70 | A `Distance`-typed schedule's `from`/`to` must reference declared queues, `speedSource` must be `"entity"` or `"server"`, and `speedAttr` must be non-empty. Blocking error. (Referencing a pair not present in `distances[]`, or a `speedAttr` not declared on any matching entity type, is a warning instead — see the Warnings table.) |
 
 ### Warnings (run proceeds, banner shown)
 
@@ -1427,6 +1454,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V-SKILL-2 | (ANY variant) `ASSIGN(Q, ANY, "Skill")` references a skill that no registered server type actually has (neither type-level `skills[]` nor any `skillProfiles[].skills`, across every server type). The cross-type pool is guaranteed empty and the effect will never match. Emitted with the same code as the blocking V-SKILL-2 rule above — severity is distinguished by which list it appears in. |
 | V62 | A server entity type is literally named `ANY` (case-insensitive) — this collides with the reserved `ASSIGN(..., ANY, ...)` cross-type-pooling sentinel and makes any `ANY`-based ASSIGN in the model ambiguous. Rename the server type. |
 | V68 | An entity type's `requiredSequence` has a routing edge (traced through ASSIGN/DELAY/COSEIZE/BATCH/MATCH sources and RELEASE/routing-table/ARRIVE/MATCH/SPLIT destinations, including C-event → scheduled B-event links via `cSchedules`) whose destination queue is an **earlier** stage than its source queue. Likely a routing-table typo or a copy-paste mistake — but also matches an intentional rework/retry loop, so this is a warning, not a blocking error, and can be ignored when the backward routing is deliberate. |
+| V70 | A `Distance`-typed schedule references a `(from, to)` pair not present in `distances[]` (falls back to a duration of 0 at run time), or a `speedAttr` not declared as a numeric attribute on any entity type matching `speedSource` (always falls back to 0). Both are warnings, not blocking errors, since the model may still be under construction. |
 | V-SLOT-1 | `DELAY(QueueName, N)` capacity must be a positive integer. |
 | V-CAL-1 | Calendar conditions (`isWeekday`, `isWeekend`, `hourOfDay`, `dayOfWeek`) are used but the model has no `epoch` set. Calendar variables will return defaults (isWeekday=true, hourOfDay=0). Set a Real-world start date in Model Settings. |
 | V-CAL-2 | `hourOfDay` comparison value is outside the valid range 0-23. |
@@ -1996,6 +2024,37 @@ The model represents a 3-stage urgent care pathway: **NHS 24 triage → Minor In
 1. `q_miu` and `q_ed_wait` use `PRIORITY` discipline — patients need a `priority` attribute (`et_patient.attrDefs[0]`).
 2. `q_discharge` is in the MIU section's `memberIds` (not a separate section) because discharge is part of the MIU flow.
 3. `c_discharge.priority: 0` ensures completions fire before new arrivals are seized, avoiding head-of-line starvation.
+
+---
+
+### 12.4 Distance-Based Transport Time
+
+For a multi-leg transport model (courier, ground crew, ambulance dispatch) where each leg's duration should scale with a physical distance and a speed rather than being a flat sampled number:
+
+```json
+{
+  "distances": [
+    { "id": "d_warehouse_depot", "fromQueue": "WarehouseQueue", "toQueue": "DepotQueue", "distance": 12 }
+  ],
+  "entityTypes": [
+    { "id": "et_courier", "name": "Courier", "role": "server", "count": 2,
+      "attrDefs": [{ "name": "speed", "valueType": "number", "defaultValue": "3" }] }
+  ],
+  "cEvents": [{
+    "id": "c_leg1", "name": "Depart Warehouse", "priority": 1,
+    "condition": "queue(WarehouseQueue).length > 0 AND idle(Courier).count > 0",
+    "effect": ["ASSIGN(WarehouseQueue, Courier)"],
+    "cSchedules": [{
+      "eventId": "b_leg1_done",
+      "dist": "Distance",
+      "distParams": { "from": "WarehouseQueue", "to": "DepotQueue", "speedAttr": "speed", "speedSource": "server" },
+      "useEntityCtx": true
+    }]
+  }]
+}
+```
+
+The completion B-event (`b_leg1_done`) releases the courier at `DepotQueue` as usual — `Distance` only changes how the *duration* of that leg is computed (`12 ÷ 3 = 4` time units here), everything else about the ASSIGN/RELEASE flow is unchanged. See the built-in **"Courier Ground Transport"** template for a complete two-leg working example.
 
 ---
 

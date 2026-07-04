@@ -2040,6 +2040,75 @@ describe('Sprint 71 — persistence layer', () => {
     });
   });
 
+  // Distance-based transport time adds a top-level `distances` registry
+  // (undirected queue-pair distances, consumed by the Distance distribution
+  // type). Same shape as containerTypes — lives only in model_json, not a
+  // dedicated column — so it gets the identical round-trip test pattern.
+  describe('round-trip — model_json.distances survives saveModel insert', () => {
+    it('the insert payload model_json contains distances from the input object', async () => {
+      const distances = [
+        { id: 'd_warehouse_depot', fromQueue: 'WarehouseQueue', toQueue: 'DepotQueue', distance: 12 },
+      ];
+      const model = {
+        name: 'Distance RT',
+        entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
+        distances,
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'dist-rt-id', name: model.name, owner_id: 'u1' }, error: null,
+      });
+      await saveModel(model, 'u1');
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json.distances).toEqual(distances);
+    });
+
+    it('model_json.distances defaults to [] when not supplied', async () => {
+      const model = {
+        name: 'No Distances',
+        entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'no-dist-id', name: model.name, owner_id: 'u1' }, error: null,
+      });
+      await saveModel(model, 'u1');
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json.distances).toEqual([]);
+    });
+  });
+
+  describe('norm() — deserialises distances from model_json', () => {
+    it('reads distances from model_json', () => {
+      const distances = [{ id: 'd_x', fromQueue: 'A', toQueue: 'B', distance: 5 }];
+      const result = norm({
+        id: 'dist-norm-1', name: 'With Distances',
+        entity_types: [], b_events: [], c_events: [], queues: [],
+        model_json: { distances },
+      });
+      expect(result.distances).toEqual(distances);
+    });
+
+    it('defaults distances to [] when absent from model_json', () => {
+      const result = norm({
+        id: 'dist-norm-2', name: 'No Distances',
+        entity_types: [], b_events: [], c_events: [], queues: [],
+        model_json: {},
+      });
+      expect(result.distances).toEqual([]);
+    });
+
+    it('defaults distances to [] when model_json is absent entirely', () => {
+      const result = norm({
+        id: 'dist-norm-3', name: 'Legacy Row',
+        entity_types: [], b_events: [], c_events: [], queues: [],
+      });
+      expect(result.distances).toEqual([]);
+    });
+  });
+
   // ── notes — internal/explanatory field, separate from description ───────
   describe('round-trip — model_json.notes survives saveModel insert', () => {
     it('the insert payload model_json contains notes from the input object', async () => {

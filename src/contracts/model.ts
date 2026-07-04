@@ -211,6 +211,17 @@ export interface ContainerDefinition {
   initialLevel?: number;
 }
 
+export interface DistanceDefinition {
+  /** Unique identifier for this registry entry (UI/CRUD identity only — not a macro argument). */
+  id: string;
+  /** Queue *name* (matching how every macro references queues), not id. */
+  fromQueue: string;
+  toQueue: string;
+  /** Must be > 0. Undirected — this one entry covers travel in either direction. Units are
+   * the modeler's responsibility, same as every other distribution (no unit system exists). */
+  distance: number;
+}
+
 export interface GoalDefinition {
   /** Dot-notation metric key, e.g. "summary.avgWait". */
   metric: string;
@@ -251,6 +262,8 @@ export interface DesModelJson {
   cEvents: CEventDefinition[];
   queues: QueueDefinition[];
   containerTypes?: ContainerDefinition[];
+  /** Named distance registry between queue pairs, consumed by the `Distance` distribution type. */
+  distances?: DistanceDefinition[];
   goals?: GoalDefinition[];
   dataSources?: DataSourceDefinition[];
   experimentDefaults?: ExperimentDefaults;

@@ -14,7 +14,7 @@ export const DIST_GROUPS = [
   {
     id: "fromdata",
     label: "From data",
-    dists: ["Empirical", "ServerAttr", "EntityAttr"],
+    dists: ["Empirical", "ServerAttr", "EntityAttr", "Distance"],
   },
 ];
 
@@ -90,6 +90,10 @@ export const DIST_HELP = {
     params: {
       attr: "Name of the entity attribute to use as the sampled value.",
     },
+  },
+  Distance: {
+    summary: "Duration = a declared distance between two queues ÷ a speed attribute read from the entity or server. Only meaningful on a C-event's schedule.",
+    params: {},
   },
 };
 

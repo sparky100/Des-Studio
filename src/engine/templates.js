@@ -482,6 +482,69 @@ const PORT_BERTH = {
   queues: [{ id: "q_anchorage", name: "Anchorage", customerType: "Vessel", capacity: "", discipline: "FIFO" }],
 };
 
+// ── Courier Ground Transport ───────────────────────────────────────────────────
+
+const COURIER_GROUND_TRANSPORT = {
+  name: "Courier Ground Transport",
+  description: "Parcels are picked up at a warehouse, relayed through a depot, and delivered to a customer site. Each leg's travel time is computed from a declared distance between the two queues divided by the courier's speed, instead of a flat sampled duration — demonstrates the Distance distribution and the Distances reference-data registry.",
+  domain: "Logistics",
+  templateMeta: {
+    scenarioType: "Multi-leg transport with distance-based travel time",
+    keyMacros: ["ARRIVE", "ASSIGN", "RELEASE", "DELAY", "COMPLETE"],
+    paramGuide: "Parcel arrival mean 10 min. Couriers: 2, speed 3 distance-units/min. Warehouse→Depot distance 12 (4 min travel); Depot→CustomerSite distance 9 (3 min travel). Distances are declared in the Reference Data tab and are undirected.",
+    limitations: "Two fixed legs only — no route choice or shortest-path selection. Distance units are arbitrary and consistent within this model, not real-world km/miles.",
+  },
+  entityTypes: [
+    { id: "et_parcel", name: "Parcel", role: "customer", count: 0, attrDefs: [] },
+    { id: "et_courier", name: "Courier", role: "server", count: 2, attrDefs: [
+      { id: "a_speed", name: "speed", valueType: "number", defaultValue: "3", mutable: false },
+    ]},
+  ],
+  stateVariables: [],
+  bEvents: [
+    { id: "b_arrive", name: "Parcel Arrival", scheduledTime: "0", effect: ["ARRIVE(Parcel, WarehouseQueue)"],
+      schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "10" } }] },
+    { id: "b_leg1_done", name: "Arrived at Depot", scheduledTime: "9999",
+      effect: ["RELEASE(Courier, DepotQueue)"], schedules: [] },
+    { id: "b_leg2_done", name: "Arrived at Customer Site", scheduledTime: "9999",
+      effect: ["RELEASE(Courier, CustomerSiteQueue)"], schedules: [] },
+    { id: "b_delivered", name: "Delivered", scheduledTime: "9999",
+      effect: ["COMPLETE()"], schedules: [] },
+  ],
+  cEvents: [
+    { id: "c_leg1", name: "Depart Warehouse", priority: 1,
+      condition: "queue(WarehouseQueue).length > 0 AND idle(Courier).count > 0",
+      effect: ["ASSIGN(WarehouseQueue, Courier)"],
+      cSchedules: [{ eventId: "b_leg1_done", dist: "Distance",
+        distParams: { from: "WarehouseQueue", to: "DepotQueue", speedAttr: "speed", speedSource: "server" },
+        useEntityCtx: true }] },
+    { id: "c_leg2", name: "Depart Depot", priority: 2,
+      condition: "queue(DepotQueue).length > 0 AND idle(Courier).count > 0",
+      effect: ["ASSIGN(DepotQueue, Courier)"],
+      cSchedules: [{ eventId: "b_leg2_done", dist: "Distance",
+        distParams: { from: "DepotQueue", to: "CustomerSiteQueue", speedAttr: "speed", speedSource: "server" },
+        useEntityCtx: true }] },
+    { id: "c_deliver", name: "Confirm Delivery", priority: 3,
+      condition: "queue(CustomerSiteQueue).length > 0",
+      effect: ["DELAY(CustomerSiteQueue)"],
+      cSchedules: [{ eventId: "b_delivered", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+  ],
+  queues: [
+    { id: "q_warehouse", name: "WarehouseQueue", customerType: "Parcel", capacity: "", discipline: "FIFO" },
+    { id: "q_depot", name: "DepotQueue", customerType: "Parcel", capacity: "", discipline: "FIFO" },
+    { id: "q_customer_site", name: "CustomerSiteQueue", customerType: "Parcel", capacity: "", discipline: "FIFO" },
+  ],
+  distances: [
+    { id: "d_warehouse_depot", fromQueue: "WarehouseQueue", toQueue: "DepotQueue", distance: 12 },
+    { id: "d_depot_customer", fromQueue: "DepotQueue", toQueue: "CustomerSiteQueue", distance: 9 },
+  ],
+  experimentDefaults: {
+    maxSimTime: 480,
+    warmupPeriod: 60,
+    replications: 5,
+  },
+};
+
 // ── Technology ────────────────────────────────────────────────────────────────
 
 const DATA_CENTER = {
@@ -1251,6 +1314,7 @@ export const TEMPLATES = [
   { id: "bulk-order-split", ...BULK_ORDER_SPLIT },
   // Logistics
   { id: "port-berth",      ...PORT_BERTH },
+  { id: "courier-ground-transport", ...COURIER_GROUND_TRANSPORT },
   // Technology
   { id: "data-center",     ...DATA_CENTER },
   // Capability showcases (Sprint 41-45)

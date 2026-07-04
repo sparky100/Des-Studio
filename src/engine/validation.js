@@ -139,7 +139,7 @@ export function validateModel(model) {
   // ── V5: Distribution parameters in valid bounds (+ V11 warning) ────────────
   function checkDist(dist, params, context, tab) {
     const distName = normalizeDistributionName(dist);
-    if (!distName || distName === 'ServerAttr' || distName === 'EntityAttr') return;
+    if (!distName || distName === 'ServerAttr' || distName === 'EntityAttr' || distName === 'Distance') return;
     const p = params || {};
     if (distName === 'Piecewise') {
       const periods = getPiecewisePeriods(p);
@@ -1106,7 +1106,7 @@ export function validateModel(model) {
   bEvents.forEach(b => {
     (b.schedules || []).forEach((s, j) => {
       const distName = normalizeDistributionName(s.dist);
-      if (!distName || distName === 'ServerAttr' || distName === 'EntityAttr') return;
+      if (!distName || distName === 'ServerAttr' || distName === 'EntityAttr' || distName === 'Distance') return;
       const p = s.distParams || {};
       if (distName === 'Exponential') {
         const mean = parseFloat(p.mean);
@@ -1875,6 +1875,89 @@ export function validateModel(model) {
       current = entityTypeById.get(current.parentTypeId);
     }
   });
+
+  // ── V69: Distance registry — valid id/fromQueue/toQueue/distance ───────────
+  const distanceEntries = model.distances || [];
+  const distanceIds = new Set();
+  const distancePairs = new Set();
+  distanceEntries.forEach((d, i) => {
+    const id = (d.id || '').trim();
+    if (!id) {
+      err('V69', `Distance at position ${i + 1} has an empty id.`, 'containers');
+    } else if (distanceIds.has(id.toLowerCase())) {
+      err('V69', `Duplicate distance id: '${id}'.`, 'containers');
+    } else {
+      distanceIds.add(id.toLowerCase());
+    }
+    const from = (d.fromQueue || '').trim();
+    const to = (d.toQueue || '').trim();
+    if (!from || !queueNamesLower.has(from.toLowerCase())) {
+      err('V69', `Distance '${id || i + 1}': fromQueue '${d.fromQueue || ''}' does not match any defined queue.`, 'containers');
+    }
+    if (!to || !queueNamesLower.has(to.toLowerCase())) {
+      err('V69', `Distance '${id || i + 1}': toQueue '${d.toQueue || ''}' does not match any defined queue.`, 'containers');
+    }
+    if (from && to && from.toLowerCase() === to.toLowerCase()) {
+      err('V69', `Distance '${id || i + 1}': fromQueue and toQueue must be different queues.`, 'containers');
+    }
+    const dist = parseFloat(d.distance);
+    if (isNaN(dist) || dist <= 0) {
+      err('V69', `Distance '${id || i + 1}': distance must be a positive number (got '${d.distance ?? ''}').`, 'containers');
+    }
+    if (from && to) {
+      const pairKey = [from.toLowerCase(), to.toLowerCase()].sort().join('::');
+      if (distancePairs.has(pairKey)) {
+        err('V69', `Distance '${id || i + 1}': duplicate entry for the pair '${from}' ↔ '${to}' — distances are undirected, only one entry is needed per pair.`, 'containers');
+      } else {
+        distancePairs.add(pairKey);
+      }
+    }
+  });
+
+  // ── V70: Distance distribution usage — cross-reference distParams ──────────
+  // Reuses the same undirected-pair matching the engine applies at runtime
+  // (findDistancePair in phases.js) so validation and execution agree on what
+  // counts as "declared."
+  const findDeclaredDistancePair = (from, to) => {
+    const a = String(from ?? '').trim().toLowerCase();
+    const b = String(to ?? '').trim().toLowerCase();
+    return distanceEntries.some(d => {
+      const df = String(d.fromQueue ?? '').trim().toLowerCase();
+      const dt = String(d.toQueue ?? '').trim().toLowerCase();
+      return (df === a && dt === b) || (df === b && dt === a);
+    });
+  };
+  const checkDistanceSchedules = (schedules, ev, tab) => {
+    (schedules || []).forEach(s => {
+      if (s.dist !== 'Distance') return;
+      const { from, to, speedAttr, speedSource } = s.distParams || {};
+      const label = tab === 'bevents' ? 'B' : 'C';
+      if (!from || !queueNamesLower.has(String(from).trim().toLowerCase())) {
+        err('V70', `${label}-Event '${ev.name || ev.id}': Distance's 'from' ('${from || ''}') does not match any defined queue.`, tab, { eventIds: [ev.id] });
+      }
+      if (!to || !queueNamesLower.has(String(to).trim().toLowerCase())) {
+        err('V70', `${label}-Event '${ev.name || ev.id}': Distance's 'to' ('${to || ''}') does not match any defined queue.`, tab, { eventIds: [ev.id] });
+      }
+      if (speedSource !== 'entity' && speedSource !== 'server') {
+        err('V70', `${label}-Event '${ev.name || ev.id}': Distance's 'speedSource' must be "entity" or "server" (got '${speedSource ?? ''}').`, tab, { eventIds: [ev.id] });
+      }
+      if (!speedAttr || !String(speedAttr).trim()) {
+        err('V70', `${label}-Event '${ev.name || ev.id}': Distance requires a non-empty 'speedAttr'.`, tab, { eventIds: [ev.id] });
+      }
+      if (from && to && !findDeclaredDistancePair(from, to)) {
+        warn('V70', `${label}-Event '${ev.name || ev.id}': no declared distance entry for '${from}' ↔ '${to}' — this will fall back to a duration of 0 at run time.`, tab, { eventIds: [ev.id] });
+      }
+      if (speedAttr && (speedSource === 'entity' || speedSource === 'server')) {
+        const roleTypes = mergedEntityTypes.filter(et => et.role === speedSource);
+        const covered = roleTypes.some(et => (et.attrDefs || []).some(a => (a.name || '').trim().toLowerCase() === String(speedAttr).trim().toLowerCase()));
+        if (!covered) {
+          warn('V70', `${label}-Event '${ev.name || ev.id}': Distance's speedAttr '${speedAttr}' is not declared on any ${speedSource} entity type — this will always fall back to a duration of 0.`, tab, { eventIds: [ev.id] });
+        }
+      }
+    });
+  };
+  cEvents.forEach(c => checkDistanceSchedules(c.cSchedules, c, 'cevents'));
+  bEvents.forEach(b => checkDistanceSchedules(b.schedules, b, 'bevents'));
 
   // V-CAL-1: Calendar conditions require epoch
   const calendarVars = ['isWeekday', 'isWeekend', 'hourOfDay', 'dayOfWeek'];

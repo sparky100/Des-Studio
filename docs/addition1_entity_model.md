@@ -620,6 +620,8 @@ All stochastic delays — inter-arrival times, service durations, patience times
 | `serverAttr` | `attr: string` (default: `"serviceTime"`) | attribute value | Reads the named attribute from the matched server entity at service-scheduling time. Allows per-server-instance service time variation. Returns `max(0, value)` or 1 if not found. |
 | `entityAttr` | `attr: string` | attribute value | Reads the named attribute from the arriving customer entity. Resolved at runtime via entity context. Returns the attribute value or 0 if not found. |
 | `schedule` | `times: number[]` or `rows: {time, attrs}[]`, optional `jitterDist`, `jitterParams` | per-plan | Generates arrivals at planned absolute times. `rows[]` supports per-arrival entity attribute overrides (S40.2). Returns `1e9` when the plan is exhausted (no further arrivals). Supports optional Normal or Uniform jitter. |
+| `categorical` | `options: { value, weight }[]` | n/a — non-numeric | Weighted random selection from a list of values (string/boolean/`null`). Not usable for time delays — only for entity attributes. |
+| `distance` | `from: string, to: string, speedAttr: string, speedSource: "entity"\|"server"` | distance / speed | Duration = a declared `distances[]` entry between the two named queues ÷ the named numeric attribute on the matched server or arriving entity (per `speedSource`). Resolved at cSchedule-resolution time via `phases.js`, not `sample()` — same mechanism as `serverAttr`/`entityAttr`. Falls back to 0 (with a log message) if the pair or attribute isn't found. Only meaningful on a C-event's `cSchedules`. |
 
 ### 6.2 Distribution JSON Schema
 

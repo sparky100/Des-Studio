@@ -559,7 +559,51 @@ const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
   );
 };
 
-const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[],epoch,timeUnit})=>{
+const DistanceEditor=({value,onChange,queues=[],entityTypes=[]})=>{
+  const {C,FONT}=useTheme();
+  const p=value?.distParams||{};
+  const speedSource=p.speedSource||"server";
+  const upd=(patch)=>onChange({...value,dist:"Distance",distParams:{...p,...patch}});
+  const attrPool=(entityTypes||[])
+    .filter(et=>et.role===speedSource)
+    .flatMap(et=>(et.attrDefs||[]).filter(a=>a.valueType==="number").map(a=>a.name))
+    .filter(Boolean);
+  const uniqueAttrs=[...new Set(attrPool)];
+  const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"};
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from queue:</span>
+        <select aria-label="Distance from queue" value={p.from||""} onChange={e=>upd({from:e.target.value})} style={selSt}>
+          <option value="">— select queue —</option>
+          {queues.map(q=><option key={q.id} value={q.name}>{q.name}</option>)}
+        </select>
+        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>to queue:</span>
+        <select aria-label="Distance to queue" value={p.to||""} onChange={e=>upd({to:e.target.value})} style={selSt}>
+          <option value="">— select queue —</option>
+          {queues.map(q=><option key={q.id} value={q.name}>{q.name}</option>)}
+        </select>
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>speed from:</span>
+        <select aria-label="Distance speed source" value={speedSource} onChange={e=>upd({speedSource:e.target.value,speedAttr:""})} style={selSt}>
+          <option value="server">matched server</option>
+          <option value="entity">arriving entity</option>
+        </select>
+        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>speed attribute:</span>
+        <select aria-label="Distance speed attribute" value={p.speedAttr||""} onChange={e=>upd({speedAttr:e.target.value})} style={selSt}>
+          <option value="">— select attribute —</option>
+          {uniqueAttrs.map(a=><option key={a} value={a}>{a}</option>)}
+        </select>
+      </div>
+      {(!p.from||!p.to)&&<span style={{fontSize:10,color:C.amber,fontFamily:FONT}}>Pick both queues — the declared distance between them (Reference Data tab) is looked up at run time.</span>}
+      {uniqueAttrs.length===0&&<span style={{fontSize:10,color:C.amber,fontFamily:FONT}}>No numeric attribute declared on any {speedSource==="server"?"server":"customer"} entity type yet — add one (e.g. "speed") first.</span>}
+    </div>
+  );
+};
+
+const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=false,attrDefs=[],queues=[],entityTypes=[],epoch,timeUnit})=>{
   const {C,FONT}=useTheme();
   const fileRef=useRef(null);
   const [csvParse,setCsvParse]=useState(null);
@@ -572,6 +616,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[],epoch,
   const dd=DISTRIBUTIONS[v.dist||"Fixed"]||DISTRIBUTIONS.Fixed;
   const isPiecewise=v.dist==="Piecewise";
   const isSchedule=v.dist==="Schedule";
+  const isDistance=v.dist==="Distance";
 
   // Derive current family from distribution
   const currentGroup=getDistGroup(v.dist)||DIST_GROUPS[0];
@@ -601,7 +646,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[],epoch,
       const hasScheduleData=v.dist==="Schedule"&&Array.isArray(v.distParams?.rows)&&v.distParams.rows.length>0;
       const hasPiecewiseData=v.dist==="Piecewise"&&Array.isArray(v.distParams?.periods)&&v.distParams.periods.length>1;
       if((hasScheduleData||hasPiecewiseData)&&!window.confirm("Changing the distribution family will clear the current schedule data. Continue?"))return;
-      const first=group.dists.find(d=>allowPiecewise||d!=="Piecewise")||group.dists[0];
+      const first=group.dists.find(d=>(allowPiecewise||d!=="Piecewise")&&(allowDistance||d!=="Distance"))||group.dists[0];
       if(first) handleDistChange(first);
     }
     setSelectedFamily(fid);
@@ -695,13 +740,14 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[],epoch,
           <select value={v.dist||"Exponential"} onChange={e=>handleDistChange(e.target.value)} style={selSt}>
             {(DIST_GROUPS.find(g=>g.id===activeFamilyId)?.dists||[])
               .filter(d=>allowPiecewise||d!=="Piecewise")
+              .filter(d=>allowDistance||d!=="Distance")
               .filter(d=>DISTRIBUTIONS[d])
               .map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
             {activeFamilyId==="fromdata"&&<option value="__csv__">⬆ Import from CSV…</option>}
           </select>
 
           {/* Param inputs with blur validation */}
-          {!isImported&&!isPiecewise&&!isSchedule&&dd.params.map(param=>{
+          {!isImported&&!isPiecewise&&!isSchedule&&!isDistance&&dd.params.map(param=>{
             const helpTxt=distHelp?.params?.[param];
             const errMsg=blurErrors[param];
             return (
@@ -761,6 +807,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[],epoch,
 
       {isPiecewise&&<PiecewiseEditor value={v} onChange={onChange} compact={compact}/>}
       {isSchedule&&<ScheduleEditor value={v} onChange={onChange} attrDefs={attrDefs} epoch={epoch} timeUnit={timeUnit}/>}
+      {isDistance&&<DistanceEditor value={v} onChange={onChange} queues={queues} entityTypes={entityTypes}/>}
 
       {/* CSV column picker */}
       {csvParse&&(

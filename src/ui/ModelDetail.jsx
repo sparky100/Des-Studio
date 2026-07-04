@@ -8,7 +8,7 @@ import { MarkdownContent } from "./shared/MarkdownContent.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { useViewport } from "./shared/hooks.js";
 import { SkeletonPanel } from "./shared/SkeletonPanel.jsx";
-import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor, ContainerEditor } from "./editors/index.jsx";
+import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor, ContainerEditor, DistanceRegistryEditor } from "./editors/index.jsx";
 import { SectionEditor } from "./editors/SectionEditor.jsx";
 import { ScheduleManager } from "./editors/ScheduleManager.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
@@ -46,7 +46,7 @@ import { AdaptiveBatchPanel }               from "./execute/AdaptiveBatchPanel.j
 import { normalizeModelConditions }         from "../model/conditionFormat.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "goals", "graph", "experimentDefaults"];
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "distances", "goals", "graph", "experimentDefaults"];
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
 const AuthoringWorkflowShell = ({ mode, children }) => (
@@ -929,7 +929,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     {id:"ai",label:"Describe"},
     {id:"entities",label:"Entity Types"},
     {id:"queues",label:"Queues"},
-    {id:"containers",label:"Containers"},
+    {id:"containers",label:"Reference Data"},
     {id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},
     {id:"sections",label:"Sections"},
@@ -1440,18 +1440,23 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           }
           setWholeModel(updated);
         }:()=>{}}/></div>)}
-        {tab==="containers"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><ContainerEditor containers={model.containerTypes||[]} onChange={canEdit?newContainers=>{
-          const oldContainers = model.containerTypes || [];
-          let updated = { ...model, containerTypes: newContainers };
-          for (let i = 0; i < newContainers.length; i++) {
-            const oldId = oldContainers[i]?.id?.trim();
-            const newId = newContainers[i]?.id?.trim();
-            if (oldId && newId && oldId !== newId) {
-              updated = renameContainer(updated, oldId, newId);
+        {tab==="containers"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto",display:"flex",flexDirection:"column",gap:24}}>
+          <ContainerEditor containers={model.containerTypes||[]} onChange={canEdit?newContainers=>{
+            const oldContainers = model.containerTypes || [];
+            let updated = { ...model, containerTypes: newContainers };
+            for (let i = 0; i < newContainers.length; i++) {
+              const oldId = oldContainers[i]?.id?.trim();
+              const newId = newContainers[i]?.id?.trim();
+              if (oldId && newId && oldId !== newId) {
+                updated = renameContainer(updated, oldId, newId);
+              }
             }
-          }
-          setWholeModel(updated);
-        }:()=>{}}/></div>)}
+            setWholeModel(updated);
+          }:()=>{}}/>
+          <DistanceRegistryEditor distances={model.distances||[]} queues={model.queues||[]} onChange={canEdit?newDistances=>{
+            setWholeModel({ ...model, distances: newDistances });
+          }:()=>{}}/>
+        </div>)}
 
         {tab==="validate"&&(
           <div style={{maxWidth:1120,margin:"0 auto",display:"flex",flexDirection:"column",gap:14}}>

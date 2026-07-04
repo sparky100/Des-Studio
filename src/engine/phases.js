@@ -14,6 +14,17 @@ import { sample }                           from "./distributions.js";
 import { clearWaitingState, attemptQueueJoin, preemptCustomer, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
 import { hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
 
+// Distances are undirected — one declared entry covers travel in either direction.
+function findDistancePair(distances, from, to) {
+  const a = String(from ?? "").trim().toLowerCase();
+  const b = String(to ?? "").trim().toLowerCase();
+  return (distances || []).find(d => {
+    const df = String(d.fromQueue ?? "").trim().toLowerCase();
+    const dt = String(d.toQueue ?? "").trim().toLowerCase();
+    return (df === a && dt === b) || (df === b && dt === a);
+  });
+}
+
 function completeEntity(cust, ev, clock, state, index = null) {
   const previousQueue = cust.queue ?? cust.lastQueue ?? null;
   clearWaitingState(cust, index);
@@ -522,6 +533,24 @@ export function fireCEvent(ev, ctx) {
         }
         delay = Math.max(0, parseFloat(raw) || 0);
         msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [entity.${attrName}=${delay}]`);
+      } else if (cs.dist === "Distance") {
+        const { from, to, speedAttr, speedSource } = cs.distParams || {};
+        const pair = findDistancePair(model.distances, from, to);
+        let speedVal;
+        if (speedSource === "server") {
+          const srv = findEntityById(ctx.index, ctx.entities, effectCtx._lastSrvId);
+          speedVal = parseFloat(srv?.attrs?.[speedAttr]);
+        } else {
+          const cust = perCustId ? findEntityById(ctx.index, ctx.entities, perCustId) : null;
+          speedVal = parseFloat(cust?.attrs?.[speedAttr]);
+        }
+        if (!pair) {
+          msgs.push(`Distance(${from}→${to}): no declared distance for this pair — delay = 0`);
+        } else if (!Number.isFinite(speedVal) || speedVal <= 0) {
+          msgs.push(`Distance(${from}→${to}): invalid/missing speed attribute '${speedAttr}' (${speedSource}) — delay = 0`);
+        }
+        delay = (pair && Number.isFinite(speedVal) && speedVal > 0) ? pair.distance / speedVal : 0;
+        msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [Distance(${from}→${to})=${delay.toFixed(3)}]`);
       } else {
         // Check if the customer has remaining service from preemption/failure
         const cust = perCustId ? findEntityById(ctx.index, ctx.entities, perCustId) : null;
