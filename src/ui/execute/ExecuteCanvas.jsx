@@ -14,7 +14,8 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { TOKEN_COLORS } from "../shared/tokens.js";
-import { deriveGraphFromModel } from "../visual-designer/graph.js";
+import { useFitNodeRef } from "../shared/useFitNodeRef.js";
+import { deriveGraphFromModel, searchGraphNodes } from "../visual-designer/graph.js";
 import { ExecuteSourceNode }   from "./ExecuteSourceNode.jsx";
 import { ExecuteQueueNode }    from "./ExecuteQueueNode.jsx";
 import { ExecuteActivityNode } from "./ExecuteActivityNode.jsx";
@@ -385,6 +386,114 @@ function toFlowEdge(edge, C) {
   };
 }
 
+// Rendered inside <ReactFlow> so it can wire `fitNodeRef` via useReactFlow(),
+// and hosts the node-search box + (optional) Sections toggle in one top-left panel.
+function ExecuteCanvasToolbar({
+  fitNodeRef,
+  nodeSearchQuery,
+  onSearchChange,
+  onSearchKeyDown,
+  searchMatches,
+  onSelectResult,
+  hasSections,
+  showSections,
+  onToggleSections,
+}) {
+  const { C, FONT } = useTheme();
+  useFitNodeRef({ fitNodeRef, defaultWidth: EXEC_NODE_WIDTH, defaultHeight: 120 });
+
+  return (
+    <Panel position="top-left" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ position: "relative" }}>
+        <input
+          type="search"
+          aria-label="Search canvas nodes"
+          placeholder="Find a node…"
+          value={nodeSearchQuery}
+          onChange={onSearchChange}
+          onKeyDown={onSearchKeyDown}
+          style={{
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: 4,
+            color: C.text,
+            fontFamily: FONT,
+            fontSize: 11,
+            outline: "none",
+            padding: "5px 8px",
+            width: 160,
+          }}
+        />
+        {nodeSearchQuery.trim() && (
+          <div
+            role="listbox"
+            aria-label="Node search results"
+            style={{
+              background: C.surface,
+              border: `1px solid ${C.border}`,
+              borderRadius: 4,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+              left: 0,
+              maxHeight: 220,
+              overflowY: "auto",
+              position: "absolute",
+              top: "calc(100% + 4px)",
+              width: 220,
+              zIndex: 20,
+            }}
+          >
+            {searchMatches.length === 0 ? (
+              <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, padding: "8px 10px" }}>
+                No matching nodes.
+              </div>
+            ) : (
+              <>
+                {searchMatches.slice(0, 8).map(node => (
+                  <div
+                    key={node.id}
+                    role="option"
+                    onClick={() => onSelectResult(node)}
+                    style={{ color: C.text, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "6px 10px" }}
+                  >
+                    <span>{node.label}</span>
+                    <span style={{ color: C.muted, marginLeft: 6, fontSize: 10 }}>{node.type}</span>
+                  </div>
+                ))}
+                {searchMatches.length > 8 && (
+                  <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, padding: "4px 10px" }}>
+                    +{searchMatches.length - 8} more
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      {hasSections && (
+        <button
+          type="button"
+          aria-pressed={showSections}
+          onClick={onToggleSections}
+          title={showSections ? "Hide section overlays" : "Show section overlays"}
+          style={{
+            background: showSections ? `${C.accent}22` : C.surface,
+            border: `1px solid ${showSections ? C.accent : C.border}`,
+            borderRadius: 4,
+            color: showSections ? C.accent : C.muted,
+            cursor: "pointer",
+            fontFamily: FONT,
+            fontSize: 10,
+            fontWeight: 700,
+            padding: "5px 9px",
+          }}
+        >
+          Sections
+        </button>
+      )}
+    </Panel>
+  );
+}
+
 export function ExecuteCanvas({
   model, snap, summary,
   animationEnabled = true,
@@ -398,6 +507,11 @@ export function ExecuteCanvas({
 }) {
   const { C, FONT } = useTheme();
   const baseGraph = useMemo(() => deriveGraphFromModel(model), [model]);
+  // Ref set by ExecuteCanvasToolbar (inside ReactFlow) to expose fitView for specific nodes
+  const fitNodeRef = useRef(null);
+  const [nodeSearchQuery, setNodeSearchQuery] = useState("");
+  const searchMatches = useMemo(() => searchGraphNodes(baseGraph.nodes, nodeSearchQuery), [baseGraph.nodes, nodeSearchQuery]);
+  const matchedNodeIds = useMemo(() => new Set(searchMatches.map(n => n.id)), [searchMatches]);
   const cumulativeGraphTotals = useMemo(() => {
     if (!snap) return { arrived: 0, served: 0, reneged: 0 };
     const eventCounts = snap.eventCounts || {};
@@ -444,6 +558,23 @@ export function ExecuteCanvas({
   const startResize = (event) => {
     event.preventDefault();
     dragStateRef.current = { startY: event.clientY, startHeight: canvasHeight };
+  };
+
+  // Jump to a node picked from the search results dropdown: pan/select it,
+  // expand its section overlay if collapsed, and sync the same selection
+  // state a direct node click would (drives BottomPanel's log filter + sidebar).
+  const selectSearchResult = (node) => {
+    fitNodeRef.current?.(node.id);
+    setFocusedSectionId(node.sectionId ?? null);
+    onNodeSelect?.(node.label ?? null);
+    if (node.type === "queue" || node.type === "activity") {
+      onNodeDetailSelect?.({
+        nodeType: node.type === "queue" ? "queueNode" : "activityNode",
+        label: node.label ?? null,
+        refId: node.refId ?? null,
+      });
+    }
+    setNodeSearchQuery("");
   };
 
   // Build c-event id → { serverTypes, capacities, ceventName } for activity node enrichment.
@@ -594,7 +725,8 @@ export function ExecuteCanvas({
           };
         }
       }
-      const dimmed = showSections && focusedSectionId != null && node.sectionId !== focusedSectionId;
+      const dimmed = (showSections && focusedSectionId != null && node.sectionId !== focusedSectionId) ||
+        (matchedNodeIds.size > 0 && !matchedNodeIds.has(node.id));
       return {
         ...toFlowNode(node),
         data: { ...node, liveData },
@@ -623,7 +755,7 @@ export function ExecuteCanvas({
     }
 
     return mapped;
-  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels]);
+  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels, matchedNodeIds]);
 
   const flowEdges = useMemo(() => baseGraph.edges.map(edge => {
     const base = {
@@ -726,33 +858,27 @@ export function ExecuteCanvas({
         >
           <Background color={C.border} gap={24} size={1} />
           <Controls showInteractive={false} />
-          {(model.sections?.length > 0) && (
-            <Panel position="top-left">
-              <button
-                type="button"
-                aria-pressed={showSections}
-                onClick={() => setShowSections(prev => {
-                  const next = !prev;
-                  try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch {}
-                  return next;
-                })}
-                title={showSections ? "Hide section overlays" : "Show section overlays"}
-                style={{
-                  background: showSections ? `${C.accent}22` : C.surface,
-                  border: `1px solid ${showSections ? C.accent : C.border}`,
-                  borderRadius: 4,
-                  color: showSections ? C.accent : C.muted,
-                  cursor: "pointer",
-                  fontFamily: FONT,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: "5px 9px",
-                }}
-              >
-                Sections
-              </button>
-            </Panel>
-          )}
+          <ExecuteCanvasToolbar
+            fitNodeRef={fitNodeRef}
+            nodeSearchQuery={nodeSearchQuery}
+            onSearchChange={ev => setNodeSearchQuery(ev.target.value)}
+            onSearchKeyDown={ev => {
+              if (ev.key === "Enter" && searchMatches.length === 1) {
+                selectSearchResult(searchMatches[0]);
+              } else if (ev.key === "Escape") {
+                setNodeSearchQuery("");
+              }
+            }}
+            searchMatches={searchMatches}
+            onSelectResult={selectSearchResult}
+            hasSections={(model.sections?.length ?? 0) > 0}
+            showSections={showSections}
+            onToggleSections={() => setShowSections(prev => {
+              const next = !prev;
+              try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch {}
+              return next;
+            })}
+          />
         </ReactFlow>
         <NodeDetailSidebar
           selectedNode={selectedNodeDetail}

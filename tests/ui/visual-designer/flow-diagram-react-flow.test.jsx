@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FlowDiagramReactFlow } from '../../../src/ui/visual-designer/FlowDiagramReactFlow.jsx';
 
@@ -28,7 +28,7 @@ vi.mock('@xyflow/react', () => ({
     <div data-testid="react-flow">
       {nodes.map(node => {
         const Comp = nodeTypes[node.type];
-        return Comp ? <div key={node.id} data-node-id={node.id}><Comp data={node.data} selected={!!node.selected} /></div> : null;
+        return Comp ? <div key={node.id} data-node-id={node.id} style={node.style}><Comp data={node.data} selected={!!node.selected} /></div> : null;
       })}
       {edges.map(edge => {
         const Comp = edgeTypes[edge.type];
@@ -83,6 +83,66 @@ describe('FlowDiagramReactFlow — node error badge', () => {
     const activityNode = screen.getByTestId('react-flow').querySelector('[data-node-id="activity:activity-1"]');
     expect(queueNode.querySelector('[title="Queue issue."]')).toBeTruthy();
     expect(activityNode.querySelector('[title="Queue issue."]')).toBeNull();
+  });
+});
+
+function makeSectionedGraph() {
+  return {
+    nodes: [
+      { id: 'queue:queue-1', type: 'queue', refId: 'queue-1', x: 0, y: 0, label: 'Queue 1', sectionId: 'sec-a' },
+      { id: 'queue:queue-2', type: 'queue', refId: 'queue-2', x: 100, y: 0, label: 'Queue 2', sectionId: 'sec-b' },
+    ],
+    edges: [],
+    sectionPanels: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+  };
+}
+
+describe('FlowDiagramReactFlow — node search', () => {
+  it('dims nodes outside the matched set and keeps matches at full opacity', () => {
+    render(
+      <FlowDiagramReactFlow
+        graph={makeSectionedGraph()}
+        canEdit
+        matchedNodeIds={new Set(['queue:queue-1'])}
+      />
+    );
+    const matched = screen.getByTestId('react-flow').querySelector('[data-node-id="queue:queue-1"]');
+    const other = screen.getByTestId('react-flow').querySelector('[data-node-id="queue:queue-2"]');
+    expect(matched.style.opacity).toBe('1');
+    expect(other.style.opacity).toBe('0.15');
+  });
+
+  it('leaves nodes at full opacity when matchedNodeIds is empty', () => {
+    render(
+      <FlowDiagramReactFlow
+        graph={makeSectionedGraph()}
+        canEdit
+        matchedNodeIds={new Set()}
+      />
+    );
+    const node = screen.getByTestId('react-flow').querySelector('[data-node-id="queue:queue-1"]');
+    expect(node.style.opacity).toBe('1');
+  });
+
+  it('exposes focusSectionRef so external search UI can expand a node\'s section, dimming other sections', () => {
+    const focusSectionRef = { current: null };
+    render(
+      <FlowDiagramReactFlow
+        graph={makeSectionedGraph()}
+        canEdit
+        showSections
+        focusSectionRef={focusSectionRef}
+      />
+    );
+    expect(typeof focusSectionRef.current).toBe('function');
+
+    act(() => focusSectionRef.current('sec-b'));
+
+    const nodeInOtherSection = screen.getByTestId('react-flow').querySelector('[data-node-id="queue:queue-1"]');
+    const nodeInFocusedSection = screen.getByTestId('react-flow').querySelector('[data-node-id="queue:queue-2"]');
+    expect(nodeInOtherSection.style.opacity).toBe('0.15');
+    expect(nodeInFocusedSection.style.opacity).toBe('1');
   });
 });
 

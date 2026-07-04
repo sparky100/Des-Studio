@@ -548,6 +548,69 @@ describe('Visual Designer shell', () => {
     expect(screen.getByDisplayValue('Customer Arrival')).toBeInTheDocument();
   });
 
+  it('finds a canvas node via search and selects it on click, clearing the query', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={vi.fn()}
+      />
+    );
+
+    const searchInput = screen.getByLabelText('Search canvas nodes');
+    await user.type(searchInput, 'consult');
+
+    const results = screen.getByLabelText('Node search results');
+    const match = within(results).getByRole('option', { name: /^Consultant Queue/i });
+    await user.click(match);
+
+    // Selecting the match opens the inspector for that queue
+    expect(screen.getByDisplayValue('Consultant Queue')).toBeInTheDocument();
+    // The query resets and the dropdown closes after a selection
+    expect(searchInput).toHaveValue('');
+    expect(screen.queryByLabelText('Node search results')).not.toBeInTheDocument();
+  });
+
+  it('jumps to the single search match when Enter is pressed', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={vi.fn()}
+      />
+    );
+
+    // "Consultant Queue" only matches the queue node itself — the arrival
+    // source's sublabel mentions "Triage Queue", so that query would be ambiguous.
+    const searchInput = screen.getByLabelText('Search canvas nodes');
+    await user.type(searchInput, 'Consultant Queue');
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByDisplayValue('Consultant Queue')).toBeInTheDocument();
+    expect(searchInput).toHaveValue('');
+  });
+
+  it('shows a "no matching nodes" message when the search query has no results', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={vi.fn()}
+      />
+    );
+
+    const searchInput = screen.getByLabelText('Search canvas nodes');
+    await user.type(searchInput, 'nonexistent-node-name');
+
+    expect(screen.getByText(/no matching nodes/i)).toBeInTheDocument();
+  });
+
   it('gives server count controls room for two digits in the node palette', async () => {
     const onModelChange = vi.fn();
 
