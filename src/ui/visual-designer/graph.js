@@ -475,6 +475,18 @@ export function deriveGraphFromModel(model = {}) {
   };
 }
 
+// Case-insensitive substring match over a node's label, sublabel and type —
+// used by the canvas search box in both the Visual Designer and Execute panel.
+export function searchGraphNodes(nodes = [], query = "") {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return nodes.filter(node =>
+    (node.label || "").toLowerCase().includes(q) ||
+    (node.sublabel || "").toLowerCase().includes(q) ||
+    (node.type || "").toLowerCase().includes(q)
+  );
+}
+
 export function graphLayoutFromDerivedGraph(derivedGraph = {}) {
   return {
     version: 1,

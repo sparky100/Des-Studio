@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
-import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
+import { deriveGraphFromModel, searchGraphNodes, VISUAL_NODE_TYPES } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
 import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, updateProbabilisticBranchProbability, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
@@ -290,7 +290,12 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   };
   // Ref set by CanvasControls (inside ReactFlow) to expose fitView for specific nodes
   const fitNodeRef = useRef(null);
+  // Ref set by CanvasControls to expand/focus a section overlay so a found node is visible
+  const focusSectionRef = useRef(null);
+  const [nodeSearchQuery, setNodeSearchQuery] = useState("");
   const graph = useMemo(() => deriveGraphFromModel(model || {}), [model]);
+  const searchMatches = useMemo(() => searchGraphNodes(graph.nodes, nodeSearchQuery), [graph.nodes, nodeSearchQuery]);
+  const matchedNodeIds = useMemo(() => new Set(searchMatches.map(n => n.id)), [searchMatches]);
   const storedViewport = useMemo(() => {
     try { return JSON.parse(localStorage.getItem(`des.vp.${model?.id}`) || 'null'); } catch { return null; }
   }, [model?.id]);
@@ -603,9 +608,18 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   };
 
   // Pan/zoom the canvas to a node and open its inspector.
+  // Also expands the node's section overlay (if any) so it's guaranteed visible.
   const focusNode = (nodeId) => {
     selectNode(nodeId);
+    const node = graph.nodes.find(n => n.id === nodeId);
+    focusSectionRef.current?.(node?.sectionId);
     fitNodeRef.current?.(nodeId);
+  };
+
+  // Jump to a node picked from the search results dropdown, then clear the query.
+  const selectSearchResult = (node) => {
+    focusNode(node.id);
+    setNodeSearchQuery("");
   };
 
   // Auto-dismiss the canvas status message after a short delay.
@@ -973,6 +987,84 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
             </div>
 
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <div style={{ position: "relative" }}>
+                <input
+                  type="search"
+                  aria-label="Search canvas nodes"
+                  placeholder="Find a node…"
+                  value={nodeSearchQuery}
+                  onChange={ev => setNodeSearchQuery(ev.target.value)}
+                  onKeyDown={ev => {
+                    if (ev.key === "Enter" && searchMatches.length === 1) {
+                      selectSearchResult(searchMatches[0]);
+                    } else if (ev.key === "Escape") {
+                      setNodeSearchQuery("");
+                    }
+                  }}
+                  style={{
+                    background: C.panel,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 4,
+                    color: C.text,
+                    fontFamily: FONT,
+                    fontSize: 11,
+                    outline: "none",
+                    padding: "5px 8px",
+                    width: 160,
+                  }}
+                />
+                {nodeSearchQuery.trim() && (
+                  <div
+                    role="listbox"
+                    aria-label="Node search results"
+                    style={{
+                      background: C.surface,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 4,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                      left: 0,
+                      maxHeight: 220,
+                      overflowY: "auto",
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      width: 220,
+                      zIndex: 20,
+                    }}
+                  >
+                    {searchMatches.length === 0 ? (
+                      <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, padding: "8px 10px" }}>
+                        No matching nodes.
+                      </div>
+                    ) : (
+                      <>
+                        {searchMatches.slice(0, 8).map(node => (
+                          <div
+                            key={node.id}
+                            role="option"
+                            onClick={() => selectSearchResult(node)}
+                            style={{
+                              color: C.text,
+                              cursor: "pointer",
+                              fontFamily: FONT,
+                              fontSize: 11,
+                              padding: "6px 10px",
+                            }}
+                          >
+                            <span>{node.label}</span>
+                            <span style={{ color: C.muted, marginLeft: 6, fontSize: 10 }}>{node.type}</span>
+                          </div>
+                        ))}
+                        {searchMatches.length > 8 && (
+                          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, padding: "4px 10px" }}>
+                            +{searchMatches.length - 8} more
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {(model?.sections || []).length > 0 && (
                 <button
                   type="button"
@@ -1061,6 +1153,8 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               errorNodeIds={errorNodeIds}
               fitNodeRef={fitNodeRef}
               fitAllRef={fitAllRef}
+              focusSectionRef={focusSectionRef}
+              matchedNodeIds={matchedNodeIds}
               showSections={showSections}
               onNodeSelect={selectNode}
               onNodeSelectionChange={syncSelection}

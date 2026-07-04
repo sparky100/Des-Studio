@@ -12,11 +12,11 @@ import {
   Position,
   ReactFlow,
   SelectionMode as ReactFlowSelectionMode,
-  useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { useFitNodeRef } from "../shared/useFitNodeRef.js";
 import { SectionPanelNode } from "./SectionPanelNode.jsx";
 
 function colorForNodeType(type, C) {
@@ -348,7 +348,7 @@ function toFlowEdge(edge, C, FONT) {
   };
 }
 
-function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef }) {
+function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId }) {
   const { C, FONT } = useTheme();
   const [showShortcuts, setShowShortcuts] = useState(false);
   const panelBtnStyle = {
@@ -356,32 +356,10 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
     color: C.muted, cursor: "pointer", fontFamily: FONT,
     fontSize: 10, fontWeight: 600, letterSpacing: 0.5, padding: "5px 9px",
   };
-  const { fitView, getNode, setCenter, getViewport } = useReactFlow();
+  const { fitView } = useFitNodeRef({ fitNodeRef, fitAllRef });
 
-  if (fitAllRef) {
-    fitAllRef.current = () => fitView({ padding: 0.15, duration: 0 });
-  }
-
-  // Pan to a specific node without re-zooming the whole canvas.
-  // Using setCenter instead of fitView prevents the "whole diagram shifts" effect
-  // that occurs when fitView recalculates bounds for a single node with large padding.
-  if (fitNodeRef) {
-    fitNodeRef.current = (nodeId) => {
-      if (nodeId) {
-        const node = getNode(nodeId);
-        if (node) {
-          const { zoom } = getViewport();
-          const w = node.measured?.width ?? node.width ?? 160;
-          const h = node.measured?.height ?? node.height ?? 40;
-          setCenter(node.position.x + w / 2, node.position.y + h / 2, {
-            zoom: Math.max(zoom, 0.6),
-            duration: 350,
-          });
-          return;
-        }
-      }
-      fitView({ padding: 0.15, duration: 350 });
-    };
+  if (focusSectionRef) {
+    focusSectionRef.current = (sectionId) => setFocusedSectionId(sectionId ?? null);
   }
 
   return (
@@ -463,6 +441,8 @@ export function FlowDiagramReactFlow({
   errorNodeIds,
   fitNodeRef,
   fitAllRef,
+  focusSectionRef,
+  matchedNodeIds,
   showSections = true,
   onNodeSelect,
   onNodeSelectionChange,
@@ -501,7 +481,8 @@ export function FlowDiagramReactFlow({
       const base = toFlowNode(node);
       const hasError = errorNodeIds ? errorNodeIds.has(node.id) : false;
       const errorMessage = hasError ? (errorNodeIds.get?.(node.id) || []).join(" · ") : undefined;
-      const dimmed = showSections && focusedSectionId != null && node.sectionId !== focusedSectionId;
+      const dimmed = (showSections && focusedSectionId != null && node.sectionId !== focusedSectionId) ||
+        (matchedNodeIds && matchedNodeIds.size > 0 && !matchedNodeIds.has(node.id));
       return {
         ...base,
         selected: selectedSet.has(node.id),
@@ -538,7 +519,7 @@ export function FlowDiagramReactFlow({
     }
 
     return flowNodes;
-  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet]);
+  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet, matchedNodeIds]);
 
   const edges = useMemo(() => {
     return (graph.edges || []).map(e => {
@@ -708,6 +689,8 @@ export function FlowDiagramReactFlow({
           connecting={connecting}
           fitNodeRef={fitNodeRef}
           fitAllRef={fitAllRef}
+          focusSectionRef={focusSectionRef}
+          setFocusedSectionId={setFocusedSectionId}
         />
       </ReactFlow>
     </div>
