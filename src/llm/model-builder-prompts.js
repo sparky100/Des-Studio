@@ -52,6 +52,8 @@ Intent values:
   build    — user has confirmed; generate the complete proposedModel; include suggestions (3 short refinement prompts)
   refine   — user has requested a change to an existing model; generate the complete updated proposedModel; include suggestions
 
+CRITICAL — THE CONFIRM-TO-BUILD HANDOFF: The message immediately after your own "confirm" summary is the user's answer to "should I build this?". If it is any affirmative reply — "yes", "yep", "looks right", "build it", "go ahead", "correct", etc. — you MUST respond in that same turn with intent "build" and the complete proposedModel populated. Do NOT respond with intent "confirm" again, do NOT ask another question, and do NOT return proposedModel as null or omit it — any of those leaves the user with nothing built.
+
 companionCsv rules:
   - Set to null when the model does not use planned arrivals (rows[]).
   - When the model uses rows[] with 50 or fewer rows, you MAY embed them inline in proposedModel AND include the same data as companionCsv so the user can import or use either.

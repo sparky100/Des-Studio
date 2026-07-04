@@ -22,4 +22,14 @@ describe("llm-proxy provider router", () => {
     expect(proxySource).toMatch(/async function callAnthropic/);
     expect(proxySource).toMatch(/proxyRequest\.stream/);
   });
+
+  it("merges every system-role message instead of dropping all but the first", () => {
+    expect(proxySource).toMatch(/function splitSystemMessages/);
+    // The old bug: `.find(m => m.role === "system")` picked one message, then
+    // `.filter(m => m.role !== "system")` silently discarded any others (e.g.
+    // "Working draft" / validation-retry notes injected mid-conversation).
+    expect(proxySource).not.toMatch(/request\.messages\.find\(m => m\.role === "system"\)/);
+    expect(proxySource).toMatch(/\.filter\(m => m\.role === "system"\)/);
+    expect(proxySource).toMatch(/join\("\\n\\n"\)/);
+  });
 });

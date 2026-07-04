@@ -640,7 +640,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       setLoading(false);
       return;
     }
-    const originalSuggestions = response?.suggestions;
+    let originalSuggestions = response?.suggestions;
 
     if (!response) { setLoading(false); return; }
 
@@ -650,6 +650,33 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       setHistory(prev => [...prev, { role: "assistant-confirm", content: cleanExplanation }]);
       setLoading(false);
       return;
+    }
+
+    // The assistant should have built something here (it's past clarify/confirm), but
+    // sometimes replies without a proposedModel. Ask it to try again before giving up —
+    // there was previously no recovery path for this, only for an invalid (but present) model.
+    if (response.intent !== "clarify" && !response.proposedModel) {
+      const MAX_MISSING_RETRIES = 2;
+      let retryMessages = messages;
+      for (let attempt = 0; attempt < MAX_MISSING_RETRIES && !response.proposedModel; attempt++) {
+        setHistory(prev => [...prev, {
+          role: "system",
+          content: `The assistant's last reply didn't include a model (attempt ${attempt + 1}/${MAX_MISSING_RETRIES}). Asking it to try again...`,
+        }]);
+
+        retryMessages = [...retryMessages, {
+          role: "assistant",
+          content: JSON.stringify({ intent: response.intent, explanation: response.explanation || null }),
+        }, {
+          role: "user",
+          content: `Your last response was missing proposedModel. Respond again with the full JSON envelope, intent "build", and the complete proposedModel populated — do not ask another question or re-summarize.`,
+        }];
+
+        const retryResponse = await callModelBuilder(systemPrompt, retryMessages, () => {}, () => {});
+        if (!retryResponse) break;
+        response = retryResponse;
+        originalSuggestions = response?.suggestions;
+      }
     }
 
     if (response.proposedModel) {
@@ -719,7 +746,11 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     if (response.intent === "clarify") {
       newTurns.push({ role: "assistant", content: questionText });
     } else if (!response.proposedModel) {
-      newTurns.push({ role: "assistant", content: response.explanation || "Model proposal received." });
+      // Retries above were exhausted without a model — surface this as a real error
+      // rather than a success-sounding chat bubble, so the user isn't left thinking
+      // a model was built when nothing was.
+      setError("The assistant didn't return a model. Try again, or simplify your description.");
+      setRawErrorText(JSON.stringify(response, null, 2));
     }
 
     setHistory(prev => [...prev, ...newTurns]);
@@ -767,6 +798,8 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     const nextHistory = [...history, { role: "user", content: yesMessage }];
     setHistory(nextHistory);
     setRefinementChips([]);
+    setError("");
+    setRawErrorText("");
     setLoading(true);
 
     const messages = [
