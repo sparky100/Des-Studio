@@ -7,6 +7,7 @@ vi.mock('../../src/ui/shared/xlsxParser.js', () => ({
 }));
 
 const mockGetRun = vi.hoisted(() => vi.fn());
+const mockGetRunResultsJson = vi.hoisted(() => vi.fn());
 const mockFetchRunHistory = vi.hoisted(() => vi.fn());
 const mockUpdateRunLabel = vi.hoisted(() => vi.fn());
 const mockUpdateRunTags = vi.hoisted(() => vi.fn());
@@ -19,6 +20,7 @@ const mockCompareScenarios = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/db/models.js', () => ({
   getRun: mockGetRun,
+  getRunResultsJson: mockGetRunResultsJson,
   fetchRunHistory: mockFetchRunHistory,
   updateRunLabel: mockUpdateRunLabel,
   updateRunTags: mockUpdateRunTags,
@@ -132,6 +134,8 @@ describe('ModelHistoryTab — Run History UI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetRun.mockReset();
+    mockGetRunResultsJson.mockReset();
+    mockGetRunResultsJson.mockResolvedValue({});
     mockBuildEngine.mockReset();
     mockCompareScenarios.mockReset();
     mockCompareScenarios.mockReturnValue({
@@ -222,39 +226,36 @@ describe('ModelHistoryTab — Run History UI', () => {
     expect(screen.getByText('1 run selected')).toBeInTheDocument();
   });
 
-  it('compares exactly two selected runs from history', () => {
+  it('compares exactly two selected runs from history', async () => {
+    // results_json is fetched lazily, on demand, when the user triggers
+    // Compare — it's no longer attached to the list rows themselves.
+    const resultsJsonById = {
+      r1: {
+        summary: storedSummary,
+        replicationResults: [
+          { result: { summary: { avgWait: 5, avgSvc: 2, avgSojourn: 7, served: 10, reneged: 0, totalCost: 0 } } },
+          { result: { summary: { avgWait: 6, avgSvc: 2, avgSojourn: 8, served: 10, reneged: 0, totalCost: 0 } } },
+        ],
+      },
+      r2: {
+        summary: storedSummary,
+        replicationResults: [
+          { result: { summary: { avgWait: 7, avgSvc: 2, avgSojourn: 9, served: 10, reneged: 0, totalCost: 0 } } },
+          { result: { summary: { avgWait: 8, avgSvc: 2, avgSojourn: 10, served: 10, reneged: 0, totalCost: 0 } } },
+        ],
+      },
+    };
+    mockGetRunResultsJson.mockImplementation(async id => resultsJsonById[id] || {});
     const rows = [
-      makeRow({
-        id: 'r1',
-        run_label: 'Baseline',
-        replications: 3,
-        results_json: {
-          summary: storedSummary,
-          replicationResults: [
-            { result: { summary: { avgWait: 5, avgSvc: 2, avgSojourn: 7, served: 10, reneged: 0, totalCost: 0 } } },
-            { result: { summary: { avgWait: 6, avgSvc: 2, avgSojourn: 8, served: 10, reneged: 0, totalCost: 0 } } },
-          ],
-        },
-      }),
-      makeRow({
-        id: 'r2',
-        run_label: 'Variant',
-        replications: 3,
-        results_json: {
-          summary: storedSummary,
-          replicationResults: [
-            { result: { summary: { avgWait: 7, avgSvc: 2, avgSojourn: 9, served: 10, reneged: 0, totalCost: 0 } } },
-            { result: { summary: { avgWait: 8, avgSvc: 2, avgSojourn: 10, served: 10, reneged: 0, totalCost: 0 } } },
-          ],
-        },
-      }),
+      makeRow({ id: 'r1', run_label: 'Baseline', replications: 3 }),
+      makeRow({ id: 'r2', run_label: 'Variant', replications: 3 }),
     ];
     renderTab({ historyRows: rows });
     fireEvent.click(screen.getByLabelText('Select run Baseline'));
     fireEvent.click(screen.getByLabelText('Select run Variant'));
     fireEvent.click(screen.getByRole('button', { name: 'Compare selected' }));
 
-    expect(mockCompareScenarios).toHaveBeenCalled();
+    await waitFor(() => expect(mockCompareScenarios).toHaveBeenCalled());
     expect(screen.getByText('RUN COMPARISON')).toBeInTheDocument();
     expect(screen.getAllByText('Baseline').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Variant').length).toBeGreaterThan(0);
@@ -391,12 +392,15 @@ describe('ModelHistoryTab — Run History UI', () => {
 
   // ── View Results / Explain ─────────────────────────────────────────────
 
-  it('View Results button only appears when row has results_json payload', () => {
-    const withResults = makeRow({ id: 'r1', results_json: { summary: storedSummary } });
-    const withoutResults = makeRow({ id: 'r2', results_json: {} });
-    renderTab({ historyRows: [withResults, withoutResults] });
+  it('View Results button appears for every listed run', () => {
+    // Every row inserted via saveSimulationRun() always carries a results_json
+    // payload; since the list query no longer selects that column at all, the
+    // button can't be gated on its presence in the row — it always shows.
+    const rowA = makeRow({ id: 'r1' });
+    const rowB = makeRow({ id: 'r2' });
+    renderTab({ historyRows: [rowA, rowB] });
     const viewResultsButtons = screen.getAllByRole('button', { name: 'View Results' });
-    expect(viewResultsButtons).toHaveLength(1);
+    expect(viewResultsButtons).toHaveLength(2);
   });
 
   it('clicking View Results calls onViewResults', () => {

@@ -36,7 +36,7 @@ import { ModelTabBar }       from "./ModelTabBar.jsx";
 import { SaveBanner }        from "./SaveBanner.jsx";
 import { VersionHistoryPanel } from "./VersionHistoryPanel.jsx";
 import { ScenariosSection } from "./ScenariosSection.jsx";
-import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, buildSchedulesMap, saveSimulationRun, saveAiInsights } from "../db/models.js";
+import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, getRunResultsJson, buildSchedulesMap, saveSimulationRun, saveAiInsights } from "../db/models.js";
 import { generateReport, sanitizeFilename, buildModelDefinitionHtml } from "../reports/index.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
@@ -177,8 +177,11 @@ function preferMetricValue(primary, fallback) {
   return primary;
 }
 
-function hydrateResultsFromHistoryRow(row) {
-  const json = row?.results_json;
+// results_json is no longer part of the run-history list query (it's fetched
+// lazily per-row, on demand) — fetch it here unless the row already carries it.
+async function hydrateResultsFromHistoryRow(row) {
+  if (!row?.id) return null;
+  const json = row.results_json ?? await getRunResultsJson(row.id);
   if (!json || typeof json !== "object") return null;
   const summary = json.summary || {};
   const nextSummary = {
@@ -468,6 +471,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [schedulesVersion,setSchedulesVersion]=useState(0);
   const [resultsView,setResultsView]=useState("summary");
   const [overviewHistory,setOverviewHistory]=useState([]);
+  const [overviewLastRunResults,setOverviewLastRunResults]=useState(null);
   const [showOptimisePanel,setShowOptimisePanel]=useState(false);
   const [aiAction,setAiAction]=useState(null);
   const [collabQuery,setCollabQuery]=useState("");
@@ -829,16 +833,17 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     downloadJsonFile(payload, `simmodlr-${slugifyModelName(model.name)}.json`);
   };
 
-  const hasResultsPayload = row => {
-    const json = row?.results_json;
-    return !!(json && typeof json === "object" && (json.summary || json.timeSeries || json.waitDist));
-  };
+  // Every row inserted via saveSimulationRun() always carries a results_json
+  // payload with at least a `summary` (see buildPersistedResultsJson); the
+  // list query no longer selects that column, so presence can't be checked
+  // from the row itself. Treat every listed run as having a results payload.
+  const hasResultsPayload = row => !!row;
 
-  const loadResultsRun = runId => {
+  const loadResultsRun = async runId => {
     const row = historyRows.find(r => r.id === runId);
     if (!hasResultsPayload(row)) return;
     setSelectedResultsRunId(row.id);
-    const hydratedResults = hydrateResultsFromHistoryRow(row);
+    const hydratedResults = await hydrateResultsFromHistoryRow(row);
     setLatestResults(hydratedResults);
     setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
     // Populate replication results from stored compact summaries so SummaryCardGrid
@@ -855,9 +860,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       const row = historyRows.find(r => r.id === selectedResultsRunId);
       let reportModel = model;
       let schedulesMap = {};
+      let run = null;
       if (selectedResultsRunId) {
         try {
-          const run = await getRun(selectedResultsRunId);
+          run = await getRun(selectedResultsRunId);
           if (run?.model_snapshot) reportModel = run.model_snapshot;
           const scheduleRows = await fetchModelSchedules(reportModel.id || modelId);
           schedulesMap = buildSchedulesMap(scheduleRows);
@@ -867,13 +873,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         runId: selectedResultsRunId || null,
         runLabel: row?.run_label || '',
         seed: row?.seed ?? null,
-        engineVersion: row?.results_json?._engine_version || '',
+        engineVersion: run?.engine_version || '',
         prnAlgorithm: 'mulberry32',
         runTimestamp: row?.ran_at || new Date().toISOString(),
-        narrativeText: row?.results_json?.narrative_text ?? null,
-        modelDescriptionText: row?.results_json?.model_description_text ?? null,
+        narrativeText: run?.results_json?.narrative_text ?? null,
+        modelDescriptionText: run?.results_json?.model_description_text ?? null,
       };
-      const expConfig = row?.results_json?._experiment_config || {
+      const expConfig = run?.experiment_config || {
         maxSimTime: row?.max_simulation_time ?? 500,
         warmupPeriod: row?.warmup_period ?? 0,
         replications: row?.replications ?? 1,
@@ -896,10 +902,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     }
   }, [latestResults, resultsReportGenerating, historyRows, selectedResultsRunId, model, modelId]);
 
-  const openResultsForRun = useCallback((row, nextSubtab = "summary") => {
+  const openResultsForRun = useCallback(async (row, nextSubtab = "summary") => {
     if (!hasResultsPayload(row)) return;
     setSelectedResultsRunId(row.id);
-    const hydratedResults = hydrateResultsFromHistoryRow(row);
+    const hydratedResults = await hydrateResultsFromHistoryRow(row);
     setLatestResults(hydratedResults);
     setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
     const storedReps = Array.isArray(hydratedResults?.replications) ? hydratedResults.replications : [];
@@ -1024,12 +1030,21 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[tab,modelId,runHistoryFetcher]);
 
   useEffect(()=>{
+    const lastRow = overviewHistory[0];
+    if(!lastRow){ setOverviewLastRunResults(null); return; }
+    let cancelled = false;
+    hydrateResultsFromHistoryRow(lastRow).then(res=>{ if(!cancelled) setOverviewLastRunResults(res); })
+      .catch(()=>{ if(!cancelled) setOverviewLastRunResults(null); });
+    return () => { cancelled = true; };
+  },[overviewHistory]);
+
+  useEffect(()=>{
     if(tab!=="results")return;
     setHistoryLoading(true);setHistoryError("");
     Promise.all([
       runHistoryFetcher({ archived: historyShowArchived }),
       listShareLinks(modelId).catch(()=>[]),
-    ]).then(([rows, links])=>{
+    ]).then(async ([rows, links])=>{
       const nextRows = rows || [];
       setHistoryRows(nextRows);
       const map = {};
@@ -1040,7 +1055,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       const row = selected || fallback;
       if(row && !latestResults){
         setSelectedResultsRunId(row.id);
-        const hydratedResults = hydrateResultsFromHistoryRow(row);
+        const hydratedResults = await hydrateResultsFromHistoryRow(row);
         setLatestResults(hydratedResults);
         setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
         const storedReps = Array.isArray(hydratedResults?.replications) ? hydratedResults.replications : [];
@@ -1208,7 +1223,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             {/* Key metrics from last run */}
             {overviewHistory.length > 0 && (() => {
               const lastRow = overviewHistory[0];
-              const res = hydrateResultsFromHistoryRow(lastRow);
+              const res = overviewLastRunResults;
               const s = res?.summary;
               if (!s) return null;
               const repCount = lastRow.replications > 0 ? lastRow.replications : 1;
@@ -1657,11 +1672,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                   setResultsReportGenerating(true);
                   toast.info("Building report…");
                   try {
-                    const results = hydrateResultsFromHistoryRow(row);
+                    const results = await hydrateResultsFromHistoryRow(row);
                     let reportModel = model;
                     let schedulesMap = {};
+                    let run = null;
                     try {
-                      const run = await getRun(row.id);
+                      run = await getRun(row.id);
                       if (run?.model_snapshot) reportModel = run.model_snapshot;
                       const scheduleRows = await fetchModelSchedules(reportModel.id || modelId);
                       schedulesMap = buildSchedulesMap(scheduleRows);
@@ -1670,13 +1686,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                       runId: row.id,
                       runLabel: row.run_label || '',
                       seed: row.seed ?? null,
-                      engineVersion: row.results_json?._engine_version || '',
+                      engineVersion: run?.engine_version || '',
                       prnAlgorithm: 'mulberry32',
                       runTimestamp: row.ran_at || new Date().toISOString(),
-                      narrativeText: row.results_json?.narrative_text ?? null,
-                      modelDescriptionText: row.results_json?.model_description_text ?? null,
+                      narrativeText: run?.results_json?.narrative_text ?? null,
+                      modelDescriptionText: run?.results_json?.model_description_text ?? null,
                     };
-                    const expConfig = row.results_json?._experiment_config || {
+                    const expConfig = run?.experiment_config || {
                       maxSimTime: row.max_simulation_time ?? 500,
                       warmupPeriod: row.warmup_period ?? 0,
                       replications: row.replications ?? 1,

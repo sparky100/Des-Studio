@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockFetchRunHistory = vi.hoisted(() => vi.fn());
 const mockSaveSimulationRun = vi.hoisted(() => vi.fn());
 const mockListShareLinks = vi.hoisted(() => vi.fn());
+const mockGetRunResultsJson = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/db/models.js', async () => {
   const actual = await vi.importActual('../../src/db/models.js');
@@ -12,6 +13,7 @@ vi.mock('../../src/db/models.js', async () => {
     fetchRunHistory: mockFetchRunHistory,
     saveSimulationRun: mockSaveSimulationRun,
     listShareLinks: mockListShareLinks,
+    getRunResultsJson: mockGetRunResultsJson,
   };
 });
 
@@ -72,6 +74,8 @@ describe('run history', () => {
     mockFetchRunHistory.mockResolvedValue([historyRow]);
     mockListShareLinks.mockReset();
     mockListShareLinks.mockResolvedValue([]);
+    mockGetRunResultsJson.mockReset();
+    mockGetRunResultsJson.mockResolvedValue(historyRow.results_json);
     URL.createObjectURL = vi.fn(() => 'blob:run-history');
     URL.revokeObjectURL = vi.fn();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
@@ -116,7 +120,8 @@ describe('run history', () => {
     fireEvent.click(screen.getByRole('button', { name: /Export list/i }));
     fireEvent.click(screen.getByRole('button', { name: /Export as JSON/i }));
 
-    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    await waitFor(() => expect(mockGetRunResultsJson).toHaveBeenCalledWith('run-1'));
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob)));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:run-history');
   });
 });
