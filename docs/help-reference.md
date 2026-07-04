@@ -98,11 +98,11 @@ Level-based resource pools. Defined in `containerTypes[]` array.
 
 **Operations:** FILL adds quantity (clamped to capacity); DRAIN removes quantity (only fires when sufficient level exists).
 
-Edited in the UI via the **Reference Data** tab, which also holds the **Distances** registry below the container list.
+Edited in the UI via the **Model Data** tab, which also holds Skills, the **Distances** registry, and State Variables.
 
 ### Distances
 
-Named, undirected distances between queue pairs. Defined in the `distances[]` array (`{id, fromQueue, toQueue, distance}`), edited in the same **Reference Data** tab as Containers.
+Named, undirected distances between queue pairs. Defined in the `distances[]` array (`{id, fromQueue, toQueue, distance}`), edited in the same **Model Data** tab as Containers.
 
 **Purpose:** Consumed by the `Distance` distribution type to compute a C-event schedule's duration as distance ÷ a speed attribute, instead of a flat sampled number — for courier/dispatch/transport-style models.
 
@@ -235,7 +235,7 @@ All 12 distribution types. Parameter values must be strings (e.g., "5" not 5).
 | Empirical | `{ values: [N, N, ...] }` | Non-empty array | Sample-driven; draws uniformly from provided values |
 | EntityAttr | `{ attr: "attrName" }` | Attribute must exist on entity | Duration from entity attribute (e.g., imported plan) |
 | ServerAttr | `{ attr: "attrName" }` | Attribute must exist on server | Duration from assigned server attribute |
-| Distance | `{ from, to, speedAttr, speedSource: "entity"\|"server" }` | `from`/`to` must be declared queues; `speedSource` must be "entity" or "server" | Travel time = declared distance (Reference Data tab) ÷ speed attribute. Only meaningful on a C-event's `cSchedules`, after an `ASSIGN`. |
+| Distance | `{ from, to, speedAttr, speedSource: "entity"\|"server" }` | `from`/`to` must be declared queues; `speedSource` must be "entity" or "server" | Travel time = declared distance (Model Data tab) ÷ speed attribute. Only meaningful on a C-event's `cSchedules`, after an `ASSIGN`. |
 
 ---
 
@@ -453,7 +453,7 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | V45 | Queue is never used as a routing destination (disconnected fragment) | Wire the queue into routing, or remove it |
 | V46 | Queue overflow chain cycles back on itself | Break the cycle — overflow chains must terminate at a queue without a cycle |
 | V47 | DELAY references an unknown queue, or its completion B-event has only an ARRIVE effect (entity left stuck "serving" forever) | Correct the queue name; add COMPLETE(), RELEASE(), or routing to the completion B-event |
-| V50 | Weekly schedule pattern requires a startOfWeek epoch | Set a `startOfWeek` epoch in Model Data (only the day-of-week matters) |
+| V50 | Weekly schedule pattern requires a startOfWeek epoch | Set a `startOfWeek` epoch in Time & Schedules (only the day-of-week matters) |
 | V51 | Weekly schedule pattern has unscheduled hours with no active shift | Fill every 1-hour cell with a capacity ≥ 0, or add a shift schedule row covering the gap |
 | V52 | Set/Capacity schedule reference targets a non-schedule resource | Ensure the referenced entity type is a server with a schedule pattern |
 | V53 | Schedule pattern capacity exceeds shift capacity at [time] | Reduce grid capacity or increase shift capacity for the overlapping time window |
@@ -546,7 +546,7 @@ context (no suggestion text is shown live).
 
 ### Defining and using server skills
 
-1. **Register skills** in Model Settings / State tab / Skills section. Type a skill name and press Enter.
+1. **Register skills** in the Model Data tab's Skills section. Type a skill name and press Enter.
 2. **Assign to server types** in Entity Types tab. Expand a server type, tick skills in the Skills panel.
 3. **Use in C-Events** via ASSIGN with quoted skill: `ASSIGN(Queue, Doctor, "Surgery")` — only doctors with Surgery skill are considered.
 4. **Pool across server types** — use `ASSIGN(Queue, ANY, "Surgery")` instead of a fixed server type to seize any idle server, of any type, that has the skill. Requires a skill argument.
@@ -591,7 +591,7 @@ Use calendar variables in C-event conditions to restrict activities to specific 
 - `hourOfDay` — integer 0-23
 - `dayOfWeek` — integer 0-6 (0=Sunday, 1=Monday, ..., 6=Saturday)
 
-**Requires epoch:** Set the model's epoch in Model Settings → State tab → "Real-world start date and time". Without epoch, calendar variables return defaults (isWeekday=true, hourOfDay=0).
+**Requires epoch:** Set the model's epoch in the Time & Schedules tab → "Real-world start date/time". Without epoch, calendar variables return defaults (isWeekday=true, hourOfDay=0).
 
 **Example:** "Schedule appointments weekdays 9am-5pm only":
 ```
@@ -840,11 +840,11 @@ If a private model has no collaborators and isn't public yet, the Access tab sho
 
 ## Schedule Manager (Timetables)
 
-Timetable data for arrival B-events is stored separately from the core model in the **Schedules** tab of the model editor. This keeps the model lightweight and lets you maintain multiple named timetables for the same model.
+Timetable data for arrival B-events is stored separately from the core model in the **Time & Schedules** tab of the model editor. This keeps the model lightweight and lets you maintain multiple named timetables for the same model.
 
 ### Accessing schedules
 
-Open your model and click the **Schedules** tab (between C-Events and State Variables).
+Open your model and click the **Time & Schedules** tab (between Sections and Goals).
 
 ### Schedule list
 
@@ -876,9 +876,9 @@ Each arrival B-event stores a `scheduleRef` UUID pointing to a schedule record. 
 
 ### Bidirectional navigation
 
-In the **B-Events** editor, a green badge appears next to each event that is linked to a named schedule (showing the schedule name). Clicking the badge switches to the Schedules tab with that schedule selected.
+In the **B-Events** editor, a green badge appears next to each event that is linked to a named schedule (showing the schedule name). Clicking the badge switches to the Time & Schedules tab with that schedule selected.
 
-In the **Schedules** editor, the Event Links panel lists every B-event that uses the current schedule. Clicking a B-event name switches to the B-Events tab and scrolls to that event.
+In the **Time & Schedules** editor, the Event Links panel lists every B-event that uses the current schedule. Clicking a B-event name switches to the B-Events tab and scrolls to that event.
 
 ### Migrating inline rows to a named schedule
 

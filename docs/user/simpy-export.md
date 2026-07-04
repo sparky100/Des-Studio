@@ -83,7 +83,7 @@ The generated script contains these sections, in order:
 | Imports | `simpy`, `random`, `math`, `statistics`, `json`, `dataclasses` |
 | Configuration | `MAX_SIM_TIME`, `WARMUP_PERIOD`, `REPLICATIONS`, `BASE_SEED`, `RUN_MODE` |
 | Distribution samplers | `_exp`, `_uniform`, `_normal`, `_triangular`, `_fixed`, `_erlang`, `_lognormal` |
-| State variables | Module-level Python variables from the model's State tab |
+| State variables | Module-level Python variables from the model's Model Data tab |
 | Entity dataclasses | One `@dataclass` per customer entity type, with `arrival_time`, `sojourn_time`, `service_start_time` |
 | Statistics collector | `Stats` class tracking `served`, `reneged`, `total_cost`, `resource_busy` |
 | Arrival processes | One generator per B-event with `ARRIVE` |

@@ -1131,9 +1131,11 @@ export const AiAssistantPanel = ({
           { label: "Review conditional events", prompt: "Review the C-events in this model. Are the conditions and effects correctly specified?" },
           { label: "Explain the event logic", prompt: "Explain the conditional event logic in this model — what triggers each event and what happens?" },
         ] : activeTab === "schedules" ? [
-          { label: "Explain the schedule structure", prompt: "Explain how the named schedules in this model are used and how they connect to arrival events." },
+          { label: "Explain the schedule structure", prompt: "Explain the time configuration and named schedules in this model — how are they used and how do they connect to arrival events?" },
+        ] : activeTab === "containers" ? [
+          { label: "Review skills, containers, distances, and state variables", prompt: "Review the skills, containers, distances, and state variables defined in this model. Are they used appropriately, and is anything missing?" },
         ] : activeTab === "state" ? [
-          { label: "Review state variables", prompt: "Review the state variables in this model. Are they used appropriately?" },
+          { label: "Review data sources", prompt: "Review the data sources connected to this model. Are they wired up correctly to drive arrivals or entity attributes?" },
         ] : activeTab === "sections" ? [
           { label: "Explain the sections", prompt: "Explain the sections defined in this model and how they structure the workflow." },
         ] : [
