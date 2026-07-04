@@ -98,6 +98,16 @@ Level-based resource pools. Defined in `containerTypes[]` array.
 
 **Operations:** FILL adds quantity (clamped to capacity); DRAIN removes quantity (only fires when sufficient level exists).
 
+Edited in the UI via the **Reference Data** tab, which also holds the **Distances** registry below the container list.
+
+### Distances
+
+Named, undirected distances between queue pairs. Defined in the `distances[]` array (`{id, fromQueue, toQueue, distance}`), edited in the same **Reference Data** tab as Containers.
+
+**Purpose:** Consumed by the `Distance` distribution type to compute a C-event schedule's duration as distance ÷ a speed attribute, instead of a flat sampled number — for courier/dispatch/transport-style models.
+
+**Validation:** V69 (registry structure), V70 (usage cross-reference — see Distributions above).
+
 ### Goals
 
 Performance targets. Defined in `goals[]` array.
@@ -225,6 +235,7 @@ All 12 distribution types. Parameter values must be strings (e.g., "5" not 5).
 | Empirical | `{ values: [N, N, ...] }` | Non-empty array | Sample-driven; draws uniformly from provided values |
 | EntityAttr | `{ attr: "attrName" }` | Attribute must exist on entity | Duration from entity attribute (e.g., imported plan) |
 | ServerAttr | `{ attr: "attrName" }` | Attribute must exist on server | Duration from assigned server attribute |
+| Distance | `{ from, to, speedAttr, speedSource: "entity"\|"server" }` | `from`/`to` must be declared queues; `speedSource` must be "entity" or "server" | Travel time = declared distance (Reference Data tab) ÷ speed attribute. Only meaningful on a C-event's `cSchedules`, after an `ASSIGN`. |
 
 ---
 
@@ -460,6 +471,8 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | V66 | `MATCH`'s compatibility predicate (6th argument) fails to parse or evaluate | Fix the predicate syntax — check for unknown variable namespaces or malformed operators |
 | V67 | `parentTypeId` is self-referential, references an unknown entity type, references a different-role entity type, or creates a circular inheritance chain | Point `parentTypeId` at a real entity type of the same role, with no cycle |
 | V68 | An entry in `requiredSequence` doesn't match any declared queue (blocking), or the model's routing sends this entity type backward through the declared stages (warning — intentional rework loops can be ignored) | Correct the queue name; or review the routing edge and confirm the backward jump is intentional |
+| V69 | A `distances[]` entry has an empty/duplicate id, `fromQueue`/`toQueue` doesn't match a declared queue or the two are the same, a non-positive `distance`, or a duplicate entry for the same undirected pair | Fix the id, queue names, distance value, or remove the duplicate pair |
+| V70 | A `Distance`-typed schedule has an invalid `from`/`to`/`speedSource`/`speedAttr` (blocking), or references a pair/attribute that isn't declared (warning — falls back to a duration of 0) | Correct the distParams; or declare the missing distance/attribute |
 
 Gaps in the numbering (e.g. no V7) are intentional — codes were retired or renumbered during development and are not reused.
 

@@ -312,8 +312,13 @@ rng(); // → number in [0, 1)
       effect:    string,
       cSchedules: [
         { eventId: string, dist: string, distParams: Object, useEntityCtx?: boolean }
+        // dist: "Distance" computes duration from a declared distances[] entry ÷ a
+        // speed attribute (distParams: {from, to, speedAttr, speedSource}) — see below.
       ],
     }
+  ],
+  distances: [               // Optional: named, undirected distances between queue pairs
+    { id: string, fromQueue: string, toQueue: string, distance: number }
   ],
 }
 ```

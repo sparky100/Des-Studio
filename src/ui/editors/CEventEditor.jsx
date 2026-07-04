@@ -401,7 +401,8 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                         <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:60}}>delay via:</span>
                         <DistPicker value={{dist:s.dist||"ServerAttr",distParams:s.distParams||{attr:"serviceTime"}}}
-                          onChange={v=>updSched(i,j,{dist:v.dist,distParams:v.distParams})} compact/>
+                          onChange={v=>updSched(i,j,{dist:v.dist,distParams:v.distParams})} compact
+                          allowDistance queues={queues} entityTypes={entityTypes}/>
                       </div>
                       {rowIsDelay&&s.dist==="ServerAttr"&&(
                         <div style={{fontSize:10,color:C.amber,fontFamily:FONT,lineHeight:1.5}}>

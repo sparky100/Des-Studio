@@ -221,6 +221,12 @@ export const DISTRIBUTIONS = {
     hint:   "Read named attribute from the arriving customer entity",
     sample: () => 0, // resolved in phases.js via effectCtx._lastCustId
   },
+  Distance: {
+    params: [],
+    label:  "Distance / travel time",
+    hint:   "Duration = declared distance between two queues ÷ a speed attribute",
+    sample: () => 0, // resolved in phases.js via runtimeModel.distances + effectCtx._lastCustId/_lastSrvId
+  },
   Categorical: {
     params: [],
     label:  "Categorical (weighted options)",

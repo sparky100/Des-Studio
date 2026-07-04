@@ -97,11 +97,11 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 |------|---------------|
 | `index.js` | `buildEngine()` factory, FEL management, run orchestration; module-level WeakMap caches resolved `runtimeModel` across reps |
 | `phases.js` | Phase A (clock advance), Phase B (B-Event fire), Phase C (C-scan with restart rule) |
-| `macros.js` | 19 effect macros: ARRIVE, ASSIGN, BATCH, COMPLETE, COSEIZE, COST, DRAIN, FAIL, FILL, MATCH, PREEMPT, RELEASE, RENEGE, RENEGE_OLDEST, REPAIR, SET, SET_ATTR, SPLIT, UNBATCH |
+| `macros.js` | 24 effect macros: ARRIVE, ASSIGN, BATCH, CANCEL, COMPLETE, COSEIZE, COST, DELAY, DRAIN, FAIL, FILL, FINISH, MATCH, PREEMPT, RELEASE, RELEASE_COSEIZED, RENEGE, RENEGE_OLDEST, REPAIR, ROUND_ROBIN, SET, SET_ATTR, SPLIT, UNBATCH |
 | `entities.js` | Entity lifecycle, queue discipline sort functions, server pool management, `_busyStart`/`_busyTime` utilisation tracking. `attemptQueueJoin(entity, queueName, clock, ctx, opts)` is the single centralized join function — called from every queue-join site (ARRIVE, RELEASE, BATCH/UNBATCH/SPLIT, conditional/probabilistic routing, loop-guard exit, preemption re-queue) and enforces balking (F11.2), capacity/overflow (F11.1/F11.3, recursing through `overflowDestination` chains with a `visitedQueues` cycle guard), and queue-level auto-reneging (`renegeDist`) uniformly regardless of how the entity reaches the queue. |
-| `distributions.js` | Sampler registry, seeded RNG (mulberry32), all 12 distribution types |
+| `distributions.js` | Sampler registry, seeded RNG (mulberry32), all 14 distribution types |
 | `conditions.js` | Safe predicate evaluator — no `eval`, no `new Function` |
-| `validation.js` | V1–V56 (V7 unused); 55 distinct rules, pre-run gate |
+| `validation.js` | V1–V70 (V7 unused); 79 distinct rules including named V-SKILL-*/V-CAL-*/V-SLOT-* rules, pre-run gate |
 | `schedule-pattern.js` | `expandWeeklyPatternToEvents()`, `getPatternInitialCapacity()`, `parseHHMM()`, `timeToSimMin()`, `periodLabel()` weekly schedule pattern engine (Sprint 86) |
 | `statistics.js` | CI, batch means, ANOVA, Tukey HSD, Welch test; exports `summarizeEntitySummary` used by engine and persistence |
 | `replication-runner.js` | Persistent worker pool (`createReplicationPool`), INIT_RUN protocol, compact per-rep payload |
@@ -187,6 +187,7 @@ interface ModelJson {
   cEvents: CEvent[];
   stateVariables: StateVariable[];
   containerTypes: ContainerType[];
+  distances?: DistanceType[];           // undirected queue-pair distances, consumed by the Distance distribution type
   dataSources: DataSource[];
   sections?: Section[];                 // named groupings for authoring/visualisation (engine-agnostic)
 
@@ -208,6 +209,13 @@ interface Section {
   memberIds: string[];                  // queue/entityType/bEvent/cEvent IDs
   entryQueues: string[];                // subset of memberIds — queues where entities arrive from other sections
   exitQueues: string[];                 // subset of memberIds — queues where entities leave to other sections
+}
+
+interface DistanceType {
+  id: string;                           // registry/CRUD identity only — not a distribution argument
+  fromQueue: string;                    // queue name (V69)
+  toQueue: string;                      // queue name (V69); must differ from fromQueue
+  distance: number;                     // > 0 (V69); undirected — one entry covers both directions
 }
 ```
 
@@ -326,7 +334,9 @@ interface CEvent {
 | `Piecewise` | `periods[]` | Time-varying; clock-aware selection |
 | `ServerAttr` | `attributeName` | Reads attribute from the serving resource |
 | `EntityAttr` | `attributeName` | Reads attribute from the arriving entity |
+| `Categorical` | `options[]` | Weighted random selection; returns non-numeric values (string/boolean/null) — for entity attributes, not durations |
 | `Schedule` | `scheduleRef` | Planned absolute times from `model_schedules` |
+| `Distance` | `from, to, speedAttr, speedSource` | Duration = declared `distances[]` entry ÷ a speed attribute read from the matched server or arriving entity. Resolved in `phases.js`'s cSchedules loop (not `sample()`), same as `ServerAttr`/`EntityAttr`. Meaningful only on a C-event's `cSchedules`. |
 
 All distributions sample via `state.rng` (mulberry32 seeded PRNG). No distribution calls `Math.random()`.
 
@@ -810,7 +820,9 @@ The standard 7 distributions (Exponential, Uniform, Normal, Triangular, Fixed, E
 - **Schedule** — generates a `for`-loop over `rows[]` with per-row attribute injection; used by the Appointment Clinic template.
 - **Empirical** — generates `random.choice([values])`.
 
-All 22 built-in templates produce valid Category 1 Python.
+`ServerAttr`, `EntityAttr`, `Categorical`, and `Distance` are **not** auto-translated — `distToExpr()` falls back to a fixed value of `1.0` for each and emits a `# NOTE: distribution "X" not auto-translated` comment in the generated script. This does not affect Category 1/2 classification (that's determined solely by macro usage — see `TODO_MACRO_SET`), so a template using these distributions still exports and runs standalone, just with reduced fidelity on that duration. The "Courier Ground Transport" template's two `Distance`-typed legs export this way.
+
+All 26 built-in templates produce valid Category 1 Python.
 
 #### C-event → B-event routing resolution
 
@@ -859,7 +871,7 @@ DES Studio `DRAIN` fails immediately if container level < amount (guard). SimPy 
 | 30 replications, 100,000 events each | < 60 seconds | Persistent worker pool, `hardwareConcurrency − 1` workers |
 | M/M/1 analytical accuracy | Within 5% of formula | Benchmark gate in CI (`mm1_benchmark.js`) |
 | M/M/c analytical accuracy | Within 5% of formula | Benchmark gate in CI (`mmc_benchmark.js`) |
-| model_json parse + validate | < 100 ms | V1–V56 (V7 unused); 55 distinct rules |
+| model_json parse + validate | < 100 ms | V1–V70 (V7 unused); 79 distinct rules |
 | Visual Designer canvas: 50 nodes | 60 fps | @xyflow/react default render loop |
 
 Worker pool size defaults to `navigator.hardwareConcurrency - 1` (minimum 1, no upper cap). Workers are **persistent** — spawned once per batch run via `createReplicationPool()` and reused across all rounds (adaptive batch, sweep points). The model and run configuration are sent to each worker exactly once via an `INIT_RUN` message; subsequent `RUN_REPLICATION` messages carry only `{ replicationIndex, seed, entityDetail }`, avoiding a `structuredClone` of the full model per job.
