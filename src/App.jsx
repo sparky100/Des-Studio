@@ -405,6 +405,7 @@ export default function App({ onThemeChange }){
         queues: template.queues || [],
         goals: template.goals || [],
         containerTypes: template.containerTypes || [],
+        distances: template.distances || [],
       };
       // Preserve optional top-level fields that templates may carry
       if(template.graph!=null)          payload.graph          = template.graph;
