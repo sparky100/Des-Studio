@@ -70,12 +70,21 @@ function normalizeRequest(body: Record<string, unknown>, config: LlmProviderConf
   };
 }
 
-async function callAnthropic(request: LlmProxyRequest, config: LlmProviderConfig) {
-  const systemText = request.messages.find(m => m.role === "system")?.content || "";
-  const userMessages = request.messages.filter(m => m.role !== "system").map(m => ({
+function splitSystemMessages(messages: LlmMessage[]) {
+  const systemText = messages
+    .filter(m => m.role === "system")
+    .map(m => m.content || "")
+    .filter(Boolean)
+    .join("\n\n");
+  const userMessages = messages.filter(m => m.role !== "system").map(m => ({
     role: m.role === "assistant" ? "assistant" : "user",
     content: String(m.content || ""),
   }));
+  return { systemText, userMessages };
+}
+
+async function callAnthropic(request: LlmProxyRequest, config: LlmProviderConfig) {
+  const { systemText, userMessages } = splitSystemMessages(request.messages);
   const system = systemText || undefined;
   return fetch(ANTHROPIC_API_URL, {
     method: "POST",
@@ -137,13 +146,9 @@ function getZenEndpoint(model: string): { url: string; format: "openai" | "anthr
 
 async function callZen(request: LlmProxyRequest, config: LlmProviderConfig) {
   const { url, format } = getZenEndpoint(config.model);
-  const systemText = request.messages.find(m => m.role === "system")?.content || "";
 
   if (format === "anthropic") {
-    const userMessages = request.messages.filter(m => m.role !== "system").map(m => ({
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: String(m.content || ""),
-    }));
+    const { systemText, userMessages } = splitSystemMessages(request.messages);
     return fetch(url, {
       method: "POST",
       headers: {

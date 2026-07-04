@@ -658,6 +658,62 @@ describe("AiGeneratedModelPanel", () => {
       expect(screen.queryByLabelText(/model confirmation/i)).not.toBeInTheDocument();
       expect(screen.getByPlaceholderText(/describe what.s wrong/i)).toBeInTheDocument();
     });
+
+    it("retries when the build response omits proposedModel, then succeeds", async () => {
+      let callCount = 0;
+      mockCallModelBuilder.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({ intent: "confirm", explanation: "Ready to build a post office.", proposedModel: null });
+        }
+        if (callCount === 2) {
+          // The "build" turn comes back without a model — this used to silently
+          // show "Model proposal received." with nothing built.
+          return Promise.resolve({ intent: "build", explanation: "Built the post office.", proposedModel: null });
+        }
+        return Promise.resolve({
+          intent: "build",
+          explanation: "Built the post office.",
+          proposedModel: { ...model },
+        });
+      });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A post office" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByLabelText(/model confirmation/i)).toBeInTheDocument());
+      fireEvent.click(screen.getByRole("button", { name: /looks right.*build it/i }));
+
+      await waitFor(() => expect(mockCallModelBuilder).toHaveBeenCalledTimes(3));
+      expect(screen.getByLabelText(/model proposal preview/i)).toBeInTheDocument();
+      expect(screen.queryByText(/model proposal received/i)).not.toBeInTheDocument();
+    });
+
+    it("shows a clear error instead of a false success message when proposedModel stays missing", async () => {
+      mockCallModelBuilder.mockImplementation(() => {
+        return Promise.resolve({ intent: "confirm", explanation: "Ready to build a post office.", proposedModel: null });
+      });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A post office" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByLabelText(/model confirmation/i)).toBeInTheDocument());
+
+      // Every subsequent call (the build attempt plus both retries) also omits proposedModel.
+      mockCallModelBuilder.mockImplementation(() => Promise.resolve({
+        intent: "build",
+        explanation: "Built the post office.",
+        proposedModel: null,
+      }));
+      fireEvent.click(screen.getByRole("button", { name: /looks right.*build it/i }));
+
+      await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+      expect(screen.getByRole("alert")).toHaveTextContent(/didn.t return a model/i);
+      expect(screen.queryByLabelText(/model proposal preview/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/model proposal received/i)).not.toBeInTheDocument();
+    });
   });
 
   describe("F8C.4 — proactive refinement chips", () => {

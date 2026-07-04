@@ -69,6 +69,13 @@ describe("model builder prompts", () => {
     expect(prompt).toMatch(/confirm/);
   });
 
+  it("instructs the LLM to switch to build with a populated proposedModel on an affirmative reply to its own confirm summary", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/CONFIRM-TO-BUILD HANDOFF/i);
+    expect(prompt).toMatch(/do not respond with intent "confirm" again/i);
+    expect(prompt).toMatch(/do not return proposedModel as null or omit it/i);
+  });
+
   it("instructs questions to be a single string not an array", () => {
     const prompt = buildModelBuilderSystemPrompt();
     expect(prompt).toMatch(/next single question/i);
