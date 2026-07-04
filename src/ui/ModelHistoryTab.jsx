@@ -5,7 +5,7 @@ import { Btn, Empty } from "./shared/components.jsx";
 import { csvEscape, downloadTextFile, downloadJsonFile, buildRunHistoryExportPayload, buildRunHistoryCsv, slugifyResultName, timestampForFilename } from "./shared/utils.js";
 import { ScenarioComparisonTable } from "./shared/ScenarioComparisonTable.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
-import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink, fetchModelSchedules, buildSchedulesMap } from "../db/models.js";
+import { fetchRunHistory, getRun, getRunResultsJson, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink, fetchModelSchedules, buildSchedulesMap } from "../db/models.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { buildEngine } from "../engine/index.js";
 import * as XLSX from 'xlsx';
@@ -27,10 +27,11 @@ function slugifyModelName(name = "") {
 }
 
 
-const hasResultsPayload = row => {
-  const json = row?.results_json;
-  return !!(json && typeof json === "object" && (json.summary || json.timeSeries || json.waitDist));
-};
+// Every row inserted via saveSimulationRun() always carries a results_json
+// payload with at least a `summary` (see buildPersistedResultsJson); the
+// list query no longer selects that column, so presence can't be checked
+// from the row itself. Treat every listed run as having a results payload.
+const hasResultsPayload = () => true;
 
 function formatRunDate(value) {
   const dt = new Date(value);
@@ -63,6 +64,7 @@ export function ModelHistoryTab({
   const [moreMenuPos, setMoreMenuPos] = useState({ top: 0, right: 0 });
   const [exportListMenuOpen, setExportListMenuOpen] = useState(false);
   const [exportPopoverRowId, setExportPopoverRowId] = useState(null);
+  const [exportPopoverJson, setExportPopoverJson] = useState(null);
   const [selectedComparison, setSelectedComparison] = useState(null);
   const runHistoryFetcher = (filters = {}) => (
     userId ? fetchRunHistory(modelId, filters) : Promise.resolve(fetchLocalRunHistory(modelId))
@@ -163,8 +165,15 @@ export function ModelHistoryTab({
     }
   };
 
-  const exportRunHistoryJson = () => {
-    const payload = buildRunHistoryExportPayload(model, historyRows);
+  const exportRunHistoryJson = async () => {
+    // Full results_json is no longer part of the list query (see aggregate_stats
+    // migration) — fetch each row's payload on demand only when this export
+    // is actually triggered, instead of on every history load.
+    const rowsWithResults = await Promise.all(historyRows.map(async row => ({
+      ...row,
+      results_json: await getRunResultsJson(row.id),
+    })));
+    const payload = buildRunHistoryExportPayload(model, rowsWithResults);
     downloadJsonFile(payload, `simmodlr-run-history-${slugifyModelName(model?.name)}.json`);
     toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as JSON`);
   };
@@ -186,8 +195,8 @@ export function ModelHistoryTab({
     toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as Excel`);
   };
 
-  const handleExportLLMBundle = (row) => {
-    const json = row.results_json || {};
+  const handleExportLLMBundle = async (row) => {
+    const json = await getRunResultsJson(row.id);
     const expConfig = json._experiment_config || {};
     const config = {
       runLabel: row.run_label || row.runLabel,
@@ -244,15 +253,16 @@ export function ModelHistoryTab({
     toast.success(`Deleted ${ids.length} run${ids.length !== 1 ? "s" : ""}`);
   };
 
-  const compareSelected = () => {
+  const compareSelected = async () => {
     const selectedRows = historyRows.filter(row => historySelected.has(row.id));
     if (selectedRows.length !== 2) {
       setSelectedComparison({ error: "Select exactly 2 runs to compare." });
       return;
     }
     const [rowA, rowB] = selectedRows;
-    const repsA = rowA?.results_json?.replicationResults || [];
-    const repsB = rowB?.results_json?.replicationResults || [];
+    const [jsonA, jsonB] = await Promise.all([getRunResultsJson(rowA.id), getRunResultsJson(rowB.id)]);
+    const repsA = jsonA?.replicationResults || [];
+    const repsB = jsonB?.replicationResults || [];
     if (repsA.length < 2 || repsB.length < 2) {
       setSelectedComparison({ error: `Both runs must have at least 2 replications. Run A: ${repsA.length}, Run B: ${repsB.length}.` });
       return;
@@ -474,7 +484,7 @@ export function ModelHistoryTab({
                       </td>
                       <td style={{ padding: "6px 12px" }}>
                         {(() => {
-                          const ci = row.results_json?.aggregateStats?.["summary.avgWait"];
+                          const ci = row.aggregate_stats?.["summary.avgWait"];
                           if (!ci || ci.halfWidth == null || ci.mean == null || !Number.isFinite(ci.mean) || ci.mean === 0) return <span style={{ color: C.muted }}>—</span>;
                           const relHw = (ci.halfWidth / Math.abs(ci.mean)) * 100;
                           const color = relHw < 10 ? C.green : relHw < 25 ? C.amber : C.red;
@@ -564,17 +574,27 @@ export function ModelHistoryTab({
                                   {hasResultsPayload(row) && (
                                     <div style={{ position: "relative" }}>
                                       <button
-                                        onClick={() => {
-                                          setExportPopoverRowId(exportPopoverRowId === row.id ? null : row.id);
+                                        onClick={async () => {
+                                          if (exportPopoverRowId === row.id) {
+                                            setExportPopoverRowId(null);
+                                            setExportPopoverJson(null);
+                                            return;
+                                          }
+                                          setExportPopoverRowId(row.id);
+                                          setExportPopoverJson(null);
+                                          const json = await getRunResultsJson(row.id);
+                                          setExportPopoverJson(json);
                                         }}
                                         style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
                                       >Export results ▾</button>
                                       {exportPopoverRowId === row.id && (
                                         <>
-                                          <div style={{ position: "fixed", inset: 0, zIndex: 1099 }} onClick={() => setExportPopoverRowId(null)} />
+                                          <div style={{ position: "fixed", inset: 0, zIndex: 1099 }} onClick={() => { setExportPopoverRowId(null); setExportPopoverJson(null); }} />
                                           <div style={{ position: "relative", zIndex: 1100, minWidth: 260 }}>
-                                            {(() => {
-                                              const rowResults = row.results_json || {};
+                                            {!exportPopoverJson ? (
+                                              <div style={{ padding: 10, fontSize: 12, fontFamily: FONT, color: C.muted, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>Loading…</div>
+                                            ) : (() => {
+                                              const rowResults = exportPopoverJson || {};
                                               const expConfig = rowResults._experiment_config || {};
                                               const rowConfig = {
                                                 runLabel: row.run_label || '',
@@ -594,7 +614,7 @@ export function ModelHistoryTab({
                                                   replicationResults={rowReps.map((p, i) => ({ replicationIndex: p.replicationIndex ?? i, seed: p.seed, result: { summary: p.summary || {} }, summary: p.summary || {} }))}
                                                   aggregateStats={rowResults.aggregateStats || {}}
                                                   config={rowConfig}
-                                                  onClose={() => setExportPopoverRowId(null)}
+                                                  onClose={() => { setExportPopoverRowId(null); setExportPopoverJson(null); }}
                                                 />
                                               );
                                             })()}

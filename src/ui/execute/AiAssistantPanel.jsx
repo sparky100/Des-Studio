@@ -7,6 +7,7 @@ import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
 import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt, buildKpis, buildUtilisationMap, correctUtilisationFigures, buildGoalGapsFromResults, correctSuggestionGoalFields } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { getRunResultsJson } from "../../db/models.js";
 import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { MarkdownContent } from "../shared/MarkdownContent.jsx";
@@ -731,17 +732,24 @@ export const AiAssistantPanel = ({
     runPrompt(buildExplainResultsPrompt(analysisModel, exportConfig, mergedResults, ciResults), "explainResults");
   };
 
-  const compareRuns = () => {
+  const compareRuns = async () => {
     if (!selectedRun) return;
+    // Saved runs only carry list-view columns (results_json is fetched lazily,
+    // on demand, rather than pulled for every run in the history list).
+    let savedRunPayload = selectedRun.payload;
+    if (selectedRun.source === "saved" && !savedRunPayload?.results_json) {
+      const resultsJson = await getRunResultsJson(savedRunPayload.id);
+      savedRunPayload = { ...savedRunPayload, results_json: resultsJson };
+    }
     const comparisonPayload = selectedRun.source === "saved"
-      ? makeSavedRunPromptPayload(selectedRun.payload)
+      ? makeSavedRunPromptPayload(savedRunPayload)
       : makeRunPromptPayload(selectedRun.label, selectedRun.payload);
 
     // Resolve comparison model structure: session reps share the current model;
     // saved runs may carry a snapshot in results_json._model_snapshot.
     const modelB = selectedRun.source === "session"
       ? model
-      : (selectedRun.payload?.results_json?._model_snapshot ?? null);
+      : (savedRunPayload?.results_json?._model_snapshot ?? null);
 
     runPrompt(buildComparisonPrompt(
       model.name,

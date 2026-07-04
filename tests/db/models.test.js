@@ -463,6 +463,10 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
           seed: 0,
           avg_service_time: 3,
           replications: 3,
+          // aggregate_stats is a dedicated column (mirrors results_json.aggregateStats)
+          // so the run-history list query can render the CI badge without
+          // selecting the full results_json payload.
+          aggregate_stats: { 'summary.avgWait': { n: 3, mean: 4 } },
           results_json: expect.objectContaining({
             existing: true,
             summary: expect.objectContaining({ avgSvc: 3, avgSojourn: 7 }),
@@ -474,6 +478,38 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
         })
       );
       expect(suppliedResultsJson).toEqual({ existing: true });
+    });
+
+    it('falls back to aggregate_stats derived from resultsJson.aggregateStats when config.aggregateStats is not passed', async () => {
+      supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-3' }, error: null });
+
+      await saveSimulationRun(
+        'm1',
+        'u1',
+        { summary: { total: 1, served: 1, reneged: 0 }, snap: { clock: 10 } },
+        { resultsJson: { aggregateStats: { 'summary.avgWait': { n: 2, mean: 5 } } } }
+      );
+
+      expect(supabase.from('simulation_runs').insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          aggregate_stats: { 'summary.avgWait': { n: 2, mean: 5 } },
+        })
+      );
+    });
+
+    it('stores a null aggregate_stats when no aggregateStats is available', async () => {
+      supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-4' }, error: null });
+
+      await saveSimulationRun(
+        'm1',
+        'u1',
+        { summary: { total: 1, served: 1, reneged: 0 }, snap: { clock: 10 } },
+        {}
+      );
+
+      expect(supabase.from('simulation_runs').insert).toHaveBeenCalledWith(
+        expect.objectContaining({ aggregate_stats: null })
+      );
     });
 
     it('stores a null avg_service_time when avgSvc is missing', async () => {
@@ -601,14 +637,19 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       );
     });
 
-    it('normalizes run history avg service from results_json when scalar is absent', () => {
+    it('normalizes run history rows from real columns, without reading results_json', () => {
+      // results_json is no longer selected by fetchRunHistory (perf: avoid
+      // pulling the full payload for every row in the list) — normalization
+      // must rely solely on the promoted scalar columns and aggregate_stats.
       expect(normalizeRunHistoryRow({
         id: 'run-1',
-        avg_service_time: null,
-        results_json: { runLabel: 'Two servers', summary: { avgSvc: 2.75 } },
+        avg_service_time: 2.75,
+        run_label: 'Two servers',
+        aggregate_stats: { 'summary.avgWait': { mean: 5, halfWidth: 0.5, n: 3 } },
       })).toEqual(expect.objectContaining({
         avg_service_time: 2.75,
         run_label: 'Two servers',
+        aggregate_stats: { 'summary.avgWait': { mean: 5, halfWidth: 0.5, n: 3 } },
       }));
     });
 
@@ -856,38 +897,38 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       await expect(getShareLink('revoked-token')).rejects.toThrow('revoked');
     });
 
-    it('fetchRunHistory falls back to results_json summary when top-level metrics are zeroed', async () => {
+    it('fetchRunHistory does not select or depend on results_json for list rows', async () => {
       supabase.from('simulation_runs').limit.mockResolvedValueOnce({
         data: [{
           id: 'run-1',
           ran_at: '2026-05-09T11:00:00Z',
-          total_arrived: 0,
-          total_served: 0,
-          total_reneged: 0,
-          avg_wait_time: 0,
-          avg_service_time: 0,
-          renege_rate: 0,
+          total_arrived: 100,
+          total_served: 95,
+          total_reneged: 5,
+          avg_wait_time: 8.2,
+          avg_service_time: 1.1,
+          renege_rate: 0.05,
           duration_ms: null,
           replications: 1,
           seed: 42,
           max_simulation_time: 500,
           warmup_period: 0,
+          aggregate_stats: { 'summary.avgWait': { mean: 8.2, halfWidth: 0.4, n: 3 } },
           ai_insights: null,
-          run_label: '',
+          run_label: 'Recovered run',
           tags: [],
           archived: false,
           version_id: null,
           model_versions: null,
-          results_json: {
-            runLabel: 'Recovered run',
-            summary: { total: 100, served: 95, reneged: 5, avgWait: 8.2, avgSvc: 1.1 },
-          },
         }],
         error: null,
       });
 
       const [row] = await fetchRunHistory('model-1');
 
+      expect(supabase.from('simulation_runs').select).toHaveBeenCalledWith(
+        expect.not.stringContaining('results_json')
+      );
       expect(row.run_label).toBe('Recovered run');
       expect(row.total_arrived).toBe(100);
       expect(row.total_served).toBe(95);
@@ -895,6 +936,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(row.avg_wait_time).toBe(8.2);
       expect(row.avg_service_time).toBe(1.1);
       expect(row.renege_rate).toBeCloseTo(0.05);
+      expect(row.aggregate_stats).toEqual({ 'summary.avgWait': { mean: 8.2, halfWidth: 0.4, n: 3 } });
     });
 
     it('revokeShareLink sets revoked_at and guards by userId', async () => {

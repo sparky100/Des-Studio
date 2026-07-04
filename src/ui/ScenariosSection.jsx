@@ -1,6 +1,6 @@
 // ui/ScenariosSection.jsx — Scenario relationships on model Overview tab
 import { useState } from "react";
-import { fetchRunHistory } from "../db/models.js";
+import { fetchRunHistory, getRunResultsJson } from "../db/models.js";
 import { compareScenarios } from "../engine/statistics.js";
 import { ScenarioComparisonTable } from "./shared/ScenarioComparisonTable.jsx";
 import { ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
@@ -57,8 +57,9 @@ export function ScenariosSection({ model, parentModel, childScenarios = [], onOp
         setCompareState(prev => ({ ...prev, [scenario.id]: { error: msg } }));
         return;
       }
-      const repsA = getReps(runA);
-      const repsB = getReps(runB);
+      const [jsonA, jsonB] = await Promise.all([getRunResultsJson(runA.id), getRunResultsJson(runB.id)]);
+      const repsA = getReps({ results_json: jsonA });
+      const repsB = getReps({ results_json: jsonB });
       if (!repsA.length || !repsB.length) {
         setCompareState(prev => ({ ...prev, [scenario.id]: { error: "No replication data found in run history." } }));
         return;

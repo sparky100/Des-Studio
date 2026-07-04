@@ -389,6 +389,7 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     avg_service_time:    s.avgSvc ?? null,
     renege_rate:         s.total ? (s.reneged / s.total) : 0,
     results_json:        resultsJson,
+    aggregate_stats:     config.aggregateStats ?? resultsJson.aggregateStats ?? null,
     duration_ms:         config.durationMs || null,
     run_label:           runLabel || null,
   };
@@ -411,33 +412,23 @@ export async function saveAiInsights(runId, insights) {
   return { ok: true };
 }
 
-function preferSummaryValue(primary, summaryValue) {
-  if (summaryValue == null) return primary ?? null;
-  if (primary == null) return summaryValue;
-  if (primary === 0 && summaryValue !== 0) return summaryValue;
-  return primary;
-}
-
 export function normalizeRunHistoryRow(row = {}) {
-  const summary = row.results_json?.summary || {};
-  const totalArrived = preferSummaryValue(row.total_arrived, summary.total) ?? 0;
-  const totalServed = preferSummaryValue(row.total_served, summary.served) ?? 0;
-  const totalReneged = preferSummaryValue(row.total_reneged, summary.reneged) ?? 0;
-  const avgWaitTime = preferSummaryValue(row.avg_wait_time, summary.avgWait);
-  const avgServiceTime = preferSummaryValue(row.avg_service_time, summary.avgSvc);
+  const totalArrived = row.total_arrived ?? 0;
+  const totalServed = row.total_served ?? 0;
+  const totalReneged = row.total_reneged ?? 0;
   return {
     ...row,
     total_arrived: totalArrived,
     total_served: totalServed,
     total_reneged: totalReneged,
-    avg_wait_time: avgWaitTime,
-    avg_service_time: avgServiceTime,
+    avg_wait_time: row.avg_wait_time,
+    avg_service_time: row.avg_service_time,
     renege_rate: totalArrived ? (totalReneged / totalArrived) : (row.renege_rate ?? 0),
-    // Prefer real column; fall back to JSON for legacy rows
-    run_label: row.run_label || row.results_json?.runLabel || row.results_json?.run_label || "",
+    run_label: row.run_label || "",
     tags: row.tags || [],
     archived: row.archived || false,
     ai_insights: row.ai_insights || null,
+    aggregate_stats: row.aggregate_stats || null,
   };
 }
 
@@ -445,7 +436,7 @@ export async function fetchRunHistory(modelId, filters = {}) {
   const { search, tags, archived = false } = filters;
   let query = supabase
     .from("simulation_runs")
-    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, seed, max_simulation_time, results_json, warmup_period, ai_insights, run_label, tags, archived, version_id, model_versions(version, name)")
+    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, seed, max_simulation_time, aggregate_stats, warmup_period, ai_insights, run_label, tags, archived, version_id, model_versions(version, name)")
     .eq("model_id", modelId)
     .eq("archived", archived)
     .order("ran_at", { ascending: false })
@@ -538,6 +529,20 @@ export async function getRun(runId) {
     summary: rj.summary ?? null,
     results_json: rj,
   };
+}
+
+// Lazy-fetch the full results_json for a single run, on demand — used by
+// history-row actions (compare, LLM bundle export, results export) that
+// need the full payload only when the user actually triggers them, so the
+// run-history list query itself doesn't have to select results_json.
+export async function getRunResultsJson(runId) {
+  const { data, error } = await supabase
+    .from("simulation_runs")
+    .select("id, results_json")
+    .eq("id", runId)
+    .single();
+  if (error) throw error;
+  return data?.results_json || {};
 }
 
 export async function deleteSimulationRun(runId, userId) {
