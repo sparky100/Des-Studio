@@ -658,7 +658,9 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     if (response.intent !== "clarify" && !response.proposedModel) {
       const MAX_MISSING_RETRIES = 2;
       let retryMessages = messages;
+      let attempted = false;
       for (let attempt = 0; attempt < MAX_MISSING_RETRIES && !response.proposedModel; attempt++) {
+        attempted = true;
         setHistory(prev => [...prev, {
           role: "system",
           content: `The assistant's last reply didn't include a model (attempt ${attempt + 1}/${MAX_MISSING_RETRIES}). Asking it to try again...`,
@@ -676,6 +678,9 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
         if (!retryResponse) break;
         response = retryResponse;
         originalSuggestions = response?.suggestions;
+      }
+      if (attempted && response.proposedModel) {
+        setHistory(prev => [...prev, { role: "system", content: "Model built — see the proposal on the right." }]);
       }
     }
 
