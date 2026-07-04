@@ -205,7 +205,7 @@ function getSuggestedQuestions(currentTab, currentView, validation) {
 function getWorkflowMode(currentTab, currentView) {
   if (currentView === 'library') return 'Library';
   
-  const designingTabs = ['visual', 'entities', 'queues', 'bevents', 'cevents', 'state', 'goals'];
+  const designingTabs = ['visual', 'entities', 'queues', 'containers', 'bevents', 'cevents', 'schedules', 'state', 'goals'];
   const runningTabs = ['execute'];
   const analyzingTabs = ['results', 'history', 'validate', 'overview'];
   

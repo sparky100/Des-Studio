@@ -1191,7 +1191,7 @@ Continuous-level resources (tanks, buffers, stock).
 
 > **Container vs state variable — when to use each:** Use a `containerType` when the resource has a physical level that is bounded, shared across entity interactions, and must be tracked continuously (e.g. a fuel tank, a blood inventory, a buffer). Use a **state variable** when you need a simple scalar counter or flag that is set/incremented by events and read in C-event conditions (e.g. a shift active flag, an entity count, a mode toggle). Containers expose `FILL`/`DRAIN` semantics with capacity clamping; state variables expose `SET()` arithmetic with no bounds enforcement.
 
-> **UI note:** Container types are fully editable in the UI via the "Containers" tab (Define sub-nav) — users can add, edit, and remove containers (`id`, `capacity`, `initialLevel`) after import. Containers can also be added and deleted as standalone nodes on the Draw canvas (they don't connect to other nodes, since they don't participate in entity flow). Simulation results carry per-container `containerLevels[id] = {min, avg, max, final}`, surfaced in the Overview tab, the Results tab, and all generated reports (Model Definition, Markdown/HTML results). The AI-facing KPI payload additionally includes `capacity`/`initialLevel` alongside the level stats, so analysis prompts can reason about utilization and overflow/stockout risk.
+> **UI note:** Container types are fully editable in the UI via the "Model Data" tab (Define sub-nav) — users can add, edit, and remove containers (`id`, `capacity`, `initialLevel`) after import. Containers can also be added and deleted as standalone nodes on the Draw canvas (they don't connect to other nodes, since they don't participate in entity flow). Simulation results carry per-container `containerLevels[id] = {min, avg, max, final}`, surfaced in the Overview tab, the Results tab, and all generated reports (Model Definition, Markdown/HTML results). The AI-facing KPI payload additionally includes `capacity`/`initialLevel` alongside the level stats, so analysis prompts can reason about utilization and overflow/stockout risk.
 
 ```json
 {
@@ -1216,7 +1216,7 @@ Continuous-level resources (tanks, buffers, stock).
 
 Named distances between queue pairs, consumed by the `Distance` distribution type (§4) to compute travel time as distance ÷ speed instead of a flat sampled duration.
 
-> **UI note:** Distances are editable in the UI via the "Reference Data" tab (the same tab that holds Container Types), in a dedicated section below the container list — add, edit, and remove distances (`fromQueue`, `toQueue`, `distance`) via two queue-name dropdowns and a number field.
+> **UI note:** Distances are editable in the UI via the "Model Data" tab (the same tab that holds Skills, Container Types, and State Variables), in a dedicated section below the container list — add, edit, and remove distances (`fromQueue`, `toQueue`, `distance`) via two queue-name dropdowns and a number field.
 
 ```json
 {
@@ -1456,7 +1456,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V68 | An entity type's `requiredSequence` has a routing edge (traced through ASSIGN/DELAY/COSEIZE/BATCH/MATCH sources and RELEASE/routing-table/ARRIVE/MATCH/SPLIT destinations, including C-event → scheduled B-event links via `cSchedules`) whose destination queue is an **earlier** stage than its source queue. Likely a routing-table typo or a copy-paste mistake — but also matches an intentional rework/retry loop, so this is a warning, not a blocking error, and can be ignored when the backward routing is deliberate. |
 | V70 | A `Distance`-typed schedule references a `(from, to)` pair not present in `distances[]` (falls back to a duration of 0 at run time), or a `speedAttr` not declared as a numeric attribute on any entity type matching `speedSource` (always falls back to 0). Both are warnings, not blocking errors, since the model may still be under construction. |
 | V-SLOT-1 | `DELAY(QueueName, N)` capacity must be a positive integer. |
-| V-CAL-1 | Calendar conditions (`isWeekday`, `isWeekend`, `hourOfDay`, `dayOfWeek`) are used but the model has no `epoch` set. Calendar variables will return defaults (isWeekday=true, hourOfDay=0). Set a Real-world start date in Model Settings. |
+| V-CAL-1 | Calendar conditions (`isWeekday`, `isWeekend`, `hourOfDay`, `dayOfWeek`) are used but the model has no `epoch` set. Calendar variables will return defaults (isWeekday=true, hourOfDay=0). Set a Real-world start date in the Time & Schedules tab. |
 | V-CAL-2 | `hourOfDay` comparison value is outside the valid range 0-23. |
 | CHK-013 | A queue receives entities (via `ARRIVE`, `RELEASE`, or routing) but no C-event consumes from it — entities will accumulate indefinitely |
 

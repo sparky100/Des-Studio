@@ -205,9 +205,11 @@ const MODEL_HEALTH_TAB_LABELS = {
   ai: "AI Designer",
   entities: "Entity Types",
   queues: "Queues",
+  containers: "Model Data",
   bevents: "B-Events",
   cevents: "C-Events",
-  state: "Model Data",
+  schedules: "Time & Schedules",
+  state: "Data Sources",
   execute: "Run",
   results: "Results",
   history: "Run History",
@@ -929,13 +931,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     {id:"ai",label:"Describe"},
     {id:"entities",label:"Entity Types"},
     {id:"queues",label:"Queues"},
-    {id:"containers",label:"Reference Data"},
+    {id:"containers",label:"Model Data"},
     {id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},
     {id:"sections",label:"Sections"},
-    {id:"schedules",label:"Schedules"},
+    {id:"schedules",label:"Time & Schedules"},
     {id:"goals",label:"Goals"},
-    {id:"state",label:"Model Data"},
+    {id:"state",label:"Data Sources"},
     {id:"validate",label:"Model Health"},
     {id:"execute",label:"Run"},
     {id:"results",label:"Results"},
@@ -1329,6 +1331,15 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="state"&&renderAuthoringShell(
           <div style={{maxWidth:920,margin:"0 auto",display:"flex",flexDirection:"column",gap:14}}>
             <TabErrors tabId="state" validation={validation}/>
+            <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
+          </div>
+        )}
+        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><TabErrors tabId="bevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}} onGoToCEvent={(cEventId)=>{setFocusCEventId(cEventId);setTab("cevents");}} errorFilter={errorFilter?.tab==="bevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
+        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><TabErrors tabId="cevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} skills={model.skills||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}} onCreateBEvent={canEdit?b=>setField("bEvents",[...(model.bEvents||[]),b]):undefined} focusCEventId={focusCEventId} onFocusHandled={()=>setFocusCEventId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} errorFilter={errorFilter?.tab==="cevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
+        {tab==="sections"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><SectionEditor sections={model.sections||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} bEvents={model.bEvents||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("sections",v):()=>{}}/></div>)}
+        {tab==="goals"&&renderAuthoringShell(<div style={{maxWidth:760,margin:"0 auto"}}><GoalsEditor goals={model.goals||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/></div>)}
+        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto",display:"flex",flexDirection:"column",gap:24}}>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div>
               <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Time Configuration</div>
               <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Simulation time unit and real-world calendar alignment</div>
@@ -1362,7 +1373,31 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </span>
               </div>
             </div>
-            {/* ── Skills section ── */}
+          </div>
+          <ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} dataSources={model.dataSources||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
+            const next = { ...model, bEvents: updatedBEvents };
+            setModel(next);
+            try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
+          }} onUpdateBEvents={canEdit ? async (updatedBEvents) => {
+            const next = { ...model, bEvents: updatedBEvents };
+            setModel(next);
+            try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Event link updated and model saved"); } catch { toast.error("Link updated but model save failed — please save manually"); }
+          } : undefined}/>
+        </div>)}
+        {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><TabErrors tabId="queues" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} sections={model.sections||[]} errorFilter={errorFilter?.tab==="queues"?{filteredQueueIds:errorFilter.affectedQueueIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} onChange={canEdit?newQueues=>{
+          const oldQueues = model.queues || [];
+          let updated = { ...model, queues: newQueues };
+          for (let i = 0; i < newQueues.length; i++) {
+            const oldName = oldQueues[i]?.name?.trim();
+            const newName = newQueues[i]?.name?.trim();
+            if (oldName && newName && oldName !== newName) {
+              updated = renameQueue(updated, oldName, newName);
+            }
+          }
+          setWholeModel(updated);
+        }:()=>{}}/></div>)}
+        {tab==="containers"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto",display:"flex",flexDirection:"column",gap:24}}>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div>
               <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Skills</div>
               <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Define capabilities that server types can possess. Used for skill-based routing in ASSIGN and COSEIZE.</div>
@@ -1400,47 +1435,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </div>
               )}
             </div>
-            <StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?newVars=>{
-              const oldVars = model.stateVariables || [];
-              let updated = { ...model, stateVariables: newVars };
-              for (let i = 0; i < newVars.length; i++) {
-                const oldName = oldVars[i]?.name?.trim();
-                const newName = newVars[i]?.name?.trim();
-                if (oldName && newName && oldName !== newName) {
-                  updated = renameStateVariable(updated, oldName, newName);
-                }
-              }
-              setWholeModel(updated);
-            }:()=>{}}/>
-            <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
           </div>
-        )}
-        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><TabErrors tabId="bevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}} onGoToCEvent={(cEventId)=>{setFocusCEventId(cEventId);setTab("cevents");}} errorFilter={errorFilter?.tab==="bevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
-        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><TabErrors tabId="cevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} skills={model.skills||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}} onCreateBEvent={canEdit?b=>setField("bEvents",[...(model.bEvents||[]),b]):undefined} focusCEventId={focusCEventId} onFocusHandled={()=>setFocusCEventId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} errorFilter={errorFilter?.tab==="cevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
-        {tab==="sections"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><SectionEditor sections={model.sections||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} bEvents={model.bEvents||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("sections",v):()=>{}}/></div>)}
-        {tab==="goals"&&renderAuthoringShell(<div style={{maxWidth:760,margin:"0 auto"}}><GoalsEditor goals={model.goals||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/></div>)}
-        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1120,margin:"0 auto"}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} dataSources={model.dataSources||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
-          const next = { ...model, bEvents: updatedBEvents };
-          setModel(next);
-          try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
-        }} onUpdateBEvents={canEdit ? async (updatedBEvents) => {
-          const next = { ...model, bEvents: updatedBEvents };
-          setModel(next);
-          try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Event link updated and model saved"); } catch { toast.error("Link updated but model save failed — please save manually"); }
-        } : undefined}/></div>)}
-        {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><TabErrors tabId="queues" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} sections={model.sections||[]} errorFilter={errorFilter?.tab==="queues"?{filteredQueueIds:errorFilter.affectedQueueIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} onChange={canEdit?newQueues=>{
-          const oldQueues = model.queues || [];
-          let updated = { ...model, queues: newQueues };
-          for (let i = 0; i < newQueues.length; i++) {
-            const oldName = oldQueues[i]?.name?.trim();
-            const newName = newQueues[i]?.name?.trim();
-            if (oldName && newName && oldName !== newName) {
-              updated = renameQueue(updated, oldName, newName);
-            }
-          }
-          setWholeModel(updated);
-        }:()=>{}}/></div>)}
-        {tab==="containers"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto",display:"flex",flexDirection:"column",gap:24}}>
           <ContainerEditor containers={model.containerTypes||[]} onChange={canEdit?newContainers=>{
             const oldContainers = model.containerTypes || [];
             let updated = { ...model, containerTypes: newContainers };
@@ -1455,6 +1450,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           }:()=>{}}/>
           <DistanceRegistryEditor distances={model.distances||[]} queues={model.queues||[]} onChange={canEdit?newDistances=>{
             setWholeModel({ ...model, distances: newDistances });
+          }:()=>{}}/>
+          <StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?newVars=>{
+            const oldVars = model.stateVariables || [];
+            let updated = { ...model, stateVariables: newVars };
+            for (let i = 0; i < newVars.length; i++) {
+              const oldName = oldVars[i]?.name?.trim();
+              const newName = newVars[i]?.name?.trim();
+              if (oldName && newName && oldName !== newName) {
+                updated = renameStateVariable(updated, oldName, newName);
+              }
+            }
+            setWholeModel(updated);
           }:()=>{}}/>
         </div>)}
 
