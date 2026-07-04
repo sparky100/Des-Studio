@@ -12,8 +12,8 @@ const StateVarEditor=({vars,onChange})=>{
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
         <div>
-          <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Model Data</div>
-          <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>State variables for counters, gates, and tracked values</div>
+          <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>State Variables</div>
+          <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Counters, gates, and tracked values</div>
         </div>
         <Btn variant="primary" onClick={add}>+ Add Data Item</Btn>
       </div>
