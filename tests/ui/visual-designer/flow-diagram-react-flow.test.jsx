@@ -193,3 +193,53 @@ describe('FlowDiagramReactFlow — probabilistic-branch % label', () => {
     expect(screen.getByText('70%')).toBeInTheDocument();
   });
 });
+
+// An activity's outgoing route (routing/terminal edge) opens the RouteEdgeDialog
+// on click, which now owns deletion (a "Delete connection" button in "none" mode,
+// or per-branch "x" rows otherwise) — so the inline canvas delete button must not
+// also appear for these edges, to avoid two competing ways to delete on one click.
+// Edges from other sources (e.g. Queue -> Activity "condition" edges) are untouched.
+describe('FlowDiagramReactFlow — delete button suppressed for activity routing/terminal edges', () => {
+  function makeMixedGraph() {
+    return {
+      nodes: [
+        { id: 'queue:queue-1', type: 'queue', refId: 'queue-1', x: 0, y: 0, label: 'Queue 1' },
+        { id: 'activity:activity-1', type: 'activity', refId: 'activity-1', x: 100, y: 0, label: 'Triage' },
+        { id: 'queue:queue-2', type: 'queue', refId: 'queue-2', x: 200, y: 0, label: 'Queue 2' },
+      ],
+      edges: [
+        { id: 'condition-edge', from: 'queue:queue-1', to: 'activity:activity-1', source: 'condition' },
+        { id: 'routing-edge', from: 'activity:activity-1', to: 'queue:queue-2', source: 'routing' },
+      ],
+      sectionPanels: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+    };
+  }
+
+  it('does not show the inline delete button on a selected activity routing edge', () => {
+    render(<FlowDiagramReactFlow graph={makeMixedGraph()} canEdit selectedEdgeId="routing-edge" onDeleteEdge={vi.fn()} />);
+    const routingEdgeEl = screen.getByTestId('react-flow').querySelector('[data-edge-id="routing-edge"]');
+    expect(routingEdgeEl.querySelector('button[title^="Delete connection"]')).toBeNull();
+  });
+
+  it('still shows the inline delete button on a selected non-activity-route edge (e.g. condition)', () => {
+    render(<FlowDiagramReactFlow graph={makeMixedGraph()} canEdit selectedEdgeId="condition-edge" onDeleteEdge={vi.fn()} />);
+    const conditionEdgeEl = screen.getByTestId('react-flow').querySelector('[data-edge-id="condition-edge"]');
+    expect(conditionEdgeEl.querySelector('button[title^="Delete connection"]')).not.toBeNull();
+  });
+
+  it('still suppresses the routing edge delete button even when canEdit is true and it is a terminal (Activity->Sink) edge', () => {
+    const graph = {
+      nodes: [
+        { id: 'activity:activity-1', type: 'activity', refId: 'activity-1', x: 0, y: 0, label: 'Triage' },
+        { id: 'sink:sink-1', type: 'sink', refId: 'sink-1', x: 100, y: 0, label: 'Done' },
+      ],
+      edges: [{ id: 'terminal-edge', from: 'activity:activity-1', to: 'sink:sink-1', source: 'terminal' }],
+      sectionPanels: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+    };
+    render(<FlowDiagramReactFlow graph={graph} canEdit selectedEdgeId="terminal-edge" onDeleteEdge={vi.fn()} />);
+    const terminalEdgeEl = screen.getByTestId('react-flow').querySelector('[data-edge-id="terminal-edge"]');
+    expect(terminalEdgeEl.querySelector('button[title^="Delete connection"]')).toBeNull();
+  });
+});

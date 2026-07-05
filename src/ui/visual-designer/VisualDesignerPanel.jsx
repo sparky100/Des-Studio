@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
-import { deriveGraphFromModel, searchGraphNodes, VISUAL_NODE_TYPES } from "./graph.js";
+import { deriveGraphFromModel, searchGraphNodes, VISUAL_NODE_TYPES, isActivityRouteEdge } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
 import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
@@ -352,7 +352,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     const edge = (graph.edges || []).find(e => e.id === edgeId);
     if (!edge) return false;
     const fromNode = (graph.nodes || []).find(n => n.id === edge.from);
-    return fromNode?.type === VISUAL_NODE_TYPES.ACTIVITY && (edge.source === "routing" || edge.source === "terminal");
+    return isActivityRouteEdge(edge, fromNode?.type);
   };
 
   // Single selection model: node(s) XOR edge — selecting one clears the other.
@@ -623,6 +623,13 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     const nextModel = deleteVisualEdge(model, graph, edgeId);
     applyModel(nextModel);
     setMessage({ state: "success", text: "Connection removed." });
+  };
+  // The route dialog's own "Delete connection" action (for a not-yet-split
+  // single-destination route) — same delete, but also closes the dialog since
+  // its edge no longer exists afterward.
+  const deleteEdgeFromDialog = (edgeId) => {
+    deleteEdge(edgeId);
+    setRouteDialogEdgeId(null);
   };
   kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit, selectedEdgeId, deleteEdge, clearSelection, copySelectedNodes, pasteFromClipboard, duplicateSelectedNodes };
   const resetLayout = () => {
@@ -1297,6 +1304,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
           model={model}
           graph={graph}
           canEdit={canEdit}
+          onDeleteEdge={deleteEdgeFromDialog}
           onApply={applyModel}
           onClose={() => setRouteDialogEdgeId(null)}
         />
