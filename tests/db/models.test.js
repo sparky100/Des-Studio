@@ -1830,6 +1830,43 @@ describe('Sprint 71 — persistence layer', () => {
       });
     });
 
+    it('bEvents[].probabilisticRouting[] round-trips through saveModel unchanged (no normalization)', async () => {
+      const model = {
+        name: 'Probabilistic Routing RT Model',
+        entityTypes: [], stateVariables: [], cEvents: [],
+        queues: [
+          { id: 'q-rt-1', name: 'Queue 2', customerType: 'Customer', discipline: 'FIFO' },
+          { id: 'q-rt-2', name: 'Queue 3', customerType: 'Customer', discipline: 'FIFO' },
+        ],
+        bEvents: [
+          { id: 'be-rt', name: 'Triage Complete', scheduledTime: '9999', effect: 'RELEASE(Server)', schedules: [],
+            probabilisticRouting: [
+              { probability: 0.5, queueName: 'Queue 2' },
+              { probability: 0.5, queueName: 'Queue 3' },
+            ] },
+        ],
+      };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.b_events[0].probabilisticRouting).toEqual([
+        { probability: 0.5, queueName: 'Queue 2' },
+        { probability: 0.5, queueName: 'Queue 3' },
+      ]);
+      expect(insertArg.model_json.bEvents[0].probabilisticRouting).toEqual([
+        { probability: 0.5, queueName: 'Queue 2' },
+        { probability: 0.5, queueName: 'Queue 3' },
+      ]);
+    });
+
     it('a string cEvents[].cSchedules[].when is normalized to a predicate object in the insert payload', async () => {
       const model = {
         name: 'When String RT Model',

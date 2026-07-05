@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, searchGraphNodes, VISUAL_NODE_TYPES } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
-import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, updateProbabilisticBranchProbability, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
+import { RouteEdgeDialog } from "./RouteEdgeDialog.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { renameEntityType } from "../../engine/queue-refs.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -247,6 +248,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState([]);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
+  const [routeDialogEdgeId, setRouteDialogEdgeId] = useState(null);
   const [message, setMessage] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [selectedPatternId, setSelectedPatternId] = useState(VISUAL_PATTERNS[0]?.id || "");
@@ -338,11 +340,25 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     setSelectedNodeIds([]);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
+    setRouteDialogEdgeId(null);
+  };
+
+  // A single click on an Activity's outgoing routing/terminal edge opens the full
+  // route dialog (conditions/probabilities) — including a plain, not-yet-consolidated
+  // edge, so a user can proactively switch it into routing mode without first having
+  // to draw a second connection. Other edge kinds (arrival, condition, overflow) just
+  // select, matching today's behavior.
+  const isRoutingEdge = (edgeId) => {
+    const edge = (graph.edges || []).find(e => e.id === edgeId);
+    if (!edge) return false;
+    const fromNode = (graph.nodes || []).find(n => n.id === edge.from);
+    return fromNode?.type === VISUAL_NODE_TYPES.ACTIVITY && (edge.source === "routing" || edge.source === "terminal");
   };
 
   // Single selection model: node(s) XOR edge — selecting one clears the other.
   const selectEdge = (edgeId) => {
     setSelectedEdgeId(edgeId);
+    setRouteDialogEdgeId(edgeId && isRoutingEdge(edgeId) ? edgeId : null);
     if (edgeId) {
       setSelectedNodeIds([]);
       setSelectedNodeId(null);
@@ -578,6 +594,17 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
       return;
     }
     applyModel(result.model);
+    if (result.consolidatedBEventId) {
+      // A 2nd+ route was just added to an existing completion B-event (split evenly by
+      // default) — open the route dialog on the new branch straight away so the user can
+      // fine-tune the split (or switch to conditional routing) right where they left off.
+      const nextGraph = deriveGraphFromModel(result.model);
+      const newEdge = (nextGraph.edges || []).find(e => e.bEventId === result.consolidatedBEventId && e.to === to);
+      if (newEdge) {
+        setSelectedEdgeId(newEdge.id);
+        setRouteDialogEdgeId(newEdge.id);
+      }
+    }
     if (result.validation.loop) {
       setMessage({ state: "success", text: `Loop back-edge created — configure rework limit in the B-Event editor (max ${result.validation.maxLoopCount || 3}x).` });
     } else {
@@ -596,10 +623,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     const nextModel = deleteVisualEdge(model, graph, edgeId);
     applyModel(nextModel);
     setMessage({ state: "success", text: "Connection removed." });
-  };
-  const editProbability = (edge, probability) => {
-    if (!canEdit) return;
-    applyModel(updateProbabilisticBranchProbability(model, edge, probability));
   };
   kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit, selectedEdgeId, deleteEdge, clearSelection, copySelectedNodes, pasteFromClipboard, duplicateSelectedNodes };
   const resetLayout = () => {
@@ -1160,7 +1183,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               onNodeSelectionChange={syncSelection}
               onEdgeSelect={selectEdge}
               onDeleteEdge={canEdit ? deleteEdge : null}
-              onEditProbability={editProbability}
               onNodeMove={moveNode}
               onNodesMove={moveNodes}
               onViewportChange={changeViewport}
@@ -1267,6 +1289,16 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
           dependents={pendingDelete.dependents}
           onConfirm={() => doDelete(pendingDelete.node, pendingDelete.nodes)}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+      {routeDialogEdgeId && (
+        <RouteEdgeDialog
+          edgeId={routeDialogEdgeId}
+          model={model}
+          graph={graph}
+          canEdit={canEdit}
+          onApply={applyModel}
+          onClose={() => setRouteDialogEdgeId(null)}
         />
       )}
     </div>

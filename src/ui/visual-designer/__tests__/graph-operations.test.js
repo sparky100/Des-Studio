@@ -1,6 +1,10 @@
 // Tests for graph-operations fixes: cSchedules append, auto-link guard, deleteVisualNode overflow cleanup
 import { describe, test, expect } from 'vitest';
-import { connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes, updateProbabilisticBranchProbability } from '../graph-operations.js';
+import {
+  connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes, deleteVisualEdge,
+  updateProbabilisticBranchProbability, updateProbabilisticBranchQueueTarget, updateConditionalBranch,
+  updateDefaultQueueName, addBlankRoutingBranch, removeRoutingBranch, applyBEventRoutingMode,
+} from '../graph-operations.js';
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from '../graph.js';
 
 // Model with Triage activity already routing to Queue 2.
@@ -43,17 +47,32 @@ function makeModel() {
   };
 }
 
-describe('connectVisualNodes — ACTIVITY→QUEUE cSchedules append', () => {
-  test('appends new cSchedule, preserving the existing route', () => {
+describe('connectVisualNodes — ACTIVITY→QUEUE consolidation (F-consolidation fix)', () => {
+  // Previously, a 2nd connection from the same activity spawned a second,
+  // independently-firing completion B-event — since cSchedules entries with no
+  // `when` all fire (engine "legacy behaviour"), the entity was routed down BOTH
+  // branches instead of choosing one. These tests assert the fix: the 2nd+
+  // connection is consolidated onto the SAME shared B-event via an evenly-split
+  // probabilisticRouting array, and cSchedules stays at exactly one entry.
+  test('consolidates onto the existing completion B-event with an even split, instead of spawning a second B-event', () => {
     const model = makeModel();
     const graph = deriveGraphFromModel(model);
 
     const result = connectVisualNodes(model, graph, 'activity:activity-1', 'queue:queue-3');
     const cEvent = result.model.cEvents.find(e => e.id === 'activity-1');
 
-    expect(cEvent.cSchedules).toHaveLength(2);
-    expect(cEvent.cSchedules.some(cs => cs.eventId === 'route-activity-1-queue-2')).toBe(true);
-    expect(cEvent.cSchedules.some(cs => cs.eventId === 'route-activity-1-queue-3')).toBe(true);
+    // Still exactly one cSchedule — the shared completion B-event is reused, not duplicated.
+    expect(cEvent.cSchedules).toHaveLength(1);
+    expect(cEvent.cSchedules[0].eventId).toBe('route-activity-1-queue-2');
+    expect(result.model.bEvents.find(e => e.id === 'route-activity-1-queue-3')).toBeUndefined();
+
+    const bEvent = result.model.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent.probabilisticRouting).toEqual([
+      { probability: 0.5, queueName: 'Queue 2' },
+      { probability: 0.5, queueName: 'Queue 3' },
+    ]);
+    expect(bEvent.effect).toBe('RELEASE(Server)');
+    expect(result.consolidatedBEventId).toBe('route-activity-1-queue-2');
   });
 
   test('creates the first cSchedule when none exist', () => {
@@ -66,6 +85,7 @@ describe('connectVisualNodes — ACTIVITY→QUEUE cSchedules append', () => {
 
     expect(cEvent.cSchedules).toHaveLength(1);
     expect(cEvent.cSchedules[0].eventId).toBe('route-activity-1-queue-3');
+    expect(result.consolidatedBEventId).toBeNull();
   });
 
   test('does not duplicate when connecting to the same queue a second time', () => {
@@ -77,19 +97,167 @@ describe('connectVisualNodes — ACTIVITY→QUEUE cSchedules append', () => {
     const second = connectVisualNodes(first.model, graph2, 'activity:activity-1', 'queue:queue-3');
 
     const cEvent = second.model.cEvents.find(e => e.id === 'activity-1');
-    const matches = cEvent.cSchedules.filter(cs => cs.eventId === 'route-activity-1-queue-3');
-    expect(matches).toHaveLength(1);
+    expect(cEvent.cSchedules).toHaveLength(1);
+    const bEvent = second.model.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent.probabilisticRouting).toHaveLength(2);
+    // Re-connecting to an already-covered target is a no-op — nothing to consolidate.
+    expect(second.consolidatedBEventId).toBeNull();
   });
 
-  test('also creates the RELEASE b-event targeting the new queue', () => {
+  test('a 3rd connection rebalances every branch to an even 1/3 split', () => {
     const model = makeModel();
+    model.queues.push({ id: 'queue-4', name: 'Queue 4', customerType: 'Customer', discipline: 'FIFO' });
+    let graph = deriveGraphFromModel(model);
+
+    let result = connectVisualNodes(model, graph, 'activity:activity-1', 'queue:queue-3');
+    graph = deriveGraphFromModel(result.model);
+    result = connectVisualNodes(result.model, graph, 'activity:activity-1', 'queue:queue-4');
+
+    const bEvent = result.model.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent.probabilisticRouting).toHaveLength(3);
+    const total = bEvent.probabilisticRouting.reduce((s, b) => s + b.probability, 0);
+    expect(total).toBeCloseTo(1, 4);
+    bEvent.probabilisticRouting.forEach(b => expect(b.probability).toBeCloseTo(1 / 3, 3));
+  });
+
+  test('blocks consolidation when the activity has attribute-conditional (`when`) cSchedules, rather than guessing', () => {
+    const model = makeModel();
+    model.cEvents[0] = {
+      ...model.cEvents[0],
+      cSchedules: [
+        { eventId: 'route-activity-1-queue-2', when: { variable: 'Entity.severity', operator: '>', value: '5' }, dist: 'Fixed', distParams: { value: '1' } },
+        { eventId: 'route-activity-1-queue-2', dist: 'Fixed', distParams: { value: '1' } },
+      ],
+    };
     const graph = deriveGraphFromModel(model);
 
     const result = connectVisualNodes(model, graph, 'activity:activity-1', 'queue:queue-3');
-    const releaseEvent = result.model.bEvents.find(e => e.id === 'route-activity-1-queue-3');
 
-    expect(releaseEvent).toBeDefined();
-    expect(releaseEvent.effect).toBe('RELEASE(Server, Queue 3)');
+    expect(result.validation.ok).toBe(false);
+    expect(result.model).toBe(model);
+  });
+
+  test('a loop-back connection creates its own B-event, structurally separate from the forward route', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+
+    // Queue 1 -> Activity 1 already exists (ASSIGN(Queue 1, Server)); Activity 1 -> Queue 1 is a back-edge.
+    const result = connectVisualNodes(model, graph, 'activity:activity-1', 'queue:queue-1');
+    expect(result.validation.ok).toBe(true);
+    expect(result.validation.loop).toBe(true);
+
+    // Forward route is untouched — no routing array, still a plain single-target RELEASE.
+    const forward = result.model.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(forward.probabilisticRouting).toBeUndefined();
+    expect(forward.effect).toBe('RELEASE(Server, Queue 2)');
+
+    // A separate loop-back B-event was created, not merged into the forward one.
+    const loopBEvent = result.model.bEvents.find(e => e.id === 'route-activity-1-queue-1-loop');
+    expect(loopBEvent).toBeDefined();
+    expect(loopBEvent.loopConfig).toBeDefined();
+
+    const cEvent = result.model.cEvents.find(e => e.id === 'activity-1');
+    expect(cEvent.cSchedules).toHaveLength(2);
+  });
+});
+
+describe('connectVisualNodes — ACTIVITY→SINK consolidation', () => {
+  function makeModelWithSink() {
+    const model = makeModel();
+    model.bEvents.push({ id: 'sink-1', name: 'Completion 1', scheduledTime: '9999', effect: 'COMPLETE()', schedules: [] });
+    return model;
+  }
+
+  test('first Activity→Sink connection schedules the sink bEvent directly (unchanged single-branch behavior)', () => {
+    const model = makeModelWithSink();
+    model.cEvents[0] = { ...model.cEvents[0], cSchedules: [] };
+    const graph = deriveGraphFromModel(model);
+    const sinkNode = graph.nodes.find(n => n.refId === 'sink-1');
+
+    const result = connectVisualNodes(model, graph, 'activity:activity-1', sinkNode.id);
+    const cEvent = result.model.cEvents.find(e => e.id === 'activity-1');
+    expect(cEvent.cSchedules).toHaveLength(1);
+    expect(cEvent.cSchedules[0].eventId).toBe('sink-1');
+  });
+
+  test('a 2nd connection to a Sink (after an existing Queue route) adds a null-exit branch to the shared B-event', () => {
+    const model = makeModelWithSink();
+    const graph = deriveGraphFromModel(model);
+    const sinkNode = graph.nodes.find(n => n.refId === 'sink-1');
+
+    const result = connectVisualNodes(model, graph, 'activity:activity-1', sinkNode.id);
+
+    const cEvent = result.model.cEvents.find(e => e.id === 'activity-1');
+    expect(cEvent.cSchedules).toHaveLength(1);
+    expect(cEvent.cSchedules[0].eventId).toBe('route-activity-1-queue-2');
+
+    const bEvent = result.model.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent.probabilisticRouting).toEqual([
+      { probability: 0.5, queueName: 'Queue 2' },
+      { probability: 0.5, queueName: null },
+    ]);
+  });
+});
+
+describe('connectVisualNodes — DELAY-mode activity consolidation', () => {
+  function makeDelayModel() {
+    const model = makeModel();
+    model.cEvents[0] = {
+      ...model.cEvents[0],
+      effect: ['DELAY(Queue 1)'],
+      cSchedules: [{ eventId: 'delay-complete-1', dist: 'Fixed', distParams: { value: '1' }, useEntityCtx: true }],
+    };
+    model.bEvents = model.bEvents.filter(be => be.id !== 'route-activity-1-queue-2');
+    model.bEvents.push({ id: 'delay-complete-1', name: 'Delay Complete', scheduledTime: '9999', effect: [], schedules: [] });
+    return model;
+  }
+
+  test('a 2nd connection adds a branch to the existing DELAY completion B-event (no RELEASE effect)', () => {
+    const model = makeDelayModel();
+    const graph = deriveGraphFromModel(model);
+
+    const result = connectVisualNodes(model, graph, 'activity:activity-1', 'queue:queue-3');
+
+    const cEvent = result.model.cEvents.find(e => e.id === 'activity-1');
+    expect(cEvent.cSchedules).toHaveLength(1);
+
+    const bEvent = result.model.bEvents.find(e => e.id === 'delay-complete-1');
+    expect(bEvent.probabilisticRouting).toEqual([
+      { probability: 0.5, queueName: null },
+      { probability: 0.5, queueName: 'Queue 3' },
+    ]);
+  });
+});
+
+describe('deleteVisualEdge — removing one branch from a consolidated route', () => {
+  test('removes just the clicked branch, keeping the shared B-event and its cSchedule for the remaining branch', () => {
+    const model = makeProbabilisticModel();
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 1);
+
+    const next = deleteVisualEdge(model, graph, edge.id);
+
+    const bEvent = next.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent).toBeDefined();
+    expect(bEvent.probabilisticRouting).toEqual([{ probability: 0.7, queueName: 'Queue 2' }]);
+
+    const cEvent = next.cEvents.find(e => e.id === 'activity-1');
+    expect(cEvent.cSchedules).toHaveLength(1);
+    expect(cEvent.cSchedules[0].eventId).toBe('route-activity-1-queue-2');
+  });
+
+  test('removing the last remaining branch deletes the B-event and its cSchedule', () => {
+    const model = makeModel();
+    model.bEvents = model.bEvents.map(be =>
+      be.id === 'route-activity-1-queue-2' ? { ...be, probabilisticRouting: [{ probability: 1, queueName: 'Queue 2' }] } : be
+    );
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.bEventId === 'route-activity-1-queue-2' && e.branchIndex === 0);
+
+    const next = deleteVisualEdge(model, graph, edge.id);
+
+    expect(next.bEvents.find(e => e.id === 'route-activity-1-queue-2')).toBeUndefined();
+    expect(next.cEvents.find(e => e.id === 'activity-1').cSchedules).toHaveLength(0);
   });
 });
 
@@ -462,5 +630,60 @@ describe('updateProbabilisticBranchProbability', () => {
 
     const next = updateProbabilisticBranchProbability(model, conditionEdge, 0.9);
     expect(next).toBe(model);
+  });
+});
+
+describe('RouteEdgeDialog support functions', () => {
+  test('updateProbabilisticBranchQueueTarget retargets only the specified branch', () => {
+    const model = makeProbabilisticModel();
+    const next = updateProbabilisticBranchQueueTarget(model, { bEventId: 'route-activity-1-queue-2', branchIndex: 1 }, null);
+    const bEvent = next.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent.probabilisticRouting[0].queueName).toBe('Queue 2');
+    expect(bEvent.probabilisticRouting[1].queueName).toBeNull();
+  });
+
+  test('addBlankRoutingBranch appends a zero-probability blank branch in probabilistic mode', () => {
+    const model = makeProbabilisticModel();
+    const next = addBlankRoutingBranch(model, 'route-activity-1-queue-2', 'probabilistic');
+    const bEvent = next.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent.probabilisticRouting).toHaveLength(3);
+    expect(bEvent.probabilisticRouting[2]).toEqual({ probability: 0, queueName: '' });
+  });
+
+  test('removeRoutingBranch removes one branch, keeping the B-event when others remain', () => {
+    const model = makeProbabilisticModel();
+    const next = removeRoutingBranch(model, 'route-activity-1-queue-2', 1);
+    const bEvent = next.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent.probabilisticRouting).toEqual([{ probability: 0.7, queueName: 'Queue 2' }]);
+  });
+
+  test('removeRoutingBranch deletes the B-event and its cSchedule once the last branch is removed', () => {
+    const model = makeModel();
+    model.bEvents = model.bEvents.map(be =>
+      be.id === 'route-activity-1-queue-2' ? { ...be, probabilisticRouting: [{ probability: 1, queueName: 'Queue 2' }] } : be
+    );
+    const next = removeRoutingBranch(model, 'route-activity-1-queue-2', 0);
+    expect(next.bEvents.find(e => e.id === 'route-activity-1-queue-2')).toBeUndefined();
+    expect(next.cEvents.find(e => e.id === 'activity-1').cSchedules).toHaveLength(0);
+  });
+
+  test('applyBEventRoutingMode switches to conditional, seeding one blank routing row and stripping the RELEASE queue arg', () => {
+    const model = makeModel();
+    const next = applyBEventRoutingMode(model, 'route-activity-1-queue-2', 'conditional');
+    const bEvent = next.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent.routing).toEqual([{ condition: { variable: '', operator: '==', value: '' }, queueName: '' }]);
+    expect(bEvent.defaultQueueName).toBe('');
+    expect(bEvent.effect).toBe('RELEASE(Server)');
+  });
+
+  test('updateConditionalBranch and updateDefaultQueueName update the right fields', () => {
+    const model = applyBEventRoutingMode(makeModel(), 'route-activity-1-queue-2', 'conditional');
+    const withCondition = updateConditionalBranch(model, 'route-activity-1-queue-2', 0, { queueName: 'Queue 3' });
+    const bEvent1 = withCondition.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent1.routing[0].queueName).toBe('Queue 3');
+
+    const withDefault = updateDefaultQueueName(withCondition, 'route-activity-1-queue-2', null);
+    const bEvent2 = withDefault.bEvents.find(e => e.id === 'route-activity-1-queue-2');
+    expect(bEvent2.defaultQueueName).toBeNull();
   });
 });

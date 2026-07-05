@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FlowDiagramReactFlow } from '../../../src/ui/visual-designer/FlowDiagramReactFlow.jsx';
 
@@ -169,55 +169,26 @@ function makeProbabilisticGraph() {
   };
 }
 
-describe('FlowDiagramReactFlow — inline probabilistic-branch % editor', () => {
-  it('shows the static % label, not an input, when the edge is unselected', () => {
-    render(<FlowDiagramReactFlow graph={makeProbabilisticGraph()} canEdit onEditProbability={vi.fn()} />);
+// The inline "%" quick-editor (Sprint 89) was replaced by RouteEdgeDialog — a single
+// click on a routing/terminal edge now opens the full dialog (see VisualDesignerPanel's
+// selectEdge/RouteEdgeDialog) instead of an inline input rendered by this component.
+// FlowDiagramReactFlow's job for a probabilistic branch edge is now just to render the
+// static "NN%" label, whether or not the edge is selected.
+describe('FlowDiagramReactFlow — probabilistic-branch % label', () => {
+  it('shows the static % label when the edge is unselected', () => {
+    render(<FlowDiagramReactFlow graph={makeProbabilisticGraph()} canEdit />);
     expect(screen.getByText('70%')).toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
   });
 
-  it('shows an editable number input pre-filled with the percentage when the edge is selected', () => {
-    render(
-      <FlowDiagramReactFlow
-        graph={makeProbabilisticGraph()}
-        canEdit
-        selectedEdgeId="edge-1"
-        onEditProbability={vi.fn()}
-      />
-    );
-    const input = screen.getByRole('spinbutton');
-    expect(input).toHaveValue(70);
+  it('still shows the static % label (no inline input) when the edge is selected', () => {
+    render(<FlowDiagramReactFlow graph={makeProbabilisticGraph()} canEdit selectedEdgeId="edge-1" />);
+    expect(screen.getByText('70%')).toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
   });
 
-  it('commits the new probability (as a 0–1 fraction) on blur', () => {
-    const onEditProbability = vi.fn();
-    render(
-      <FlowDiagramReactFlow
-        graph={makeProbabilisticGraph()}
-        canEdit
-        selectedEdgeId="edge-1"
-        onEditProbability={onEditProbability}
-      />
-    );
-    const input = screen.getByRole('spinbutton');
-    fireEvent.change(input, { target: { value: '45' } });
-    fireEvent.blur(input);
-
-    expect(onEditProbability).toHaveBeenCalledTimes(1);
-    const [edgeArg, probabilityArg] = onEditProbability.mock.calls[0];
-    expect(edgeArg.id).toBe('edge-1');
-    expect(probabilityArg).toBeCloseTo(0.45);
-  });
-
-  it('does not show the editable input when canEdit is false, even if selected', () => {
-    render(
-      <FlowDiagramReactFlow
-        graph={makeProbabilisticGraph()}
-        canEdit={false}
-        selectedEdgeId="edge-1"
-        onEditProbability={vi.fn()}
-      />
-    );
+  it('never shows an inline input when canEdit is false, even if selected', () => {
+    render(<FlowDiagramReactFlow graph={makeProbabilisticGraph()} canEdit={false} selectedEdgeId="edge-1" />);
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
     expect(screen.getByText('70%')).toBeInTheDocument();
   });

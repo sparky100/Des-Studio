@@ -79,7 +79,7 @@ function withLayout(nodes, edges, graph = {}) {
   });
 }
 
-function conditionLabel(c, depth = 0) {
+export function conditionLabel(c, depth = 0) {
   if (!c) return "condition";
   if (typeof c === "string") return c;
   if (typeof c !== "object") return "condition";
@@ -264,10 +264,10 @@ export function deriveGraphFromModel(model = {}) {
               if (!branch.queueName) {
                 // null queueName = exit system → derive edge to synthetic Sink
                 const sinkId = getExitSinkId();
-                edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: condLabel });
+                edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: condLabel, bEventId: bEvent.id, branchIndex: branchIdx });
               } else {
                 const nextQueueId = queueNodeByName.get(norm(branch.queueName));
-                if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: condLabel });
+                if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: condLabel, bEventId: bEvent.id, branchIndex: branchIdx });
               }
             });
             if (bEvent.defaultQueueName) {
@@ -348,10 +348,10 @@ export function deriveGraphFromModel(model = {}) {
             const condLabel = conditionLabel(branch.condition);
             if (!branch.queueName) {
               const sinkId = getExitSinkId();
-              edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-dr-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: condLabel });
+              edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-dr-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: condLabel, bEventId: bEvent.id, branchIndex: branchIdx });
             } else {
               const nextQueueId = queueNodeByName.get(norm(branch.queueName));
-              if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-dr-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: condLabel });
+              if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-dr-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: condLabel, bEventId: bEvent.id, branchIndex: branchIdx });
             }
           });
           if (bEvent.defaultQueueName) {
