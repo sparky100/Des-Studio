@@ -38,7 +38,7 @@ function resolveBEventId(model, graph, edge) {
   return schedules[0]?.eventId ?? null;
 }
 
-export function RouteEdgeDialog({ edgeId, model, graph, canEdit, onApply, onClose }) {
+export function RouteEdgeDialog({ edgeId, model, graph, canEdit, onApply, onClose, onDeleteEdge }) {
   const { C, FONT } = useTheme();
   const edge = (graph.edges || []).find(e => e.id === edgeId);
   const bEventId = edge ? resolveBEventId(model, graph, edge) : null;
@@ -193,7 +193,10 @@ export function RouteEdgeDialog({ edgeId, model, graph, canEdit, onApply, onClos
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", justifyContent: mode === "none" ? "space-between" : "flex-end" }}>
+          {mode === "none" && canEdit && (
+            <Btn small variant="danger" onClick={() => onDeleteEdge?.(edgeId)}>Delete connection</Btn>
+          )}
           <Btn small variant="primary" onClick={onClose}>Done</Btn>
         </div>
       </div>

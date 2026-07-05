@@ -22,6 +22,16 @@ export const VISUAL_NODE_TYPES = {
   CONTAINER: "container",
 };
 
+// True for an edge representing one of an Activity's outgoing routes (a plain
+// single-destination completion, or one branch of a routing/probabilisticRouting
+// array) — the kind of edge whose conditions/probability the RouteEdgeDialog can
+// edit. Shared by FlowDiagramReactFlow (to suppress the inline delete button,
+// since the dialog owns deletion for these) and VisualDesignerPanel (to decide
+// whether a click should open the dialog) so the two checks can't drift apart.
+export function isActivityRouteEdge(edge, fromNodeType) {
+  return fromNodeType === VISUAL_NODE_TYPES.ACTIVITY && (edge?.source === "routing" || edge?.source === "terminal");
+}
+
 function norm(value = "") {
   return clean(value).toLowerCase();
 }

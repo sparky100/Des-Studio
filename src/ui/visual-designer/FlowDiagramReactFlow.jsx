@@ -15,6 +15,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
+import { isActivityRouteEdge } from "./graph.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useFitNodeRef } from "../shared/useFitNodeRef.js";
 import { SectionPanelNode } from "./SectionPanelNode.jsx";
@@ -467,12 +468,17 @@ export function FlowDiagramReactFlow({
 
   const edges = useMemo(() => {
     return (graph.edges || []).map(e => {
+      // An activity's outgoing route (single-destination or one branch of a
+      // routing/probabilisticRouting array) opens the RouteEdgeDialog on click —
+      // deletion for these is handled inside that dialog instead of the inline
+      // canvas button, so the two affordances never compete on the same click.
+      const opensRouteDialog = isActivityRouteEdge(e, nodeById.get(e.from)?.type);
       const flowEdge = {
         ...toFlowEdge(e, C, FONT),
         selected: selectedEdgeId === e.id,
         interactionWidth: 20,
         data: {
-          onDelete: canEdit ? onDeleteEdge : null,
+          onDelete: canEdit && !opensRouteDialog ? onDeleteEdge : null,
         },
       };
       if (showSections && focusedSectionId != null) {
