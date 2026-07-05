@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker, SectionFilterTabs, filterBySection, normTypeName } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { setBEventRoutingMode } from "../visual-designer/graph-operations.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
@@ -156,15 +157,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const routingEntityAttrs=entityTypes.filter(et=>et.role!=="server").flatMap(et=>(et.attrDefs||et.attrs||[]).map(a=>`Entity.${a.name||a}`)).filter(Boolean);
         const setRoutingMode=(mode)=>{
           const n=[...events];
-          const{routing:_r,defaultQueueName:_d,probabilisticRouting:_pr,...rest}=n[i];
-          const cleanEff=effects.map(eff=>typeof eff==='string'?eff
-            .replace(/^(RELEASE\s*\([^,)]+),\s*[^)]+\)/i,'$1)')
-            .replace(/^(RELEASE_COSEIZED\(\s*\[[^\]]+\]\s*),\s*[^)]+\)/i,'$1)'):eff);
-          // Seed one empty row (mirroring the probabilistic branch below) — an empty routing[]
-          // array reads as hasRouting=false, which would immediately fall back to "none".
-          if(mode==="conditional") n[i]={...rest,routing:[{condition:{variable:'',operator:'==',value:''},queueName:''}],defaultQueueName:'',effect:cleanEff};
-          else if(mode==="probabilistic") n[i]={...rest,probabilisticRouting:[{probability:1,queueName:''}],effect:cleanEff};
-          else n[i]={...rest};
+          n[i]=setBEventRoutingMode(n[i],mode);
           onChange(n);
         };
         const addRoutingRow=()=>{const n=[...events];const r=[...(n[i].routing||[])];r.push({condition:{variable:'',operator:'==',value:''},queueName:''});n[i]={...n[i],routing:r};onChange(n);};

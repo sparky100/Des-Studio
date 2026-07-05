@@ -30,3 +30,36 @@ export function macroCalls(effect) {
     args: match[2].split(",").map(arg => arg.trim()).filter(Boolean),
   }));
 }
+
+// Extracts the target queue name from a bare `RELEASE(Server, Queue)` /
+// `RELEASE_COSEIZED([Type1, Type2, ...], Queue)` effect — the "implicit" single
+// destination a completion B-event routes to before it gains a routing/
+// probabilisticRouting array. RELEASE_COSEIZED's bracketed type list contains
+// commas, so a naive split breaks it apart — handled here the same way
+// visual-designer/graph.js's edge derivation already does. Returns null when no
+// RELEASE-style call with a queue argument is present (e.g. DELAY completions,
+// or effects that already route via `routing`/`probabilisticRouting`).
+export function extractReleaseTarget(effect) {
+  const effects = Array.isArray(effect) ? effect : [effect];
+  for (const eff of effects) {
+    const text = typeof eff === "string" ? eff : effectText(eff);
+    const coseized = text.match(/RELEASE_COSEIZED\s*\(\s*\[[^\]]+\]\s*,\s*([^,)]+)\)/i);
+    if (coseized) return coseized[1].trim();
+    const release = text.match(/RELEASE\s*\(\s*[^,)]+\s*,\s*([^,)]+)\)/i);
+    if (release) return release[1].trim();
+  }
+  return null;
+}
+
+// Strips the trailing queue argument out of a `RELEASE(...)`/`RELEASE_COSEIZED(...)`
+// effect once its destination is superseded by a routing/probabilisticRouting array —
+// mirrors BEventEditor's `setRoutingMode` cleanup exactly so both editors produce the
+// same stripped effect string instead of drifting apart.
+export function stripReleaseTarget(effect) {
+  const stripOne = (eff) => (typeof eff === "string"
+    ? eff
+        .replace(/^(RELEASE\s*\([^,)]+),\s*[^)]+\)/i, "$1)")
+        .replace(/^(RELEASE_COSEIZED\(\s*\[[^\]]+\]\s*),\s*[^)]+\)/i, "$1)")
+    : eff);
+  return Array.isArray(effect) ? effect.map(stripOne) : stripOne(effect);
+}

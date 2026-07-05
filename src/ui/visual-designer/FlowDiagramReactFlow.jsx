@@ -180,65 +180,10 @@ function DesEdge({
   // Delete button appears at midpoint when edge is selected
   const btnX = labelX;
   const btnY = labelY + yOffset + (label ? 18 : 0);
-  const editingProbability = selected && data?.onEditProbability;
-  const [draftPercent, setDraftPercent] = useState(() => Math.round((data?.probability ?? 0) * 100));
-  useEffect(() => {
-    if (editingProbability) setDraftPercent(Math.round((data?.probability ?? 0) * 100));
-  }, [editingProbability, data?.probability]);
-  const commitProbability = () => {
-    const parsed = parseFloat(draftPercent);
-    data.onEditProbability(Number.isFinite(parsed) ? parsed / 100 : 0);
-  };
   return (
     <>
       <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={edgeStyle} interactionWidth={interactionWidth} />
-      {editingProbability ? (
-        <EdgeLabelRenderer>
-          <span
-            className="nodrag nopan"
-            title="Edit this branch's probability (%)"
-            style={{
-              position: "absolute",
-              pointerEvents: "all",
-              transform: `translate(-50%,-50%) translate(${labelX}px,${labelY + yOffset}px)`,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 2,
-              background: labelBgStyle?.fill ?? C.bg,
-              border: `1px solid ${C.accent}`,
-              borderRadius: 3,
-              padding: "1px 4px",
-            }}
-          >
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={draftPercent}
-              onChange={e => setDraftPercent(e.target.value)}
-              onBlur={commitProbability}
-              onKeyDown={e => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") {
-                  setDraftPercent(Math.round((data?.probability ?? 0) * 100));
-                  e.currentTarget.blur();
-                }
-              }}
-              style={{
-                width: 38,
-                background: "transparent",
-                border: "none",
-                color: labelStyle?.fill,
-                fontFamily: labelStyle?.fontFamily,
-                fontSize: labelStyle?.fontSize,
-                fontWeight: labelStyle?.fontWeight,
-                textAlign: "right",
-              }}
-            />
-            <span style={{ color: labelStyle?.fill, fontFamily: labelStyle?.fontFamily, fontSize: labelStyle?.fontSize }}>%</span>
-          </span>
-        </EdgeLabelRenderer>
-      ) : label && (
+      {label && (
         <EdgeLabelRenderer>
           <span
             className="nodrag nopan"
@@ -406,7 +351,7 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
             padding: "5px 12px",
             whiteSpace: "nowrap",
           }}>
-            Connect: drag from the <strong>●</strong> handle on a node's right edge to another node's left handle &nbsp;·&nbsp; Click a connection to select it, then press Del or click the <strong style={{color:"#e55"}}>×</strong> button to delete &nbsp;·&nbsp; Drag canvas = pan &nbsp;·&nbsp; Scroll = pan &nbsp;·&nbsp; Ctrl+Scroll = zoom
+            Connect: drag from the <strong>●</strong> handle on a node's right edge to another node's left handle &nbsp;·&nbsp; Click an activity's outgoing connection to edit its conditions/probabilities, or press Del / click the <strong style={{color:"#e55"}}>×</strong> button to delete &nbsp;·&nbsp; Drag canvas = pan &nbsp;·&nbsp; Scroll = pan &nbsp;·&nbsp; Ctrl+Scroll = zoom
           </div>
         </Panel>
       )}
@@ -448,7 +393,6 @@ export function FlowDiagramReactFlow({
   onNodeSelectionChange,
   onEdgeSelect,
   onDeleteEdge,
-  onEditProbability,
   onNodeMove,
   onNodesMove,
   onViewportChange,
@@ -523,16 +467,12 @@ export function FlowDiagramReactFlow({
 
   const edges = useMemo(() => {
     return (graph.edges || []).map(e => {
-      const isProbabilistic = e.bEventId != null && e.branchIndex != null;
       const flowEdge = {
         ...toFlowEdge(e, C, FONT),
         selected: selectedEdgeId === e.id,
         interactionWidth: 20,
         data: {
           onDelete: canEdit ? onDeleteEdge : null,
-          isProbabilistic,
-          probability: e.probability,
-          onEditProbability: canEdit && isProbabilistic ? probability => onEditProbability?.(e, probability) : null,
         },
       };
       if (showSections && focusedSectionId != null) {
@@ -550,7 +490,7 @@ export function FlowDiagramReactFlow({
       }
       return flowEdge;
     });
-  }, [graph.edges, C, FONT, showSections, focusedSectionId, nodeById, selectedEdgeId, canEdit, onDeleteEdge, onEditProbability]);
+  }, [graph.edges, C, FONT, showSections, focusedSectionId, nodeById, selectedEdgeId, canEdit, onDeleteEdge]);
 
   const isValidConnection = useCallback(connection => {
     const validation = validateVisualConnection(graph, connection.source, connection.target);

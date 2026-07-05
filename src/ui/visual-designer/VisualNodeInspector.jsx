@@ -2,7 +2,7 @@ import { useId } from "react";
 ;
 import { Btn, CommitInput, DistPicker, SH, Tag } from "../shared/components.jsx";
 import { ConditionBuilder, EntityFilterBuilder } from "../editors/index.jsx";
-import { VISUAL_NODE_TYPES } from "./graph.js";
+import { VISUAL_NODE_TYPES, conditionLabel } from "./graph.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { disciplineAttr, disciplineBase } from "../shared/utils.js";
 
@@ -142,7 +142,8 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
   const sourceQueue = effectValue(bEvent?.effect, /ARRIVE\([^,]+,\s*([^)]+)\)/i);
   const sinkMacro = String(bEvent?.effect || "").toUpperCase().includes("RENEGE") ? "RENEGE" : "COMPLETE";
   const sourceSchedule = bEvent?.schedules?.[0] || {};
-  const activitySchedule = cEvent?.cSchedules?.[0] || {};
+  const activityCSchedules = cEvent?.cSchedules || [];
+  const activitySchedule = activityCSchedules[0] || {};
   const activityServer = effectValue(cEvent?.effect, /ASSIGN\([^,)]+,\s*([^)]+)\)/i);
   const isDelayActivity = /DELAY\(/i.test(String(cEvent?.effect || ""));
 
@@ -351,11 +352,46 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
                   Service time
                 </div>
-                <DistPicker
-                  value={{ dist: activitySchedule.dist || "Fixed", distParams: activitySchedule.distParams || { value: "1" } }}
-                  onChange={canEdit ? value => onPatchNode(node, { serviceTime: value }) : () => {}}
-                  compact
-                />
+                {activityCSchedules.length <= 1 ? (
+                  <>
+                    {(() => {
+                      const targetBEvent = activitySchedule.eventId ? (model.bEvents || []).find(b => b.id === activitySchedule.eventId) : null;
+                      return targetBEvent ? (
+                        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+                          Schedules "{targetBEvent.name || targetBEvent.id}"
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 10, color: C.amber, fontFamily: FONT, fontStyle: "italic" }}>
+                          No completion event configured yet
+                        </div>
+                      );
+                    })()}
+                    <DistPicker
+                      value={{ dist: activitySchedule.dist || "Fixed", distParams: activitySchedule.distParams || { value: "1" } }}
+                      onChange={canEdit ? value => onPatchNode(node, { serviceTime: value }) : () => {}}
+                      compact
+                    />
+                  </>
+                ) : (
+                  // Genuinely parallel, attribute-conditional schedules (V29) — each `when`
+                  // branch fires independently with its own delay, so show and edit them
+                  // separately instead of silently only reading/writing index 0.
+                  activityCSchedules.map((schedule, idx) => {
+                    const targetBEvent = (model.bEvents || []).find(b => b.id === schedule.eventId);
+                    return (
+                      <div key={idx} style={{ display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${C.border}`, borderRadius: 5, padding: "6px 8px" }}>
+                        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+                          {schedule.when ? `If ${conditionLabel(schedule.when)}` : "Otherwise"} → schedules "{targetBEvent?.name || targetBEvent?.id || "?"}"
+                        </div>
+                        <DistPicker
+                          value={{ dist: schedule.dist || "Fixed", distParams: schedule.distParams || { value: "1" } }}
+                          onChange={canEdit ? value => onPatchNode(node, { serviceTime: value, serviceTimeIndex: idx }) : () => {}}
+                          compact
+                        />
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </>
           )}

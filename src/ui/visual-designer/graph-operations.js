@@ -1,6 +1,7 @@
 import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES } from "./graph.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 import { renameQueue } from "../../engine/queue-refs.js";
+import { extractReleaseTarget, stripReleaseTarget } from "../../model/macroParser.js";
 
 function clean(value = "") {
   return String(value || "").trim();
@@ -373,6 +374,127 @@ function wouldCreateCycle(edges, from, to) {
   }
   return false;
 }
+
+function normTarget(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+// null/undefined both mean "exit system" — treat them as the same target.
+function sameTarget(a, b) {
+  const an = a ?? null;
+  const bn = b ?? null;
+  if (an === null || bn === null) return an === bn;
+  return normTarget(an) === normTarget(bn);
+}
+
+// Returns this activity's single shared "completion route" — the non-`when`
+// cSchedules entry (and its target B-event) that a 2nd/3rd canvas connection
+// should add a branch to, rather than spawning an independently-firing B-event
+// (the root cause of F-consolidation's duplicate-completion bug). `loop` selects
+// between an activity's forward route and its (structurally separate) loop-back
+// route — the two are never merged into each other.
+// Returns `{ blocked: true }` when the activity has attribute-conditional (V29
+// `when`) cSchedules — those are independent, parallel-by-design paths, and
+// silently picking one to consolidate onto would be wrong, so callers should
+// refuse the connection rather than guess.
+function findCompletionRoute(model, cEvent, { loop = false } = {}) {
+  const schedules = cEvent?.cSchedules || [];
+  if (schedules.some(s => s.when)) return { blocked: true };
+  const bEvents = model.bEvents || [];
+  const candidate = schedules
+    .map(scheduleEntry => ({ scheduleEntry, bEvent: bEvents.find(b => b.id === scheduleEntry.eventId) }))
+    .find(c => c.bEvent && Boolean(c.bEvent.loopConfig) === loop);
+  return candidate || null;
+}
+
+// The set of queue names (or null for "exit") this B-event currently routes to —
+// from its routing/probabilisticRouting array if consolidated already, otherwise
+// the single implicit target baked into its RELEASE(...) effect (or null if none).
+function branchTargets(bEvent) {
+  if (Array.isArray(bEvent.routing) && bEvent.routing.length > 0) {
+    return bEvent.routing.map(b => b.queueName ?? null);
+  }
+  if (Array.isArray(bEvent.probabilisticRouting) && bEvent.probabilisticRouting.length > 0) {
+    return bEvent.probabilisticRouting.map(b => b.queueName ?? null);
+  }
+  const implicit = extractReleaseTarget(bEvent.effect);
+  return implicit != null ? [implicit] : [];
+}
+
+// Rebalances every branch's probability to an even 1/N split (rounded to 4
+// decimals, with any rounding remainder folded into the first branch so the
+// total is exactly 1.0 — satisfying V18's ±0.001 tolerance regardless of N).
+function rebalanceEvenly(branches) {
+  const n = branches.length;
+  if (n === 0) return branches;
+  const even = Math.floor((1 / n) * 10000) / 10000;
+  const remainder = Math.round((1 - even * n) * 10000) / 10000;
+  return branches.map((branch, idx) => ({
+    ...branch,
+    probability: idx === 0 ? Math.round((even + remainder) * 10000) / 10000 : even,
+  }));
+}
+
+// Adds a new probability-weighted branch to a completion B-event, bootstrapping
+// `probabilisticRouting` from the B-event's current implicit single target if it
+// doesn't have one yet, then rebalancing every branch to an even split.
+export function addProbabilisticBranch(bEvent, queueNameOrNull) {
+  const hasArray = Array.isArray(bEvent.probabilisticRouting) && bEvent.probabilisticRouting.length > 0;
+  const baseBranches = hasArray
+    ? bEvent.probabilisticRouting
+    : [{ probability: 1, queueName: extractReleaseTarget(bEvent.effect) }];
+  const probabilisticRouting = rebalanceEvenly([...baseBranches, { probability: 0, queueName: queueNameOrNull }]);
+  return { ...bEvent, effect: stripReleaseTarget(bEvent.effect), probabilisticRouting };
+}
+
+// Adds a new conditional branch to a completion B-event, bootstrapping `routing`
+// + `defaultQueueName` from the B-event's current implicit single target (which
+// becomes the fallback, since conditional routing is first-match-else-default,
+// not per-branch defaults). The new branch's condition is left empty/unset —
+// there's no sensible default predicate to fabricate — only its target queue
+// (exactly what the user just drew) is known.
+export function addConditionalBranch(bEvent, queueNameOrNull) {
+  const hasArray = Array.isArray(bEvent.routing) && bEvent.routing.length > 0;
+  const defaultQueueName = hasArray ? bEvent.defaultQueueName : extractReleaseTarget(bEvent.effect);
+  const baseBranches = hasArray ? bEvent.routing : [];
+  const routing = [...baseBranches, { condition: { variable: "", operator: "==", value: "" }, queueName: queueNameOrNull }];
+  return { ...bEvent, effect: stripReleaseTarget(bEvent.effect), routing, defaultQueueName };
+}
+
+// Adds a branch to whichever routing mode a completion B-event is already using
+// (reusing conditional if already conditional, otherwise probabilistic) —
+// defaulting to probabilistic (with an even split) when it has neither yet.
+function addBranchToBEvent(bEvent, queueNameOrNull) {
+  if (Array.isArray(bEvent.routing) && bEvent.routing.length > 0) return addConditionalBranch(bEvent, queueNameOrNull);
+  return addProbabilisticBranch(bEvent, queueNameOrNull);
+}
+
+// Removes one branch (by index if known, else by matching queue target) from a
+// completion B-event's routing/probabilisticRouting array. Returns the B-event
+// unchanged if neither array is populated.
+function removeBranchFromBEvent(bEvent, branchIndex, queueLabel) {
+  if (Array.isArray(bEvent.routing) && bEvent.routing.length > 0) {
+    const idx = branchIndex != null ? branchIndex : bEvent.routing.findIndex(b => sameTarget(b.queueName, queueLabel));
+    if (idx < 0) return bEvent;
+    return { ...bEvent, routing: bEvent.routing.filter((_, i) => i !== idx) };
+  }
+  if (Array.isArray(bEvent.probabilisticRouting) && bEvent.probabilisticRouting.length > 0) {
+    const idx = branchIndex != null ? branchIndex : bEvent.probabilisticRouting.findIndex(b => sameTarget(b.queueName, queueLabel));
+    if (idx < 0) return bEvent;
+    return { ...bEvent, probabilisticRouting: bEvent.probabilisticRouting.filter((_, i) => i !== idx) };
+  }
+  return bEvent;
+}
+
+// True once a routing/probabilisticRouting array has been emptied out by branch
+// removal — the B-event no longer has any completion path left.
+function isBEventRouteEmpty(bEvent) {
+  return (Array.isArray(bEvent.routing) && bEvent.routing.length === 0) ||
+    (Array.isArray(bEvent.probabilisticRouting) && bEvent.probabilisticRouting.length === 0);
+}
+
+const ATTRIBUTE_CONDITIONAL_BLOCK_MESSAGE =
+  "This activity has attribute-conditional completion schedules — edit routing in the B-Events editor instead of the canvas.";
 
 export function validateVisualConnection(graph, from, to) {
   const source = findNode(graph, from);
@@ -800,6 +922,7 @@ export function connectVisualNodes(model, graph, from, to) {
   const target = findNode(graph, to);
   const server = firstServerType(model);
   let next = { ...model };
+  let consolidatedBEventId = null;
 
   if (source.type === VISUAL_NODE_TYPES.SOURCE && target.type === VISUAL_NODE_TYPES.QUEUE) {
     const customer = firstCustomerType(next);
@@ -845,46 +968,85 @@ export function connectVisualNodes(model, graph, from, to) {
 
   if (source.type === VISUAL_NODE_TYPES.ACTIVITY && target.type === VISUAL_NODE_TYPES.QUEUE) {
     const isLoop = validation.loop === true;
-    const completionId = `route-${source.refId || "activity"}-${target.refId || "queue"}${isLoop ? "-loop" : ""}`;
-    const bEvents = [...(next.bEvents || [])];
-    const existing = bEvents.find(event => event.id === completionId);
-    const loopConfig = isLoop ? { maxLoopCount: validation.maxLoopCount ?? 3, exitQueueName: validation.exitQueueName ?? null } : undefined;
-    if (existing) {
-      next.bEvents = updateByRef(bEvents, completionId, event => ({
-        ...event,
-        effect: `RELEASE(${server}, ${target.label})`,
-        ...(loopConfig ? { loopConfig } : {}),
-      }));
-    } else {
-      next.bEvents = [...bEvents, {
-        id: completionId,
-        name: `${source.label} Complete`,
-        scheduledTime: "9999",
-        effect: `RELEASE(${server}, ${target.label})`,
-        schedules: [],
-        ...(loopConfig ? { loopConfig } : {}),
-      }];
+    const sourceCEvent = (next.cEvents || []).find(ce => ce.id === source.refId);
+    const route = findCompletionRoute(next, sourceCEvent, { loop: isLoop });
+    if (route?.blocked) {
+      return { model, validation: { ok: false, message: ATTRIBUTE_CONDITIONAL_BLOCK_MESSAGE } };
     }
-    next.cEvents = updateByRef(next.cEvents, source.refId, event => {
-      const kept = (event.cSchedules || []).filter(cs => cs.eventId !== completionId);
-      return {
-        ...event,
-        cSchedules: [...kept, { eventId: completionId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
-      };
-    });
+    if (!route) {
+      // No existing forward/loop route for this activity yet — today's single-branch
+      // behavior, unchanged: one bare-RELEASE completion B-event, one cSchedule entry.
+      const completionId = `route-${source.refId || "activity"}-${target.refId || "queue"}${isLoop ? "-loop" : ""}`;
+      const bEvents = [...(next.bEvents || [])];
+      const existing = bEvents.find(event => event.id === completionId);
+      const loopConfig = isLoop ? { maxLoopCount: validation.maxLoopCount ?? 3, exitQueueName: validation.exitQueueName ?? null } : undefined;
+      if (existing) {
+        next.bEvents = updateByRef(bEvents, completionId, event => ({
+          ...event,
+          effect: `RELEASE(${server}, ${target.label})`,
+          ...(loopConfig ? { loopConfig } : {}),
+        }));
+      } else {
+        next.bEvents = [...bEvents, {
+          id: completionId,
+          name: `${source.label} Complete`,
+          scheduledTime: "9999",
+          effect: `RELEASE(${server}, ${target.label})`,
+          schedules: [],
+          ...(loopConfig ? { loopConfig } : {}),
+        }];
+      }
+      next.cEvents = updateByRef(next.cEvents, source.refId, event => {
+        const kept = (event.cSchedules || []).filter(cs => cs.eventId !== completionId);
+        return {
+          ...event,
+          cSchedules: [...kept, { eventId: completionId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+        };
+      });
+    } else {
+      // A route already exists — consolidate onto the same shared B-event instead of
+      // spawning a second, independently-firing completion (the duplicate-B-event bug).
+      // cSchedules is left untouched: still exactly one entry, reused.
+      const { bEvent } = route;
+      const alreadyTargets = branchTargets(bEvent).some(t => sameTarget(t, target.label));
+      if (!alreadyTargets) {
+        const merged = addBranchToBEvent(bEvent, target.label);
+        next.bEvents = (next.bEvents || []).map(be => (be.id === bEvent.id ? merged : be));
+        consolidatedBEventId = bEvent.id;
+      }
+    }
   }
 
   if (source.type === VISUAL_NODE_TYPES.ACTIVITY && target.type === VISUAL_NODE_TYPES.SINK) {
-    next.cEvents = updateByRef(next.cEvents, source.refId, event => {
-      const kept = (event.cSchedules || []).filter(cs => cs.eventId !== target.refId);
-      return {
-        ...event,
-        cSchedules: [...kept, { eventId: target.refId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
-      };
-    });
+    const sourceCEvent = (next.cEvents || []).find(ce => ce.id === source.refId);
+    const route = findCompletionRoute(next, sourceCEvent, { loop: false });
+    if (route?.blocked) {
+      return { model, validation: { ok: false, message: ATTRIBUTE_CONDITIONAL_BLOCK_MESSAGE } };
+    }
+    if (!route) {
+      // No existing route yet — today's behavior, unchanged: cSchedule straight to the
+      // sink's own terminal B-event.
+      next.cEvents = updateByRef(next.cEvents, source.refId, event => {
+        const kept = (event.cSchedules || []).filter(cs => cs.eventId !== target.refId);
+        return {
+          ...event,
+          cSchedules: [...kept, { eventId: target.refId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+        };
+      });
+    } else {
+      // A route already exists — add an exit (queueName: null) branch to the shared
+      // completion B-event instead of scheduling a second, independently-firing sink.
+      const { bEvent } = route;
+      const alreadyTargets = branchTargets(bEvent).some(t => sameTarget(t, null));
+      if (!alreadyTargets) {
+        const merged = addBranchToBEvent(bEvent, null);
+        next.bEvents = (next.bEvents || []).map(be => (be.id === bEvent.id ? merged : be));
+        consolidatedBEventId = bEvent.id;
+      }
+    }
   }
 
-  return { model: updateGraphLayout(next, deriveGraphFromModel(next)), validation };
+  return { model: updateGraphLayout(next, deriveGraphFromModel(next)), validation, consolidatedBEventId };
 }
 
 function escRe(str) {
@@ -1024,28 +1186,47 @@ export function deleteVisualEdge(model, graph, edgeId) {
   }
 
   // Activity → Queue ("routing"): remove cSchedule referencing the RELEASE bEvent for this queue;
-  // also remove the RELEASE bEvent itself if it is not shared with any other C-event.
+  // also remove the RELEASE bEvent itself if it is not shared with any other C-event. When the
+  // edge belongs to a consolidated multi-branch completion B-event (edge.bEventId set), remove
+  // just that one branch instead — the shared B-event and its single cSchedule entry stay intact
+  // for the remaining branches.
   if (edge.source === "routing" && fromNode.type === VISUAL_NODE_TYPES.ACTIVITY && toNode.type === VISUAL_NODE_TYPES.QUEUE) {
-    const cEvent = cEvents.find(ce => ce.id === fromNode.refId);
-    if (cEvent) {
-      const esc = escRe(toNode.label || "");
-      const releasePat = new RegExp(`RELEASE\\([^,]+,\\s*${esc}\\)`, "i");
-      const schedToRemove = (cEvent.cSchedules || []).find(s => {
-        const be = bEvents.find(b => b.id === s.eventId);
-        return be && releasePat.test(typeof be.effect === "string" ? be.effect : "");
-      });
-      if (schedToRemove) {
-        const otherRefs = new Set(
-          cEvents.filter(ce => ce.id !== cEvent.id).flatMap(ce => (ce.cSchedules || []).map(s => s.eventId))
-        );
-        next.cEvents = cEvents.map(ce =>
-          ce.id !== cEvent.id ? ce : {
+    if (edge.bEventId != null) {
+      const targetBEvent = bEvents.find(be => be.id === edge.bEventId);
+      if (targetBEvent) {
+        const removed = removeBranchFromBEvent(targetBEvent, edge.branchIndex, toNode.label);
+        if (isBEventRouteEmpty(removed)) {
+          next.bEvents = bEvents.filter(be => be.id !== targetBEvent.id);
+          next.cEvents = cEvents.map(ce => ({
             ...ce,
-            cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== schedToRemove.eventId),
+            cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== targetBEvent.id),
+          }));
+        } else {
+          next.bEvents = bEvents.map(be => (be.id === targetBEvent.id ? removed : be));
+        }
+      }
+    } else {
+      const cEvent = cEvents.find(ce => ce.id === fromNode.refId);
+      if (cEvent) {
+        const esc = escRe(toNode.label || "");
+        const releasePat = new RegExp(`RELEASE\\([^,]+,\\s*${esc}\\)`, "i");
+        const schedToRemove = (cEvent.cSchedules || []).find(s => {
+          const be = bEvents.find(b => b.id === s.eventId);
+          return be && releasePat.test(typeof be.effect === "string" ? be.effect : "");
+        });
+        if (schedToRemove) {
+          const otherRefs = new Set(
+            cEvents.filter(ce => ce.id !== cEvent.id).flatMap(ce => (ce.cSchedules || []).map(s => s.eventId))
+          );
+          next.cEvents = cEvents.map(ce =>
+            ce.id !== cEvent.id ? ce : {
+              ...ce,
+              cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== schedToRemove.eventId),
+            }
+          );
+          if (!otherRefs.has(schedToRemove.eventId)) {
+            next.bEvents = bEvents.filter(be => be.id !== schedToRemove.eventId);
           }
-        );
-        if (!otherRefs.has(schedToRemove.eventId)) {
-          next.bEvents = bEvents.filter(be => be.id !== schedToRemove.eventId);
         }
       }
     }
@@ -1058,16 +1239,34 @@ export function deleteVisualEdge(model, graph, edgeId) {
     );
   }
 
-  // Activity → Sink ("terminal"): remove cSchedule entry referencing the sink bEvent
+  // Activity → Sink ("terminal"): remove cSchedule entry referencing the sink bEvent. When the
+  // edge belongs to a consolidated multi-branch completion B-event (an exit branch to a
+  // synthetic sink), remove just that one branch instead.
   if (edge.source === "terminal" && fromNode.type === VISUAL_NODE_TYPES.ACTIVITY && toNode.type === VISUAL_NODE_TYPES.SINK) {
-    const cEvent = cEvents.find(ce => ce.id === fromNode.refId);
-    if (cEvent) {
-      next.cEvents = cEvents.map(ce =>
-        ce.id !== cEvent.id ? ce : {
-          ...ce,
-          cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== toNode.refId),
+    if (edge.bEventId != null) {
+      const targetBEvent = bEvents.find(be => be.id === edge.bEventId);
+      if (targetBEvent) {
+        const removed = removeBranchFromBEvent(targetBEvent, edge.branchIndex, null);
+        if (isBEventRouteEmpty(removed)) {
+          next.bEvents = bEvents.filter(be => be.id !== targetBEvent.id);
+          next.cEvents = cEvents.map(ce => ({
+            ...ce,
+            cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== targetBEvent.id),
+          }));
+        } else {
+          next.bEvents = bEvents.map(be => (be.id === targetBEvent.id ? removed : be));
         }
-      );
+      }
+    } else {
+      const cEvent = cEvents.find(ce => ce.id === fromNode.refId);
+      if (cEvent) {
+        next.cEvents = cEvents.map(ce =>
+          ce.id !== cEvent.id ? ce : {
+            ...ce,
+            cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== toNode.refId),
+          }
+        );
+      }
     }
   }
 
@@ -1092,6 +1291,110 @@ export function updateProbabilisticBranchProbability(model, edge, probability) {
       );
       return { ...be, probabilisticRouting };
     }),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+// Retargets one probabilistic-routing branch's destination queue (or null for
+// "exit system"), addressed the same way as updateProbabilisticBranchProbability.
+export function updateProbabilisticBranchQueueTarget(model, edge, queueNameOrNull) {
+  if (!edge || edge.bEventId == null || edge.branchIndex == null) return model;
+  const next = {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => {
+      if (be.id !== edge.bEventId) return be;
+      const probabilisticRouting = (be.probabilisticRouting || []).map((branch, idx) =>
+        idx === edge.branchIndex ? { ...branch, queueName: queueNameOrNull } : branch
+      );
+      return { ...be, probabilisticRouting };
+    }),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+// Updates one conditional-routing branch's condition and/or destination queue in place.
+export function updateConditionalBranch(model, bEventId, branchIndex, patch) {
+  const next = {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => {
+      if (be.id !== bEventId) return be;
+      const routing = (be.routing || []).map((branch, idx) => (idx === branchIndex ? { ...branch, ...patch } : branch));
+      return { ...be, routing };
+    }),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+// Updates a conditional-routing B-event's fallback (`defaultQueueName`) destination.
+export function updateDefaultQueueName(model, bEventId, queueNameOrNull) {
+  const next = {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => (be.id === bEventId ? { ...be, defaultQueueName: queueNameOrNull } : be)),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+// Appends a blank probabilistic/conditional branch to an existing completion B-event
+// (the RouteEdgeDialog's "+ Add branch"/"+ Add condition" buttons) — unlike
+// addProbabilisticBranch/addConditionalBranch (used by connectVisualNodes, where the
+// target queue is already known from the just-drawn connection), the target here is
+// left blank for the user to pick from the dialog's queue selector.
+export function addBlankRoutingBranch(model, bEventId, mode) {
+  const next = {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => {
+      if (be.id !== bEventId) return be;
+      if (mode === "conditional") {
+        return { ...be, routing: [...(be.routing || []), { condition: { variable: "", operator: "==", value: "" }, queueName: "" }] };
+      }
+      return { ...be, probabilisticRouting: [...(be.probabilisticRouting || []), { probability: 0, queueName: "" }] };
+    }),
+  };
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+// Removes one branch (by index) from a completion B-event's routing/probabilisticRouting
+// array. Falls back to deleting the whole B-event (and the cSchedule referencing it) once
+// the last branch is removed, mirroring deleteVisualEdge's un-shared-B-event cleanup.
+export function removeRoutingBranch(model, bEventId, branchIndex) {
+  const bEvent = (model.bEvents || []).find(be => be.id === bEventId);
+  if (!bEvent) return model;
+  const removed = removeBranchFromBEvent(bEvent, branchIndex, undefined);
+  let next;
+  if (isBEventRouteEmpty(removed)) {
+    next = {
+      ...model,
+      bEvents: (model.bEvents || []).filter(be => be.id !== bEventId),
+      cEvents: (model.cEvents || []).map(ce => ({
+        ...ce,
+        cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== bEventId),
+      })),
+    };
+  } else {
+    next = { ...model, bEvents: (model.bEvents || []).map(be => (be.id === bEventId ? removed : be)) };
+  }
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+// Pure transform for a routing-mode switch ("none"/"conditional"/"probabilistic") on a
+// single B-event — extracted from BEventEditor's setRoutingMode so the RouteEdgeDialog
+// and BEventEditor share the exact same mode-switch behavior instead of drifting apart.
+export function setBEventRoutingMode(bEvent, mode) {
+  const { routing: _routing, defaultQueueName: _defaultQueueName, probabilisticRouting: _probabilisticRouting, ...rest } = bEvent;
+  const cleanEffect = stripReleaseTarget(bEvent.effect);
+  if (mode === "conditional") {
+    return { ...rest, routing: [{ condition: { variable: "", operator: "==", value: "" }, queueName: "" }], defaultQueueName: "", effect: cleanEffect };
+  }
+  if (mode === "probabilistic") {
+    return { ...rest, probabilisticRouting: [{ probability: 1, queueName: "" }], effect: cleanEffect };
+  }
+  return { ...rest };
+}
+
+export function applyBEventRoutingMode(model, bEventId, mode) {
+  const next = {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => (be.id === bEventId ? setBEventRoutingMode(be, mode) : be)),
   };
   return updateGraphLayout(next, deriveGraphFromModel(next));
 }
@@ -1362,10 +1665,11 @@ export function updateVisualNode(model, node, patch = {}) {
         nextEvent.effect = replaceServerName(nextEvent.effect || "", oldServer, patch.serverType);
       }
       if (patch.serviceTime) {
+        const idx = patch.serviceTimeIndex ?? 0;
         const cSchedules = Array.isArray(nextEvent.cSchedules) ? [...nextEvent.cSchedules] : [];
-        const first = cSchedules[0] || { eventId: "", useEntityCtx: true };
-        cSchedules[0] = {
-          ...first,
+        const current = cSchedules[idx] || { eventId: "", useEntityCtx: true };
+        cSchedules[idx] = {
+          ...current,
           dist: patch.serviceTime.dist,
           distParams: patch.serviceTime.distParams || {},
         };
