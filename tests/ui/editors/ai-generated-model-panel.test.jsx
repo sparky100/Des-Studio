@@ -688,6 +688,9 @@ describe("AiGeneratedModelPanel", () => {
       await waitFor(() => expect(mockCallModelBuilder).toHaveBeenCalledTimes(3));
       expect(screen.getByLabelText(/model proposal preview/i)).toBeInTheDocument();
       expect(screen.queryByText(/model proposal received/i)).not.toBeInTheDocument();
+      // The retry note ("Asking it to try again...") shouldn't be left dangling —
+      // there should be a closing message once the model actually comes back.
+      expect(screen.getByText(/model built/i)).toBeInTheDocument();
     });
 
     it("shows a clear error instead of a false success message when proposedModel stays missing", async () => {
