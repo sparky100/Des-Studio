@@ -16,7 +16,7 @@ type LlmProxyRequest = {
 };
 type LlmProviderConfig = {
   provider: string; model: string; apiKey: string;
-  temperature?: number; rateLimitPerHour?: number;
+  temperature?: number; rateLimitPerHour?: number; maxTokensPerRun?: number;
 };
 
 function rateLimitKey(request: Request) {
@@ -64,7 +64,7 @@ function normalizeRequest(body: Record<string, unknown>, config: LlmProviderConf
   return {
     version: String(body.version || "2026-05-05"),
     kind: String(body.kind || "narrative"), messages,
-    maxTokens: Math.min(Number(body.maxTokens) || Number(body.max_tokens) || 450, 16000),
+    maxTokens: Math.min(Number(body.maxTokens) || Number(body.max_tokens) || 450, config.maxTokensPerRun || 16000),
     stream: body.stream !== false,
     responseFormat: body.responseFormat === "json" ? "json" : "text",
   };
@@ -205,8 +205,11 @@ async function callZen(request: LlmProxyRequest, config: LlmProviderConfig) {
 async function callProvider(request: LlmProxyRequest, config: LlmProviderConfig) {
   switch (config.provider) {
     case "openai":
-    case "opencode-go":
       return callOpenAI(request, config);
+    case "opencode-go": {
+      const zenConfig = { ...config, model: config.model.replace(/^opencode-go\//, "") };
+      return callZen(request, zenConfig);
+    }
     case "zen":
       return callZen(request, config);
     default:
@@ -232,13 +235,16 @@ async function loadConfig(): Promise<LlmProviderConfig> {
           const apiKey = cfg.apiKey ||
             (provider === "anthropic"
               ? Deno.env.get("ANTHROPIC_API_KEY")
-              : provider === "zen"
+              : provider === "zen" || provider === "opencode-go"
                 ? Deno.env.get("ZEN_API_KEY")
                 : Deno.env.get("OPENAI_API_KEY")) || "";
           const temperature = typeof cfg.temperature === "number" ? cfg.temperature : 0.3;
           const rateLimitPerHour = typeof cfg.rateLimitPerHour === "number" ? cfg.rateLimitPerHour : 25;
+          const maxTokensPerRun = typeof cfg.maxTokensPerRun === "number" && cfg.maxTokensPerRun > 0
+            ? cfg.maxTokensPerRun
+            : undefined;
           console.log("[llm-proxy] config:platform_config", { provider, model, hasApiKey: !!apiKey, apiKeyLen: apiKey.length });
-          return { provider, model, apiKey, temperature, rateLimitPerHour };
+          return { provider, model, apiKey, temperature, rateLimitPerHour, maxTokensPerRun };
         }
         console.log("[llm-proxy] config:platform_config table has no 'llm' row — falling back to env vars");
       } else {
@@ -271,6 +277,7 @@ Deno.serve(async request => {
       apiKeyPreview: config.apiKey ? config.apiKey.slice(0, 12) + "..." : "(none)",
       temperature: config.temperature,
       rateLimitPerHour: config.rateLimitPerHour,
+      maxTokensPerRun: config.maxTokensPerRun,
     }, null, 2), { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
 

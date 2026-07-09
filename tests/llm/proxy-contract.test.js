@@ -32,4 +32,20 @@ describe("llm-proxy provider router", () => {
     expect(proxySource).toMatch(/\.filter\(m => m\.role === "system"\)/);
     expect(proxySource).toMatch(/join\("\\n\\n"\)/);
   });
+
+  it("routes opencode-go through the Zen gateway instead of the real OpenAI API", () => {
+    // The old bug: "opencode-go" fell through to callOpenAI(), which POSTs to
+    // api.openai.com with Zen-style model ids like "opencode-go/deepseek-v4-flash"
+    // that OpenAI would reject.
+    const opencodeGoCase = proxySource.match(/case "opencode-go": \{[\s\S]*?\n    \}/)?.[0] || "";
+    expect(opencodeGoCase).toMatch(/callZen/);
+    expect(opencodeGoCase).not.toMatch(/callOpenAI/);
+    expect(opencodeGoCase).toMatch(/replace\(\/\^opencode-go\\\/\//);
+  });
+
+  it("reads maxTokensPerRun from platform_config and applies it as the token cap", () => {
+    expect(proxySource).toMatch(/maxTokensPerRun\?: number/);
+    expect(proxySource).toMatch(/const maxTokensPerRun = typeof cfg\.maxTokensPerRun === "number"/);
+    expect(proxySource).toMatch(/config\.maxTokensPerRun \|\| 16000/);
+  });
 });
