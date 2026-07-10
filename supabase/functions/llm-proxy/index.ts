@@ -217,6 +217,33 @@ async function callProvider(request: LlmProxyRequest, config: LlmProviderConfig)
   }
 }
 
+// Speech-to-text is OpenAI-only (Whisper) regardless of which provider is
+// configured for chat/extraction via platform_config, so it always reads its
+// own dedicated OPENAI_API_KEY secret rather than config.apiKey.
+async function transcribeAudio(audio: File): Promise<{ text: string }> {
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+
+  const model = Deno.env.get("TRANSCRIPTION_MODEL") || "whisper-1";
+  const upstreamForm = new FormData();
+  upstreamForm.append("file", audio, audio.name || "recording.webm");
+  upstreamForm.append("model", model);
+
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: upstreamForm,
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`OpenAI transcription API ${response.status}: ${err}`);
+  }
+
+  const result = await response.json();
+  return { text: result?.text || "" };
+}
+
 async function loadConfig(): Promise<LlmProviderConfig> {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -286,6 +313,31 @@ Deno.serve(async request => {
   const config = await loadConfig();
   if (isRateLimited(rateLimitKey(request), config.rateLimitPerHour || 25)) {
     return new Response("Rate limit exceeded", { status: 429, headers: CORS_HEADERS });
+  }
+
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    try {
+      const form = await request.formData();
+      const audio = form.get("audio");
+      if (!(audio instanceof File)) {
+        return new Response(JSON.stringify({ error: { message: "Missing 'audio' file field" } }), {
+          status: 400,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        });
+      }
+      const result = await transcribeAudio(audio);
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return new Response(JSON.stringify({ error: { message } }), {
+        status: 500,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
   }
 
   let body;
