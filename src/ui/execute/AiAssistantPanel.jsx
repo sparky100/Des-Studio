@@ -690,9 +690,12 @@ export const AiAssistantPanel = ({
     const controller = new AbortController();
     abortRef.current = controller;
     const workflowMode = isRunContext ? 'Running' : isResultsContext ? 'Analyzing' : 'Designing';
-    const modelChanged = lastQueryModelRef.current !== model;
-    lastQueryModelRef.current = model;
-    const messages = buildModelQueryPrompt(question, model, conversationHistory, { currentTab: activeTab, workflowMode, forceModelContext: modelChanged });
+    // Answer about the model that actually produced these results, not whatever
+    // the live Design-tab model looks like now — it may differ from this run's snapshot.
+    const queryModel = results?._model_snapshot ?? model;
+    const modelChanged = lastQueryModelRef.current !== queryModel;
+    lastQueryModelRef.current = queryModel;
+    const messages = buildModelQueryPrompt(question, queryModel, conversationHistory, { currentTab: activeTab, workflowMode, forceModelContext: modelChanged });
     setConversationHistory(prev => [...prev, { role: "user", content: question }]);
     setModelQueryText("");
     setResponse("");
@@ -717,7 +720,7 @@ export const AiAssistantPanel = ({
         setStatus("error");
       },
     });
-  }, [model, conversationHistory, isStreaming]);
+  }, [model, results, conversationHistory, isStreaming]);
 
   const explainResults = () => {
     // Analyse the model that actually produced these results, not whatever
