@@ -370,6 +370,9 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                       value={{ dist: activitySchedule.dist || "Fixed", distParams: activitySchedule.distParams || { value: "1" } }}
                       onChange={canEdit ? value => onPatchNode(node, { serviceTime: value }) : () => {}}
                       compact
+                      allowDistance
+                      queues={queues}
+                      entityTypes={model.entityTypes || []}
                     />
                   </>
                 ) : (
@@ -387,6 +390,9 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                           value={{ dist: schedule.dist || "Fixed", distParams: schedule.distParams || { value: "1" } }}
                           onChange={canEdit ? value => onPatchNode(node, { serviceTime: value, serviceTimeIndex: idx }) : () => {}}
                           compact
+                          allowDistance
+                          queues={queues}
+                          entityTypes={model.entityTypes || []}
                         />
                       </div>
                     );

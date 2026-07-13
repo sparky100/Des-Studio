@@ -170,6 +170,99 @@ describe('VisualNodeInspector — section assignment', () => {
   });
 });
 
+// Regression coverage for the "Courier Ground Transport" template bug: the
+// Activity inspector's Service Time DistPicker never passed entityTypes/queues/
+// allowDistance, so a Distance-type schedule (from queue, to queue, speed
+// attribute) silently rendered with everything blank and a false "no numeric
+// attribute declared" warning, even though the template's server entity type
+// and queues were fully declared.
+describe('VisualNodeInspector — Distance-type service time (Courier Ground Transport regression)', () => {
+  function makeDistanceModel(overrides = {}) {
+    return makeModel({
+      entityTypes: [
+        { id: 'customer-1', name: 'Customer', role: 'customer' },
+        { id: 'server-1', name: 'Server', role: 'server', count: 1, attrDefs: [{ name: 'speed', valueType: 'number', defaultValue: '3' }] },
+      ],
+      queues: [
+        { id: 'queue-1', name: 'Warehouse Queue', customerType: 'Customer', discipline: 'FIFO' },
+        { id: 'queue-2', name: 'Depot Queue', customerType: 'Customer', discipline: 'FIFO' },
+      ],
+      bEvents: [
+        { id: 'arrival-1', name: 'Arrivals', scheduledTime: '0', effect: 'ARRIVE(Customer, Warehouse Queue)',
+          schedules: [{ eventId: 'arrival-1', dist: 'Exponential', distParams: { mean: '5' } }] },
+        { id: 'route-activity-1', name: 'Arrived at Depot', scheduledTime: '9999', effect: 'RELEASE(Server, Depot Queue)', schedules: [] },
+      ],
+      cEvents: [{
+        id: 'activity-1',
+        name: 'Courier Ground Transport',
+        priority: 1,
+        condition: 'queue(Warehouse Queue).length > 0 AND idle(Server).count > 0',
+        effect: 'ASSIGN(Warehouse Queue, Server)',
+        cSchedules: [{
+          eventId: 'route-activity-1',
+          dist: 'Distance',
+          distParams: { from: 'Warehouse Queue', to: 'Depot Queue', speedAttr: 'speed', speedSource: 'server' },
+          useEntityCtx: true,
+        }],
+      }],
+      ...overrides,
+    });
+  }
+
+  it('pre-populates the from/to queues and speed attribute instead of showing them blank', () => {
+    const model = makeDistanceModel();
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByLabelText('Distance from queue')).toHaveValue('Warehouse Queue');
+    expect(screen.getByLabelText('Distance to queue')).toHaveValue('Depot Queue');
+    expect(screen.getByLabelText('Distance speed attribute')).toHaveValue('speed');
+  });
+
+  it('does not show the false "no numeric attribute declared" warning when one is declared', () => {
+    const model = makeDistanceModel();
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.queryByText(/no numeric attribute declared/i)).not.toBeInTheDocument();
+  });
+
+  it('offers the declared numeric server attribute as a selectable option', () => {
+    const model = makeDistanceModel();
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    const options = Array.from(screen.getByLabelText('Distance speed attribute').querySelectorAll('option')).map(o => o.value);
+    expect(options).toContain('speed');
+  });
+
+  it('also passes entityTypes/queues for the V29 multi-schedule (per-when) rows', () => {
+    const model = makeDistanceModel({
+      cEvents: [{
+        id: 'activity-1',
+        name: 'Courier Ground Transport',
+        priority: 1,
+        condition: 'queue(Warehouse Queue).length > 0 AND idle(Server).count > 0',
+        effect: 'ASSIGN(Warehouse Queue, Server)',
+        cSchedules: [
+          { eventId: 'route-activity-1', when: { variable: 'Entity.priority', operator: '==', value: 'high' },
+            dist: 'Distance', distParams: { from: 'Warehouse Queue', to: 'Depot Queue', speedAttr: 'speed', speedSource: 'server' } },
+          { eventId: 'route-activity-1', dist: 'Fixed', distParams: { value: '5' } },
+        ],
+      }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByLabelText('Distance from queue')).toHaveValue('Warehouse Queue');
+    expect(screen.queryByText(/no numeric attribute declared/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('VisualNodeInspector — read-only mode', () => {
   it('disables fields and hides delete when canEdit is false', () => {
     const model = makeModel();
