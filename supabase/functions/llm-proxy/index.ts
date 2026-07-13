@@ -217,10 +217,18 @@ async function callProvider(request: LlmProxyRequest, config: LlmProviderConfig)
   }
 }
 
-// Speech-to-text is OpenAI-only (Whisper) regardless of which provider is
-// configured for chat/extraction via platform_config, so it always reads its
-// own dedicated OPENAI_API_KEY secret rather than config.apiKey.
-async function transcribeAudio(audio: File): Promise<{ text: string }> {
+// Speech-to-text is independent of whichever chat/extraction provider is
+// configured via platform_config -- it always reads its own dedicated
+// secret(s) rather than config.apiKey. Default is OpenAI Whisper (plain
+// text, unchanged from before). If DEEPGRAM_API_KEY is configured, Deepgram
+// is used instead, which additionally returns per-speaker diarization
+// (`segments`) -- consumers that only read `.text` (e.g. any existing
+// caller) are unaffected either way, since `segments` is a new, additive
+// field that's `null` whenever diarization isn't available.
+type TranscriptSegment = { speaker: string; text: string };
+type TranscriptResult = { text: string; segments: TranscriptSegment[] | null };
+
+async function transcribeWithWhisper(audio: File): Promise<TranscriptResult> {
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
 
@@ -241,7 +249,63 @@ async function transcribeAudio(audio: File): Promise<{ text: string }> {
   }
 
   const result = await response.json();
-  return { text: result?.text || "" };
+  return { text: result?.text || "", segments: null };
+}
+
+// Pure mapper kept separate from the network call so it's unit-testable
+// without mocking fetch (see index.test.ts) -- turns Deepgram's nested
+// response shape into the flat {text, segments} contract this function
+// returns either way, regardless of which provider served the request.
+export function mapDeepgramResponseToTranscript(result: unknown): TranscriptResult {
+  const r = result as Record<string, any> | null | undefined;
+  const text = r?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
+  const utterances = r?.results?.utterances;
+  if (!Array.isArray(utterances) || utterances.length === 0) {
+    return { text, segments: null };
+  }
+  const segments = utterances
+    .map((u: any) => ({
+      speaker: Number.isInteger(u?.speaker) ? `Speaker ${u.speaker + 1}` : "",
+      text: String(u?.transcript || "").trim(),
+    }))
+    .filter((s: TranscriptSegment) => s.speaker && s.text);
+  return { text, segments: segments.length > 0 ? segments : null };
+}
+
+async function transcribeWithDeepgram(audio: File, apiKey: string): Promise<TranscriptResult> {
+  const response = await fetch(
+    "https://api.deepgram.com/v1/listen?diarize=true&utterances=true&model=nova-2&smart_format=true",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiKey}`,
+        "Content-Type": audio.type || "audio/webm",
+      },
+      body: audio,
+    },
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Deepgram transcription API ${response.status}: ${err}`);
+  }
+
+  return mapDeepgramResponseToTranscript(await response.json());
+}
+
+async function transcribeAudio(audio: File): Promise<TranscriptResult> {
+  const deepgramKey = Deno.env.get("DEEPGRAM_API_KEY");
+  if (deepgramKey) {
+    try {
+      return await transcribeWithDeepgram(audio, deepgramKey);
+    } catch (e) {
+      // Diarization is a bonus, not a hard dependency -- if Deepgram is down
+      // or misconfigured, fall back to Whisper rather than breaking
+      // transcription for every caller.
+      console.error("[llm-proxy] Deepgram transcription failed, falling back to Whisper:", e);
+    }
+  }
+  return transcribeWithWhisper(audio);
 }
 
 async function loadConfig(): Promise<LlmProviderConfig> {
