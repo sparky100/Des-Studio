@@ -218,18 +218,46 @@ async function callProvider(request: LlmProxyRequest, config: LlmProviderConfig)
 }
 
 // Speech-to-text is independent of whichever chat/extraction provider is
-// configured via platform_config -- it always reads its own dedicated
-// secret(s) rather than config.apiKey. Default is OpenAI Whisper (plain
-// text, unchanged from before). If DEEPGRAM_API_KEY is configured, Deepgram
-// is used instead, which additionally returns per-speaker diarization
-// (`segments`) -- consumers that only read `.text` (e.g. any existing
-// caller) are unaffected either way, since `segments` is a new, additive
-// field that's `null` whenever diarization isn't available.
+// configured via platform_config's `llm` key -- it reads its own dedicated
+// `whisper`/`deepgram` platform_config keys instead (falling back to the
+// matching env secret if a key isn't set there), so an admin can configure
+// either from Lens's own Admin Panel rather than needing Supabase Dashboard
+// access. Default is OpenAI Whisper (plain text, unchanged from before). If
+// a Deepgram key is available, Deepgram is used instead, which additionally
+// returns per-speaker diarization (`segments`) -- consumers that only read
+// `.text` (e.g. any existing caller) are unaffected either way, since
+// `segments` is a new, additive field that's `null` whenever diarization
+// isn't available.
 type TranscriptSegment = { speaker: string; text: string };
 type TranscriptResult = { text: string; segments: TranscriptSegment[] | null };
 
-async function transcribeWithWhisper(audio: File): Promise<TranscriptResult> {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
+// Mirrors loadConfig()'s REST-fetch-with-service-role pattern for the `llm`
+// key, extended to fetch `whisper`/`deepgram` in one request. Returns {} if
+// either env var is missing or the request fails -- callers already fall
+// back to their own env-var secret in that case, matching loadConfig()'s
+// own fail-open behavior.
+export async function loadTranscriptionKeys(): Promise<{ whisperApiKey?: string; deepgramApiKey?: string }> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) return {};
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/platform_config?key=in.(whisper,deepgram)&select=key,value`,
+      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
+    );
+    if (!res.ok) return {};
+    const rows: { key: string; value?: { apiKey?: string } }[] = await res.json();
+    const whisperApiKey = rows.find(r => r.key === "whisper")?.value?.apiKey || undefined;
+    const deepgramApiKey = rows.find(r => r.key === "deepgram")?.value?.apiKey || undefined;
+    return { whisperApiKey, deepgramApiKey };
+  } catch (e) {
+    console.error("[llm-proxy] loadTranscriptionKeys exception", e);
+    return {};
+  }
+}
+
+async function transcribeWithWhisper(audio: File, overrideApiKey?: string): Promise<TranscriptResult> {
+  const apiKey = overrideApiKey || Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
 
   const model = Deno.env.get("TRANSCRIPTION_MODEL") || "whisper-1";
@@ -294,7 +322,8 @@ async function transcribeWithDeepgram(audio: File, apiKey: string): Promise<Tran
 }
 
 async function transcribeAudio(audio: File): Promise<TranscriptResult> {
-  const deepgramKey = Deno.env.get("DEEPGRAM_API_KEY");
+  const { whisperApiKey, deepgramApiKey } = await loadTranscriptionKeys();
+  const deepgramKey = deepgramApiKey || Deno.env.get("DEEPGRAM_API_KEY");
   if (deepgramKey) {
     try {
       return await transcribeWithDeepgram(audio, deepgramKey);
@@ -305,7 +334,7 @@ async function transcribeAudio(audio: File): Promise<TranscriptResult> {
       console.error("[llm-proxy] Deepgram transcription failed, falling back to Whisper:", e);
     }
   }
-  return transcribeWithWhisper(audio);
+  return transcribeWithWhisper(audio, whisperApiKey);
 }
 
 async function loadConfig(): Promise<LlmProviderConfig> {
