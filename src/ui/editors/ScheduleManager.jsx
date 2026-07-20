@@ -178,6 +178,12 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, dataSources =
     ? [...new Set(allRows.flatMap(r => Object.keys(r.attrs || {})))]
     : [];
 
+  const matchBEvent = (eventId) =>
+    bEvents.find(be => be.id === eventId) ??
+    bEvents.find(be => be.name === eventId) ??
+    bEvents.find(be => be.name?.toLowerCase() === eventId?.toLowerCase()) ??
+    null;
+
   // Collect entity type names from B-Event effects (for display reference)
   const arrivingEntityTypes = (() => {
     const types = new Set();
@@ -200,12 +206,6 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, dataSources =
       setSaving(false);
     }
   };
-
-  const matchBEvent = (eventId) =>
-    bEvents.find(be => be.id === eventId) ??
-    bEvents.find(be => be.name === eventId) ??
-    bEvents.find(be => be.name?.toLowerCase() === eventId?.toLowerCase()) ??
-    null;
 
   const handleImportFile = async (e) => {
     const file = e.target.files?.[0];
