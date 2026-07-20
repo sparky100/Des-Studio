@@ -100,13 +100,17 @@ describe('calendarUtilisation — calendar-aware overall utilisation', () => {
     expect(clerk.calendarUtilisation).toBeUndefined();
   });
 
-  test('is materially higher than the plain wall-clock utilisation for a narrow-window resource', () => {
-    // Nurse is only open ~20 of the 700 simulated minutes. The plain `utilisation`
-    // field divides busy time by the full 700-minute wall clock, which drastically
-    // understates how busy Nurse actually was while open — calendarUtilisation
-    // divides by open-hours-only capacity-time instead and should read much higher.
+  test('r.utilisation is overwritten with calendarUtilisation for shift-scheduled resources', () => {
+    // The plain wall-clock `utilisation` was previously computed as
+    // busyTimeSum / (elapsed * r.total) where r.total was the end-of-run server
+    // count — for a narrow-window resource like Nurse (open ~20 min of 700),
+    // r.total is 0 at the end, producing ~0% utilisation even though the Nurse
+    // was 100% busy while open. The fix overwrites r.utilisation with the
+    // shift-correct calendarUtilisation so downstream consumers get the right
+    // answer without checking the calendar field first.
     const result = buildEngine(calendarModel(), 42, 0, 700, null, 5000, 5000, false).runAll();
     const nurse = result.summary.perResource?.Nurse;
-    expect(nurse.calendarUtilisation).toBeGreaterThan(nurse.utilisation);
+    expect(nurse.utilisation).toBe(nurse.calendarUtilisation);
+    expect(nurse.utilisation).toBeGreaterThan(0.5);
   });
 });
