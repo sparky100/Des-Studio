@@ -473,6 +473,8 @@ export function resolveInlineSchedules(model, schedulesMap = {}) {
         // Prefer compound key (multi-event schedule), fall back to plain uuid
         const resolved = schedulesMap[`${s.scheduleRef}:${be.id}`] ?? schedulesMap[s.scheduleRef];
         if (!resolved) return s;                                   // ref not found — 0 arrivals
+        // Only overwrite when the schedule has no rows yet — idempotent
+        if (s.rows && s.rows.length > 0) return s;
         return { ...s, rows: resolved.rows ?? [] };
       }),
     })),
@@ -1877,45 +1879,48 @@ const cycleLog = [];
       r.availability  = denominator > 0 ? +(1 - r.downtimeSum / denominator).toFixed(4) : 1;
       r.meanDowntimePerFailure = r.failureCount > 0 ? +(r.downtimeSum / r.failureCount).toFixed(4) : null;
 
-      // Per-shift utilisation (F86.4) — only for types with schedulePattern
+      // Per-shift utilisation (F86.4) — for any resource type with shift timeline data
+      const timeline = state.__shiftTimeline?.[type] || [];
+      const buckets = perShiftBuckets[type] || {};
+      if (timeline.length > 0) {
+        r.perShiftUtil = timeline.map(period => {
+          const label = `shift_${period.startTime}_cap${period.capacity}`;
+          const bucket = buckets[label] || { busyTimeSum: 0 };
+          // Clip to the post-warmup window: busyTimeSum only ever accrues after
+          // _statsResetTime (server _busyTime is zeroed at warmup), so a period
+          // that spans the warmup boundary must not count its pre-warmup span
+          // in elapsed, or utilisation for that period is understated.
+          const periodStart = Math.max(period.startTime, _statsResetTime);
+          const periodEnd = period.endTime ?? clock;
+          const pElapsed = Math.max(0, periodEnd - periodStart);
+          const pDenom = pElapsed * period.capacity;
+          return {
+            label: `T=${period.startTime} cap=${period.capacity}`,
+            startTime: period.startTime,
+            endTime: period.endTime ?? clock,
+            plannedCapacity: period.capacity,
+            busyTimeSum: +bucket.busyTimeSum.toFixed(4),
+            elapsed: pElapsed,
+            utilisation: pDenom > 0 ? +(bucket.busyTimeSum / pDenom).toFixed(4) : 0,
+            completions: bucket.completions || 0,
+          };
+        });
+        // Calendar-aware overall utilisation: aggregate the same per-period
+        // open-capacity-time the per-shift breakdown above already computes,
+        // instead of the plain wall-clock elapsed*headcount denominator used
+        // for `r.utilisation`.
+        const busySum = r.perShiftUtil.reduce((s, p) => s + p.busyTimeSum, 0);
+        const denomSum = r.perShiftUtil.reduce((s, p) => s + p.elapsed * p.plannedCapacity, 0);
+        r.calendarUtilisation = denomSum > 0 ? +(busySum / denomSum).toFixed(4) : 0;
+        // Overwrite r.utilisation with the shift-correct value so downstream
+        // consumers that do not check calendarUtilisation first get the right
+        // answer for shift-scheduled resources.
+        r.utilisation = r.calendarUtilisation;
+      }
+      // Schedule adherence (F86.5) — weekly patterns only
       const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
       const et = (runtimeModel.entityTypes || []).find(et => et.role === "server" && match(et.name, type));
       if (et?.schedulePattern?.type === 'weekly') {
-        const timeline = state.__shiftTimeline?.[type] || [];
-        const buckets = perShiftBuckets[type] || {};
-        if (timeline.length > 0) {
-          r.perShiftUtil = timeline.map(period => {
-            const label = `shift_${period.startTime}_cap${period.capacity}`;
-            const bucket = buckets[label] || { busyTimeSum: 0 };
-            // Clip to the post-warmup window: busyTimeSum only ever accrues after
-            // _statsResetTime (server _busyTime is zeroed at warmup), so a period
-            // that spans the warmup boundary must not count its pre-warmup span
-            // in elapsed, or utilisation for that period is understated.
-            const periodStart = Math.max(period.startTime, _statsResetTime);
-            const periodEnd = period.endTime ?? clock;
-            const pElapsed = Math.max(0, periodEnd - periodStart);
-            const pDenom = pElapsed * period.capacity;
-            return {
-              label: `T=${period.startTime} cap=${period.capacity}`,
-              startTime: period.startTime,
-              endTime: period.endTime ?? clock,
-              plannedCapacity: period.capacity,
-              busyTimeSum: +bucket.busyTimeSum.toFixed(4),
-              elapsed: pElapsed,
-              utilisation: pDenom > 0 ? +(bucket.busyTimeSum / pDenom).toFixed(4) : 0,
-              completions: bucket.completions || 0,
-            };
-          });
-          // Calendar-aware overall utilisation: aggregate the same per-period
-          // open-capacity-time the per-shift breakdown above already computes,
-          // instead of the plain wall-clock elapsed*headcount denominator used
-          // for `r.utilisation`. Only meaningful for schedulePattern resources,
-          // so this is additive — `r.utilisation` is left untouched for everyone.
-          const busySum = r.perShiftUtil.reduce((s, p) => s + p.busyTimeSum, 0);
-          const denomSum = r.perShiftUtil.reduce((s, p) => s + p.elapsed * p.plannedCapacity, 0);
-          r.calendarUtilisation = denomSum > 0 ? +(busySum / denomSum).toFixed(4) : 0;
-        }
-        // Schedule adherence (F86.5)
         const adhSamples = state.__scheduleAdherenceSamples?.[type.toLowerCase()];
         if (adhSamples && adhSamples.total > 0) {
           r.scheduleAdherence = +(adhSamples.matching / adhSamples.total).toFixed(4);
