@@ -317,6 +317,12 @@ export function deriveGraphFromModel(model = {}) {
           }
         }
         if (call.macro === "COMPLETE" || call.macro === "RENEGE") {
+          // When the BEvent has a RELEASE macro, add the terminal edge here
+          // because the DELAY/no-RELEASE section below won't run.
+          // When the BEvent has no RELEASE, the DELAY section handles this
+          // edge — skip here to prevent a duplicate.
+          const hasRelease = calls.some(c => c.macro === "RELEASE" || c.macro === "RELEASE_COSEIZED");
+          if (!hasRelease) return;
           // Skip the unlabeled COMPLETE edge when routing already handles all exits
           // via labeled branches (null queueName). The routing edges already point to
           // the same sink node (via getExitSinkId above), so a second unlabeled edge

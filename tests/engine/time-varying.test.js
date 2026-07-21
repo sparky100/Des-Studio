@@ -38,7 +38,7 @@ describe('shift schedules', () => {
         id: 'srv',
         name: 'Server',
         role: 'server',
-        count: '1',
+        count: 1,
         attrDefs: [],
         shiftSchedule: [
           { time: '0', capacity: '3' },
@@ -66,7 +66,7 @@ describe('shift schedules', () => {
 
 describe('time-varying model validation', () => {
   const base = {
-    entityTypes: [{ id: 'srv', name: 'Server', role: 'server', count: '1', attrDefs: [] }],
+    entityTypes: [{ id: 'srv', name: 'Server', role: 'server', count: 1, attrDefs: [] }],
     stateVariables: [],
     bEvents: [],
     cEvents: [],
@@ -125,7 +125,7 @@ describe('time-varying model validation', () => {
         id: 'srv',
         name: 'Server',
         role: 'server',
-        count: '1',
+        count: 1,
         attrDefs: [],
         shiftSchedule: [{ time: '5', capacity: '0' }],
       }],
@@ -142,7 +142,7 @@ describe('time-varying model validation', () => {
         id: 'srv',
         name: 'Server',
         role: 'server',
-        count: '1',
+        count: 1,
         attrDefs: [],
         shiftSchedule: [
           { time: '0', capacity: '1' },
@@ -167,7 +167,7 @@ describe('time-varying model validation', () => {
         id: 'srv',
         name: 'Server',
         role: 'server',
-        count: '1',
+        count: 1,
         attrDefs: [],
         shiftSchedule: [
           { time: '0', capacity: '1' },
@@ -187,7 +187,7 @@ describe('time-varying model validation', () => {
         id: 'srv',
         name: 'Server',
         role: 'server',
-        count: '1',
+        count: 1,
         attrDefs: [],
         shiftSchedule: [
           { time: '0', capacity: '1' },
@@ -206,7 +206,7 @@ describe('time-varying model validation', () => {
         id: 'srv',
         name: 'Server',
         role: 'server',
-        count: '1',
+        count: 1,
         attrDefs: [],
         shiftSchedule: [
           { time: '0', capacity: '1' },
@@ -227,7 +227,7 @@ describe('time-varying model validation', () => {
         id: 'srv',
         name: 'Server',
         role: 'server',
-        count: '1',
+        count: 1,
         attrDefs: [],
         shiftSchedule: [
           { time: '0', capacity: '1' },
@@ -247,7 +247,7 @@ describe('time-varying model validation', () => {
         id: 'srv',
         name: 'Server',
         role: 'server',
-        count: '1',
+        count: 1,
         attrDefs: [],
         shiftSchedule: [
           { time: '0', capacity: '1' },

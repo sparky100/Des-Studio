@@ -31,13 +31,11 @@ export function parseHHMM(str) {
 export function dateToSimDay(dateStr, epoch, timeUnit = "minutes") {
   if (!dateStr || epoch == null || epoch === "") return null;
   const ms = UNIT_MS[timeUnit] ?? UNIT_MS.minutes;
-  const target = new Date(dateStr);
+  const target = new Date(dateStr + "T00:00:00Z");
   if (isNaN(target.getTime())) return null;
-  const epochDate = new Date(epoch);
+  const epochDate = new Date(epoch + "T00:00:00Z");
   if (isNaN(epochDate.getTime())) return null;
-  // Align to start of the target day
-  const dayStart = new Date(target.getFullYear(), target.getMonth(), target.getDate());
-  return (dayStart.getTime() - epochDate.getTime()) / ms;
+  return (target.getTime() - epochDate.getTime()) / ms;
 }
 
 // Get the simulation time for a specific day-of-week at HH:MM within a given week.
@@ -63,7 +61,7 @@ export function summarizePattern(pattern) {
   // Group by (start, end, capacity)
   const bySlot = {};
   for (const p of pattern.periods) {
-    const key = `${p.start}-${p.end}:${p.capacity}`;
+    const key = `${p.start}|${p.end}|${p.capacity}`;
     if (!bySlot[key]) bySlot[key] = [];
     bySlot[key].push(p.dayOfWeek);
   }
@@ -82,7 +80,7 @@ export function summarizePattern(pattern) {
         if (i < dayNums.length) { rangeStart = dayNums[i]; prev = dayNums[i]; }
       }
     }
-    const [start, end, cap] = key.split(":");
+    const [start, end, cap] = key.split("|");
     parts.push(`${ranges.join(",")} ${start}-${end} (${cap})`);
   }
   return parts.join("; ");

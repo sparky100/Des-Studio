@@ -180,8 +180,8 @@ export function applyEffect(effect, ctx) {
     // (e.g. fireBEvent's routing block) rely on ctx._lastCustId/_lastSrvId to
     // resolve the entity even when there's no effect, such as a DELAY-completion
     // B-event that resolves the entity purely via a routing table.
-    ctx._lastCustId = felRef?._contextCustId ?? null;
-    ctx._lastSrvId  = felRef?._contextSrvId  ?? null;
+    ctx._lastCustId = ctx._lastCustId ?? felRef?._contextCustId ?? null;
+    ctx._lastSrvId  = ctx._lastSrvId  ?? felRef?._contextSrvId  ?? null;
     return { msgs: [], felEntries: [] };
   }
   const msgs       = [];

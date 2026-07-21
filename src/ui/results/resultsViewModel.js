@@ -113,7 +113,7 @@ export function buildServerUtilizationSeries(results = {}, model = {}, sectionFi
       isPercent: true,
       points: timeSeries.map(entry => {
         const busy = finiteNumber(entry?.byType?.[server.name]?.busy);
-        const total = finiteNumber(entry?.byType?.[server.name]?.total);
+        const total = finiteNumber(entry?.byType?.[server.name]?.total) || parseInt(server.count, 10) || 1;
         return {
           t: finiteNumber(entry?.t),
           value: total > 0 ? (busy / total) * 100 : 0,
