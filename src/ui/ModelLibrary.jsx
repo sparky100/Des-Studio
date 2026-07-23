@@ -217,7 +217,7 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsC
 export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportFile, onPasteJson, onUseAi }) => {
   const { C, FONT } = useTheme();
   const toast = useToast();
-  const [name, setName] = useState(""); const [desc, setDesc] = useState("");
+  const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState("choose");
   const [pasteText, setPasteText] = useState("");
@@ -230,37 +230,55 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
     nameInputRef.current?.focus();
     return false;
   };
-  const startDesign = async () => { if (!requireName()) return; setSaving(true); try { await onStartDesign?.(name.trim(), desc.trim()); } finally { setSaving(false); } onClose(); };
-  const triggerImport = () => { if (!requireName()) return; fileInputRef.current?.click(); };
+  const startDesign = async () => { if (!requireName()) return; setSaving(true); try { await onStartDesign?.(name.trim(), ""); } finally { setSaving(false); } onClose(); };
+  const triggerImport = () => { fileInputRef.current?.click(); };
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => { onImportFile?.(reader.result, name.trim(), desc.trim()); onClose(); };
+    reader.onload = () => { onImportFile?.(reader.result, "", ""); onClose(); };
     reader.readAsText(file);
   };
   const handlePasteSubmit = () => {
-    if (!requireName()) return;
     if (!pasteText.trim()) { toast.error("Please paste model JSON first."); return; }
     setPasteStatus({ state: "loading", message: "Validating JSON..." });
-    onPasteJson?.(pasteText, name.trim(), desc.trim(),
+    onPasteJson?.(pasteText, "", "",
       () => { onClose(); },
       (msg) => { setPasteStatus({ state: "error", message: msg }); }
     );
   };
-  const useTemplate = () => { if (!requireName()) return; onUseTemplate?.(name.trim(), desc.trim()); onClose(); };
-  const useAi = () => { if (!requireName()) return; onUseAi?.(name.trim(), desc.trim()); onClose(); };
-  const goPaste = () => { if (!requireName()) return; setMode("paste"); };
+  const useTemplate = () => { onUseTemplate?.("", ""); onClose(); };
+  const useAi = async () => { if (saving) return; setSaving(true); try { await onUseAi?.("", ""); } finally { setSaving(false); } onClose(); };
+  const goPaste = () => { setMode("paste"); };
+  const goDraw = () => { setMode("draw"); };
   const inputStyle = { width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" };
   const optionBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 10, textAlign: "left", color: "inherit", fontFamily: FONT };
   const iconBox = { width: 30, height: 30, background: C.border + "44", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
   const importBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "10px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textAlign: "left", color: "inherit", fontFamily: FONT };
+  if (mode === "draw") {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
+        <div role="dialog" aria-modal="true" aria-labelledby="draw-model-title" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 28, width: 520, maxWidth: "95vw", fontFamily: FONT, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div id="draw-model-title" style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Name your model</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>NAME *</label>
+            <input ref={nameInputRef} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Queue with Reneging" autoFocus style={inputStyle} onKeyDown={e => { if (e.key === "Enter") startDesign(); }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <Btn variant="ghost" onClick={() => setMode("choose")}>Back</Btn>
+            <Btn variant="primary" disabled={saving} onClick={startDesign}>
+              {saving ? "Starting…" : "Start Drawing"}
+            </Btn>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (mode === "paste") {
     return (
       <div style={{ position: "fixed", inset: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
         <div role="dialog" aria-modal="true" aria-labelledby="paste-model-title" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 28, width: 520, maxWidth: "95vw", fontFamily: FONT, display: "flex", flexDirection: "column", gap: 16 }}>
           <div id="paste-model-title" style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Paste Model JSON</div>
-          {name && <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Model: <strong style={{ color: C.text }}>{name}</strong></div>}
           <textarea aria-label="Model JSON" value={pasteText} onChange={e => setPasteText(e.target.value)} placeholder={'{\n  "name": "My Model",\n  "entityTypes": [...],\n  ...\n}'} spellCheck={false} style={{ ...inputStyle, height: 200, resize: "vertical", fontFamily: "'JetBrains Mono',monospace" }} />
           {pasteStatus && pasteStatus.state !== "loading" && (
             <div style={{ background: pasteStatus.state === "error" ? C.red + "18" : C.green + "18", border: `1px solid ${pasteStatus.state === "error" ? C.red + "44" : C.green + "44"}`, borderRadius: 5, color: pasteStatus.state === "error" ? C.red : C.green, fontSize: 12, fontFamily: FONT, padding: "8px 10px" }}>
@@ -281,16 +299,6 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
     <div style={{ position: "fixed", inset: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
       <div role="dialog" aria-modal="true" aria-labelledby="new-model-title" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 28, width: 520, maxWidth: "95vw", fontFamily: FONT, display: "flex", flexDirection: "column", gap: 18, maxHeight: "90vh", overflowY: "auto" }}>
         <div id="new-model-title" style={{ fontSize: 16, fontWeight: 700, color: C.text }}>New Model</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>NAME *</label>
-            <input ref={nameInputRef} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Queue with Reneging" autoFocus style={inputStyle} />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>DESCRIPTION</label>
-            <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Optional — helps the model assistant start to build your model" rows={2} style={{ ...inputStyle, resize: "vertical" }} />
-          </div>
-        </div>
         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>START WITH</div>
         <button type="button" onClick={useAi} style={{ background: C.bg, border: `2px solid ${C.accent}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12, textAlign: "left", color: "inherit", fontFamily: FONT, width: "100%" }}>
           <div style={{ width: 36, height: 36, background: C.accent + "22", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -305,13 +313,13 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
           </div>
         </button>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <button type="button" onClick={startDesign} disabled={saving} style={optionBtn}>
+          <button type="button" onClick={goDraw} style={optionBtn}>
             <div style={iconBox}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
             </div>
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Draw</div>
-              <div style={{ fontSize: 10, color: C.muted }}>Build from a blank canvas</div>
+              <div style={{ fontSize: 10, color: C.muted }}>Build from a blank canvas — you'll name it next</div>
             </div>
           </button>
           <button type="button" onClick={useTemplate} style={optionBtn}>
@@ -334,14 +342,14 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Import a file</div>
-              <div style={{ fontSize: 10, color: C.muted }}>Upload a .json model</div>
+              <div style={{ fontSize: 10, color: C.muted }}>Upload a .json model — keeps its name</div>
             </div>
           </button>
           <button type="button" onClick={goPaste} style={importBtn}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Paste model</div>
-              <div style={{ fontSize: 10, color: C.muted }}>JSON from clipboard</div>
+              <div style={{ fontSize: 10, color: C.muted }}>JSON from clipboard — keeps its name</div>
             </div>
           </button>
         </div>
