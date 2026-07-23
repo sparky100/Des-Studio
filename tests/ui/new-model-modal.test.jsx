@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { NewModelModal } from '../../src/ui/ModelLibrary.jsx';
+import { ToastProvider } from '../../src/ui/shared/ToastContext.jsx';
 
 describe('NewModelModal', () => {
   it('renders name and description fields', () => {
@@ -19,12 +20,23 @@ describe('NewModelModal', () => {
     expect(screen.getByText(/^Describe$/i)).toBeInTheDocument();
   });
 
-  it('requires name before enabling design start', () => {
-    render(<NewModelModal onClose={vi.fn()} onStartDesign={vi.fn()} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
-    const designBtn = screen.getByText(/^Draw$/i).closest('button');
-    expect(designBtn).toBeDisabled();
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), { target: { value: 'Test Model' } });
-    expect(designBtn).not.toBeDisabled();
+  it('does not start design when name is empty', async () => {
+    const user = userEvent.setup();
+    const onStartDesign = vi.fn();
+    render(<NewModelModal onClose={vi.fn()} onStartDesign={onStartDesign} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
+    await user.click(screen.getByText(/^Draw$/i).closest('button'));
+    expect(onStartDesign).not.toHaveBeenCalled();
+  });
+
+  it('shows a toast asking for a name when Draw is clicked without one', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <NewModelModal onClose={vi.fn()} onStartDesign={vi.fn()} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />
+      </ToastProvider>
+    );
+    await user.click(screen.getByText(/^Draw$/i).closest('button'));
+    expect(await screen.findByText(/enter a model name/i)).toBeInTheDocument();
   });
 
   it('calls onStartDesign when design is clicked', async () => {
@@ -46,8 +58,15 @@ describe('NewModelModal', () => {
     expect(onUseTemplate).toHaveBeenCalledWith('Template Draft', 'Use this description');
   });
 
-  it('switches to paste mode when paste model is clicked', () => {
+  it('does not switch to paste mode without a name', () => {
     render(<NewModelModal onClose={vi.fn()} onStartDesign={vi.fn()} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
+    fireEvent.click(screen.getByText(/Paste model/i).closest('button'));
+    expect(screen.queryByText(/Paste Model JSON/i)).not.toBeInTheDocument();
+  });
+
+  it('switches to paste mode when paste model is clicked with a name', () => {
+    render(<NewModelModal onClose={vi.fn()} onStartDesign={vi.fn()} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), { target: { value: 'Test Model' } });
     fireEvent.click(screen.getByText(/Paste model/i).closest('button'));
     expect(screen.getByText(/Paste Model JSON/i)).toBeInTheDocument();
     // In paste mode, there's a textarea with aria-label "Model JSON"
