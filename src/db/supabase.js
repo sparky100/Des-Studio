@@ -30,17 +30,22 @@ export async function touchLastActive(userId) {
   }
 }
 
+// Identifies this app in the shared feedback table (also used by the
+// sibling "lens" and "loop" apps against the same Supabase project).
+export const FEEDBACK_APP_NAME = 'simmodlr';
+
 /**
  * Submit user feedback to the Supabase feedback table.
  * Inserts one row; throws on error.
  *
  * @param {{ category: string, message: string, userId: string|null, appVersion: string|undefined, pageContext: string|undefined, replyEmail?: string }} params
+ * @param {object} [client] - Supabase client to use (defaults to the module singleton; injectable for tests).
  */
-export async function submitFeedback({ category, message, userId, appVersion, pageContext, replyEmail }) {
+export async function submitFeedback({ category, message, userId, appVersion, pageContext, replyEmail }, client = supabase) {
   let accountEmail = null;
   if (userId) {
     try {
-      const { data } = await supabase.auth.getUser();
+      const { data } = await client.auth.getUser();
       if (data?.user?.id === userId) {
         accountEmail = data.user.email || null;
       }
@@ -49,7 +54,7 @@ export async function submitFeedback({ category, message, userId, appVersion, pa
     }
   }
 
-  const { error } = await supabase.from('feedback').insert({
+  const { error } = await client.from('feedback').insert({
     category,
     message,
     user_id: userId ?? null,
@@ -57,6 +62,7 @@ export async function submitFeedback({ category, message, userId, appVersion, pa
     reply_email: replyEmail?.trim() || null,
     app_version: appVersion,
     page_context: pageContext,
+    app_name: FEEDBACK_APP_NAME,
     user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
   });
   if (error) throw error;

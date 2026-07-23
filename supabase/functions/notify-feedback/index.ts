@@ -25,6 +25,18 @@ const CATEGORY_LABELS: Record<string, string> = {
   other:   "💬 Other",
 };
 
+// Sibling apps sharing this feedback table (see app_name column).
+const APP_LABELS: Record<string, string> = {
+  simmodlr: "simmodlr",
+  lens:     "Lens",
+  loop:     "Loop",
+};
+
+function appLabel(appName: string | null | undefined): string {
+  if (!appName) return "Unknown app";
+  return APP_LABELS[appName] ?? (appName.charAt(0).toUpperCase() + appName.slice(1));
+}
+
 function escapeHtml(str: string | null | undefined): string {
   if (!str) return "—";
   return str
@@ -37,10 +49,10 @@ function escapeHtml(str: string | null | undefined): string {
 function buildEmailHtml(record: Record<string, unknown>): string {
   const {
     id, category, message, user_id, account_email, reply_email,
-    app_version, page_context, created_at,
+    app_name, app_version, page_context, created_at,
   } = record as {
     id?: string; category?: string; message?: string; user_id?: string;
-    account_email?: string; reply_email?: string;
+    account_email?: string; reply_email?: string; app_name?: string;
     app_version?: string; page_context?: string; created_at?: string;
   };
 
@@ -53,41 +65,45 @@ function buildEmailHtml(record: Record<string, unknown>): string {
 <html lang="en">
 <head><meta charset="utf-8"><title>New feedback</title></head>
 <body style="font-family:system-ui,sans-serif;font-size:13px;color:#1a1a1a;background:#fff;padding:24px">
-  <h2 style="margin:0 0 16px;font-size:16px;color:#4f46e5">New feedback — simmodlr</h2>
+  <h2 style="margin:0 0 16px;font-size:16px;color:#4f46e5">New feedback — ${escapeHtml(appLabel(app_name))}</h2>
   <table cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:560px">
     <tr style="background:#f5f5f5">
-      <th align="left" width="140" style="border:1px solid #ddd;font-weight:600">Category</th>
-      <td style="border:1px solid #ddd">${categoryLabel}</td>
+      <th align="left" width="140" style="border:1px solid #ddd;font-weight:600">App</th>
+      <td style="border:1px solid #ddd"><strong>${escapeHtml(appLabel(app_name))}</strong></td>
     </tr>
     <tr>
+      <th align="left" style="border:1px solid #ddd;font-weight:600">Category</th>
+      <td style="border:1px solid #ddd">${categoryLabel}</td>
+    </tr>
+    <tr style="background:#f5f5f5">
       <th align="left" style="border:1px solid #ddd;font-weight:600">Submitted</th>
       <td style="border:1px solid #ddd">${escapeHtml(ts)}</td>
     </tr>
-    <tr style="background:#f5f5f5">
+    <tr>
       <th align="left" style="border:1px solid #ddd;font-weight:600">User ID</th>
       <td style="border:1px solid #ddd;font-size:11px;color:#555">${escapeHtml(user_id) === "—" ? "(anonymous)" : escapeHtml(user_id)}</td>
     </tr>
-    <tr>
+    <tr style="background:#f5f5f5">
       <th align="left" style="border:1px solid #ddd;font-weight:600">Account email</th>
       <td style="border:1px solid #ddd">${escapeHtml(account_email)}</td>
     </tr>
-    <tr style="background:#f5f5f5">
+    <tr>
       <th align="left" style="border:1px solid #ddd;font-weight:600">Reply email</th>
       <td style="border:1px solid #ddd">${escapeHtml(reply_email)}</td>
     </tr>
-    <tr>
+    <tr style="background:#f5f5f5">
       <th align="left" style="border:1px solid #ddd;font-weight:600">App version</th>
       <td style="border:1px solid #ddd">${escapeHtml(app_version)}</td>
     </tr>
-    <tr style="background:#f5f5f5">
+    <tr>
       <th align="left" style="border:1px solid #ddd;font-weight:600">Page</th>
       <td style="border:1px solid #ddd">${escapeHtml(page_context)}</td>
     </tr>
-    <tr>
+    <tr style="background:#f5f5f5">
       <th align="left" style="border:1px solid #ddd;font-weight:600;vertical-align:top">Message</th>
       <td style="border:1px solid #ddd;white-space:pre-wrap;line-height:1.5">${escapeHtml(message as string)}</td>
     </tr>
-    <tr style="background:#f5f5f5">
+    <tr>
       <th align="left" style="border:1px solid #ddd;font-weight:600">Row ID</th>
       <td style="border:1px solid #ddd;font-size:11px;color:#555">${escapeHtml(id)}</td>
     </tr>
@@ -129,8 +145,8 @@ Deno.serve(async (req: Request) => {
         ? (body.record as Record<string, unknown>)
         : body;
 
-    const { category } = record as { category?: string };
-    const subject = `[simmodlr Feedback] ${CATEGORY_LABELS[category ?? ""] ?? category ?? "new submission"}`;
+    const { category, app_name } = record as { category?: string; app_name?: string };
+    const subject = `[${appLabel(app_name)} Feedback] ${CATEGORY_LABELS[category ?? ""] ?? category ?? "new submission"}`;
 
     const emailRes = await fetch(RESEND_API_URL, {
       method: "POST",
