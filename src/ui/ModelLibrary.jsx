@@ -5,6 +5,7 @@ import { Tag, Avatar, Btn, Field, Empty } from "./shared/components.jsx";
 import { TEMPLATES } from "../engine/templates.js";
 import { validateModel } from "../engine/validation.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { useToast } from "./shared/ToastContext.jsx";
 import { WelcomeDialog } from "./WelcomeDialog.jsx";
 import { buildLLMSchemaPromptPack } from "../llm/bundleExport.js";
 import { downloadTextFile } from "./shared/utils.js";
@@ -215,14 +216,22 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsC
 
 export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportFile, onPasteJson, onUseAi }) => {
   const { C, FONT } = useTheme();
+  const toast = useToast();
   const [name, setName] = useState(""); const [desc, setDesc] = useState("");
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState("choose");
   const [pasteText, setPasteText] = useState("");
   const [pasteStatus, setPasteStatus] = useState(null);
   const fileInputRef = useRef(null);
-  const startDesign = async () => { if (!name.trim()) return; setSaving(true); try { await onStartDesign?.(name.trim(), desc.trim()); } finally { setSaving(false); } onClose(); };
-  const triggerImport = () => { if (!name.trim()) return; fileInputRef.current?.click(); };
+  const nameInputRef = useRef(null);
+  const requireName = () => {
+    if (name.trim()) return true;
+    toast.error("Please enter a model name first.");
+    nameInputRef.current?.focus();
+    return false;
+  };
+  const startDesign = async () => { if (!requireName()) return; setSaving(true); try { await onStartDesign?.(name.trim(), desc.trim()); } finally { setSaving(false); } onClose(); };
+  const triggerImport = () => { if (!requireName()) return; fileInputRef.current?.click(); };
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -231,15 +240,17 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
     reader.readAsText(file);
   };
   const handlePasteSubmit = () => {
-    if (!pasteText.trim() || !name.trim()) return;
+    if (!requireName()) return;
+    if (!pasteText.trim()) { toast.error("Please paste model JSON first."); return; }
     setPasteStatus({ state: "loading", message: "Validating JSON..." });
     onPasteJson?.(pasteText, name.trim(), desc.trim(),
       () => { onClose(); },
       (msg) => { setPasteStatus({ state: "error", message: msg }); }
     );
   };
-  const useTemplate = () => { onUseTemplate?.(name.trim(), desc.trim()); onClose(); };
-  const useAi = () => { onUseAi?.(name.trim(), desc.trim()); onClose(); };
+  const useTemplate = () => { if (!requireName()) return; onUseTemplate?.(name.trim(), desc.trim()); onClose(); };
+  const useAi = () => { if (!requireName()) return; onUseAi?.(name.trim(), desc.trim()); onClose(); };
+  const goPaste = () => { if (!requireName()) return; setMode("paste"); };
   const inputStyle = { width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" };
   const optionBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 10, textAlign: "left", color: "inherit", fontFamily: FONT };
   const iconBox = { width: 30, height: 30, background: C.border + "44", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
@@ -258,7 +269,7 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
           )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
             <Btn variant="ghost" onClick={() => setMode("choose")}>Back</Btn>
-            <Btn variant="primary" disabled={!pasteText.trim() || !name.trim() || pasteStatus?.state === "loading"} onClick={handlePasteSubmit}>
+            <Btn variant="primary" disabled={pasteStatus?.state === "loading"} onClick={handlePasteSubmit}>
               {pasteStatus?.state === "loading" ? "Importing…" : "Import Model"}
             </Btn>
           </div>
@@ -273,7 +284,7 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>NAME *</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Queue with Reneging" autoFocus style={inputStyle} />
+            <input ref={nameInputRef} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Queue with Reneging" autoFocus style={inputStyle} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>DESCRIPTION</label>
@@ -294,7 +305,7 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
           </div>
         </button>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <button type="button" onClick={startDesign} disabled={!name.trim() || saving} style={optionBtn}>
+          <button type="button" onClick={startDesign} disabled={saving} style={optionBtn}>
             <div style={iconBox}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
             </div>
@@ -326,7 +337,7 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
               <div style={{ fontSize: 10, color: C.muted }}>Upload a .json model</div>
             </div>
           </button>
-          <button type="button" onClick={() => setMode("paste")} style={importBtn}>
+          <button type="button" onClick={goPaste} style={importBtn}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Paste model</div>
