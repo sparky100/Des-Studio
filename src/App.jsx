@@ -728,7 +728,8 @@ export default function App({ onThemeChange }){
             setOpenId(saved.id);
             return saved;
           } else {
-            const m = await saveModel({name, description: desc, entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: []}, uid);
+            const fallbackName = `Untitled model (${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`;
+            const m = await saveModel({name: name?.trim() || fallbackName, description: desc, entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: []}, uid);
             await loadData();
             setOpenModelOptions(nextOptions);
             setOpenId(m.id);

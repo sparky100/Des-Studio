@@ -44,12 +44,16 @@ describe('accessibility pass', () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it('labels and focuses the new model modal fields', () => {
+  it('labels and focuses the new model modal fields', async () => {
+    const user = userEvent.setup();
     render(<NewModelModal onClose={vi.fn()} onStartDesign={vi.fn()} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
 
     expect(screen.getByRole('dialog', { name: /new model/i })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/e\.g\. Queue with Reneging/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByText(/^Draw$/i).closest('button'));
+    expect(screen.getByRole('dialog', { name: /name your model/i })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i)).toHaveFocus();
-    expect(screen.getByPlaceholderText(/Optional/i)).toBeInTheDocument();
   });
 
   it('exposes selected state on model tabs', async () => {
