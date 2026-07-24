@@ -1,7 +1,7 @@
 // ui/AuthShell.jsx — Authentication forms (sign-in, sign-up, password recovery)
 import { useState, useCallback } from "react";
 import { GOOGLE_FONT_URL } from "./shared/tokens.js";
-import { supabase } from "../db/supabase.js";
+import { supabase, APP_NAME } from "../db/supabase.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
@@ -23,7 +23,11 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
         const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
         if (error) throw error;
       } else {
-        const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+        const { error } = await supabase.auth.signUp({
+          email: authEmail,
+          password: authPassword,
+          options: { data: { app_name: APP_NAME } },
+        });
         if (error) throw error;
         setShowVerifyPrompt(true);
         return;

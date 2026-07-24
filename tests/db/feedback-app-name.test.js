@@ -8,7 +8,7 @@ vi.unmock('../../src/db/supabase.js');
 vi.stubEnv('VITE_SUPABASE_URL', 'https://placeholder.supabase.co');
 vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'placeholder-anon-key');
 
-const { submitFeedback, FEEDBACK_APP_NAME } = await import('../../src/db/supabase.js');
+const { submitFeedback, APP_NAME } = await import('../../src/db/supabase.js');
 
 describe('submitFeedback app_name round-trip', () => {
   it('tags inserted feedback rows with this app\'s identifier', async () => {
@@ -30,6 +30,6 @@ describe('submitFeedback app_name round-trip', () => {
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       app_name: 'simmodlr',
     }));
-    expect(FEEDBACK_APP_NAME).toBe('simmodlr');
+    expect(APP_NAME).toBe('simmodlr');
   });
 });

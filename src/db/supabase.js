@@ -30,9 +30,9 @@ export async function touchLastActive(userId) {
   }
 }
 
-// Identifies this app in the shared feedback table (also used by the
-// sibling "lens" and "loop" apps against the same Supabase project).
-export const FEEDBACK_APP_NAME = 'simmodlr';
+// Identifies this app in the shared Supabase project (feedback table,
+// signup metadata) also used by the sibling "lens" and "loop" apps.
+export const APP_NAME = 'simmodlr';
 
 /**
  * Submit user feedback to the Supabase feedback table.
@@ -62,7 +62,7 @@ export async function submitFeedback({ category, message, userId, appVersion, pa
     reply_email: replyEmail?.trim() || null,
     app_version: appVersion,
     page_context: pageContext,
-    app_name: FEEDBACK_APP_NAME,
+    app_name: APP_NAME,
     user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
   });
   if (error) throw error;

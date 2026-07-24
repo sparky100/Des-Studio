@@ -1850,14 +1850,9 @@ Auth pattern: identical to `import-model` — `authClient.auth.getUser(token)` f
 Full response schemas: `docs/architecture/results-api-design.md`.
 
 ### notify-new-signup Edge Function
-`supabase/functions/notify-new-signup/index.ts` — receives a database webhook POST on INSERT to `auth.users`. Sends an email via Resend API and optionally a Slack message.
+`supabase/functions/notify-new-signup/index.ts` — receives a database webhook POST on INSERT to `auth.users`. Sends an email via Resend API (identifying which of the 3 apps — simmodlr/lens/loop — the signup came from, via `raw_user_meta_data.app_name`) and optionally a Slack message. Deployed with `verify_jwt: false` since it implements its own `WEBHOOK_SECRET` check instead of platform JWT verification.
 
-**Manual webhook setup (cannot be automated via migration):**
-In Supabase Dashboard -> Database -> Webhooks -> Create new webhook:
-- Table: `auth.users`
-- Events: INSERT
-- URL: `https://<project-ref>.supabase.co/functions/v1/notify-new-signup`
-- Headers: `Authorization: Bearer <WEBHOOK_SECRET>`
+**Trigger wiring:** created via migration `20260724092005_notify_new_signup_trigger.sql` — a trigger on `auth.users` calling `supabase_functions.http_request(...)`, the same mechanism as the dashboard-created `notify-feedback` trigger on `public.feedback`. No manual Dashboard webhook step needed.
 
 ### Environment variables (Sprint 71)
 Configured in Supabase Dashboard -> Edge Functions -> Secrets (NOT in .env files):

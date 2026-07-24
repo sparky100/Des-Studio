@@ -12,13 +12,11 @@
  * Optional environment variables:
  *   SLACK_WEBHOOK_URL   — If set, also sends a Slack message to this incoming webhook URL
  *
- * Database webhook setup (manual step — cannot be automated via migration):
- *   In Supabase Dashboard → Database → Webhooks → Create new webhook:
- *     Table:  auth.users
- *     Events: INSERT
- *     URL:    https://<project-ref>.supabase.co/functions/v1/notify-new-signup
- *     Headers:
- *       Authorization: Bearer <WEBHOOK_SECRET>
+ * Database trigger: created via migration (see
+ * supabase/migrations/*_notify_new_signup_trigger.sql), calling this function
+ * through supabase_functions.http_request(...) on AFTER INSERT to auth.users —
+ * the same mechanism as the feedback_notify_on_insert-style trigger already
+ * used for notify-feedback.
  *
  * Always returns HTTP 200 to prevent webhook retries on transient failures.
  * Errors are logged but never re-thrown.
@@ -30,6 +28,19 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Sibling apps sharing this Supabase project (see notify-feedback/index.ts
+// for the same pattern applied to the feedback table).
+const APP_LABELS: Record<string, string> = {
+  simmodlr: "simmodlr",
+  lens:     "Lens",
+  loop:     "Loop",
+};
+
+function appLabel(appName: string | null | undefined): string {
+  if (!appName) return "Unknown app";
+  return APP_LABELS[appName] ?? (appName.charAt(0).toUpperCase() + appName.slice(1));
+}
+
 type WebhookPayload = {
   type: string;
   table: string;
@@ -38,6 +49,7 @@ type WebhookPayload = {
     id: string;
     email: string;
     created_at: string;
+    raw_user_meta_data?: { app_name?: string; [key: string]: unknown };
     [key: string]: unknown;
   };
   old_record: null | Record<string, unknown>;
@@ -49,15 +61,18 @@ async function sendEmail(
   userEmail: string,
   userId: string,
   signupAt: string,
+  appName: string | null | undefined,
 ): Promise<void> {
   const signupDate = new Date(signupAt).toUTCString();
+  const app = appLabel(appName);
   const body = {
     from: "simmodlr <noreply@updates.simmodlr.app>",
     to: [toEmail],
-    subject: `New signup: ${userEmail}`,
+    subject: `New signup on ${app}: ${userEmail}`,
     text: [
-      "New user signup on simmodlr",
+      `New user signup on ${app}`,
       "",
+      `App:       ${app}`,
       `Email:     ${userEmail}`,
       `User ID:   ${userId}`,
       `Signed up: ${signupDate}`,
@@ -142,7 +157,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
     });
   }
 
-  const { id: userId, email: userEmail, created_at: createdAt } = payload.record;
+  const { id: userId, email: userEmail, created_at: createdAt, raw_user_meta_data } = payload.record;
+  const appName = raw_user_meta_data?.app_name;
 
   if (!userEmail) {
     console.warn("notify-new-signup: no email in webhook record — skipping notification");
@@ -162,7 +178,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   // Email (primary)
   if (resendApiKey && adminEmail) {
     try {
-      await sendEmail(resendApiKey, adminEmail, userEmail, userId, createdAt);
+      await sendEmail(resendApiKey, adminEmail, userEmail, userId, createdAt, appName);
       results.email = "sent";
       console.log(`notify-new-signup: email sent to ${adminEmail} for new user ${userEmail}`);
     } catch (err) {
