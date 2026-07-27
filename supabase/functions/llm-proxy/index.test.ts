@@ -12,8 +12,8 @@
 // fully exercising those needs a live upstream call or a fuller HTTP mock
 // harness this repo doesn't have for llm-proxy yet.
 
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { mapDeepgramResponseToTranscript, loadTranscriptionKeys } from "./index.ts";
+import { assertEquals, assertThrows } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { mapDeepgramResponseToTranscript, loadTranscriptionKeys, isBlockedHostname, extractReadableContent } from "./index.ts";
 
 function withMockedFetch<T>(handler: (url: string) => Response, fn: () => Promise<T>): Promise<T> {
   const originalFetch = globalThis.fetch;
@@ -155,3 +155,78 @@ Deno.test("loadTranscriptionKeys returns {} when fetch itself throws", () =>
     }
   })
 );
+
+// isBlockedHostname -- SSRF guard for the URL-import ("fetch_url") action.
+// Only covers the naive/literal-hostname case; DNS rebinding (a hostname
+// that resolves to a private IP only at fetch time) is a documented,
+// unaddressed residual risk -- see the comment on isBlockedHostname itself.
+Deno.test("isBlockedHostname blocks localhost and its variants", () => {
+  assertEquals(isBlockedHostname("localhost"), true);
+  assertEquals(isBlockedHostname("LOCALHOST"), true);
+  assertEquals(isBlockedHostname("foo.localhost"), true);
+  assertEquals(isBlockedHostname("0.0.0.0"), true);
+});
+
+Deno.test("isBlockedHostname blocks IPv4 loopback and RFC1918 private ranges, including the cloud metadata address", () => {
+  assertEquals(isBlockedHostname("127.0.0.1"), true);
+  assertEquals(isBlockedHostname("127.1.2.3"), true);
+  assertEquals(isBlockedHostname("10.0.0.5"), true);
+  assertEquals(isBlockedHostname("172.16.0.1"), true);
+  assertEquals(isBlockedHostname("172.31.255.255"), true);
+  assertEquals(isBlockedHostname("192.168.1.1"), true);
+  assertEquals(isBlockedHostname("169.254.169.254"), true); // cloud metadata endpoint
+});
+
+Deno.test("isBlockedHostname does not block IPv4 addresses just outside the private ranges", () => {
+  assertEquals(isBlockedHostname("172.15.255.255"), false);
+  assertEquals(isBlockedHostname("172.32.0.1"), false);
+  assertEquals(isBlockedHostname("8.8.8.8"), false);
+  assertEquals(isBlockedHostname("1.1.1.1"), false);
+});
+
+Deno.test("isBlockedHostname blocks IPv6 loopback, link-local, and unique-local addresses", () => {
+  assertEquals(isBlockedHostname("::1"), true);
+  assertEquals(isBlockedHostname("fe80::1"), true);
+  assertEquals(isBlockedHostname("fc00::1"), true);
+  assertEquals(isBlockedHostname("fd12:3456::1"), true);
+});
+
+Deno.test("isBlockedHostname allows ordinary public hostnames", () => {
+  assertEquals(isBlockedHostname("example.com"), false);
+  assertEquals(isBlockedHostname("genn-climate.com"), false);
+  assertEquals(isBlockedHostname("www.bbc.co.uk"), false);
+});
+
+// extractReadableContent -- boilerplate-stripping extraction for the
+// URL-import action, backed by Readability + linkedom.
+Deno.test("extractReadableContent returns the article body and strips nav/aside/footer boilerplate", () => {
+  const html = `
+    <!doctype html>
+    <html><head><title>Test Article</title></head>
+    <body>
+      <nav>Home | About | Contact</nav>
+      <aside class="widget">Subscribe to our newsletter! Buy now!</aside>
+      <article>
+        <h1>Test Article</h1>
+        <p>This is the first paragraph of a real article with enough substantive content to be recognized as the main body text by the Readability algorithm, which needs a reasonable amount of text to score this region highly against the surrounding boilerplate.</p>
+        <p>This is a second paragraph continuing the discussion with more detail, ensuring there is sufficient text density for extraction to succeed reliably in this test case.</p>
+      </article>
+      <footer>Copyright 2026. Privacy Policy. Terms of Service.</footer>
+    </body></html>
+  `;
+
+  const result = extractReadableContent(html);
+
+  assertEquals(result.text.includes("first paragraph"), true);
+  assertEquals(result.text.includes("Subscribe to our newsletter"), false);
+  assertEquals(result.text.includes("Home | About | Contact"), false);
+  assertEquals(result.text.includes("Privacy Policy"), false);
+});
+
+Deno.test("extractReadableContent throws a clear error when no readable content can be found", () => {
+  assertThrows(
+    () => extractReadableContent("<html><body></body></html>"),
+    Error,
+    "Could not find readable article content",
+  );
+});
