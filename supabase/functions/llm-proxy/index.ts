@@ -1,3 +1,6 @@
+import { DOMParser } from "npm:linkedom@0.16.11";
+import { Readability } from "npm:@mozilla/readability@0.5.0";
+
 const DEFAULT_PROVIDER = "anthropic";
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
@@ -337,6 +340,172 @@ async function transcribeAudio(audio: File): Promise<TranscriptResult> {
   return transcribeWithWhisper(audio, whisperApiKey);
 }
 
+// URL import (Lens "Load from URL"): fetch a page server-side and extract
+// its main article/content text, stripping navigation, ads, subscribe CTAs,
+// and other page furniture -- this exists precisely because a plain client-
+// side fetch(url) can't do this (CORS) and because the boilerplate-stripping
+// needs a real HTML parser + Readability, not just a chat-completion call.
+// Independent of whichever chat-completion provider is configured -- like
+// transcription above, this doesn't touch `config`/`platform_config` at all.
+
+// Blocks the naive/common SSRF vector for handleFetchUrl below: a hostname
+// or literal IP that resolves to loopback, link-local, or RFC1918 private
+// space (including the 169.254.169.254 cloud-metadata address). This does
+// NOT defend against DNS rebinding (a hostname resolving to a private IP
+// only at fetch time, after this check already passed against a different
+// address) -- closing that fully would require fetching by a pre-resolved IP
+// rather than by hostname, which this does not do. Exported so it's
+// unit-testable in isolation (see index.test.ts).
+export function isBlockedHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h === "0.0.0.0" || h.endsWith(".localhost")) return true;
+
+  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+    if (a === 127) return true; // loopback
+    if (a === 10) return true; // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16 (incl. cloud metadata)
+    return false;
+  }
+
+  const ipv6 = h.replace(/^\[|\]$/g, "");
+  if (ipv6 === "::1") return true; // loopback
+  if (/^fe80:/i.test(ipv6)) return true; // link-local
+  if (/^f[cd][0-9a-f]{2}:/i.test(ipv6)) return true; // fc00::/7 unique local
+
+  return false;
+}
+
+function fetchUrlError(status: number, message: string): Response {
+  return new Response(JSON.stringify({ error: { message } }), {
+    status,
+    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+  });
+}
+
+function validateFetchUrl(rawUrl: unknown): URL | Response {
+  if (typeof rawUrl !== "string" || !rawUrl.trim()) {
+    return fetchUrlError(400, "A valid http(s) URL is required");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl.trim());
+  } catch {
+    return fetchUrlError(400, "A valid http(s) URL is required");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return fetchUrlError(400, "A valid http(s) URL is required");
+  }
+  if (isBlockedHostname(parsed.hostname)) {
+    return fetchUrlError(400, "This URL points at a private or internal address and can't be fetched");
+  }
+  return parsed;
+}
+
+export type ExtractedContent = { title: string; text: string };
+
+// Pure HTML -> {title, text} extraction, kept separate from the network
+// fetch so it's unit-testable without a live request (see index.test.ts) --
+// same split this file already uses for mapDeepgramResponseToTranscript vs.
+// transcribeWithDeepgram. linkedom's DOMParser has no documented base-URL
+// option, so relative links/images inside the article aren't resolved --
+// that only affects the (unused) HTML `content` field, not the `textContent`
+// this function actually returns, so it's an acceptable gap for this use case.
+export function extractReadableContent(html: string): ExtractedContent {
+  // deno-lint-ignore no-explicit-any
+  const document = new (DOMParser as any)().parseFromString(html, "text/html");
+  // deno-lint-ignore no-explicit-any
+  const reader = new (Readability as any)(document, { charThreshold: 200 });
+  const article = reader.parse();
+  if (!article || !article.textContent || !String(article.textContent).trim()) {
+    throw new Error("Could not find readable article content on this page");
+  }
+  return {
+    title: String(article.title || "").trim(),
+    text: String(article.textContent || "").trim(),
+  };
+}
+
+const FETCH_URL_TIMEOUT_MS = 15000;
+const FETCH_URL_MAX_BYTES = 5 * 1024 * 1024; // 5MB
+const FETCH_URL_USER_AGENT = "Mozilla/5.0 (compatible; LensURLImport/1.0; +https://github.com/sparky100/lens)";
+
+async function handleFetchUrl(rawUrl: unknown): Promise<Response> {
+  const validated = validateFetchUrl(rawUrl);
+  if (validated instanceof Response) return validated;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_URL_TIMEOUT_MS);
+  let upstream: Response;
+  try {
+    upstream = await fetch(validated.toString(), {
+      signal: controller.signal,
+      headers: { "User-Agent": FETCH_URL_USER_AGENT, Accept: "text/html,text/plain;q=0.9,*/*;q=0.5" },
+      redirect: "follow",
+    });
+  } catch (e) {
+    const message = e instanceof Error && e.name === "AbortError"
+      ? "Timed out fetching this URL"
+      : `Could not reach this URL: ${e instanceof Error ? e.message : String(e)}`;
+    return fetchUrlError(504, message);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!upstream.ok) {
+    return fetchUrlError(502, `The page returned ${upstream.status} ${upstream.statusText || ""}`.trim());
+  }
+
+  const contentLength = Number(upstream.headers.get("content-length") || 0);
+  if (contentLength > FETCH_URL_MAX_BYTES) {
+    return fetchUrlError(422, "This page is too large to import");
+  }
+
+  const contentType = upstream.headers.get("content-type") || "";
+  const isHtml = contentType.includes("text/html");
+  const isPlainText = contentType.includes("text/plain");
+  if (!isHtml && !isPlainText) {
+    return fetchUrlError(422, `This URL doesn't look like a text or HTML page (content-type: ${contentType || "unknown"})`);
+  }
+
+  let raw: string;
+  try {
+    raw = await upstream.text();
+  } catch (e) {
+    return fetchUrlError(502, `Failed reading the page body: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  // Belt-and-braces cap for servers that omit or understate content-length --
+  // truncate rather than reject outright, since the article content we
+  // actually want is very likely near the start of the page regardless of
+  // how much boilerplate follows.
+  if (raw.length > FETCH_URL_MAX_BYTES) raw = raw.slice(0, FETCH_URL_MAX_BYTES);
+
+  const sourceUrl = upstream.url || validated.toString();
+
+  if (isPlainText) {
+    const text = raw.trim();
+    if (!text) return fetchUrlError(422, "This page had no readable text content");
+    return new Response(JSON.stringify({ text, title: "", sourceUrl }), {
+      status: 200,
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
+  }
+
+  try {
+    const { title, text } = extractReadableContent(raw);
+    return new Response(JSON.stringify({ text, title, sourceUrl }), {
+      status: 200,
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    return fetchUrlError(422, e instanceof Error ? e.message : "Could not extract readable content from this page");
+  }
+}
+
 async function loadConfig(): Promise<LlmProviderConfig> {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -436,6 +605,13 @@ Deno.serve(async request => {
   let body;
   try { body = await request.json(); }
   catch { return new Response("Invalid JSON", { status: 400, headers: CORS_HEADERS }); }
+
+  // URL import is independent of whichever chat-completion provider is
+  // configured (like transcription above) -- handled before the apiKey check
+  // below, since it doesn't need one.
+  if (body.action === "fetch_url") {
+    return await handleFetchUrl(body.url);
+  }
 
   if (!config.apiKey) {
     return new Response("LLM provider is not configured", { status: 503, headers: CORS_HEADERS });
