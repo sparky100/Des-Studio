@@ -1850,14 +1850,10 @@ Auth pattern: identical to `import-model` — `authClient.auth.getUser(token)` f
 Full response schemas: `docs/architecture/results-api-design.md`.
 
 ### notify-new-signup Edge Function
-`supabase/functions/notify-new-signup/index.ts` — receives a database webhook POST on INSERT to `auth.users`. Sends an email via Resend API and optionally a Slack message.
+`supabase/functions/notify-new-signup/index.ts` — receives a database webhook POST on INSERT to `auth.users`. Sends an email via Resend API and optionally a Slack message. Email subject/body include the signup's app (`APP_LABELS`/`appLabel()`, read from `raw_user_meta_data.app_name`) since this Supabase project is shared by `simmodlr`, `Lens`, and `Loop`.
 
-**Manual webhook setup (cannot be automated via migration):**
-In Supabase Dashboard -> Database -> Webhooks -> Create new webhook:
-- Table: `auth.users`
-- Events: INSERT
-- URL: `https://<project-ref>.supabase.co/functions/v1/notify-new-signup`
-- Headers: `Authorization: Bearer <WEBHOOK_SECRET>`
+**Webhook trigger:**
+Created by migration `supabase/migrations/20260730120000_notify_new_signup_webhook_trigger.sql` — a native Supabase Database Webhook (`supabase_functions.http_request`) on `AFTER INSERT` to `auth.users`. The migration ships with a placeholder secret; the real `WEBHOOK_SECRET` value must be substituted into the live trigger once, out-of-band (exact statement documented in the migration file), since a trigger definition embedding the secret as a literal cannot be committed to git.
 
 ### Environment variables (Sprint 71)
 Configured in Supabase Dashboard -> Edge Functions -> Secrets (NOT in .env files):
