@@ -248,9 +248,16 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
     );
   };
   const useTemplate = () => { onUseTemplate?.("", ""); onClose(); };
-  const useAi = async () => { if (saving) return; setSaving(true); try { await onUseAi?.("", ""); } finally { setSaving(false); } onClose(); };
+  const startAi = async () => { if (!requireName()) return; setSaving(true); try { await onUseAi?.(name.trim(), ""); } finally { setSaving(false); } onClose(); };
   const goPaste = () => { setMode("paste"); };
   const goDraw = () => { setMode("draw"); };
+  const goAi = () => { setMode("ai"); };
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   const inputStyle = { width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" };
   const optionBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 10, textAlign: "left", color: "inherit", fontFamily: FONT };
   const iconBox = { width: 30, height: 30, background: C.border + "44", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
@@ -268,6 +275,25 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
             <Btn variant="ghost" onClick={() => setMode("choose")}>Back</Btn>
             <Btn variant="primary" disabled={saving} onClick={startDesign}>
               {saving ? "Starting…" : "Start Drawing"}
+            </Btn>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (mode === "ai") {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
+        <div role="dialog" aria-modal="true" aria-labelledby="ai-model-title" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 28, width: 520, maxWidth: "95vw", fontFamily: FONT, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div id="ai-model-title" style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Name your model</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>NAME *</label>
+            <input ref={nameInputRef} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Queue with Reneging" autoFocus style={inputStyle} onKeyDown={e => { if (e.key === "Enter") startAi(); }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <Btn variant="ghost" onClick={() => setMode("choose")}>Back</Btn>
+            <Btn variant="primary" disabled={saving} onClick={startAi}>
+              {saving ? "Starting…" : "Start Assistant"}
             </Btn>
           </div>
         </div>
@@ -300,7 +326,7 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
       <div role="dialog" aria-modal="true" aria-labelledby="new-model-title" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 28, width: 520, maxWidth: "95vw", fontFamily: FONT, display: "flex", flexDirection: "column", gap: 18, maxHeight: "90vh", overflowY: "auto" }}>
         <div id="new-model-title" style={{ fontSize: 16, fontWeight: 700, color: C.text }}>New Model</div>
         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>START WITH</div>
-        <button type="button" onClick={useAi} style={{ background: C.bg, border: `2px solid ${C.accent}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12, textAlign: "left", color: "inherit", fontFamily: FONT, width: "100%" }}>
+        <button type="button" onClick={goAi} style={{ background: C.bg, border: `2px solid ${C.accent}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12, textAlign: "left", color: "inherit", fontFamily: FONT, width: "100%" }}>
           <div style={{ width: 36, height: 36, background: C.accent + "22", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063A2 2 0 0 0 14.063 15.5l-1.582 6.135a.5.5 0 0 1-.962 0z"/></svg>
           </div>
