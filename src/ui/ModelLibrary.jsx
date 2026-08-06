@@ -239,7 +239,12 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
     );
   };
   const useTemplate = () => { onUseTemplate?.(name.trim(), desc.trim()); onClose(); };
-  const useAi = () => { onUseAi?.(name.trim(), desc.trim()); onClose(); };
+  const useAi = () => { if (!name.trim()) return; onUseAi?.(name.trim(), desc.trim()); onClose(); };
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   const inputStyle = { width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" };
   const optionBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 10, textAlign: "left", color: "inherit", fontFamily: FONT };
   const iconBox = { width: 30, height: 30, background: C.border + "44", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
@@ -281,7 +286,7 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
           </div>
         </div>
         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>START WITH</div>
-        <button type="button" onClick={useAi} style={{ background: C.bg, border: `2px solid ${C.accent}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12, textAlign: "left", color: "inherit", fontFamily: FONT, width: "100%" }}>
+        <button type="button" onClick={useAi} disabled={!name.trim()} style={{ background: C.bg, border: `2px solid ${C.accent}`, borderRadius: 8, padding: "14px 16px", cursor: name.trim() ? "pointer" : "not-allowed", opacity: name.trim() ? 1 : 0.5, display: "flex", alignItems: "flex-start", gap: 12, textAlign: "left", color: "inherit", fontFamily: FONT, width: "100%" }}>
           <div style={{ width: 36, height: 36, background: C.accent + "22", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063A2 2 0 0 0 14.063 15.5l-1.582 6.135a.5.5 0 0 1-.962 0z"/></svg>
           </div>
