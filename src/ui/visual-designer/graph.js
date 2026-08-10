@@ -7,8 +7,9 @@ import dagre from "@dagrejs/dagre";
 import { clean, effectText, macroCalls } from "../../model/macroParser.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 
-const NODE_WIDTH = 142;
-const NODE_HEIGHT = 68;
+export const NODE_WIDTH = 142;
+export const NODE_HEIGHT = 68;
+export const ALIGN_GAP = 48;   // gap between a selected node and a newly palette-added node
 const DAGRE_RANK_SEP = 50;   // gap between right edge of one rank and left edge of next
 const DAGRE_NODE_SEP = 36;   // gap between nodes within the same rank
 const DAGRE_MARGIN_X = 40;
