@@ -396,6 +396,7 @@ export function FlowDiagramReactFlow({
   onDeleteEdge,
   onNodeMove,
   onNodesMove,
+  onNodeMeasure,
   onViewportChange,
   onConnectNodes,
   onDropNode,
@@ -409,6 +410,8 @@ export function FlowDiagramReactFlow({
   const nodeClickHandledRef = useRef(false);
   const boxSelectingRef = useRef(false);
   const boxSelectIdsRef = useRef([]);
+  const onNodeMeasureRef = useRef(onNodeMeasure);
+  onNodeMeasureRef.current = onNodeMeasure;
   const selectedSet = useMemo(() => new Set(selectedNodeIds.length ? selectedNodeIds : (selectedNodeId ? [selectedNodeId] : [])), [selectedNodeId, selectedNodeIds]);
 
   // Clear section focus when sections overlay is toggled off
@@ -601,6 +604,16 @@ export function FlowDiagramReactFlow({
             boxSelectIdsRef.current = ids;
           } else {
             onNodeSelectionChange?.(ids);
+          }
+        }}
+        onNodesChange={changes => {
+          // Capture actual rendered node sizes so align/distribute can work with real
+          // heights (DesNode grows beyond NODE_HEIGHT when badges/sub-labels wrap) instead
+          // of assuming every node is exactly NODE_WIDTH x NODE_HEIGHT.
+          for (const change of changes) {
+            if (change.type === "dimensions" && change.id && change.dimensions) {
+              onNodeMeasureRef.current?.(change.id, { width: change.dimensions.width, height: change.dimensions.height });
+            }
           }
         }}
         onNodeDragStop={(_, node, movedNodes = []) => {

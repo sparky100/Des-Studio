@@ -10,6 +10,87 @@ import { validateModel } from "../../engine/validation.js";
 import { renameEntityType } from "../../engine/queue-refs.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
+// Small 14x14 glyph for each align/distribute action in the Arrange menu.
+// Uses currentColor so it inherits the theme's text/accent color.
+function ArrangeGlyph({ kind }) {
+  const stroke = { stroke: "currentColor", strokeWidth: 1.3 };
+  const bar = (x, y, w, h, o = 0.9) => <rect x={x} y={y} width={w} height={h} fill="currentColor" opacity={o} />;
+  switch (kind) {
+    case "left":
+      return (
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <line x1="3" y1="2" x2="3" y2="14" {...stroke} />
+          {bar(5, 2.5, 8, 3)}
+          {bar(5, 6.5, 6, 3, 0.6)}
+          {bar(5, 10.5, 9, 3)}
+        </svg>
+      );
+    case "centerX":
+      return (
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <line x1="8" y1="2" x2="8" y2="14" {...stroke} />
+          {bar(4, 2.5, 8, 3)}
+          {bar(5.5, 6.5, 5, 3, 0.6)}
+          {bar(2.5, 10.5, 11, 3)}
+        </svg>
+      );
+    case "right":
+      return (
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <line x1="13" y1="2" x2="13" y2="14" {...stroke} />
+          {bar(3, 2.5, 8, 3)}
+          {bar(5, 6.5, 6, 3, 0.6)}
+          {bar(2, 10.5, 9, 3)}
+        </svg>
+      );
+    case "top":
+      return (
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <line x1="2" y1="3" x2="14" y2="3" {...stroke} />
+          {bar(2.5, 5, 3, 8)}
+          {bar(6.5, 5, 3, 6, 0.6)}
+          {bar(10.5, 5, 3, 9)}
+        </svg>
+      );
+    case "middleY":
+      return (
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <line x1="2" y1="8" x2="14" y2="8" {...stroke} />
+          {bar(2.5, 4, 3, 8)}
+          {bar(6.5, 5.5, 3, 5, 0.6)}
+          {bar(10.5, 2.5, 3, 11)}
+        </svg>
+      );
+    case "bottom":
+      return (
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <line x1="2" y1="13" x2="14" y2="13" {...stroke} />
+          {bar(2.5, 5, 3, 8)}
+          {bar(6.5, 7, 3, 6, 0.6)}
+          {bar(10.5, 4, 3, 9)}
+        </svg>
+      );
+    case "distributeH":
+      return (
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          {bar(2, 3, 3, 10)}
+          {bar(6.5, 3, 3, 10, 0.6)}
+          {bar(11, 3, 3, 10)}
+        </svg>
+      );
+    case "distributeV":
+      return (
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          {bar(3, 2, 10, 3)}
+          {bar(3, 6.5, 10, 3, 0.6)}
+          {bar(3, 11, 10, 3)}
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 function DeleteNodeDialog({ node, nodes = [], dependents, onConfirm, onCancel }) {
   const { C, FONT } = useTheme();
   const count = nodes.length || (node ? 1 : 0);
@@ -259,6 +340,12 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     try { return localStorage.getItem("des.sections.show") !== "0"; } catch { return true; }
   });
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  // Measured sizes reported by ReactFlow (dimensions changes) keyed by node id —
+  // used by align/distribute so real node heights (which grow past NODE_HEIGHT when
+  // badges wrap) drive the math instead of the fixed NODE_* constants.
+  const nodeSizesRef = useRef({});
+  const [arrangeOpen, setArrangeOpen] = useState(false);
+  const arrangeMenuRef = useRef(null);
   const [expandedShiftIds, setExpandedShiftIds] = useState(new Set());
   const toggleShiftExpand = (id) => setExpandedShiftIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const addShiftPeriod = (entityIdx) => {
@@ -482,15 +569,30 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     setMessage({ state: "success", text: `Duplicated ${newNodeIds.length} node${newNodeIds.length > 1 ? "s" : ""}.` });
   }
 
+  const withMeasuredSizes = nodes =>
+    nodes.map(node => ({ ...node, ...(nodeSizesRef.current[node.id] || {}) }));
+
   function alignSelectedNodes(mode) {
     if (!canEdit || selectedNodes.length < 2) return;
-    moveNodes(alignNodes(selectedNodes, mode));
+    moveNodes(alignNodes(withMeasuredSizes(selectedNodes), mode));
   }
 
   function distributeSelectedNodes(axis) {
     if (!canEdit || selectedNodes.length < 3) return;
-    moveNodes(distributeNodes(selectedNodes, axis));
+    moveNodes(distributeNodes(withMeasuredSizes(selectedNodes), axis));
   }
+
+  const ARRANGE_ITEMS = [
+    { kind: "left",       label: "Align left",   title: "Align left edges", needs: 2, run: () => alignSelectedNodes("left") },
+    { kind: "centerX",    label: "Align center", title: "Align horizontal centers", needs: 2, run: () => alignSelectedNodes("centerX") },
+    { kind: "right",      label: "Align right",  title: "Align right edges", needs: 2, run: () => alignSelectedNodes("right") },
+    { kind: "top",        label: "Align top",    title: "Align top edges", needs: 2, run: () => alignSelectedNodes("top") },
+    { kind: "middleY",    label: "Align middle", title: "Align vertical middles", needs: 2, run: () => alignSelectedNodes("middleY") },
+    { kind: "bottom",     label: "Align bottom", title: "Align bottom edges", needs: 2, run: () => alignSelectedNodes("bottom") },
+    { kind: "divider" },
+    { kind: "distributeH", label: "Distribute horizontally", title: "Distribute evenly along x-axis", needs: 3, run: () => distributeSelectedNodes("horizontal") },
+    { kind: "distributeV", label: "Distribute vertically",   title: "Distribute evenly along y-axis", needs: 3, run: () => distributeSelectedNodes("vertical") },
+  ];
 
   // Ref holds latest closures so keydown/keyup listeners never go stale.
   const kbRef = useRef(null);
@@ -511,6 +613,10 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
         return;
       }
       if (e.key === "Escape") {
+        if (kbRef.current.arrangeOpen) {
+          kbRef.current.setArrangeOpen(false);
+          return;
+        }
         kbRef.current.clearSelection();
         return;
       }
@@ -648,7 +754,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     deleteEdge(edgeId);
     setRouteDialogEdgeId(null);
   };
-  kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit, selectedEdgeId, deleteEdge, clearSelection, copySelectedNodes, pasteFromClipboard, duplicateSelectedNodes };
+  kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit, selectedEdgeId, deleteEdge, clearSelection, copySelectedNodes, pasteFromClipboard, duplicateSelectedNodes, arrangeOpen, setArrangeOpen };
   const resetLayout = () => {
     if (!canEdit) return;
     applyModel({ ...model, graph: model.graph ? { ...model.graph, nodes: [] } : undefined });
@@ -676,6 +782,18 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     const timer = setTimeout(() => setMessage(null), ms);
     return () => clearTimeout(timer);
   }, [message]);
+
+  // Close the Arrange menu on outside click / scroll.
+  useEffect(() => {
+    if (!arrangeOpen) return;
+    const onPointerDown = event => {
+      if (arrangeMenuRef.current && !arrangeMenuRef.current.contains(event.target)) {
+        setArrangeOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [arrangeOpen]);
 
   const inspectorOpen = Boolean(inspectorNodeId) && !inspectorCollapsed;
 
@@ -1165,36 +1283,75 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                     Copy
                   </Btn>
                   {canEdit && selectedNodeIds.length > 1 && (
-                    <>
-                      <Btn small variant="ghost" title="Align left edges" onClick={() => alignSelectedNodes("left")}>
-                        Align left
+                    <div ref={arrangeMenuRef} style={{ position: "relative" }}>
+                      <Btn
+                        small
+                        variant="ghost"
+                        ariaLabel="Arrange selected nodes"
+                        title="Align or distribute selected nodes"
+                        onClick={() => setArrangeOpen(open => !open)}
+                      >
+                        Arrange <span style={{ fontSize: 8, marginLeft: 2 }}>▾</span>
                       </Btn>
-                      <Btn small variant="ghost" title="Align right edges" onClick={() => alignSelectedNodes("right")}>
-                        Align right
-                      </Btn>
-                      <Btn small variant="ghost" title="Align horizontal centers" onClick={() => alignSelectedNodes("centerX")}>
-                        Align center
-                      </Btn>
-                      <Btn small variant="ghost" title="Align top edges" onClick={() => alignSelectedNodes("top")}>
-                        Align top
-                      </Btn>
-                      <Btn small variant="ghost" title="Align bottom edges" onClick={() => alignSelectedNodes("bottom")}>
-                        Align bottom
-                      </Btn>
-                      <Btn small variant="ghost" title="Align vertical middles" onClick={() => alignSelectedNodes("middleY")}>
-                        Align middle
-                      </Btn>
-                    </>
-                  )}
-                  {canEdit && selectedNodeIds.length > 2 && (
-                    <>
-                      <Btn small variant="ghost" title="Distribute evenly along x-axis" onClick={() => distributeSelectedNodes("horizontal")}>
-                        Distribute H
-                      </Btn>
-                      <Btn small variant="ghost" title="Distribute evenly along y-axis" onClick={() => distributeSelectedNodes("vertical")}>
-                        Distribute V
-                      </Btn>
-                    </>
+                      {arrangeOpen && (
+                        <div
+                          role="menu"
+                          aria-label="Arrange options"
+                          style={{
+                            background: C.surface,
+                            border: `1px solid ${C.border}`,
+                            borderRadius: 6,
+                            boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
+                            minWidth: 200,
+                            padding: "4px 0",
+                            position: "absolute",
+                            right: 0,
+                            top: "calc(100% + 4px)",
+                            zIndex: 30,
+                          }}
+                        >
+                          {ARRANGE_ITEMS.map(item =>
+                            item.kind === "divider" ? (
+                              <div key="divider" style={{ borderTop: `1px solid ${C.border}`, margin: "4px 0" }} />
+                            ) : (
+                              <button
+                                key={item.kind}
+                                type="button"
+                                role="menuitem"
+                                title={item.title}
+                                disabled={selectedNodeIds.length < item.needs}
+                                onClick={() => {
+                                  setArrangeOpen(false);
+                                  item.run();
+                                }}
+                                style={{
+                                  alignItems: "center",
+                                  background: "transparent",
+                                  border: "none",
+                                  color: C.text,
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  fontFamily: FONT,
+                                  fontSize: 11,
+                                  gap: 8,
+                                  opacity: selectedNodeIds.length < item.needs ? 0.4 : 1,
+                                  padding: "6px 10px",
+                                  textAlign: "left",
+                                  width: "100%",
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.background = C.surfaceHover; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                              >
+                                <span style={{ color: C.accent, display: "flex", flexShrink: 0, opacity: selectedNodeIds.length < item.needs ? 0.5 : 1 }}>
+                                  <ArrangeGlyph kind={item.kind} />
+                                </span>
+                                {item.label}
+                              </button>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
                   {canEdit && (
                     <Btn small variant="danger" onClick={deleteSelectedNodes}>
@@ -1237,6 +1394,9 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               showSections={showSections}
               onNodeSelect={selectNode}
               onNodeSelectionChange={syncSelection}
+              onNodeMeasure={(id, dims) => {
+                if (id && dims) nodeSizesRef.current[id] = { width: dims.width, height: dims.height };
+              }}
               onEdgeSelect={selectEdge}
               onDeleteEdge={canEdit ? deleteEdge : null}
               onNodeMove={moveNode}

@@ -752,6 +752,74 @@ describe('alignNodes', () => {
   });
 });
 
+describe('alignNodes with per-node sizes', () => {
+  const heightOf = (nodes, id) => nodes.find(n => n.id === id).height ?? NODE_HEIGHT;
+
+  test('middleY uses each node height so all centers align when heights differ', () => {
+    const nodes = [
+      { id: 'a', x: 0, y: 0, height: 68 },
+      { id: 'b', x: 100, y: 10, height: 120 },
+      { id: 'c', x: 200, y: 0, height: 68 },
+    ];
+    const result = alignNodes(nodes, 'middleY');
+    const middles = result.map(node => node.y + heightOf(nodes, node.id) / 2);
+    expect(new Set(middles).size).toBe(1);
+  });
+
+  test('middleY falls back to NODE_HEIGHT when a node has no measured height', () => {
+    const nodes = [
+      { id: 'a', x: 0, y: 0, height: 68 },
+      { id: 'b', x: 100, y: 10 },
+      { id: 'c', x: 200, y: 0, height: 120 },
+    ];
+    const result = alignNodes(nodes, 'middleY');
+    const middles = result.map(node => node.y + heightOf(nodes, node.id) / 2);
+    expect(new Set(middles).size).toBe(1);
+  });
+
+  test('bottom aligns the taller node bottom with shorter node bottoms', () => {
+    const nodes = [
+      { id: 'a', x: 0, y: 0, height: 68 },
+      { id: 'b', x: 100, y: 10, height: 120 },
+    ];
+    const result = alignNodes(nodes, 'bottom');
+    const bottoms = result.map(node => node.y + heightOf(nodes, node.id));
+    expect(new Set(bottoms).size).toBe(1);
+    expect(bottoms[0]).toBe(130);
+  });
+
+  test('right aligns the wider node right edge with narrower node right edges', () => {
+    const widthOf = (nodes, id) => nodes.find(n => n.id === id).width ?? NODE_WIDTH;
+    const nodes = [
+      { id: 'a', x: 0, y: 0, width: 142 },
+      { id: 'b', x: 100, y: 0, width: 220 },
+    ];
+    const result = alignNodes(nodes, 'right');
+    const rights = result.map(node => node.x + widthOf(nodes, node.id));
+    expect(new Set(rights).size).toBe(1);
+    expect(rights[0]).toBe(320);
+  });
+});
+
+describe('distributeNodes with per-node sizes', () => {
+  test('vertical distribution uses each node height to compute centers', () => {
+    const heightOf = (nodes, id) => nodes.find(n => n.id === id).height ?? NODE_HEIGHT;
+    const nodes = [
+      { id: 'a', x: 10, y: 0, height: 68 },
+      { id: 'b', x: 20, y: 40, height: 120 },
+      { id: 'c', x: 30, y: 300, height: 68 },
+    ];
+    const result = distributeNodes(nodes, 'vertical');
+    const byId = Object.fromEntries(result.map(n => [n.id, n]));
+    expect(byId.a.y).toBe(0);
+    expect(byId.c.y).toBe(300);
+    const centerA = byId.a.y + heightOf(nodes, 'a') / 2;
+    const centerB = byId.b.y + heightOf(nodes, 'b') / 2;
+    const centerC = byId.c.y + heightOf(nodes, 'c') / 2;
+    expect(centerB - centerA).toBeCloseTo(centerC - centerB, 5);
+  });
+});
+
 describe('distributeNodes', () => {
   test('returns empty array for fewer than 3 nodes', () => {
     expect(distributeNodes([{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 100, y: 0 }], 'horizontal')).toEqual([]);
