@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
-import { deriveGraphFromModel, searchGraphNodes, VISUAL_NODE_TYPES, isActivityRouteEdge } from "./graph.js";
+import { deriveGraphFromModel, searchGraphNodes, VISUAL_NODE_TYPES, isActivityRouteEdge, NODE_WIDTH, ALIGN_GAP } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
-import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, alignNodes, distributeNodes, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { RouteEdgeDialog } from "./RouteEdgeDialog.jsx";
@@ -482,6 +482,16 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     setMessage({ state: "success", text: `Duplicated ${newNodeIds.length} node${newNodeIds.length > 1 ? "s" : ""}.` });
   }
 
+  function alignSelectedNodes(mode) {
+    if (!canEdit || selectedNodes.length < 2) return;
+    moveNodes(alignNodes(selectedNodes, mode));
+  }
+
+  function distributeSelectedNodes(axis) {
+    if (!canEdit || selectedNodes.length < 3) return;
+    moveNodes(distributeNodes(selectedNodes, axis));
+  }
+
   // Ref holds latest closures so keydown/keyup listeners never go stale.
   const kbRef = useRef(null);
 
@@ -537,10 +547,17 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
 
   const addNode = (type, position = null) => {
     if (!canEdit) return;
-    let next = addVisualNode(model, type, position);
+    // Palette clicks (position null) with exactly one node selected place the new
+    // node to the right of the selection instead of letting the first dagre pass
+    // drop it at the canvas margin — which for a fresh model puts it directly on
+    // top of the selected node. Drag/drop positions are always respected.
+    const selectedNode = inspectorNodeId ? graph.nodes.find(node => node.id === inspectorNodeId) : null;
+    const effectivePosition = position || (selectedNode
+      ? { x: selectedNode.x + NODE_WIDTH + ALIGN_GAP, y: selectedNode.y }
+      : null);
+    let next = addVisualNode(model, type, effectivePosition);
     let nextGraph = deriveGraphFromModel(next);
     const newest = [...nextGraph.nodes].reverse().find(node => node.type === type);
-    const selectedNode = inspectorNodeId ? graph.nodes.find(node => node.id === inspectorNodeId) : null;
     const autoLinkTypes = [VISUAL_NODE_TYPES.SOURCE, VISUAL_NODE_TYPES.ACTIVITY, VISUAL_NODE_TYPES.QUEUE];
     if (selectedNode && newest && selectedNode.id !== newest.id && autoLinkTypes.includes(selectedNode.type)) {
       const validation = validateVisualConnection(nextGraph, selectedNode.id, newest.id);
@@ -1147,6 +1164,38 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                   <Btn small variant="ghost" onClick={copySelectedNodes}>
                     Copy
                   </Btn>
+                  {canEdit && selectedNodeIds.length > 1 && (
+                    <>
+                      <Btn small variant="ghost" title="Align left edges" onClick={() => alignSelectedNodes("left")}>
+                        Align left
+                      </Btn>
+                      <Btn small variant="ghost" title="Align right edges" onClick={() => alignSelectedNodes("right")}>
+                        Align right
+                      </Btn>
+                      <Btn small variant="ghost" title="Align horizontal centers" onClick={() => alignSelectedNodes("centerX")}>
+                        Align center
+                      </Btn>
+                      <Btn small variant="ghost" title="Align top edges" onClick={() => alignSelectedNodes("top")}>
+                        Align top
+                      </Btn>
+                      <Btn small variant="ghost" title="Align bottom edges" onClick={() => alignSelectedNodes("bottom")}>
+                        Align bottom
+                      </Btn>
+                      <Btn small variant="ghost" title="Align vertical middles" onClick={() => alignSelectedNodes("middleY")}>
+                        Align middle
+                      </Btn>
+                    </>
+                  )}
+                  {canEdit && selectedNodeIds.length > 2 && (
+                    <>
+                      <Btn small variant="ghost" title="Distribute evenly along x-axis" onClick={() => distributeSelectedNodes("horizontal")}>
+                        Distribute H
+                      </Btn>
+                      <Btn small variant="ghost" title="Distribute evenly along y-axis" onClick={() => distributeSelectedNodes("vertical")}>
+                        Distribute V
+                      </Btn>
+                    </>
+                  )}
                   {canEdit && (
                     <Btn small variant="danger" onClick={deleteSelectedNodes}>
                       Delete
