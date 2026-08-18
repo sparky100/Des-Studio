@@ -149,6 +149,28 @@ export default function App({ onThemeChange }){
     }
   },[])
 
+  // Session handoff from Compass: `?access_token=...&refresh_token=...` may arrive ahead of
+  // the `#model/{id}` hash (e.g. `/?access_token=...&refresh_token=...#model/abc`). This is
+  // checked against location.search independently of the hash parsing above, which is
+  // unaffected either way.
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search)
+    const access_token=params.get('access_token')
+    const refresh_token=params.get('refresh_token')
+    if(!access_token || !refresh_token)return
+    supabase.auth.setSession({access_token,refresh_token}).then(({error})=>{
+      if(error){
+        console.warn('[session-handoff] supabase.auth.setSession failed:',error.message)
+        return
+      }
+      params.delete('access_token')
+      params.delete('refresh_token')
+      const newSearch=params.toString()
+      const newUrl=window.location.pathname+(newSearch?`?${newSearch}`:'')+window.location.hash
+      window.history.replaceState(null,'',newUrl)
+    })
+  },[])
+
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
       setSession(session)
