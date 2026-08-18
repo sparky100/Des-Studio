@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { Z } from "./shared/tokens.js";
 import { Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { useViewport } from "./shared/hooks.js";
 
 const ic = (w, h, children) => (
   <svg width={w} height={h} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -57,6 +58,7 @@ const OPTIONS = [
 
 export function WelcomeDialog({ onCreateModel, onOpenLibrary, onHelp, onExportSchema, onClose }) {
   const { C, FONT } = useTheme();
+  const { isMobile } = useViewport();
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -112,7 +114,7 @@ export function WelcomeDialog({ onCreateModel, onOpenLibrary, onHelp, onExportSc
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
             gap: 10,
           }}
         >
