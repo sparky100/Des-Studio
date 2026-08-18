@@ -77,7 +77,7 @@ export function AppNavBar({
       }}>
         {/* Brand */}
         <div>
-          <div style={{ fontWeight: 700, fontSize: 17, color: C.accent, letterSpacing: 2, fontFamily: FONT, lineHeight: 1.1 }}>simmodlr</div>
+          <div style={{ fontWeight: 700, fontSize: 17, color: C.accent, letterSpacing: 2, fontFamily: FONT, lineHeight: 1.1 }}>simmodlr flow</div>
         </div>
 
         <div style={{ flex: 1 }} />
@@ -112,8 +112,8 @@ export function AppNavBar({
         {/* Info / About button — opens AboutModal */}
         <button
           type="button"
-          aria-label="About simmodlr"
-          title="About simmodlr"
+          aria-label="About flow"
+          title="About flow"
           onClick={() => setAboutOpen(true)}
           style={navBtnStyle}
         >

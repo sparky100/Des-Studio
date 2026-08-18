@@ -832,7 +832,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       catch { /* no schedule table yet — export inline rows as-is */ }
     }
     const payload = buildModelExportPayload(model, new Date().toISOString(), schedules);
-    downloadJsonFile(payload, `simmodlr-${slugifyModelName(model.name)}.json`);
+    downloadJsonFile(payload, `flow-${slugifyModelName(model.name)}.json`);
   };
 
   // Every row inserted via saveSimulationRun() always carries a results_json

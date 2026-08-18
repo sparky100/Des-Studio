@@ -2296,7 +2296,7 @@ describe('Sprint 71 — persistence layer', () => {
           error: { code: '42703', message: 'column des_models.model_json does not exist' },
         });
 
-      await expect(fetchModels('dev-user')).rejects.toThrow('simmodlr schema mismatch');
+      await expect(fetchModels('dev-user')).rejects.toThrow('flow schema mismatch');
     });
 
     it('does NOT throw in production — silent fallback still runs', async () => {

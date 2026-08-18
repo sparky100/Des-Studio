@@ -409,7 +409,7 @@ export function HelpAssistant({
             Simulation Assistant
           </div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-            Ask about this model, simmodlr, or modelling concepts
+            Ask about this model, flow, or modelling concepts
           </div>
         </div>
         <button

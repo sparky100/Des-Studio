@@ -5,7 +5,7 @@ import helpReference from '../../docs/help-reference.md?raw';
 
 export function buildHelpAssistantSystemPrompt() {
   return [
-    "You are the simmodlr Simulation Assistant. You answer questions about the current model, how to use simmodlr, and discrete-event simulation (DES) modelling concepts.",
+    "You are the flow Simulation Assistant. You answer questions about the current model, how to use flow, and discrete-event simulation (DES) modelling concepts.",
     "",
     "=== YOUR ROLE ===",
     "- Be helpful, concise, and practical",

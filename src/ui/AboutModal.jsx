@@ -1,4 +1,4 @@
-// ui/AboutModal.jsx — Static About panel for simmodlr
+// ui/AboutModal.jsx — Static About panel for flow
 import { useEffect, useRef } from "react";
 import { SPACE, RADIUS, TYPO, Z, alpha } from "./shared/tokens.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
@@ -74,7 +74,7 @@ export function AboutModal({ isOpen, onClose }) {
             id={headingId}
             style={{ fontFamily: FONT, ...TYPO.heading, color: C.text }}
           >
-            About simmodlr
+            About flow
           </div>
           <button
             type="button"
@@ -107,7 +107,7 @@ export function AboutModal({ isOpen, onClose }) {
               letterSpacing: 2,
               marginBottom: 4,
             }}>
-              simmodlr
+              flow
             </div>
             <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
               Browser-native simulation modelling for everyone
@@ -118,7 +118,7 @@ export function AboutModal({ isOpen, onClose }) {
           <div style={{ display: "flex", flexDirection: "column", gap: SPACE.sm }}>
             <Row label="Version"   value={`v${APP_VERSION || "—"}`} />
             <Row label="Build"     value={BUILD_SHA ? `${BUILD_SHA} · ${formatBuildTime(BUILD_TIME)}` : "—"} />
-            <Row label="Copyright" value="© 2026 SimModlr. All rights reserved." />
+            <Row label="Copyright" value="© 2026 Flow. All rights reserved." />
             <Row
               label="Contact"
               value={

@@ -29,10 +29,10 @@ describe("AboutModal", () => {
 
   // ── Static content ────────────────────────────────────────────────────────
 
-  it("renders the app name simmodlr", () => {
+  it("renders the app name flow", () => {
     render(<AboutModal {...DEFAULT_PROPS} />);
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("simmodlr");
+    expect(dialog).toHaveTextContent("flow");
   });
 
   it("renders a version string in the Version row", () => {
@@ -50,7 +50,7 @@ describe("AboutModal", () => {
   it("renders the copyright notice", () => {
     render(<AboutModal {...DEFAULT_PROPS} />);
     expect(
-      screen.getByText(/© 2026 SimModlr\. All rights reserved\./i)
+      screen.getByText(/© 2026 Flow\. All rights reserved\./i)
     ).toBeInTheDocument();
   });
 

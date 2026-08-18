@@ -163,7 +163,7 @@ function footer() {
       new Paragraph({
         alignment: AlignmentType.RIGHT,
         children: [
-          new TextRun({ text: 'simmodlr  |  Page ', font: 'Arial', size: 18, color: '888888' }),
+          new TextRun({ text: 'flow  |  Page ', font: 'Arial', size: 18, color: '888888' }),
           new TextRun({ children: [PageNumber.CURRENT], font: 'Arial', size: 18, color: '888888' })
         ]
       })
@@ -188,10 +188,10 @@ function buildQuickStart() {
     // Title
     new Paragraph({
       spacing: { before: 0, after: 80 },
-      children: [new TextRun({ text: 'Getting Started with simmodlr', font: 'Arial', size: 40, bold: true, color: '1F4E79' })]
+      children: [new TextRun({ text: 'Getting Started with flow', font: 'Arial', size: 40, bold: true, color: '1F4E79' })]
     }),
     bodyRuns([
-      'simmodlr is a browser-based discrete-event simulation tool. You describe entities (customers, jobs, patients), the queues they wait in, and the events that move them through your system ',
+      'flow is a browser-based discrete-event simulation tool. You describe entities (customers, jobs, patients), the queues they wait in, and the events that move them through your system ',
       { text: 'no code required', bold: true },
       '.'
     ]),
@@ -215,15 +215,15 @@ function buildQuickStart() {
 
     // Four Ways
     heading1('Four Ways to Build a Model'),
-    body('People work differently. simmodlr supports four authoring approaches, all producing the same model format so you can mix and match:'),
+    body('People work differently. flow supports four authoring approaches, all producing the same model format so you can mix and match:'),
     spacer(),
     bodyRuns([{ text: '1.  Forms & Tabs', bold: true }, ' — Step-by-step structured entry. Define entity types, queues, events, and distributions through dedicated editors. Good for precise control and iterative refinement.']),
     spacer(),
     bodyRuns([{ text: '2.  Visual Designer', bold: true }, ' — Drag-and-drop canvas. Draw your process as a flow diagram; nodes and connections translate directly into the simulation model. Good for communicating structure to stakeholders.']),
     spacer(),
-    bodyRuns([{ text: '3.  AI Model Builder', bold: true }, ' — Describe the system in plain language inside simmodlr; the built-in AI generates a first model for you to review, adjust, and run. Good for rapid prototyping from a problem description.']),
+    bodyRuns([{ text: '3.  AI Model Builder', bold: true }, ' — Describe the system in plain language inside flow; the built-in AI generates a first model for you to review, adjust, and run. Good for rapid prototyping from a problem description.']),
     spacer(),
-    bodyRuns([{ text: '4.  External LLM Import', bold: true }, ' — simmodlr publishes its full model schema. You can paste that schema into any external AI (ChatGPT, Claude, Gemini, or similar), ask it to build a model, and import the resulting JSON directly. This is particularly powerful when you already have detailed domain knowledge in a document you can share with the AI alongside the schema.']),
+    bodyRuns([{ text: '4.  External LLM Import', bold: true }, ' — flow publishes its full model schema. You can paste that schema into any external AI (ChatGPT, Claude, Gemini, or similar), ask it to build a model, and import the resulting JSON directly. This is particularly powerful when you already have detailed domain knowledge in a document you can share with the AI alongside the schema.']),
     rule(),
 
     // Step 1
@@ -251,7 +251,7 @@ function buildQuickStart() {
 
     // Step 3
     heading1('Step 3 — Experiment'),
-    body('Once the model is validated, move to an Experiment (or Study). Experiments let you test what happens when you vary a parameter — server capacity, inter-arrival rate, batch size — across a defined range. simmodlr runs multiple replications for each parameter value, averages the results with confidence intervals, and surfaces where differences are statistically significant.'),
+    body('Once the model is validated, move to an Experiment (or Study). Experiments let you test what happens when you vary a parameter — server capacity, inter-arrival rate, batch size — across a defined range. flow runs multiple replications for each parameter value, averages the results with confidence intervals, and surfaces where differences are statistically significant.'),
     body('This is where simulation earns its value: not one answer, but a map of how the system responds to change.'),
     rule(),
 
@@ -293,14 +293,14 @@ function buildCapabilities() {
     // Title
     new Paragraph({
       spacing: { before: 0, after: 80 },
-      children: [new TextRun({ text: 'simmodlr — Capabilities Overview', font: 'Arial', size: 40, bold: true, color: '1F4E79' })]
+      children: [new TextRun({ text: 'flow — Capabilities Overview', font: 'Arial', size: 40, bold: true, color: '1F4E79' })]
     }),
-    body('simmodlr is a professional discrete-event simulation (DES) platform for modellers who need rigorous results without writing code. It implements the Three-Phase Method (A/B/C), a well-established simulation paradigm used across manufacturing, healthcare, logistics, and service design.'),
+    body('flow is a professional discrete-event simulation (DES) platform for modellers who need rigorous results without writing code. It implements the Three-Phase Method (A/B/C), a well-established simulation paradigm used across manufacturing, healthcare, logistics, and service design.'),
     rule(),
 
     // Model Authoring
     heading1('Model Authoring — Four Ways to Work'),
-    body('People work differently. simmodlr provides four authoring modes, all working from the same underlying model format:'),
+    body('People work differently. flow provides four authoring modes, all working from the same underlying model format:'),
     spacer(),
     simpleTable(
       ['Mode', 'Best for'],
@@ -311,7 +311,7 @@ function buildCapabilities() {
           [new Paragraph({ children: [new TextRun({ text: 'Drag-and-drop canvas — see your process as a flow diagram while you build it. Includes a library of built-in ', font: 'Arial', size: 20 }), new TextRun({ text: 'patterns', font: 'Arial', size: 20, bold: true }), new TextRun({ text: ' (single-queue service, multi-stage pipeline, batching, reneging, priority queues, and more) that you can drop in as starting points and adapt.', font: 'Arial', size: 20 })]})]
         ],
         ['AI Model Builder', 'Describe the system in plain language; the built-in AI generates a first model to review and refine'],
-        ['External LLM Import', 'Share simmodlr’s published schema with any external AI (ChatGPT, Claude, Gemini, etc.); import the resulting model JSON directly — especially powerful when you can provide the AI with your own domain documents alongside the schema'],
+        ['External LLM Import', 'Share flow’s published schema with any external AI (ChatGPT, Claude, Gemini, etc.); import the resulting model JSON directly — especially powerful when you can provide the AI with your own domain documents alongside the schema'],
       ],
       [2800, 6226]
     ),
