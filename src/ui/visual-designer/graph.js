@@ -537,7 +537,7 @@ export async function exportCanvasToPng(fitViewFn) {
         !node.getAttribute?.('data-id')?.startsWith('section-'),
     });
   } catch (err) {
-    console.warn('[simmodlr] Canvas export failed:', err);
+    console.warn('[flow] Canvas export failed:', err);
     return null;
   }
 }

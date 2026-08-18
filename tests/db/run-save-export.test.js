@@ -110,7 +110,7 @@ describe('single run → save → export', () => {
       { replications: 1, seed: SEED, runLabel: 'Test single run', maxSimTime: MAX_SIM_TIME }
     );
 
-    expect(bundle).toContain('# simmodlr');
+    expect(bundle).toContain('# flow');
     expect(bundle).toContain('Headline KPIs');
     expect(bundle).toContain(String(result.summary.served));
   });

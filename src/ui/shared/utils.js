@@ -9,7 +9,7 @@ const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", 
  */
 export function extractImportedModelPayload(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error("Import must be a simmodlr model JSON object.");
+    throw new Error("Import must be a flow model JSON object.");
   }
   const source = payload.model_json && typeof payload.model_json === "object"
     ? payload.model_json

@@ -53,7 +53,7 @@ describe("buildLLMBundle", () => {
   it("produces a non-empty Markdown string with required top-level sections", () => {
     const bundle = buildLLMBundle(model, singleRepResults, { replications: 1, maxSimTime: 480 });
     expect(typeof bundle).toBe("string");
-    expect(bundle).toContain("# simmodlr");
+    expect(bundle).toContain("# flow");
     expect(bundle).toContain("## Model Definition");
     expect(bundle).toContain("## Experiment Configuration");
     expect(bundle).toContain("## Results");

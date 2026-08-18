@@ -1,8 +1,8 @@
-# simmodlr
+# flow
 
 ![Benchmark Gate](https://github.com/sparky100/simmodlr/actions/workflows/benchmark-gate.yml/badge.svg)
 
-simmodlr is a browser-based discrete-event simulation modelling tool built around the Three-Phase Method: Phase A clock advance, Phase B bound events, and Phase C conditional events.
+flow is a browser-based discrete-event simulation modelling tool built around the Three-Phase Method: Phase A clock advance, Phase B bound events, and Phase C conditional events.
 
 The app lets simulation modellers define entity types, queues, B-Events, C-Events, distributions, experiment controls, and replications through structured editors. Models run in the browser, with Supabase used for authentication, model storage, user settings, and run history.
 
@@ -122,7 +122,7 @@ Key rules:
 | `docs/simmodlr_User_Guide.md` | End-user guide for modellers |
 | `docs/Template Models Guide.md` | Detailed explanations of all 18 template models |
 | `docs/addition1_entity_model.md` | Entity model, macros, distributions, validation schema |
-| `docs/capability-gap-analysis.md` | simmodlr vs professional tools (SimPy, AnyLogic, JaamSim) |
+| `docs/capability-gap-analysis.md` | flow vs professional tools (SimPy, AnyLogic, JaamSim) |
 | `docs/patterns/` | Reusable modelling pattern references (6 patterns) |
 | `docs/decisions/` | Architectural Decision Records (ADR-001 through ADR-016) |
 | `docs/reviews/` | Sprint closure reports, capability guides, pre-sprint assessments |
@@ -130,7 +130,7 @@ Key rules:
 
 ## Macro Vocabulary
 
-simmodlr supports 19 macros across B-Events and C-Events:
+flow supports 19 macros across B-Events and C-Events:
 
 | Macro | Phase | Purpose |
 |---|---|---|

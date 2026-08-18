@@ -41,14 +41,14 @@ const OPTIONS = [
     heading: "Build with AI Tools",
     friendly: "Let an external AI design your model — then import it in one click",
     guidance:
-      "Download the simmodlr AI Prompt Pack: the full schema spec with a ready-to-paste prompt. Give it to Claude, ChatGPT, or any AI assistant, describe your system, and import the JSON response back here via + New Model → Import.",
+      "Download the flow AI Prompt Pack: the full schema spec with a ready-to-paste prompt. Give it to Claude, ChatGPT, or any AI assistant, describe your system, and import the JSON response back here via + New Model → Import.",
     accent: true,
   },
   {
     id: "help",
     icon: <IconHelp />,
     heading: "Get Help",
-    friendly: "Learn how simmodlr works",
+    friendly: "Learn how flow works",
     guidance:
       "Open the AI Help Assistant for a guided tour, explanations of entities, events, queues, and the three-phase simulation method.",
     accent: false,
@@ -102,7 +102,7 @@ export function WelcomeDialog({ onCreateModel, onOpenLibrary, onHelp, onExportSc
             id="welcome-dialog-title"
             style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 6 }}
           >
-            Welcome to simmodlr
+            Welcome to flow
           </div>
           <div style={{ fontSize: 12, color: C.muted }}>
             How would you like to get started?

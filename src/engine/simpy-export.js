@@ -361,7 +361,7 @@ function buildScript(model, todoSet, warnings = []) {
     : `Category 2 — partial; complete the # TODO sections before running.\n#   Macros requiring attention: ${todoList.join(', ')}`;
   parts.push(
 `"""
-simmodlr → SimPy export
+flow → SimPy export
 Model    : ${model.name || 'Untitled'}
 Generated: ${now}
 ${catMsg}

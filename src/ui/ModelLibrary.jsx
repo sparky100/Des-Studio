@@ -404,7 +404,7 @@ const PatternsGuidePanel = ({ onClose }) => {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <div>
           <div id="patterns-guide-title" style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Modelling Patterns</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>6 reusable patterns for simmodlr models</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>6 reusable patterns for flow models</div>
         </div>
         <button type="button" aria-label="Close patterns guide" onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", lineHeight: 1 }}>✕</button>
       </div>
@@ -547,7 +547,7 @@ export function ModelLibrary({
           <p style={{ fontSize: 12, color: C.muted }}>Build and share discrete-event simulation models.</p>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <Btn variant="ghost" onClick={() => downloadTextFile(buildLLMSchemaPromptPack(), "simmodlr-ai-prompt-pack.md", "text/markdown")}>↓ AI Prompt Pack</Btn>
+          <Btn variant="ghost" onClick={() => downloadTextFile(buildLLMSchemaPromptPack(), "flow-ai-prompt-pack.md", "text/markdown")}>↓ AI Prompt Pack</Btn>
           <Btn variant="primary" onClick={() => { pendingTemplateDraftRef.current = null; setShowNew(true); }}>+ New Model</Btn>
         </div>
       </div>
@@ -682,7 +682,7 @@ export function ModelLibrary({
           onOpenLibrary={() => { setShowWelcome(false); setTab("my"); }}
           onHelp={() => { setShowWelcome(false); onHelpOpen?.(); }}
           onExportSchema={() => {
-            downloadTextFile(buildLLMSchemaPromptPack(), "simmodlr-ai-prompt-pack.md", "text/markdown");
+            downloadTextFile(buildLLMSchemaPromptPack(), "flow-ai-prompt-pack.md", "text/markdown");
             setShowWelcome(false);
           }}
         />

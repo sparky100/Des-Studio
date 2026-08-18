@@ -1,5 +1,5 @@
 /**
- * simmodlr — Public Engine API
+ * flow — Public Engine API
  *
  * Stable public surface for embedding the simulation engine. All exports
  * here are part of the documented public contract; internal engine helpers

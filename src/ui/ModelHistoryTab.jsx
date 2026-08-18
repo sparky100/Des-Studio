@@ -174,13 +174,13 @@ export function ModelHistoryTab({
       results_json: await getRunResultsJson(row.id),
     })));
     const payload = buildRunHistoryExportPayload(model, rowsWithResults);
-    downloadJsonFile(payload, `simmodlr-run-history-${slugifyModelName(model?.name)}.json`);
+    downloadJsonFile(payload, `flow-run-history-${slugifyModelName(model?.name)}.json`);
     toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as JSON`);
   };
 
   const exportRunHistoryCsv = () => {
     const csv = buildRunHistoryCsv(historyRows);
-    downloadTextFile(csv, `simmodlr-run-history-${slugifyModelName(model?.name)}.csv`, "text/csv;charset=utf-8");
+    downloadTextFile(csv, `flow-run-history-${slugifyModelName(model?.name)}.csv`, "text/csv;charset=utf-8");
     toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as CSV`);
   };
 
@@ -191,7 +191,7 @@ export function ModelHistoryTab({
     const ws = XLSX.utils.aoa_to_sheet(csvRows);
     ws['!cols'] = Array(csvRows[0]?.length || 13).fill({ wch: 16 });
     XLSX.utils.book_append_sheet(wb, ws, 'Run History');
-    XLSX.writeFile(wb, `simmodlr-run-history-${slugifyModelName(model?.name)}.xlsx`);
+    XLSX.writeFile(wb, `flow-run-history-${slugifyModelName(model?.name)}.xlsx`);
     toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as Excel`);
   };
 
@@ -213,14 +213,14 @@ export function ModelHistoryTab({
     const md = buildLLMBundle(model, bundleResults, config);
     const name = slugifyModelName(model?.name);
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    downloadTextFile(md, `simmodlr-llm-bundle-${name}-${ts}.md`, "text/markdown;charset=utf-8");
+    downloadTextFile(md, `flow-llm-bundle-${name}-${ts}.md`, "text/markdown;charset=utf-8");
     setMoreMenuId(null);
   };
 
   const exportSelectedCsv = () => {
     const rows = historyRows.filter(r => historySelected.has(r.id));
     const csv = buildRunHistoryCsv(rows);
-    downloadTextFile(csv, `simmodlr-selected-runs-${slugifyModelName(model?.name)}.csv`, "text/csv;charset=utf-8");
+    downloadTextFile(csv, `flow-selected-runs-${slugifyModelName(model?.name)}.csv`, "text/csv;charset=utf-8");
     toast.success(`Exported ${rows.length} selected run${rows.length !== 1 ? "s" : ""} as CSV`);
   };
 

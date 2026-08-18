@@ -678,7 +678,7 @@ export default function App({ onThemeChange }){
       <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
         <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 24px',display:'flex',alignItems:'center',height:52}}>
           <div>
-            <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2,fontFamily:FONT,lineHeight:1.1}}>simmodlr</div>
+            <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2,fontFamily:FONT,lineHeight:1.1}}>flow</div>
           </div>
         </div>
         <div style={{maxWidth:480,margin:'0 auto',padding:'60px 24px',textAlign:'center'}}>

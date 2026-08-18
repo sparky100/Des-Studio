@@ -281,7 +281,7 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
   const [reportFormat, setReportFormat] = useState("html");
   const [reportGenerating, setReportGenerating] = useState(false);
 
-  const base = filenameBase || `simmodlr-results-${slugifyResultName(model?.name || "model")}-${timestampForFilename()}`;
+  const base = filenameBase || `flow-results-${slugifyResultName(model?.name || "model")}-${timestampForFilename()}`;
 
   const exportResultsJson = useCallback((metricsOnly = false) => {
     const payload = buildResultsExportPayload({

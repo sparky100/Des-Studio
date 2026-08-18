@@ -716,7 +716,7 @@ export function buildResultsXlsx({ results, replicationResults = [], aggregateSt
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `simmodlr-results-${slugifyResultName(modelName)}-${timestampForFilename()}.xlsx`;
+  a.download = `flow-results-${slugifyResultName(modelName)}-${timestampForFilename()}.xlsx`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

@@ -813,7 +813,7 @@ function SeriesDataPreview({ series }) {
   if (!points.length) return null;
   const th = label => <th key={label} scope="col" style={{ padding: "4px 8px", textAlign: "right", color: C.muted, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>{label}</th>;
   const td = (label, value, color = C.text) => <td key={label} style={{ padding: "4px 8px", textAlign: "right", color, fontFamily: FONT, fontSize: 10 }}>{value}</td>;
-  const filename = `simmodlr-chart-${slugify(series.label)}.csv`;
+  const filename = `flow-chart-${slugify(series.label)}.csv`;
   return (
     <DataPreviewShell summary={`See the numbers behind this chart (${points.length} points)`} onExport={() => downloadTextFile(buildSeriesCsv(series), filename)}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 260 }}>
@@ -842,7 +842,7 @@ function WaitValuesPreview({ dist }) {
   if (!values.length) return null;
   const th = label => <th key={label} scope="col" style={{ padding: "4px 8px", textAlign: "right", color: C.muted, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>{label}</th>;
   const td = (label, value, color = C.text) => <td key={label} style={{ padding: "4px 8px", textAlign: "right", color, fontFamily: FONT, fontSize: 10 }}>{value}</td>;
-  const filename = `simmodlr-wait-samples-${slugify(dist.label)}.csv`;
+  const filename = `flow-wait-samples-${slugify(dist.label)}.csv`;
   return (
     <DataPreviewShell summary={`See the waiting times behind this chart (${values.length} values)`} onExport={() => downloadTextFile(buildWaitValuesCsv(dist), filename)}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 220 }}>
@@ -1652,7 +1652,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         summary: p.result?.summary ?? p.summary ?? {},
       })),
     };
-    const filename = `simmodlr-llm-bundle-${slugifyResultName(model?.name || 'model')}-${timestampForFilename()}.md`;
+    const filename = `flow-llm-bundle-${slugifyResultName(model?.name || 'model')}-${timestampForFilename()}.md`;
     downloadTextFile(buildLLMBundle(model, bundleResults, config), filename, "text/markdown;charset=utf-8");
   }, [model, results, replicationResults]);
 
@@ -1674,10 +1674,10 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
       }
     }
     if (!sections.length) return;
-    const header = `# simmodlr — All Chart Data — ${modelName} — ${timestamp}\n#\n`;
+    const header = `# flow — All Chart Data — ${modelName} — ${timestamp}\n#\n`;
     const csvParts = sections.map(s => `# Section: ${s.label}\n${s.csv}\n`);
     const content = header + csvParts.join("\n");
-    downloadTextFile(content, `simmodlr-all-chart-data-${slugifyResultName(modelName)}-${timestamp}.csv`, "text/csv;charset=utf-8");
+    downloadTextFile(content, `flow-all-chart-data-${slugifyResultName(modelName)}-${timestamp}.csv`, "text/csv;charset=utf-8");
   }, [model, chartModel]);
 
   const handleDownloadAllChartDataXlsx = useCallback(() => {
@@ -1723,7 +1723,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `simmodlr-all-chart-data-${slugifyResultName(modelName)}-${timestamp}.xlsx`;
+    a.download = `flow-all-chart-data-${slugifyResultName(modelName)}-${timestamp}.xlsx`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, [model, chartModel]);

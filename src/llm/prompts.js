@@ -1821,7 +1821,7 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
     if (context.workflowMode) modelDigest._workflowMode = context.workflowMode;
 
     const systemContent = [
-      "You are assisting a simulation modeller in simmodlr. You have full knowledge of the model structure below.",
+      "You are assisting a simulation modeller in flow. You have full knowledge of the model structure below.",
       "Give concrete, specific answers that reference the model's actual entities, queues, events, and attributes by name.",
       "When asked to review a specific editor tab (entity types, queues, B-events, C-events, sections, state variables), focus your analysis on that area.",
       "If the model has C-events, you can reason about conditional event logic and whether the conditions and effects are correctly wired.",
@@ -1836,7 +1836,7 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
   }
 
   const messages = [
-    ...(isFirstTurn ? [{ role: 'system', content: `You are assisting a simulation modeller in simmodlr. You have detailed knowledge of the model. Answer concisely and precisely. Do not invent data. ${NOTES_PRIORITY_GUARDRAIL}` }] : [{ role: 'system', content: `Continue assisting the modeller about the model described earlier. Be concise and precise. Do not invent data. ${NOTES_PRIORITY_GUARDRAIL}` }]),
+    ...(isFirstTurn ? [{ role: 'system', content: `You are assisting a simulation modeller in flow. You have detailed knowledge of the model. Answer concisely and precisely. Do not invent data. ${NOTES_PRIORITY_GUARDRAIL}` }] : [{ role: 'system', content: `Continue assisting the modeller about the model described earlier. Be concise and precise. Do not invent data. ${NOTES_PRIORITY_GUARDRAIL}` }]),
     ...history.slice(-8),
     { role: 'user', content: userContent },
   ];
