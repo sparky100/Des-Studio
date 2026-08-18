@@ -36,6 +36,7 @@ const mockSupabase = {
   rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
   auth: {
     getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+    setSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
   },
 };
