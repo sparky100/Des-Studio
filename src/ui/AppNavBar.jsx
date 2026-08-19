@@ -62,19 +62,20 @@ export function AppNavBar({
 
         <div style={{ flex: 1 }} />
 
-        {/* User profile */}
+        {/* User profile — avatar initial only, no name label (matches Loop/Lens) */}
         {profile && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{
+          <div
+            title={profile.full_name}
+            aria-label={profile.full_name}
+            style={{
               width: 28, height: 28, borderRadius: "50%",
               background: (profile.color || C.accent) + "22",
               border: `1.5px solid ${profile.color || C.accent}55`,
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 11, fontWeight: 700, color: profile.color || C.accent,
-            }}>
-              {profile.initials || "?"}
-            </div>
-            <span style={{ fontSize: 12, color: C.muted }}>{profile.full_name}</span>
+            }}
+          >
+            {profile.initials || "?"}
           </div>
         )}
 

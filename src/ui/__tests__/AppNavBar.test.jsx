@@ -80,4 +80,13 @@ describe("AppNavBar", () => {
     await userEvent.click(screen.getByRole("button", { name: /more options/i }));
     expect(screen.queryByRole("menuitem", { name: /admin panel/i })).not.toBeInTheDocument();
   });
+
+  // ── Avatar: initial only, no name label (matches Loop/Lens) ─────────────
+
+  it("shows the avatar initial but not the profile's full name as visible text", () => {
+    render(<AppNavBar {...DEFAULT_PROPS} />);
+
+    expect(screen.getByText("AB")).toBeInTheDocument();
+    expect(screen.queryByText("Ada Baker")).not.toBeInTheDocument();
+  });
 });
