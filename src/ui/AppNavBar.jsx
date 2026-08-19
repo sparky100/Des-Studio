@@ -3,26 +3,7 @@ import { useState } from "react";
 import { useTheme } from "./shared/ThemeContext.jsx";
 import { FeedbackModal } from "./FeedbackModal.jsx";
 import { AboutModal }    from "./AboutModal.jsx";
-
-// Inline SVG icon for feedback (speech bubble / message)
-function FeedbackIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  );
-}
-
-// Inline SVG icon for info (i in circle)
-function InfoIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="16" x2="12" y2="12" />
-      <line x1="12" y1="8" x2="12.01" y2="8" />
-    </svg>
-  );
-}
+import { HeaderAccountMenu } from "./HeaderAccountMenu.jsx";
 
 // Inline SVG icon for settings (gear)
 function GearIcon() {
@@ -37,7 +18,6 @@ function GearIcon() {
 export function AppNavBar({
   profile,
   isAdmin,
-  isAdminActive,
   onHelpOpen,
   onSettings,
   onAdmin,
@@ -98,39 +78,9 @@ export function AppNavBar({
           </div>
         )}
 
-        {/* Feedback button — opens FeedbackModal */}
-        <button
-          type="button"
-          aria-label="Submit feedback"
-          title="Submit feedback"
-          onClick={() => setFeedbackOpen(true)}
-          style={navBtnStyle}
-        >
-          <FeedbackIcon />
-        </button>
-
-        {/* Info / About button — opens AboutModal */}
-        <button
-          type="button"
-          aria-label="About flow"
-          title="About flow"
-          onClick={() => setAboutOpen(true)}
-          style={navBtnStyle}
-        >
-          <InfoIcon />
-        </button>
-
-        {/* Simulation Assistant (?) button */}
-        <button
-          type="button"
-          aria-label="Simulation Assistant"
-          title="Simulation Assistant"
-          onClick={onHelpOpen}
-          style={navBtnStyle}
-        >
-          ?
-        </button>
-
+        {/* Settings stays its own persistent header icon at every viewport —
+            it never collapses into the account menu (theme/settings is
+            explicitly excluded from HeaderAccountMenu per spec). */}
         <button
           type="button"
           aria-label="Settings"
@@ -141,26 +91,17 @@ export function AppNavBar({
           <GearIcon />
         </button>
 
-        {isAdmin && (
-          <button
-            type="button"
-            aria-label="Admin panel"
-            title="Admin panel"
-            onClick={onAdmin}
-            style={{
-              ...navBtnStyle,
-              background: isAdminActive ? C.accent + "33" : C.surfaceHover,
-              border: `1px solid ${isAdminActive ? C.accent : C.border}`,
-              color: isAdminActive ? C.accent : C.muted,
-            }}
-          >
-            Admin
-          </button>
-        )}
-
-        <button type="button" aria-label="Sign out" title="Sign out" onClick={onSignOut} style={navBtnStyle}>
-          Sign Out
-        </button>
+        {/* Feedback/About/Help/Admin/Sign Out live behind the ••• trigger,
+            identically at all screen sizes. */}
+        <HeaderAccountMenu
+          appName="flow"
+          isAdmin={isAdmin}
+          onFeedback={() => setFeedbackOpen(true)}
+          onAbout={() => setAboutOpen(true)}
+          onHelp={onHelpOpen}
+          onAdminPanel={onAdmin}
+          onSignOut={onSignOut}
+        />
       </div>
 
       {/* Modals rendered outside the navbar flow */}
