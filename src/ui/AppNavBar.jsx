@@ -1,8 +1,36 @@
 // ui/AppNavBar.jsx — Top navigation bar for the authenticated app shell
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "./shared/ThemeContext.jsx";
 import { FeedbackModal } from "./FeedbackModal.jsx";
 import { AboutModal }    from "./AboutModal.jsx";
+import { HeaderAccountMenu } from "./HeaderAccountMenu.jsx";
+
+// Below this viewport width, Feedback/About/Help/Admin/Sign Out collapse
+// into the HeaderAccountMenu "•••" trigger. The Settings gear and any
+// primary actions (e.g. "+ New Model", rendered elsewhere) stay visible.
+const OVERFLOW_BREAKPOINT = 640;
+
+function useIsNarrowViewport(breakpoint) {
+  const [isNarrow, setIsNarrow] = useState(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    return window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const handler = (e) => setIsNarrow(e.matches);
+    setIsNarrow(mql.matches);
+    if (mql.addEventListener) mql.addEventListener("change", handler);
+    else mql.addListener(handler); // Safari < 14 fallback
+    return () => {
+      if (mql.removeEventListener) mql.removeEventListener("change", handler);
+      else mql.removeListener(handler);
+    };
+  }, [breakpoint]);
+
+  return isNarrow;
+}
 
 // Inline SVG icon for feedback (speech bubble / message)
 function FeedbackIcon() {
@@ -62,6 +90,7 @@ export function AppNavBar({
   };
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [aboutOpen,    setAboutOpen]    = useState(false);
+  const isNarrow = useIsNarrowViewport(OVERFLOW_BREAKPOINT);
 
   return (
     <>
@@ -98,69 +127,98 @@ export function AppNavBar({
           </div>
         )}
 
-        {/* Feedback button — opens FeedbackModal */}
-        <button
-          type="button"
-          aria-label="Submit feedback"
-          title="Submit feedback"
-          onClick={() => setFeedbackOpen(true)}
-          style={navBtnStyle}
-        >
-          <FeedbackIcon />
-        </button>
+        {/* Below 640px: Feedback/About/Help/Admin/Sign Out collapse into the
+            HeaderAccountMenu "•••" trigger. Settings stays a separate icon
+            (never collapses) on both mobile and desktop, per spec. */}
+        {isNarrow ? (
+          <>
+            <button
+              type="button"
+              aria-label="Settings"
+              title="Settings"
+              onClick={onSettings}
+              style={navBtnStyle}
+            >
+              <GearIcon />
+            </button>
 
-        {/* Info / About button — opens AboutModal */}
-        <button
-          type="button"
-          aria-label="About flow"
-          title="About flow"
-          onClick={() => setAboutOpen(true)}
-          style={navBtnStyle}
-        >
-          <InfoIcon />
-        </button>
+            <HeaderAccountMenu
+              appName="flow"
+              isAdmin={isAdmin}
+              onFeedback={() => setFeedbackOpen(true)}
+              onAbout={() => setAboutOpen(true)}
+              onHelp={onHelpOpen}
+              onAdminPanel={onAdmin}
+              onSignOut={onSignOut}
+            />
+          </>
+        ) : (
+          <>
+            {/* Feedback button — opens FeedbackModal */}
+            <button
+              type="button"
+              aria-label="Submit feedback"
+              title="Submit feedback"
+              onClick={() => setFeedbackOpen(true)}
+              style={navBtnStyle}
+            >
+              <FeedbackIcon />
+            </button>
 
-        {/* Simulation Assistant (?) button */}
-        <button
-          type="button"
-          aria-label="Simulation Assistant"
-          title="Simulation Assistant"
-          onClick={onHelpOpen}
-          style={navBtnStyle}
-        >
-          ?
-        </button>
+            {/* Info / About button — opens AboutModal */}
+            <button
+              type="button"
+              aria-label="About flow"
+              title="About flow"
+              onClick={() => setAboutOpen(true)}
+              style={navBtnStyle}
+            >
+              <InfoIcon />
+            </button>
 
-        <button
-          type="button"
-          aria-label="Settings"
-          title="Settings"
-          onClick={onSettings}
-          style={navBtnStyle}
-        >
-          <GearIcon />
-        </button>
+            {/* Simulation Assistant (?) button */}
+            <button
+              type="button"
+              aria-label="Simulation Assistant"
+              title="Simulation Assistant"
+              onClick={onHelpOpen}
+              style={navBtnStyle}
+            >
+              ?
+            </button>
 
-        {isAdmin && (
-          <button
-            type="button"
-            aria-label="Admin panel"
-            title="Admin panel"
-            onClick={onAdmin}
-            style={{
-              ...navBtnStyle,
-              background: isAdminActive ? C.accent + "33" : C.surfaceHover,
-              border: `1px solid ${isAdminActive ? C.accent : C.border}`,
-              color: isAdminActive ? C.accent : C.muted,
-            }}
-          >
-            Admin
-          </button>
+            <button
+              type="button"
+              aria-label="Settings"
+              title="Settings"
+              onClick={onSettings}
+              style={navBtnStyle}
+            >
+              <GearIcon />
+            </button>
+
+            {isAdmin && (
+              <button
+                type="button"
+                aria-label="Admin panel"
+                title="Admin panel"
+                onClick={onAdmin}
+                style={{
+                  ...navBtnStyle,
+                  background: isAdminActive ? C.accent + "33" : C.surfaceHover,
+                  border: `1px solid ${isAdminActive ? C.accent : C.border}`,
+                  color: isAdminActive ? C.accent : C.muted,
+                }}
+              >
+                Admin
+              </button>
+            )}
+
+            <button type="button" aria-label="Sign out" title="Sign out" onClick={onSignOut} style={navBtnStyle}>
+              Sign Out
+            </button>
+          </>
         )}
-
-        <button type="button" aria-label="Sign out" title="Sign out" onClick={onSignOut} style={navBtnStyle}>
-          Sign Out
-        </button>
       </div>
 
       {/* Modals rendered outside the navbar flow */}
