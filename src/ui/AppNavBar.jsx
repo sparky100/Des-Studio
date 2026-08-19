@@ -1,56 +1,9 @@
 // ui/AppNavBar.jsx — Top navigation bar for the authenticated app shell
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTheme } from "./shared/ThemeContext.jsx";
 import { FeedbackModal } from "./FeedbackModal.jsx";
 import { AboutModal }    from "./AboutModal.jsx";
 import { HeaderAccountMenu } from "./HeaderAccountMenu.jsx";
-
-// Below this viewport width, Feedback/About/Help/Admin/Sign Out collapse
-// into the HeaderAccountMenu "•••" trigger. The Settings gear and any
-// primary actions (e.g. "+ New Model", rendered elsewhere) stay visible.
-const OVERFLOW_BREAKPOINT = 640;
-
-function useIsNarrowViewport(breakpoint) {
-  const [isNarrow, setIsNarrow] = useState(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return false;
-    return window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches;
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
-    const handler = (e) => setIsNarrow(e.matches);
-    setIsNarrow(mql.matches);
-    if (mql.addEventListener) mql.addEventListener("change", handler);
-    else mql.addListener(handler); // Safari < 14 fallback
-    return () => {
-      if (mql.removeEventListener) mql.removeEventListener("change", handler);
-      else mql.removeListener(handler);
-    };
-  }, [breakpoint]);
-
-  return isNarrow;
-}
-
-// Inline SVG icon for feedback (speech bubble / message)
-function FeedbackIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  );
-}
-
-// Inline SVG icon for info (i in circle)
-function InfoIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="16" x2="12" y2="12" />
-      <line x1="12" y1="8" x2="12.01" y2="8" />
-    </svg>
-  );
-}
 
 // Inline SVG icon for settings (gear)
 function GearIcon() {
@@ -65,7 +18,6 @@ function GearIcon() {
 export function AppNavBar({
   profile,
   isAdmin,
-  isAdminActive,
   onHelpOpen,
   onSettings,
   onAdmin,
@@ -90,7 +42,6 @@ export function AppNavBar({
   };
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [aboutOpen,    setAboutOpen]    = useState(false);
-  const isNarrow = useIsNarrowViewport(OVERFLOW_BREAKPOINT);
 
   return (
     <>
@@ -127,98 +78,30 @@ export function AppNavBar({
           </div>
         )}
 
-        {/* Below 640px: Feedback/About/Help/Admin/Sign Out collapse into the
-            HeaderAccountMenu "•••" trigger. Settings stays a separate icon
-            (never collapses) on both mobile and desktop, per spec. */}
-        {isNarrow ? (
-          <>
-            <button
-              type="button"
-              aria-label="Settings"
-              title="Settings"
-              onClick={onSettings}
-              style={navBtnStyle}
-            >
-              <GearIcon />
-            </button>
+        {/* Settings stays its own persistent header icon at every viewport —
+            it never collapses into the account menu (theme/settings is
+            explicitly excluded from HeaderAccountMenu per spec). */}
+        <button
+          type="button"
+          aria-label="Settings"
+          title="Settings"
+          onClick={onSettings}
+          style={navBtnStyle}
+        >
+          <GearIcon />
+        </button>
 
-            <HeaderAccountMenu
-              appName="flow"
-              isAdmin={isAdmin}
-              onFeedback={() => setFeedbackOpen(true)}
-              onAbout={() => setAboutOpen(true)}
-              onHelp={onHelpOpen}
-              onAdminPanel={onAdmin}
-              onSignOut={onSignOut}
-            />
-          </>
-        ) : (
-          <>
-            {/* Feedback button — opens FeedbackModal */}
-            <button
-              type="button"
-              aria-label="Submit feedback"
-              title="Submit feedback"
-              onClick={() => setFeedbackOpen(true)}
-              style={navBtnStyle}
-            >
-              <FeedbackIcon />
-            </button>
-
-            {/* Info / About button — opens AboutModal */}
-            <button
-              type="button"
-              aria-label="About flow"
-              title="About flow"
-              onClick={() => setAboutOpen(true)}
-              style={navBtnStyle}
-            >
-              <InfoIcon />
-            </button>
-
-            {/* Simulation Assistant (?) button */}
-            <button
-              type="button"
-              aria-label="Simulation Assistant"
-              title="Simulation Assistant"
-              onClick={onHelpOpen}
-              style={navBtnStyle}
-            >
-              ?
-            </button>
-
-            <button
-              type="button"
-              aria-label="Settings"
-              title="Settings"
-              onClick={onSettings}
-              style={navBtnStyle}
-            >
-              <GearIcon />
-            </button>
-
-            {isAdmin && (
-              <button
-                type="button"
-                aria-label="Admin panel"
-                title="Admin panel"
-                onClick={onAdmin}
-                style={{
-                  ...navBtnStyle,
-                  background: isAdminActive ? C.accent + "33" : C.surfaceHover,
-                  border: `1px solid ${isAdminActive ? C.accent : C.border}`,
-                  color: isAdminActive ? C.accent : C.muted,
-                }}
-              >
-                Admin
-              </button>
-            )}
-
-            <button type="button" aria-label="Sign out" title="Sign out" onClick={onSignOut} style={navBtnStyle}>
-              Sign Out
-            </button>
-          </>
-        )}
+        {/* Feedback/About/Help/Admin/Sign Out live behind the ••• trigger,
+            identically at all screen sizes. */}
+        <HeaderAccountMenu
+          appName="flow"
+          isAdmin={isAdmin}
+          onFeedback={() => setFeedbackOpen(true)}
+          onAbout={() => setAboutOpen(true)}
+          onHelp={onHelpOpen}
+          onAdminPanel={onAdmin}
+          onSignOut={onSignOut}
+        />
       </div>
 
       {/* Modals rendered outside the navbar flow */}

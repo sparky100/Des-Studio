@@ -1,5 +1,5 @@
 // src/ui/__tests__/AppNavBar.test.jsx
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -8,7 +8,6 @@ import { AppNavBar } from "../AppNavBar.jsx";
 const DEFAULT_PROPS = {
   profile: { initials: "AB", full_name: "Ada Baker", color: "#06b6d4" },
   isAdmin: true,
-  isAdminActive: false,
   onHelpOpen: vi.fn(),
   onSettings: vi.fn(),
   onAdmin: vi.fn(),
@@ -17,85 +16,40 @@ const DEFAULT_PROPS = {
   currentPage: "library",
 };
 
-// Installs a mock window.matchMedia that reports `matches` for any query and
-// captures listeners so a test can flip the viewport (e.g. simulate a resize
-// across the 640px breakpoint) by calling the returned `fireChange`.
-function mockMatchMedia(initialMatches) {
-  let matches = initialMatches;
-  const listeners = new Set();
-
-  window.matchMedia = vi.fn().mockImplementation((query) => {
-    const mql = {
-      media: query,
-      get matches() { return matches; },
-      addEventListener: (_type, cb) => listeners.add(cb),
-      removeEventListener: (_type, cb) => listeners.delete(cb),
-      addListener: (cb) => listeners.add(cb),
-      removeListener: (cb) => listeners.delete(cb),
-    };
-    return mql;
-  });
-
-  return {
-    fireChange(nextMatches) {
-      matches = nextMatches;
-      listeners.forEach((cb) => cb({ matches: nextMatches }));
-    },
-  };
-}
-
-describe("AppNavBar — responsive overflow", () => {
-  const originalMatchMedia = window.matchMedia;
-
+describe("AppNavBar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    window.matchMedia = originalMatchMedia;
-  });
+  // ── Collapsed at all viewports ────────────────────────────────────────────
 
-  // ── Above 640px: inline layout ───────────────────────────────────────────
-
-  it("renders individual action buttons inline at desktop widths", () => {
-    mockMatchMedia(false); // "(max-width: 639px)" does not match
+  it("renders the ••• trigger instead of individual action buttons", () => {
     render(<AppNavBar {...DEFAULT_PROPS} />);
 
-    expect(screen.getByRole("button", { name: /submit feedback/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /about flow/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /simulation assistant/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^settings$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /admin panel/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /more options/i })).not.toBeInTheDocument();
-  });
-
-  // ── Below 640px: collapsed into HeaderAccountMenu ────────────────────────
-
-  it("collapses Feedback/About/Help/Admin/Sign Out into the ••• trigger below 640px", () => {
-    mockMatchMedia(true); // "(max-width: 639px)" matches
-    render(<AppNavBar {...DEFAULT_PROPS} />);
-
+    expect(screen.getByRole("button", { name: /more options/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /submit feedback/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /about flow/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /simulation assistant/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /admin panel/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /sign out/i })).not.toBeInTheDocument();
-
-    expect(screen.getByRole("button", { name: /more options/i })).toBeInTheDocument();
   });
 
-  it("keeps the Settings gear as its own icon on mobile, outside the overflow menu", () => {
-    mockMatchMedia(true);
+  it("keeps the Settings gear as its own persistent header icon, outside the menu", () => {
     render(<AppNavBar {...DEFAULT_PROPS} />);
 
-    // Settings is rendered directly, not inside the closed ••• menu
     expect(screen.getByRole("button", { name: /^settings$/i })).toBeInTheDocument();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("surfaces the collapsed actions inside the ••• menu on mobile", async () => {
-    mockMatchMedia(true);
+  it("calls onSettings when the gear is clicked", async () => {
+    const onSettings = vi.fn();
+    render(<AppNavBar {...DEFAULT_PROPS} onSettings={onSettings} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /^settings$/i }));
+    expect(onSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces Feedback/About/Help/Admin/Sign Out inside the ••• menu", async () => {
     render(<AppNavBar {...DEFAULT_PROPS} />);
 
     await userEvent.click(screen.getByRole("button", { name: /more options/i }));
@@ -112,12 +66,18 @@ describe("AppNavBar — responsive overflow", () => {
 
   it("wires the ••• menu's Sign Out item to the onSignOut prop", async () => {
     const onSignOut = vi.fn();
-    mockMatchMedia(true);
     render(<AppNavBar {...DEFAULT_PROPS} onSignOut={onSignOut} />);
 
     await userEvent.click(screen.getByRole("button", { name: /more options/i }));
     await userEvent.click(screen.getByRole("menuitem", { name: /sign out/i }));
 
     expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits Admin panel from the menu when isAdmin is false", async () => {
+    render(<AppNavBar {...DEFAULT_PROPS} isAdmin={false} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /more options/i }));
+    expect(screen.queryByRole("menuitem", { name: /admin panel/i })).not.toBeInTheDocument();
   });
 });
