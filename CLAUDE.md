@@ -13,6 +13,10 @@ This project uses **OpenCode**, not Claude Code. See the following files for aut
 | `docs/reviews/sprint-79-plan.md` | Sprint 79 — Consistent Panel Visibility UX (also Sprint 79, companion plan) |
 | `docs/reviews/sprint-78-plan.md` | Sprint 78 — Visual Designer Canvas Visibility |
 | `docs/addition1_entity_model.md` | Entity model, action vocabulary, distribution specs |
+| `docs/reviews/expert-review-2026-08-remediation-register.md` | Consolidated 2026-08 expert-review remediation register (prioritised) |
+| `docs/reviews/expert-review-2026-08-ux.md` | 2026-08 UX expert / modeller review (maturity 7.5/10) |
+| `docs/reviews/expert-review-2026-08-functionality.md` | 2026-08 functionality & capability review |
+| `docs/reviews/expert-review-2026-08-code.md` | 2026-08 code review |
 
 **Backup:** `AGENTS.md.bak` and `CLAUDE.md.bak` contain the pre-consolidation originals.
 
