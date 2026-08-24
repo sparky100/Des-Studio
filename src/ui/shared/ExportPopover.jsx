@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useTheme } from "./ThemeContext.jsx";
+import { useToast } from "./ToastContext.jsx";
 import { Btn } from "./components.jsx";
 import { downloadTextFile, slugifyResultName, timestampForFilename } from "./utils.js";
 import { buildResultsExportPayload, buildResultsCsv, buildResultsXlsx } from "../execute/executeHelpers.js";
@@ -274,6 +275,7 @@ function CreateReportModal({ reportType, setReportType, reportFormat, setReportF
 
 export function ExportPopover({ model, results, replicationResults = [], aggregateStats = {}, config = {}, runMeta = {}, resultFilenameBase: filenameBase, onClose, onCreateReport }) {
   const { C, FONT } = useTheme();
+  const toast = useToast();
 
   const [showCreateReportModal, setShowCreateReportModal] = useState(false);
   const [showSchemaModal, setShowSchemaModal] = useState(false);
@@ -345,7 +347,9 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
         try {
           const snap = await runMeta.fetchModelSnapshot();
           if (snap) reportModel = snap;
-        } catch {}
+        } catch {
+          toast.warning("Couldn't load the run's saved snapshot — the report describes the current model instead");
+        }
       }
       const content = await generateReport(reportModel, results, config, meta, {
         type,

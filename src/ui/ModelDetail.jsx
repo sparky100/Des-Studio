@@ -587,6 +587,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     setDirty(true);
   };
   const setWholeModel=(nextModel)=>{
+    if (valuesEqual(model, nextModel)) return;
     setPast(p=>[...p.slice(-19),model]);
     setFuture([]);
     setModel(normalizeModelConditions(nextModel));
@@ -661,8 +662,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   useEffect(()=>{
     const onKey=(e)=>{
       if(!(e.ctrlKey||e.metaKey))return;
-      if(e.key==='z'&&!e.shiftKey){e.preventDefault();_ur.current.undo();}
-      if((e.key==='z'&&e.shiftKey)||e.key==='y'){e.preventDefault();_ur.current.redo();}
+      // Ctrl+Z/Y inside an editable element belongs to the browser's native
+      // text undo — hijacking it there reverts the whole model mid-typing.
+      const el=document.activeElement;
+      const inEditable=el&&(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.tagName==='SELECT'||el.isContentEditable);
+      if(!inEditable){
+        if(e.key==='z'&&!e.shiftKey){e.preventDefault();_ur.current.undo();}
+        if((e.key==='z'&&e.shiftKey)||e.key==='y'){e.preventDefault();_ur.current.redo();}
+      }
       if(e.key==='s'){e.preventDefault();_ur.current.save?.();}
     };
     document.addEventListener('keydown',onKey);
@@ -748,7 +755,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     };
     window.addEventListener('beforeunload',onBeforeUnload);
     return()=>window.removeEventListener('beforeunload',onBeforeUnload);
-  },[dirty]);
+  },[dirty,visualPending]);
 
   const validation = useMemo(() => model ? validateModel(model) : { errors: [], warnings: [] }, [model]);
 
@@ -875,7 +882,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           if (run?.model_snapshot) reportModel = run.model_snapshot;
           const scheduleRows = await fetchModelSchedules(reportModel.id || modelId);
           schedulesMap = buildSchedulesMap(scheduleRows);
-        } catch {}
+        } catch {
+          toast.warning("Couldn't load the run's saved snapshot — the report describes the current model instead");
+        }
       }
       const meta = {
         runId: selectedResultsRunId || null,
@@ -1147,7 +1156,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="visual"&&(
           renderAuthoringShell(
             <Suspense fallback={<SkeletonPanel rows={5} />}>
-              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
+              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch { setDirty(true); toast.error("Couldn't save the new canvas layout — use Save to retry"); } }}/>
             </Suspense>
           )
         )}
@@ -1710,7 +1719,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                       if (run?.model_snapshot) reportModel = run.model_snapshot;
                       const scheduleRows = await fetchModelSchedules(reportModel.id || modelId);
                       schedulesMap = buildSchedulesMap(scheduleRows);
-                    } catch {}
+                    } catch {
+                      toast.warning("Couldn't load the run's saved snapshot — the report describes the current model instead");
+                    }
                     const meta = {
                       runId: row.id,
                       runLabel: row.run_label || '',

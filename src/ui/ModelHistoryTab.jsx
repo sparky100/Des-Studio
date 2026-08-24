@@ -657,7 +657,9 @@ export function ModelHistoryTab({
                                           const result = await createShareLink(row.id, userId, {});
                                           setShareLinksMap?.(prev => ({ ...prev, [row.id]: result }));
                                           navigator.clipboard?.writeText(`${baseUrl}/#share/${result.token}`).catch(() => {});
-                                        } catch {}
+                                        } catch {
+                                          toast.error("Couldn't create the share link — please try again");
+                                        }
                                         setMoreMenuId(null);
                                       }}
                                       style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
