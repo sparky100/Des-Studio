@@ -161,7 +161,7 @@ describe("ModelDetail Model Health panel", () => {
     const mobileWorkflow = screen.getByLabelText(/model workflow/i);
     fireEvent.click(within(mobileWorkflow).getByRole("button", { name: /^run$/i }));
     expect(within(mobileWorkflow).getByRole("button", { name: /^run$/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /^setup$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^studies$/i })).toBeInTheDocument();
     fireEvent.click(within(mobileWorkflow).getByRole("button", { name: /^results$/i }));
     expect(within(mobileWorkflow).getByRole("button", { name: /^results$/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /^summary$/i })).toBeInTheDocument();
@@ -172,6 +172,6 @@ describe("ModelDetail Model Health panel", () => {
 
     expect(screen.getByRole("region", { name: /model health/i })).toHaveTextContent(/start with a template, the visual designer, ai designer, or forms/i);
     expect(screen.queryByText(/fix blocking validation issues/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/choose a build path below to start defining your model/i)).toBeInTheDocument();
+    expect(screen.getByText(/pick the path that feels most natural/i)).toBeInTheDocument();
   });
 });

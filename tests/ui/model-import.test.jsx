@@ -202,31 +202,29 @@ describe('model JSON import', () => {
     expect(imported.notes).toBeUndefined();
   });
 
-  it('applies entered name and description when importing pasted JSON', async () => {
+  it('keeps the imported payload name and description when importing pasted JSON', async () => {
     const user = userEvent.setup();
     const importPayload = { name: 'Shared model', description: 'Original', model_json: emptyModelJson };
     mockFetchModels.mockReset();
     mockFetchModels.mockResolvedValueOnce([]).mockResolvedValue([
       {
         ...createdModel,
-        name: 'Pasted Copy',
-        description: 'Imported from clipboard',
+        name: 'Shared model (Imported)',
+        description: 'Original',
       },
     ]);
     mockSaveModel.mockResolvedValue({ id: 'created-1' });
     await renderLibrary();
 
     fireEvent.click(screen.getByRole('button', { name: /\+ new model/i }));
-    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), { target: { value: 'Pasted Copy' } });
-    fireEvent.change(screen.getByPlaceholderText(/Optional/i), { target: { value: 'Imported from clipboard' } });
     await user.click(screen.getByText(/Paste model/i).closest('button'));
     fireEvent.change(screen.getByRole('textbox', { name: /Model JSON/i }), { target: { value: JSON.stringify(importPayload) } });
     await user.click(screen.getByRole('button', { name: /import model/i }));
 
     expect(mockSaveModel).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'Pasted Copy',
-        description: 'Imported from clipboard',
+        name: 'Shared model (Imported)',
+        description: 'Original',
       }),
       'user-1'
     );
@@ -238,7 +236,7 @@ describe('model JSON import', () => {
     mockFetchModels.mockResolvedValueOnce([]).mockResolvedValue([
       {
         ...createdModel,
-        name: 'AI Draft',
+        name: 'Untitled model (10:00 AM)',
         description: '',
       },
     ]);
@@ -246,32 +244,29 @@ describe('model JSON import', () => {
 
     await renderLibrary();
     fireEvent.click(screen.getByRole('button', { name: /\+ new model/i }));
-    await user.type(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), 'AI Draft');
     const newModelDialog = screen.getByRole('dialog', { name: /new model/i });
     await user.click(within(newModelDialog).getByText('Model assistant').closest('button'));
 
     await waitFor(() => expect(mockSaveModel).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'AI Draft' }),
+      expect.objectContaining({ name: expect.stringMatching(/^Untitled model/) }),
       'user-1'
     ));
   }, 10000);
 
-  it('applies entered name and description when starting from a template', async () => {
+  it('creates the model from the template name and description when starting from a template', async () => {
     const user = userEvent.setup();
     mockFetchModels.mockReset();
     mockFetchModels.mockResolvedValueOnce([]).mockResolvedValue([
       {
         ...createdModel,
-        name: 'Template Scenario',
-        description: 'Scenario description',
+        name: 'M/M/1 Queue',
+        description: 'Classic single-server queue',
       },
     ]);
     mockSaveModel.mockResolvedValue({ id: 'created-1' });
 
     await renderLibrary();
     fireEvent.click(screen.getByRole('button', { name: /\+ new model/i }));
-    await user.type(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), 'Template Scenario');
-    await user.type(screen.getByPlaceholderText(/Optional/i), 'Scenario description');
     const newModelDialog = screen.getByRole('dialog', { name: /new model/i });
     await user.click(within(newModelDialog).getByText(/Use a template/i).closest('button'));
 
@@ -280,8 +275,8 @@ describe('model JSON import', () => {
 
     expect(mockSaveModel).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'Template Scenario',
-        description: 'Scenario description',
+        name: 'M/M/1 Queue',
+        description: expect.stringContaining('Classic single-server queue'),
       }),
       'user-1'
     );
