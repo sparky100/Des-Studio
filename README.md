@@ -84,8 +84,9 @@ npm run build
 npm run dev
 
 # Testing
-npm test                              # Watch mode — all tests
-npm test -- --run                     # Single pass, no watch
+npm test                              # Full suite, single pass (slow — CI runs this, sharded)
+npm run test:quick                    # Only tests related to uncommitted changes — fast pre-commit check
+npm run test:watch                    # Watch mode — re-runs tests affected by the file you save
 npm test -- engine                    # Engine tests only
 npm test -- ui                        # UI tests only
 

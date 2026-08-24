@@ -670,20 +670,26 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[]);
 
   const save=()=>{
-    setSaving(true);
-    setSaveError(null);
     const v = validateModel(model);
     if (v.errors.length) {
-      toast.warning(`Model saved with ${v.errors.length} validation error${v.errors.length > 1 ? 's' : ''} — check Model Health`);
-    } else if (v.warnings.length) {
-      toast.info(`Model saved with ${v.warnings.length} warning${v.warnings.length > 1 ? 's' : ''} — check Model Health`);
+      const plural = v.errors.length > 1 ? 's' : '';
+      const proceed = window.confirm(`This model has ${v.errors.length} validation error${plural} that will stop it running.\n\nSave anyway? Check Model Health to see what needs fixing.`);
+      if (!proceed) return;
     }
+    setSaving(true);
+    setSaveError(null);
     overrides.onSave?.(model)
       .then(saved => {
         setDirty(false);
         setVisualPending(false);
         setSaveSeq(s => s + 1);
-        if (!v.errors.length && !v.warnings.length) toast.success("Model saved");
+        if (v.errors.length) {
+          toast.warning(`Model saved with ${v.errors.length} validation error${v.errors.length > 1 ? 's' : ''} — check Model Health`);
+        } else if (v.warnings.length) {
+          toast.info(`Model saved with ${v.warnings.length} warning${v.warnings.length > 1 ? 's' : ''} — check Model Health`);
+        } else {
+          toast.success("Model saved");
+        }
         onRefresh?.();
       })
       .catch(error => {

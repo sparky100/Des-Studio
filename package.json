@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:quick": "vitest run --changed",
     "typecheck": "tsc --noEmit",
     "bench": "vitest run tests/engine/benchmarks --environment node --reporter verbose",
     "bench:timing": "node tests/engine/perf_timing.js",
