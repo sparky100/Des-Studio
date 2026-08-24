@@ -18,8 +18,6 @@ This project uses **OpenCode**, not Claude Code. See the following files for aut
 | `docs/reviews/expert-review-2026-08-functionality.md` | 2026-08 functionality & capability review |
 | `docs/reviews/expert-review-2026-08-code.md` | 2026-08 code review |
 
-**Backup:** `AGENTS.md.bak` and `CLAUDE.md.bak` contain the pre-consolidation originals.
-
 ## Schema Contract
 
 Any change that adds a field to model_json, db/models.js serialisation, or the Supabase schema must include a corresponding Vitest round-trip assertion in tests/db/. PRs without this are incomplete.
