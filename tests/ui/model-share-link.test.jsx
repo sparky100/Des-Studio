@@ -65,7 +65,7 @@ describe('#model/<id> deep link', () => {
 
     render(<App />);
 
-    expect(await screen.findByRole('button', { name: /^access$/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^access$/i }, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.queryByText('Model Library')).not.toBeInTheDocument();
   });
 

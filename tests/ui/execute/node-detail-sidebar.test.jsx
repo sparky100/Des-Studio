@@ -94,10 +94,11 @@ describe("NodeDetailSidebar", () => {
         model={mockModel}
       />
     );
-    expect(screen.getByText("Queue Members")).toBeInTheDocument();
-    expect(screen.getByText("Queue")).toBeInTheDocument();
+    expect(screen.getByText("Inspector")).toBeInTheDocument();
+    // "Queue" appears both as the header type tag and as the queue's name
+    expect(screen.getAllByText("Queue").length).toBe(2);
     expect(screen.getByText("FIFO")).toBeInTheDocument();
-    expect(screen.getByText("3 / 5")).toBeInTheDocument();
+    expect(screen.getByText(/3\s*\/ 5/)).toBeInTheDocument();
   });
 
   test("shows queue entities sorted by arrival time (FIFO)", () => {
@@ -194,7 +195,8 @@ describe("NodeDetailSidebar", () => {
         model={mockModel}
       />
     );
-    expect(screen.getByText("Server Pool")).toBeInTheDocument();
+    expect(screen.getByText("Inspector")).toBeInTheDocument();
+    expect(screen.getByText("Activity")).toBeInTheDocument();
     expect(screen.getByText("ServiceActivity")).toBeInTheDocument();
     expect(screen.getByText("Server")).toBeInTheDocument();
   });
@@ -322,7 +324,7 @@ describe("NodeDetailSidebar", () => {
         model={mockModel}
       />
     );
-    fireEvent.click(screen.getByText(/Close/));
+    fireEvent.click(screen.getByTitle("Close (Esc)"));
     expect(onClose).toHaveBeenCalled();
   });
 

@@ -121,8 +121,9 @@ describe('accessibility pass', () => {
     );
 
     await screen.findAllByRole('button', { name: /^run$/i });
-    await userEvent.setup().click(screen.getByRole('button', { name: /^setup$/i }));
-    await screen.findByRole('button', { name: /edit setup/i });
+    // The run controls bar now exposes the setup panel via the "⚙ Edit" toggle.
+    await userEvent.setup().click(await screen.findByRole('button', { name: '⚙ Edit' }));
+    await screen.findByRole('button', { name: /hide setup/i });
     expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
   }, 15000);

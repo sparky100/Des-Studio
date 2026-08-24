@@ -16,7 +16,6 @@ import { fetchModels, fetchProfiles,
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
 import { GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
-import { ToastProvider }                    from "./ui/shared/ToastContext.jsx";
 import { useTheme }                         from "./ui/shared/ThemeContext.jsx";
 import { KeyboardShortcutsModal }           from "./ui/shared/KeyboardShortcutsModal.jsx";
 import { HelpAssistant }                    from "./ui/HelpAssistant.jsx";
@@ -700,7 +699,6 @@ export default function App({ onThemeChange }){
   }
 
   return(
-    <ToastProvider>
     <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
       <style>{`*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:${C.bg};}::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px;}@import url('${GOOGLE_FONT_URL}');`}</style>
       <AppNavBar
@@ -789,6 +787,5 @@ export default function App({ onThemeChange }){
         />
       )}
     </div>
-    </ToastProvider>
   )
 }

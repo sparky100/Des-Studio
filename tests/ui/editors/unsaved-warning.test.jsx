@@ -112,7 +112,10 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
   });
 
   it('Back button does NOT show confirm dialog after saving', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm');
+    // The blank fixture model has blocking validation errors, so save() asks
+    // "Save anyway?" — accept that prompt; the assertion below is only about
+    // the Back button's unsaved-changes confirm.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(msg => /save anyway/i.test(msg));
     const onBack = vi.fn();
     const onRefresh = vi.fn();
     const overrides = makeOverrides();
@@ -140,14 +143,16 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
       expect(screen.queryByRole('button', { name: /^Save$/ })).not.toBeInTheDocument()
     );
 
-    // Back should now navigate without a confirm
+    // Back should now navigate without an unsaved-changes confirm
     fireEvent.click(screen.getByRole('button', { name: /Back/i }));
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(confirmSpy).not.toHaveBeenCalledWith(expect.stringContaining('unsaved changes'));
     expect(onBack).toHaveBeenCalledOnce();
   });
 
   it('Back button still shows confirm dialog while a save is in flight (fire-and-forget save must not clear dirty early)', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    // Accept the "Save anyway?" validation prompt but decline the Back
+    // button's unsaved-changes confirm.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(msg => /save anyway/i.test(msg));
     const onBack = vi.fn();
     const overrides = makeOverrides();
     let resolveSave;
@@ -180,7 +185,9 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
   });
 
   it('keeps changes dirty and shows an error when saving fails', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    // Accept the "Save anyway?" validation prompt but decline the Back
+    // button's unsaved-changes confirm.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(msg => /save anyway/i.test(msg));
     const onBack = vi.fn();
     const overrides = makeOverrides();
     overrides.onSave = vi.fn().mockRejectedValue(new Error('Database is unavailable'));

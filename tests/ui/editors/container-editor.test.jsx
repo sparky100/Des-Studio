@@ -5,8 +5,9 @@ import { ContainerEditor } from '../../../src/ui/editors/index.jsx';
 describe('ContainerEditor', () => {
   it('renders empty state with add button when no containers exist', () => {
     render(<ContainerEditor containers={[]} onChange={vi.fn()} />);
-    expect(screen.getByText(/add container/i)).toBeInTheDocument();
-    expect(screen.getByText(/no containers defined/i, { exact: false })).toBeInTheDocument();
+    // Header CTA plus empty-state CTA — both trigger the same add action.
+    expect(screen.getAllByRole('button', { name: /add container/i })).toHaveLength(2);
+    expect(screen.getByText(/no containers yet/i)).toBeInTheDocument();
   });
 
   it('renders existing containers with id, capacity and initialLevel', () => {
@@ -22,7 +23,7 @@ describe('ContainerEditor', () => {
   it('calls onChange with a new container when Add Container is clicked', () => {
     const onChange = vi.fn();
     render(<ContainerEditor containers={[]} onChange={onChange} />);
-    fireEvent.click(screen.getByText(/add container/i));
+    fireEvent.click(screen.getAllByRole('button', { name: /add container/i })[0]);
     expect(onChange).toHaveBeenCalledTimes(1);
     const newContainers = onChange.mock.calls[0][0];
     expect(newContainers).toHaveLength(1);

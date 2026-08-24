@@ -670,20 +670,26 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[]);
 
   const save=()=>{
-    setSaving(true);
-    setSaveError(null);
     const v = validateModel(model);
     if (v.errors.length) {
-      toast.warning(`Model saved with ${v.errors.length} validation error${v.errors.length > 1 ? 's' : ''} — check Model Health`);
-    } else if (v.warnings.length) {
-      toast.info(`Model saved with ${v.warnings.length} warning${v.warnings.length > 1 ? 's' : ''} — check Model Health`);
+      const plural = v.errors.length > 1 ? 's' : '';
+      const proceed = window.confirm(`This model has ${v.errors.length} validation error${plural} that will stop it running.\n\nSave anyway? Check Model Health to see what needs fixing.`);
+      if (!proceed) return;
     }
+    setSaving(true);
+    setSaveError(null);
     overrides.onSave?.(model)
       .then(saved => {
         setDirty(false);
         setVisualPending(false);
         setSaveSeq(s => s + 1);
-        if (!v.errors.length && !v.warnings.length) toast.success("Model saved");
+        if (v.errors.length) {
+          toast.warning(`Model saved with ${v.errors.length} validation error${v.errors.length > 1 ? 's' : ''} — check Model Health`);
+        } else if (v.warnings.length) {
+          toast.info(`Model saved with ${v.warnings.length} warning${v.warnings.length > 1 ? 's' : ''} — check Model Health`);
+        } else {
+          toast.success("Model saved");
+        }
         onRefresh?.();
       })
       .catch(error => {
@@ -1115,6 +1121,17 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
         <SaveBanner canEdit={canEdit} dirty={dirty} visualPending={visualPending} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
         {saveError&&<div role="alert" style={{background:C.errorBg,border:`1px solid ${C.danger}`,borderRadius:6,padding:'8px 12px',color:C.error,fontFamily:FONT,fontSize:12,marginBottom:8}}>{saveError}</div>}
+        {["overview","execute","results"].includes(tab)&&(
+          <ModelHealthPanel
+            model={model}
+            validation={healthValidation}
+            isStarterBlank={isStarterBlank}
+            tab={tab}
+            setTab={setTab}
+            latestResults={latestResults}
+            onGoToHistory={()=>{setTab("results");setResultsView("history");}}
+          />
+        )}
         <ErrorBoundary
           key={tab}
           title="Model panel crashed"

@@ -73,7 +73,7 @@ describe('VersionHistoryPanel', () => {
     const paramVersions = [{ ...mockVersions[0], isStructural: false }];
     dbModels.listVersions.mockResolvedValue(paramVersions);
     render(<VersionHistoryPanel model={mockModel} userId="user-1" isOwner={true} />);
-    await screen.findByText('parameter');
+    await screen.findByText('parameter only');
   });
 
   it('opens create version dialog when button clicked', async () => {
@@ -82,9 +82,11 @@ describe('VersionHistoryPanel', () => {
     render(<VersionHistoryPanel model={mockModel} userId="user-1" isOwner={true} />);
     await screen.findByText('+ Create version');
     fireEvent.click(screen.getByText('+ Create version'));
-    // Dialog title is "Create Version", button is also "Create Version"
+    // Dialog title is "Tag a version"; the next version number is auto-assigned
     await screen.findByRole('dialog');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Tag a version')).toBeInTheDocument();
+    expect(screen.getByText('v3')).toBeInTheDocument();
   });
 
   it('creates version when form submitted', async () => {
@@ -96,40 +98,14 @@ describe('VersionHistoryPanel', () => {
     await screen.findByText('+ Create version');
     fireEvent.click(screen.getByText('+ Create version'));
     await screen.findByRole('dialog');
-    // Verify dialog is open
+    // Verify dialog is open with the auto-assigned next version number
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('v3 (auto-assigned)')).toBeInTheDocument();
-  });
-
-  it('shows parameter badge for parameter-only versions', async () => {
-    const paramVersions = [{ ...mockVersions[0], isStructural: false }];
-    dbModels.listVersions.mockResolvedValue(paramVersions);
-    render(<VersionHistoryPanel model={mockModel} userId="user-1" isOwner={true} />);
-    await screen.findByText('parameter');
-  });
-
-  it('opens create version dialog when button clicked', async () => {
-    dbModels.listVersions.mockResolvedValue(mockVersions);
-    dbModels.getNextVersion.mockResolvedValue(3);
-    render(<VersionHistoryPanel model={mockModel} userId="user-1" isOwner={true} />);
-    await screen.findByText('+ Create version');
-    fireEvent.click(screen.getByText('+ Create version'));
-    await screen.findByRole('dialog');
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('v3 (auto-assigned)')).toBeInTheDocument();
-  });
-
-  it('creates version when form submitted', async () => {
-    dbModels.listVersions.mockResolvedValue(mockVersions);
-    dbModels.getNextVersion.mockResolvedValue(3);
-    dbModels.createVersion.mockResolvedValue({ id: 'v3', modelId: 'm1', version: 3, name: 'v3', notes: 'Test', isStructural: true, createdAt: '2026-05-20T12:00:00Z' });
-    const onToast = vi.fn();
-    render(<VersionHistoryPanel model={mockModel} userId="user-1" isOwner={true} onToast={onToast} />);
-    await screen.findByText('+ Create version');
-    fireEvent.click(screen.getByText('+ Create version'));
-    await screen.findByRole('dialog');
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('v3 (auto-assigned)')).toBeInTheDocument();
+    expect(screen.getByText('v3')).toBeInTheDocument();
+    // Submit the form and verify the version is created
+    fireEvent.click(screen.getByRole('button', { name: /save version/i }));
+    await waitFor(() => expect(dbModels.createVersion).toHaveBeenCalled());
+    expect(dbModels.createVersion).toHaveBeenCalledWith('m1', 'user-1', expect.objectContaining({ version: 3 }));
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('success', 'Version v3 created'));
   });
 
   it('shows delete button for owner', async () => {

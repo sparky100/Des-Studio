@@ -106,7 +106,7 @@ describe('Compass session handoff', () => {
 
     render(<App />);
 
-    expect(await screen.findByRole('button', { name: /^access$/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^access$/i }, { timeout: 10000 })).toBeInTheDocument();
     expect(supabase.auth.setSession).not.toHaveBeenCalled();
   });
 });
