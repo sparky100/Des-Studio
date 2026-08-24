@@ -88,17 +88,21 @@ describe('makeHelpers', () => {
     expect(result[0].status).toBe('idle');
   });
 
-  test('busyOf returns busy and serving entities', () => {
+  test('busyOf returns busy/serving server resources only', () => {
     const h = makeHelpers(entities);
     const busy = h.busyOf('Server');
     expect(busy.length).toBe(1);
     expect(busy[0].id).toBe(6);
 
-    // serving customers also count as busy
-    const servingCustomers = h.busyOf('Customer');
-    expect(servingCustomers.length).toBe(1);
-    expect(servingCustomers[0].id).toBe(3);
-    expect(servingCustomers[0].status).toBe('serving');
+    // Contract change (server-roster index optimisation): busyOf is a
+    // resource-status helper and scans only role==="server" entities — the
+    // indexed production path reads index.servers, and the non-indexed
+    // fallback mirrors it. Serving customers are no longer returned.
+    expect(h.busyOf('Customer')).toEqual([]);
+
+    // A server in "serving" status still counts as busy.
+    entities.push({ id: 7, type: 'Server', role: 'server', status: 'serving', arrivalTime: 0 });
+    expect(h.busyOf('Server').map(e => e.id)).toEqual([6, 7]);
   });
 
   test('findById returns correct entity', () => {
@@ -109,9 +113,12 @@ describe('makeHelpers', () => {
     expect(found.type).toBe('Customer');
   });
 
-  test('findById returns undefined for missing id', () => {
+  test('findById returns null for missing id', () => {
+    // Contract change: findById is now backed by findEntityById (O(1) byId
+    // index), which deliberately normalises the miss case to null on both
+    // the indexed and fallback paths. All call sites use truthy checks.
     const h = makeHelpers(entities);
-    expect(h.findById(999)).toBeUndefined();
+    expect(h.findById(999)).toBeNull();
   });
 
   test('idleOf returns idle resources in deterministic creation order', () => {

@@ -137,12 +137,20 @@ describe("getRunAdmission", () => {
   });
 
   it("auto-disables chart data for large allowed runs", () => {
+    // Contract change: chart data is no longer gated on riskLevel; it is
+    // gated on the actual per-run snapshot cost — expectedEntities x
+    // estimated B-event firings (estimatedCEventScans / cEventCount) — with
+    // a ~100M-iteration threshold (see the RA13 gate in run-admission.js).
+    // 2,000 entities x 100,000 firings = 200M > 100M, while scans stay below
+    // the standard-tier RA7/RA8 thresholds so the run is still allowed.
     const result = getAdmission({
       replications: 2,
       complexityEstimate: cleanComplexity({
-        expectedEntities: 12000,
-        totalEstimatedEntities: 24000,
-        totalEstimatedScans: 24000,
+        expectedEntities: 2000,
+        cEventCount: 1,
+        estimatedCEventScans: 100000,
+        totalEstimatedEntities: 4000,
+        totalEstimatedScans: 200000,
         riskLevel: "large",
       }),
     });
@@ -150,6 +158,23 @@ describe("getRunAdmission", () => {
     expect(result.hardErrors).toEqual([]);
     expect(result.effectiveSettings.collectTimeSeries).toBe(false);
     expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "RA13" }),
+    ]));
+  });
+
+  it("keeps chart data on for a high-risk model whose snapshot cost is low", () => {
+    // Encodes the other half of the new contract: riskLevel alone (dominated
+    // by C-event scan count) no longer disables chart data when the in-flight
+    // entity population keeps snapshots cheap.
+    const result = getAdmission({
+      complexityEstimate: cleanComplexity({
+        expectedEntities: 12000,
+        riskLevel: "large",
+      }),
+    });
+
+    expect(result.effectiveSettings.collectTimeSeries).toBe(true);
+    expect(result.warnings).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "RA13" }),
     ]));
   });

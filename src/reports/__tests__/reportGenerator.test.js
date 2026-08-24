@@ -128,7 +128,10 @@ describe('generateReport', () => {
 
     expect(html).toContain('Journey outcomes');
     expect(html).toContain('Exit');
-    expect(html).toContain('direct-routing');
+    // Contract change: the outcomes table shows the user-facing route label
+    // only — internal engine identifiers such as endedBy ('direct-routing')
+    // are no longer leaked into the report (HTML and Markdown renderers agree).
+    expect(html).not.toContain('direct-routing');
   });
 
   test('includes entity types in appendix', async () => {
@@ -158,13 +161,49 @@ describe('generateReport', () => {
     expect(html).not.toContain('Model Diagram');
   });
 
-  test('includes SVG charts for journey breakdown when wait and service data present', async () => {
+  test('includes SVG wait/service chart for single-stage models', async () => {
     callLLMOnce.mockResolvedValue('');
 
     const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
+    // Contract change: for a single-stage model the overall chart is titled
+    // "Wait & Service Time Metrics" (a lone stage is not a journey breakdown);
+    // the per-stage "Journey Time Breakdown by Stage" title is reserved for
+    // multi-stage models (covered below).
     expect(html).toContain('<svg');
-    expect(html).toContain('Journey Time Breakdown');
+    expect(html).toContain('Wait &amp; Service Time Metrics');
+  });
+
+  test('includes per-stage Journey Time Breakdown chart for multi-stage models', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const multiStageModel = {
+      ...minimalModel,
+      queues: [
+        { id: 'q1', name: 'Waiting Room', discipline: 'FIFO' },
+        { id: 'q2', name: 'Treatment', discipline: 'FIFO' },
+      ],
+    };
+    const multiStageResults = {
+      ...minimalResults,
+      waitDist: {
+        'Waiting Room': { n: 50, mean: 3.2 },
+        'Treatment':    { n: 48, mean: 1.1 },
+      },
+      entitySummary: [
+        {
+          status: 'done',
+          stages: [
+            { queueName: 'Waiting Room', stageService: 5.0 },
+            { queueName: 'Treatment',    stageService: 12.0 },
+          ],
+        },
+      ],
+    };
+
+    const html = await generateReport(multiStageModel, multiStageResults, experimentConfig, runMeta);
+
+    expect(html).toContain('<svg');
+    expect(html).toContain('Journey Time Breakdown by Stage');
   });
 
   test('includes resource utilisation chart when perResource data present', async () => {
@@ -197,7 +236,12 @@ describe('generateReport', () => {
 
     const html = await generateReport(minimalModel, resultsWithWait, experimentConfig, runMeta);
 
-    expect(html).toContain('Queue Wait-Time Distribution');
+    // Contract change: the wait-time section reports the mean wait per queue
+    // (section "Queue wait-time distributions", chart "Average Queue Wait
+    // Time") rather than the old per-percentile "Queue Wait-Time Distribution"
+    // chart — the Markdown renderer ("Queue Wait Times", mean-only) agrees.
+    expect(html).toContain('Queue wait-time distributions');
+    expect(html).toContain('Average Queue Wait Time');
     expect(html).toContain('Waiting Room');
   });
 

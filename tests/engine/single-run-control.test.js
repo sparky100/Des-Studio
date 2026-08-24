@@ -63,7 +63,11 @@ describe("single-run progress and cancellation", () => {
 
   test("completed result is unchanged when no observer is provided", () => {
     const baseline = buildEngine(makeProgressModel(), 99, 0, 5).runAll();
-    const withEmptyOptions = buildEngine(makeProgressModel(), 99, 0, 5, null, 5000, 500, false, undefined, {}).runAll();
+    // Explicit args must mirror buildEngine's actual defaults (maxCycles 5000,
+    // maxCPasses 5000, collectTimeSeries false) — the engine now echoes its
+    // config into summary (e.g. summary.maxCPasses), so a stale non-default
+    // value here would diff on the echoed config rather than on behaviour.
+    const withEmptyOptions = buildEngine(makeProgressModel(), 99, 0, 5, null, 5000, 5000, false, undefined, {}).runAll();
 
     expect(withEmptyOptions).toEqual(baseline);
   });
