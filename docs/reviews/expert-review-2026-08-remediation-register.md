@@ -126,4 +126,20 @@ Not defects — enhancements that consolidate a strong product. Grouped by theme
 
 ---
 
+## 5. Status — Sprint 90 implemented (2026-08-24, branch `claude/expert-reviews-remediation-xt3b20`)
+
+| Item | Status | Notes |
+|---|---|---|
+| R-01 CI gate | ✅ Done | `ci.yml` test job now runs the suite (sharded 2×) plus a new typecheck job |
+| R-02 Failing tests | ✅ Done | All 40+ failures repaired across 19 files. Verdicts: one **real regression** found and fixed (`ModelHealthPanel` was imported and computed but never rendered — now mounted on overview/run/results tabs); everything else was verified test drift, with git-history evidence for each engine/report case. Determinism parity, model immutability, and both analytical benchmarks re-verified green. |
+| R-03 ToastProvider | ✅ Done | Moved to `main.jsx`; authoring-flow toasts now render everywhere |
+| R-05 Save gate | ✅ Done | Blocking validation errors now require explicit confirmation; result toasts fire after the save resolves |
+| R-13 supabase/.temp | ✅ Done | Untracked and gitignored |
+| R-18 Hygiene sweep | ✅ Done | Junk removed, `.bak`/tmp files deleted, landing pages archived to `docs/archived/landing/`, `.gitignore` extended |
+| Dev loop (user request) | ✅ Done | `test:quick` script (`vitest run --changed`), corrected README testing docs, CI sharded for wall-time |
+
+Full-suite verification at completion: 0 failures (result recorded in the closing commit message). Next: Sprint 91 (R-04, R-06, R-07, R-09, R-10, R-11, R-15) and Sprint 92 (R-08, R-12, R-14, R-16, R-17).
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*
