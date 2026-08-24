@@ -68,7 +68,10 @@ vi.mock('@xyflow/react', () => ({
             <button
               type="button"
               onClick={() => onSelectionChange?.({
-                nodes: nodes.map(node => ({ ...node, selected: node.id === firstQueue.id })),
+                nodes: [
+                  { ...firstQueue, selected: true },
+                  { id: 'section:panel', type: 'sectionPanel', position: { x: 0, y: 0 } },
+                ],
               })}
             >
               Mock noisy box selection
@@ -200,7 +203,7 @@ describe('Visual Designer shell', () => {
 
   it('supports initial visual authoring actions and marks the model dirty', async () => {
     const user = userEvent.setup();
-    const onSave = vi.fn();
+    const onSave = vi.fn().mockResolvedValue({});
 
     render(
       <ModelDetail
@@ -216,12 +219,18 @@ describe('Visual Designer shell', () => {
     await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /add queue/i }));
 
-    expect(screen.getByText('Unsaved changes in this model.')).toBeInTheDocument();
+    // Visual-tab edits surface as pending-changes indicators (header + banner),
+    // each paired with a Save action.
+    expect(screen.getAllByText(/Unsaved layout changes/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole('button', { name: /^save$/i }).length).toBeGreaterThanOrEqual(1);
   });
 
   it('auto-links a newly added queue from the currently selected source when the connection is valid', async () => {
     const user = userEvent.setup();
-    const onSave = vi.fn();
+    const onSave = vi.fn().mockResolvedValue({});
+    // The freshly added queue leaves the model with blocking validation errors,
+    // and save() now confirms via window.confirm before saving anyway.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     render(
       <ModelDetail
@@ -237,18 +246,19 @@ describe('Visual Designer shell', () => {
     await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /mock select source/i }));
     await user.click(screen.getByRole('button', { name: /add queue/i }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getAllByRole('button', { name: /^save$/i })[0]);
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       bEvents: expect.arrayContaining([
         expect.objectContaining({ id: 'arrive', effect: 'ARRIVE(Patient, Queue 3)' }),
       ]),
     }));
+    confirmSpy.mockRestore();
   }, 15000);
 
   it('persists layout changes through the normal save path', async () => {
     const user = userEvent.setup();
-    const onSave = vi.fn();
+    const onSave = vi.fn().mockResolvedValue({});
 
     render(
       <ModelDetail
@@ -263,7 +273,7 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /^design$/i }));
     await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /mock move first node/i }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getAllByRole('button', { name: /^save$/i })[0]);
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       graph: expect.objectContaining({
@@ -295,7 +305,7 @@ describe('Visual Designer shell', () => {
     expect(screen.queryByText('2 selected')).not.toBeInTheDocument();
   });
 
-  it('ignores unselected nodes when React Flow reports a noisy selection payload', async () => {
+  it('ignores non-selectable section panels when React Flow reports a noisy selection payload', async () => {
     const user = userEvent.setup();
 
     render(
@@ -309,7 +319,7 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /mock noisy box selection/i }));
 
     expect(screen.getByText('1 selected')).toBeInTheDocument();
-    expect(screen.queryByText('6 selected')).not.toBeInTheDocument();
+    expect(screen.queryByText('2 selected')).not.toBeInTheDocument();
   });
 
   it('persists group movement for selected visual nodes', async () => {
@@ -633,9 +643,10 @@ describe('Visual Designer shell', () => {
 
     fireEvent.change(countInput, { target: { value: '12' } });
 
+    // Count inputs commit parsed numbers (same convention as EntityTypeEditor).
     expect(onModelChange).toHaveBeenLastCalledWith(expect.objectContaining({
       entityTypes: expect.arrayContaining([
-        expect.objectContaining({ id: 'nurse', count: '12' }),
+        expect.objectContaining({ id: 'nurse', count: 12 }),
       ]),
     }));
   });
@@ -759,7 +770,7 @@ describe('Visual Designer shell', () => {
 
   it('supports dropping a palette node onto the canvas and saving its position', async () => {
     const user = userEvent.setup();
-    const onSave = vi.fn();
+    const onSave = vi.fn().mockResolvedValue({});
     const data = new Map();
     const dataTransfer = {
       dropEffect: '',
@@ -786,7 +797,7 @@ describe('Visual Designer shell', () => {
     Object.defineProperty(dropEvent, 'clientX', { value: 300 });
     Object.defineProperty(dropEvent, 'clientY', { value: 200 });
     fireEvent(canvas, dropEvent);
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getAllByRole('button', { name: /^save$/i })[0]);
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       graph: expect.objectContaining({

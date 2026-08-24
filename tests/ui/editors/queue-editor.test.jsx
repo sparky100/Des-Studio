@@ -12,10 +12,10 @@ describe('QueueEditor', () => {
       />
     );
 
-    expect(screen.getByText(/Configure named waiting lines/i)).toBeInTheDocument();
+    expect(screen.getByText(/Named waiting lines for arriving entities/i)).toBeInTheDocument();
     expect(screen.getByText(/only compatible entity-to-queue combinations/i)).toBeInTheDocument();
     expect(screen.queryByText(/implicit per-customer queue/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/No named queues yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No queues yet/i)).toBeInTheDocument();
   });
 
   it('commits queue name edits on blur instead of on every keypress', () => {

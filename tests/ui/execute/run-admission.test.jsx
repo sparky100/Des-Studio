@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ExecutePanel } from "../../../src/ui/execute/index.jsx";
 
@@ -61,8 +61,8 @@ const largeAllowedModel = {
 };
 
 function openSetup() {
-  fireEvent.click(screen.getByRole("button", { name: /^setup$/i }));
-  fireEvent.click(screen.getByRole("button", { name: /edit setup/i }));
+  // The run toolbar's "⚙ Edit" button opens the Run Setup (ExperimentControls) panel.
+  fireEvent.click(screen.getByRole("button", { name: /edit/i }));
 }
 
 describe("ExecutePanel run admission", () => {
@@ -121,9 +121,12 @@ describe("ExecutePanel run admission", () => {
 
     openSetup();
     fireEvent.change(screen.getByLabelText(/replication count/i), { target: { value: "2" } });
-    fireEvent.click(screen.getByRole("button", { name: /^run$/i }));
 
     fireEvent.click(screen.getByRole("button", { name: /batch run/i }));
+
+    // Large runs now ask via an accessible dialog instead of window.confirm.
+    const dialog = await screen.findByRole("dialog", { name: /large run/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: /run without chart data/i }));
 
     await waitFor(() => expect(mockRunReplications).toHaveBeenCalledTimes(1));
     expect(mockRunReplications.mock.calls[0][0]).toEqual(
@@ -138,6 +141,5 @@ describe("ExecutePanel run admission", () => {
         effectiveCollectTimeSeries: false,
       })
     );
-    expect(window.confirm).toHaveBeenCalled();
   });
 });
