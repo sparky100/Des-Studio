@@ -184,7 +184,7 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Mode:</span>
         <select value={mode} onChange={e => onModeChange(e.target.value)}
-          style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }}>
+          style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px" }}>
           <option value="absolute">Absolute capacity</option>
           <option value="multiplier">Multiplier (0–100%)</option>
         </select>
@@ -194,7 +194,7 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
             <input type="number" min="0" step="1" value={baseCapacity}
               onChange={e => { const v = e.target.value; setBaseCapacity(v); onChange?.({ ...pattern, type: "weekly", mode, defaultCapacity: defaultCap, baseCapacity: v, periods, exceptions }); }}
               placeholder="e.g. 6"
-              style={{ width: 70, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }} />
+              style={{ width: 70, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px" }} />
             <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>staff × multiplier = actual</span>
           </>
         )}
@@ -203,7 +203,7 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
         <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Default off-shift {mode === "multiplier" ? "(%)" : "capacity"}:</span>
         <input type="number" min="0" step={mode === "multiplier" ? "0.01" : "1"} value={defaultCap}
           onChange={e => { const v = mode === "multiplier" ? parseFloat(e.target.value) || 0 : parseInt(e.target.value, 10) || 0; setDefaultCap(v); onChange?.({ ...pattern, type: "weekly", mode, defaultCapacity: v, baseCapacity: mode === "multiplier" ? baseCapacity : undefined, periods, exceptions }); }}
-          style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }} />
+          style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px" }} />
         {mode === "multiplier" && <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{Math.round((Number(defaultCap) || 0) * 100)}%</span>}
       </div>
       <div style={{ overflowX: "auto" }} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}>
@@ -257,7 +257,7 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
           <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{mode === "multiplier" ? "Multiplier:" : "Capacity:"}</span>
           <input type="number" min="0" max={mode === "multiplier" ? "1" : "99"} step={mode === "multiplier" ? "0.01" : "1"} value={capacityVal}
             onChange={e => setCapacityVal(mode === "multiplier" ? parseFloat(e.target.value) || 0 : parseInt(e.target.value, 10) || 0)}
-            style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.server, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }} />
+            style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.server, fontFamily: FONT, fontSize: 11, padding: "3px 6px" }} />
           {mode === "multiplier" && <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{Math.round(capacityVal * 100)}%</span>}
           <Btn small variant="primary" onClick={applySelection}>Apply</Btn>
           <Btn small variant="ghost" onClick={clearSelection}>Clear selection</Btn>
@@ -273,11 +273,11 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
           {exceptions.map((exc, idx) => (
             <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <input type="date" value={exc.date || ""} onChange={e => updException(idx, { date: e.target.value })}
-                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 6px", outline: "none" }} />
+                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 6px" }} />
               <input value={exc.label || ""} onChange={e => updException(idx, { label: e.target.value })} placeholder="Label"
-                style={{ width: 120, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 6px", outline: "none" }} />
+                style={{ width: 120, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 6px" }} />
               <input type="number" min="0" max={mode === "multiplier" ? "1" : undefined} step={mode === "multiplier" ? "0.01" : "1"} value={exc.periods?.[0]?.capacity ?? 0} onChange={e => { const p = [...(exc.periods || [])]; p[0] = { ...p[0], capacity: mode === "multiplier" ? parseFloat(e.target.value) || 0 : parseInt(e.target.value, 10) || 0 }; updException(idx, { periods: p }); }}
-                style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.server, fontFamily: FONT, fontSize: 10, padding: "2px 6px", outline: "none" }} />
+                style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.server, fontFamily: FONT, fontSize: 10, padding: "2px 6px" }} />
               <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{mode === "multiplier" ? "multiplier" : "capacity"}</span>
               {mode === "multiplier" && <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{Math.round((exc.periods?.[0]?.capacity || 0) * 100)}%</span>}
               <Btn small variant="danger" onClick={() => remException(idx)}>✕</Btn>

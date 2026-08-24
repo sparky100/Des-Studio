@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ExecutePanel } from '../../src/ui/execute/index.jsx';
 import { ModelCard, ModelDetail, NewModelModal } from '../../src/ui/ModelDetail.jsx';
+import { ModelTabBar } from '../../src/ui/ModelTabBar.jsx';
 
 const validModel = {
   id: 'model-1',
@@ -78,6 +79,48 @@ describe('accessibility pass', () => {
 
     await user.click(screen.getAllByRole('button', { name: /^run$/i })[0]);
     expect(screen.getAllByRole('button', { name: /^run$/i })[0]).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('renders no clickable aria-hidden badges in the model tab bar', () => {
+    const setTab = vi.fn();
+    const modes = [
+      { id: 'define', label: 'Define', primaryTab: 'entities', tabs: ['entities', 'validate'] },
+    ];
+
+    const { container } = render(
+      <ModelTabBar
+        tab="entities"
+        setTab={setTab}
+        DISPLAY_MODES={modes}
+        activeMode={modes[0]}
+        visibleSelectableTabs={[
+          { id: 'entities', label: 'Entities' },
+          { id: 'validate', label: 'Model Health' },
+        ]}
+        validation={{ errors: [{ tab: 'entities', message: 'Entity needs a name' }], warnings: [] }}
+        tabIssueCounts={{ entities: { errors: 1, warnings: 0 } }}
+        isCompactLayout={false}
+        showMoreTabs={false}
+        setShowMoreTabs={vi.fn()}
+      />
+    );
+
+    // Decorative aria-hidden elements (issue badges, icons) must not look or act clickable.
+    const hiddenElements = Array.from(container.querySelectorAll('[aria-hidden="true"]'));
+    expect(hiddenElements.length).toBeGreaterThan(0);
+    hiddenElements.forEach(el => {
+      expect(el.style.cursor).not.toBe('pointer');
+    });
+
+    // Clicking a badge only activates its parent tab button — it no longer hijacks
+    // the click to navigate to the validate tab. The parent button already carries
+    // the issue count in its accessible name.
+    const entitiesTab = screen.getByRole('tab', { name: /entities, 1 error/i });
+    const badge = entitiesTab.querySelector('span[aria-hidden="true"][title]');
+    expect(badge).not.toBeNull();
+    fireEvent.click(badge);
+    expect(setTab).toHaveBeenCalledWith('entities');
+    expect(setTab).not.toHaveBeenCalledWith('validate');
   });
 
   it('keeps Execute Run All discoverable and disabled with validation errors', () => {

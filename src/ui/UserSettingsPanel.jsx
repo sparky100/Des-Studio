@@ -105,7 +105,7 @@ function UserSettingsPanel({ userId, plan, onClose, onThemeChange }) {
   const inp = (extra = {}) => ({
     background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4,
     color: C.text, fontFamily: FONT, fontSize: 12,
-    padding: "6px 10px", outline: "none", ...extra,
+    padding: "6px 10px", ...extra,
   });
 
   const gridRow = { display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, alignItems: "center" };

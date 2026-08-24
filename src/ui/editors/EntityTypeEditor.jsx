@@ -192,7 +192,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
       {types.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"
-            style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
+            style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px"}}/>
           {filteredEntityTypeIds&&(
             <div style={{display:"flex",alignItems:"center",gap:4,background:`${C.amber}26`,border:`1px solid ${C.amber}80`,borderRadius:4,padding:"3px 8px",color:C.amber,fontSize:11,fontFamily:FONT,whiteSpace:"nowrap"}}>
               Filtered by error
@@ -239,14 +239,14 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                 aria-label={isExpanded?"Collapse":"Expand"}>{isExpanded?"▾":"▸"}</button>
               <Tag label={et.role||"customer"} color={et.role==="server"?C.server:C.cEvent}/>
               <CommitInput value={et.name} onCommit={value=>commitName(i,value)} placeholder="TypeName"
-                style={{width:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+                style={{width:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px"}}/>
               {!isExpanded&&(
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT,background:`${C.border}30`,borderRadius:3,padding:"2px 6px"}}>{roleSummary}{attrCount>0?` · ${attrCount} attr${attrCount!==1?"s":""}`:""}</span>
               )}
               {isExpanded&&<>
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Role:</span>
                 <select value={et.role||"customer"} onChange={e=>upd(i,"role",e.target.value)}
-                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
                   <option value="customer">Arriving Entity</option>
                   <option value="server">Pre-created Resource</option>
                 </select>
@@ -261,7 +261,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                       aria-label={`Server pool size for ${et.name||"server"}`}
                       type="number" min="1" step="1"
                       value={et.count||""} onChange={e=>upd(i,"count",parseInt(e.target.value,10)||"")} placeholder="1"
-                      style={{width:60,background:"transparent",border:`1px solid ${C.server}55`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+                      style={{width:60,background:"transparent",border:`1px solid ${C.server}55`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:12,padding:"5px 8px"}}/>
                     {parseInt(et.count||"1",10)>1&&(
                       <span style={{fontSize:10,color:C.server,fontFamily:FONT}}>
                         ({parseInt(et.count,10)} servers in pool)
@@ -286,7 +286,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Inherits from:</span>
                     <select value={et.parentTypeId||""} onChange={e=>upd(i,"parentTypeId",e.target.value||undefined)}
-                      style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                      style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
                       <option value="">— none —</option>
                       {candidates.map(t=><option key={t.id} value={t.id}>{t.name||"(unnamed)"}</option>)}
                     </select>
@@ -312,7 +312,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                     </div>
                   ))}
                   <select aria-label={`Add queue to sequence for ${et.name||"entity type"}`} value="" onChange={e=>{if(e.target.value)addSequenceStage(i,e.target.value);}}
-                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none",alignSelf:"flex-start"}}>
+                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",alignSelf:"flex-start"}}>
                     <option value="">+ add queue to sequence…</option>
                     {queues.filter(q=>!(et.requiredSequence||[]).includes(q.name)).map(q=><option key={q.id} value={q.name}>{q.name}</option>)}
                   </select>
@@ -344,7 +344,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>When capacity drops mid-shift:</span>
                       <select value={et.shiftBehavior||"delay"} onChange={e=>upd(i,"shiftBehavior",e.target.value)}
-                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,padding:"3px 6px",outline:"none"}}>
+                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,padding:"3px 6px"}}>
                         <option value="delay">Delay — finish current entity, then go offline</option>
                         <option value="preempt">Preempt — interrupt entity, store remaining time</option>
                         <option value="suspend">Suspend — freeze work in place</option>
@@ -380,7 +380,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                               <Btn small variant="primary">When condition</Btn>
                               <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>when:</span>
                               <select value={variable} disabled={noVarsAvailable} onChange={e=>updShiftWhen(i,j,{variable:e.target.value})}
-                                style={{minWidth:160,background:C.bg,border:`1px solid ${errors.includes("Select a variable")?C.red:C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}>
+                                style={{minWidth:160,background:C.bg,border:`1px solid ${errors.includes("Select a variable")?C.red:C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 7px"}}>
                                 {noVarsAvailable&&<option value="">No state variables defined — add one first</option>}
                                 {!noVarsAvailable&&!varOptions.some(o=>o.value===variable)&&variable&&(
                                   <option value={variable}>{shiftWhenVariableLabel(variable,stateVariables,queues)}</option>
@@ -388,14 +388,14 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                                 {varOptions.map(o=>(<option key={o.value} value={o.value}>{o.label}</option>))}
                               </select>
                               <select value={operator} onChange={e=>updShiftWhen(i,j,{operator:e.target.value})}
-                                style={{width:50,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}>
+                                style={{width:50,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 7px"}}>
                                 {SHIFT_OP_DISPLAY.map(o=>(<option key={o.stored} value={o.stored}>{o.label}</option>))}
                               </select>
                               <input type="number" value={whenValue??""} placeholder="value" onChange={e=>updShiftWhen(i,j,{value:e.target.value})}
-                                style={{width:72,background:"transparent",border:`1px solid ${errors.includes("Enter a value")?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}/>
+                                style={{width:72,background:"transparent",border:`1px solid ${errors.includes("Enter a value")?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px"}}/>
                               <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>capacity:</span>
                               <input type="number" value={step.capacity??""} onChange={e=>updShift(i,j,{capacity:e.target.value})}
-                                style={{width:72,background:"transparent",border:`1px solid ${invalidCapacity?C.red:C.border}`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}/>
+                                style={{width:72,background:"transparent",border:`1px solid ${invalidCapacity?C.red:C.border}`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:11,padding:"4px 7px"}}/>
                               <Btn small variant="danger" ariaLabel={`Remove shift period ${j+1}`} onClick={()=>remShift(i,j)}>x</Btn>
                             </div>
                             {(errors.length>0||warnings.length>0)&&(
@@ -421,10 +421,10 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                             </>}
                             <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from t:</span>
                             <input type="number" value={step.time??""} disabled={j===0} onChange={e=>updShift(i,j,{time:e.target.value})}
-                              style={{width:72,background:"transparent",border:`1px solid ${invalidTime?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none",opacity:j===0?0.7:1}}/>
+                              style={{width:72,background:"transparent",border:`1px solid ${invalidTime?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px",opacity:j===0?0.7:1}}/>
                             <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>capacity:</span>
                             <input type="number" value={step.capacity??""} onChange={e=>updShift(i,j,{capacity:e.target.value})}
-                              style={{width:72,background:"transparent",border:`1px solid ${invalidCapacity?C.red:C.border}`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}/>
+                              style={{width:72,background:"transparent",border:`1px solid ${invalidCapacity?C.red:C.border}`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:11,padding:"4px 7px"}}/>
                             <Btn small variant="danger" ariaLabel={`Remove shift period ${j+1}`} onClick={()=>remShift(i,j)}>x</Btn>
                           </div>
                           {(invalidCapacity||incomplete)&&(
@@ -473,7 +473,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>Failure scope:</span>
                       <select value={et.failureScope||"unit"} onChange={e=>{const n=[...types];n[i]={...n[i],failureScope:e.target.value};onChange(n);}}
-                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,padding:"3px 6px",outline:"none"}}>
+                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,padding:"3px 6px"}}>
                         <option value="unit">Each unit — servers fail independently</option>
                         <option value="pool">Whole pool — one outage affects all servers</option>
                       </select>
@@ -537,7 +537,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                               }} placeholder="Profile name" style={{
                                 background:"transparent",border:`1px solid ${C.border}`,
                                 borderRadius:4,color:C.purple,fontFamily:FONT,fontSize:11,
-                                padding:"3px 6px",flex:1,maxWidth:160,outline:"none",
+                                padding:"3px 6px",flex:1,maxWidth:160,
                               }}/>
                               <Btn small variant="danger" onClick={()=>{
                                 upd(i,"skillProfiles",et.skillProfiles.filter((_,idx)=>idx!==pi));
@@ -578,7 +578,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                                   style={{
                                     background:"transparent",border:`1px solid ${C.border}`,width:40,
                                     borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,
-                                    padding:"2px 4px",outline:"none",textAlign:"center",
+                                    padding:"2px 4px",textAlign:"center",
                                     opacity:hasCount?1:0.4,
                                   }}/>
                               </label>
@@ -600,7 +600,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                                   style={{
                                     background:"transparent",border:`1px solid ${C.border}`,width:40,
                                     borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,
-                                    padding:"2px 4px",outline:"none",textAlign:"center",
+                                    padding:"2px 4px",textAlign:"center",
                                     opacity:hasWeight?1:0.4,
                                   }}/>%
                               </label>
@@ -617,7 +617,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                                   style={{
                                     background:"transparent",border:`1px solid ${C.border}`,width:40,
                                     borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,
-                                    padding:"2px 4px",outline:"none",textAlign:"center",
+                                    padding:"2px 4px",textAlign:"center",
                                   }}/>
                               </label>
                             </div>
@@ -665,7 +665,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                 </SectionPanel>
               )}
               <input value={et.description||""} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
-                style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+                style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",width:"100%",boxSizing:"border-box"}}/>
             </>}
           </div>
         );

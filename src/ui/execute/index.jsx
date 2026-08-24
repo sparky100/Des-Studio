@@ -199,7 +199,7 @@ function ExperimentRunSettingsFields({
   model,
 }) {
   const { C, FONT } = useTheme();
-  const fieldStyle = { width: 90, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" };
+  const fieldStyle = { width: 90, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px" };
   const labelStyle = { fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
@@ -1717,7 +1717,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           value={expFilterText}
           onChange={e => setExpFilterText(e.target.value)}
           placeholder="Filter by name…"
-          style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
+          style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px" }}
         />
         {experiments.length > 1 && (
           <>
@@ -1734,12 +1734,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Name *</span>
               <input aria-label="Experiment name" type="text" value={expFormName} onChange={e => setExpFormName(e.target.value)} placeholder="e.g. High-load scenario"
-                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }} />
+                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }} />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Description</span>
               <input aria-label="Experiment description" type="text" value={expFormDesc} onChange={e => setExpFormDesc(e.target.value)} placeholder="Optional notes"
-                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }} />
+                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }} />
             </div>
             <ExperimentRunSettingsFields
               warmupPeriod={warmupPeriod} setWarmupPeriod={setWarmupPeriod}
@@ -1766,7 +1766,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       {param?.subLabel && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{param.subLabel}</span>}
                     </div>
                     <input aria-label={`Override value ${idx + 1}`} type="number" value={ov.value} onChange={e => setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, value: e.target.value } : o))} placeholder="value"
-                      style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px", outline: "none", flexShrink: 0 }} />
+                      style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px", flexShrink: 0 }} />
                     <Btn small variant="ghost" ariaLabel={`Remove override ${idx + 1}`} onClick={() => setExpFormOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
                   </div>
                 );
@@ -1893,12 +1893,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 12 }}>
                             <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Name *</span>
                             <input aria-label="Experiment name" type="text" value={expFormName} onChange={e => setExpFormName(e.target.value)}
-                              style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }} />
+                              style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }} />
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                             <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Description</span>
                             <input aria-label="Experiment description" type="text" value={expFormDesc} onChange={e => setExpFormDesc(e.target.value)} placeholder="Optional notes"
-                              style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }} />
+                              style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }} />
                           </div>
                           <ExperimentRunSettingsFields
                             warmupPeriod={warmupPeriod} setWarmupPeriod={setWarmupPeriod}
@@ -1925,7 +1925,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                                     {param?.subLabel && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{param.subLabel}</span>}
                                   </div>
                                   <input type="number" value={ov.value} onChange={e => setExpFormOverrides(prev => prev.map((o, j) => j === i2 ? { ...o, value: e.target.value } : o))} placeholder="value"
-                                    style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px", outline: "none", flexShrink: 0 }} />
+                                    style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px", flexShrink: 0 }} />
                                   <Btn small variant="ghost" onClick={() => setExpFormOverrides(prev => prev.filter((_, j) => j !== i2))}>×</Btn>
                                 </div>
                               );
@@ -2036,7 +2036,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       flex: 1, display: "flex", flexDirection: "column", gap: 1, textAlign: "left",
                       background: alpha(paramColor(sweepSelectedParam.type, C), 0.09),
                       border: `1px solid ${alpha(paramColor(sweepSelectedParam.type, C), 0.27)}`,
-                      borderRadius: RADIUS.sm, padding: "4px 8px", cursor: "pointer", outline: "none",
+                      borderRadius: RADIUS.sm, padding: "4px 8px", cursor: "pointer", 
                     }}
                   >
                     <span style={{ fontSize: 11, color: paramColor(sweepSelectedParam.type, C), fontFamily: FONT, fontWeight: 700 }}>{sweepSelectedParam.label}</span>
@@ -2080,7 +2080,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         flex: 1, display: "flex", flexDirection: "column", gap: 1, textAlign: "left",
                         background: alpha(paramColor(sweepSelectedParamB.type, C), 0.09),
                         border: `1px solid ${alpha(paramColor(sweepSelectedParamB.type, C), 0.27)}`,
-                        borderRadius: RADIUS.sm, padding: "4px 8px", cursor: "pointer", outline: "none",
+                        borderRadius: RADIUS.sm, padding: "4px 8px", cursor: "pointer", 
                       }}
                     >
                       <span style={{ fontSize: 11, color: paramColor(sweepSelectedParamB.type, C), fontFamily: FONT, fontWeight: 700 }}>{sweepSelectedParamB.label}</span>
@@ -2122,19 +2122,19 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                     <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN {sweepMode === "2d" ? "X" : ""}</span>
                     <input type="number" aria-label="Sweep min" value={sweepMin}
                       onChange={e => setSweepMin(parseFloat(e.target.value) || 0)}
-                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                     <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX {sweepMode === "2d" ? "X" : ""}</span>
                     <input type="number" aria-label="Sweep max" value={sweepMax}
                       onChange={e => setSweepMax(parseFloat(e.target.value) || 0)}
-                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                     <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP {sweepMode === "2d" ? "X" : ""}</span>
                     <input type="number" aria-label="Sweep step" value={sweepStep}
                       onChange={e => setSweepStep(parseFloat(e.target.value) || 0)}
-                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                   </div>
                 </div>
 
@@ -2144,19 +2144,19 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN Y</span>
                       <input type="number" aria-label="Sweep min Y" value={sweepMinB}
                         onChange={e => setSweepMinB(parseFloat(e.target.value) || 0)}
-                        style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                        style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                       <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX Y</span>
                       <input type="number" aria-label="Sweep max Y" value={sweepMaxB}
                         onChange={e => setSweepMaxB(parseFloat(e.target.value) || 0)}
-                        style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                        style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                       <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP Y</span>
                       <input type="number" aria-label="Sweep step Y" value={sweepStepB}
                         onChange={e => setSweepStepB(parseFloat(e.target.value) || 0)}
-                        style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                        style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                     </div>
                   </div>
                 )}
@@ -2226,7 +2226,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   <select aria-label="Sweep KPI metric"
                     value={sweepKpiMetric}
                     onChange={e => setSweepKpiMetric(e.target.value)}
-                    style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                    style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px" }}>
                     {CI_METRICS.map(m => (
                       <option key={m} value={m}>{METRIC_LABELS[m]}</option>
                     ))}
@@ -2329,7 +2329,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Cell A</span>
                         <select aria-label="Cell A" value={comparisonIdxA}
                           onChange={e => { setComparisonIdxA(parseInt(e.target.value)); setComparisonResult(null); }}
-                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px" }}>
                           {sweepResults.map((pt, i) => (
                             <option key={i} value={i}>
                               {sweepSelectedParam?.label || "X"}={fmt(pt.valueA)}, {sweepSelectedParamB?.label || "Y"}={fmt(pt.valueB)}
@@ -2341,7 +2341,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Cell B</span>
                         <select aria-label="Cell B" value={comparisonIdxB ?? ""}
                           onChange={e => { setComparisonIdxB(parseInt(e.target.value) || null); setComparisonResult(null); }}
-                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px" }}>
                           <option value="">Select...</option>
                           {sweepResults.map((pt, i) => (
                             i !== comparisonIdxA ? (
@@ -2388,7 +2388,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Scenario A</span>
                         <select aria-label="Scenario A" value={comparisonIdxA}
                           onChange={e => { setComparisonIdxA(parseInt(e.target.value)); setComparisonResult(null); }}
-                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px" }}>
                           {sweepResults.map((pt, i) => (
                             <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option>
                           ))}
@@ -2398,7 +2398,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Scenario B</span>
                         <select aria-label="Scenario B" value={comparisonIdxB ?? ""}
                           onChange={e => { setComparisonIdxB(parseInt(e.target.value) || null); setComparisonResult(null); }}
-                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px" }}>
                           <option value="">Select...</option>
                           {sweepResults.map((pt, i) => (
                             i !== comparisonIdxA ? <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option> : null
@@ -3287,13 +3287,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   placeholder="Optional title..."
                   value={shareConfig.title}
                   onChange={e => setShareConfig(prev => ({ ...prev, title: e.target.value }))}
-                  style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 10px", outline: "none" }}
+                  style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 10px" }}
                 />
                 <select
                   aria-label="Link expiry"
                   value={shareConfig.expiresIn}
                   onChange={e => setShareConfig(prev => ({ ...prev, expiresIn: e.target.value }))}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", cursor: "pointer" }}>
+                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", cursor: "pointer" }}>
                   <option value="never">No expiry</option>
                   <option value="24h">24 hours</option>
                   <option value="7d">7 days</option>

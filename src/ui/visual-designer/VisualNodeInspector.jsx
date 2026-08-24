@@ -32,7 +32,6 @@ function SelectField({ label, value, onChange, children, disabled }) {
           fontFamily: FONT,
           fontSize: 12,
           padding: "8px 10px",
-          outline: "none",
           opacity: disabled ? 0.5 : 1,
         }}
       >
@@ -68,7 +67,6 @@ function CommitField({ label, value, onChange, disabled, transform, placeholder 
           fontFamily: FONT,
           fontSize: 12,
           padding: "8px 10px",
-          outline: "none",
           width: "100%",
           boxSizing: "border-box",
           opacity: disabled ? 0.5 : 1,

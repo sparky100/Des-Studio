@@ -563,7 +563,6 @@ export function HelpAssistant({
               fontFamily: FONT,
               fontSize: 12,
               padding: '8px 10px',
-              outline: 'none',
               boxSizing: 'border-box',
               resize: 'none',
             }}

@@ -75,7 +75,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
       {events.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"
-            style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
+            style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px"}}/>
           {filteredEventIds&&(
             <div style={{display:"flex",alignItems:"center",gap:4,background:`${C.amber}26`,border:`1px solid ${C.amber}80`,borderRadius:4,padding:"3px 8px",color:C.amber,fontSize:11,fontFamily:FONT,whiteSpace:"nowrap"}}>
               Filtered by error
@@ -193,7 +193,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 aria-label={isExpanded?"Collapse":"Expand"}>{isExpanded?"▾":"▸"}</button>
               <Tag label={isTmpl?"scheduled follow-on":"B-event"} color={isTmpl?C.muted:C.bEvent}/>
               <CommitInput value={ev.name} onCommit={value=>commitName(i,value)} placeholder="Event name"
-                style={{flex:1,minWidth:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+                style={{flex:1,minWidth:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px"}}/>
               {!isExpanded&&(
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT,background:`${C.bEvent}18`,borderRadius:3,padding:"2px 6px"}}>{effectSummary}</span>
               )}
@@ -201,7 +201,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Behavior:</span>
                 <select value={isStart?"start":isTmpl?"scheduled":"time"}
                   onChange={e=>{const v=e.target.value;if(v==="start")upd(i,"scheduledTime","0");else if(v==="scheduled")upd(i,"scheduledTime","9999");else upd(i,"scheduledTime","1");}}
-                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
                   <option value="start">Fire at start</option>
                   <option value="scheduled">Scheduled follow-on</option>
                   <option value="time">Specific time (t=)</option>
@@ -209,7 +209,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
               </div>
               {showTimeInput&&(
                 <input value={ev.scheduledTime} type="number" step="0.5" onChange={e=>upd(i,"scheduledTime",e.target.value)}
-                  style={{width:65,background:"transparent",border:`1px solid ${C.bEvent+"66"}`,borderRadius:4,color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+                  style={{width:65,background:"transparent",border:`1px solid ${C.bEvent+"66"}`,borderRadius:4,color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px"}}/>
               )}
               <Btn small variant="danger" ariaLabel={`Remove B-event ${ev.name||i+1}`} onClick={()=>rem(i)}>✕</Btn>
             </div>
@@ -268,7 +268,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Mode:</span>
                     <select value={routingMode} onChange={e=>setRoutingMode(e.target.value)}
-                      style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                      style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
                       <option value="none">Single queue (no routing)</option>
                       <option value="conditional">Conditional routing</option>
                       <option value="probabilistic">Probabilistic routing</option>
@@ -280,21 +280,21 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                           <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>IF</span>
                           <select value={row.condition?.variable||""} onChange={e=>updRoutingRow(j,{condition:{...row.condition,variable:e.target.value}})}
-                            style={{flex:1,minWidth:110,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                            style={{flex:1,minWidth:110,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px"}}>
                             <option value="">— attribute —</option>
                             {routingEntityAttrs.map(a=><option key={a} value={a}>{a}</option>)}
                           </select>
                           <select value={row.condition?.operator||"=="} onChange={e=>updRoutingRow(j,{condition:{...row.condition,operator:e.target.value}})}
-                            style={{width:52,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 3px",outline:"none"}}>
+                            style={{width:52,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 3px"}}>
                             {["==","!=","<",">","<=",">="].map(op=><option key={op} value={op}>{op}</option>)}
                           </select>
                           <input value={row.condition?.value||""} onChange={e=>updRoutingRow(j,{condition:{...row.condition,value:e.target.value}})} placeholder="value"
-                            style={{width:80,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}/>
+                            style={{width:80,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px"}}/>
                           <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
                           <select
                             value={row.queueName==null?"__EXIT__":(row.queueName||"")}
                             onChange={e=>updRoutingRow(j,{queueName:e.target.value==="__EXIT__"?null:e.target.value})}
-                            style={{flex:1,minWidth:100,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:row.queueName==null?C.green:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                            style={{flex:1,minWidth:100,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:row.queueName==null?C.green:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px"}}>
                             <option value="">— queue —</option>
                             <option value="__EXIT__">Exit system (leave)</option>
                             {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
@@ -308,7 +308,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                       <select
                         value={ev.defaultQueueName==null?"__EXIT__":(ev.defaultQueueName||"")}
                         onChange={e=>{const v=e.target.value;upd(i,"defaultQueueName",v==="__EXIT__"?null:v);}}
-                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:ev.defaultQueueName==null?C.green:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:ev.defaultQueueName==null?C.green:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
                         <option value="">— queue or exit system —</option>
                         <option value="__EXIT__">Exit system (leave)</option>
                         {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
@@ -320,12 +320,12 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                     {(ev.probabilisticRouting||[]).map((row,j)=>(
                       <div key={j} style={{background:C.bg,borderRadius:4,padding:"8px 10px",border:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                         <input value={row.probability} type="number" min="0" max="1" step="0.01" onChange={e=>updProbRow(j,{probability:parseFloat(e.target.value)||0})} aria-label={`Probability for route ${j+1}`}
-                          style={{width:70,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}/>
+                          style={{width:70,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px"}}/>
                         <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
                         <select
                           value={row.queueName == null ? "__EXIT__" : (row.queueName || "")}
                           onChange={e => updProbRow(j, { queueName: e.target.value === "__EXIT__" ? null : e.target.value })}
-                          style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:row.queueName == null ? C.green : C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                          style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:row.queueName == null ? C.green : C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px"}}>
                           <option value="">— queue —</option>
                           <option value="__EXIT__">Exit system (discharge)</option>
                           {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
@@ -375,11 +375,11 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                       value={ev.loopConfig?.maxLoopCount||""}
                       onChange={e=>updLoop('maxLoopCount',parseInt(e.target.value)||1)}
                       placeholder="3"
-                      style={{width:70,background:'transparent',border:`1px solid ${C.purple}55`,borderRadius:4,color:C.purple,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
+                      style={{width:70,background:'transparent',border:`1px solid ${C.purple}55`,borderRadius:4,color:C.purple,fontFamily:FONT,fontSize:11,padding:'4px 8px'}}/>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Exit to:</span>
                     <select value={ev.loopConfig?.exitQueueName||""}
                       onChange={e=>updLoop('exitQueueName',e.target.value)}
-                      style={{flex:1,background:C.bg,border:`1px solid ${C.purple}55`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}>
+                      style={{flex:1,background:C.bg,border:`1px solid ${C.purple}55`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 8px'}}>
                       <option value="">exit system (entity discarded)</option>
                       {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
                     </select>
@@ -404,7 +404,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                   <div key={j} style={{background:C.bg,borderRadius:5,padding:"10px 12px",border:`1px solid ${s.isRenege?C.reneged+"44":C.border}40`,display:"flex",flexDirection:"column",gap:8}}>
                     <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                       <select value={s.eventId} onChange={e=>updS(i,j,{eventId:e.target.value})}
-                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
                         <option value="">— select B-event —</option>
                         {events.map(b=><option key={b.id} value={b.id}>{displayEventName(b.name)||b.id}</option>)}
                       </select>
@@ -518,7 +518,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
               </SectionPanel>
 
               <input value={ev.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
-                style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+                style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",width:"100%",boxSizing:"border-box"}}/>
             </>}
           </div>
         );

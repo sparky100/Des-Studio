@@ -84,7 +84,7 @@ export function ExperimentControls({
                 placeholder="Baseline"
                 style={{ width: 160, background: "transparent", border: `1px solid ${C.border}`,
                   borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12,
-                  padding: "6px 8px", outline: "none" }}
+                  padding: "6px 8px" }}
               />
             </div>
 
@@ -103,7 +103,7 @@ export function ExperimentControls({
                   }}
                   style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`,
                     borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
-                    padding: "6px 8px", outline: "none" }}
+                    padding: "6px 8px" }}
                 />
                 <Btn small variant="ghost" onClick={onDetectWarmup} disabled={replicationResults.length === 0}>
                   Suggest a value
@@ -172,7 +172,7 @@ export function ExperimentControls({
                 }}
                 style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`,
                   borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
-                  padding: "6px 8px", outline: "none" }}
+                  padding: "6px 8px" }}
               />
               <div style={helperStyle}>
                 Run the same scenario several times to reduce random noise.
@@ -189,7 +189,7 @@ export function ExperimentControls({
                   onChange={e => { const v = parseInt(e.target.value) || 0; setSeed(v); persistExperimentDefaults({ seed: v }); }}
                   style={{ width: 120, background: "transparent", border: `1px solid ${C.border}`,
                     borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
-                    padding: "6px 8px", outline: "none" }}
+                    padding: "6px 8px" }}
                 />
                 <Btn small variant="ghost" onClick={() => { const v = Math.floor(Math.random() * 1e9); setSeed(v); persistExperimentDefaults({ seed: v }); }}>Randomise</Btn>
               </div>
@@ -235,7 +235,7 @@ export function ExperimentControls({
                   }}
                   style={{ width: 100, background: "transparent", border: `1px solid ${C.border}`,
                     borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
-                    padding: "6px 8px", outline: "none" }}
+                    padding: "6px 8px" }}
                 />
                 <div style={helperStyle}>
                   The model stops after this amount of simulated time.

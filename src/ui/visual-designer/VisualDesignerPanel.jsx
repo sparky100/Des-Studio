@@ -934,7 +934,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                     fontFamily: FONT,
                     fontSize: 11,
                     padding: "5px 7px",
-                    outline: "none",
                   }}
                 >
                   {VISUAL_PATTERNS.map(pattern => (
@@ -1002,14 +1001,14 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                         maxLength={20}
                         disabled={!canEdit}
                         ariaLabel={`Entity type ${i + 1} name`}
-                        style={{ width: "100%", minWidth: 0, background: "transparent", border: "none", color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
+                        style={{ width: "100%", minWidth: 0, background: "transparent", border: "none", color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 4px" }}
                       />
                       <select value={et.role || "customer"} onChange={e => {
                         const next = [...(model.entityTypes || [])];
                         next[i] = { ...next[i], role: e.target.value, count: e.target.value === "server" ? (next[i].count || "1") : "" };
                         applyModel({ ...model, entityTypes: next });
                       }}
-                        style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: et.role === "server" ? C.server : C.cEvent, fontFamily: FONT, fontSize: 9, padding: "1px 3px", outline: "none" }}>
+                        style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: et.role === "server" ? C.server : C.cEvent, fontFamily: FONT, fontSize: 9, padding: "1px 3px" }}>
                         <option value="customer">Entity</option>
                         <option value="server">Server</option>
                       </select>
@@ -1019,7 +1018,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                           next[i] = { ...next[i], count: parseInt(e.target.value, 10) || "1" };
                           applyModel({ ...model, entityTypes: next });
                         }}
-                          style={{ width: "100%", boxSizing: "border-box", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 3px", outline: "none", textAlign: "center" }}
+                          style={{ width: "100%", boxSizing: "border-box", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 3px", textAlign: "center" }}
                         />
                       )}
                       {et.role === "server" && hasShifts && (
@@ -1079,7 +1078,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                               next[i] = { ...next[i], shiftBehavior: e.target.value };
                               applyModel({ ...model, entityTypes: next });
                             }}
-                              style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 3, color: C.text, fontFamily: FONT, fontSize: 9, padding: "2px 4px", outline: "none" }}>
+                              style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 3, color: C.text, fontFamily: FONT, fontSize: 9, padding: "2px 4px" }}>
                               <option value="delay">Delay</option>
                               <option value="preempt">Preempt</option>
                               <option value="suspend">Suspend</option>
@@ -1096,11 +1095,11 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                             <div key={j} style={{ display: "flex", gap: 6, alignItems: "center" }}>
                               <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>t={j === 0 ? "0" : time || ""}</span>
                               <input type="number" value={step.time ?? ""} disabled={j === 0} onChange={e => updShiftPeriod(i, j, { time: e.target.value })}
-                                style={{ width: 52, background: "transparent", border: `1px solid ${invalidTime ? C.red : C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none", opacity: j === 0 ? 0.7 : 1 }}
+                                style={{ width: 52, background: "transparent", border: `1px solid ${invalidTime ? C.red : C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 4px", opacity: j === 0 ? 0.7 : 1 }}
                               />
                               <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>cap:</span>
                               <input type="number" value={step.capacity ?? ""} onChange={e => updShiftPeriod(i, j, { capacity: e.target.value })}
-                                style={{ width: 44, background: "transparent", border: `1px solid ${invalidCapacity ? C.red : C.border}`, borderRadius: 3, color: C.server, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
+                                style={{ width: 44, background: "transparent", border: `1px solid ${invalidCapacity ? C.red : C.border}`, borderRadius: 3, color: C.server, fontFamily: FONT, fontSize: 10, padding: "2px 4px" }}
                               />
                               {canEdit && <button type="button" onClick={() => remShiftPeriod(i, j)}
                                 style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 10, padding: 0, lineHeight: 1 }}>✕</button>}
@@ -1173,7 +1172,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                     color: C.text,
                     fontFamily: FONT,
                     fontSize: 11,
-                    outline: "none",
                     padding: "5px 8px",
                     width: 160,
                   }}

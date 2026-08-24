@@ -419,7 +419,6 @@ function ExecuteCanvasToolbar({
             color: C.text,
             fontFamily: FONT,
             fontSize: 11,
-            outline: "none",
             padding: "5px 8px",
             width: 160,
           }}

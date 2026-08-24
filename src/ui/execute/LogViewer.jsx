@@ -94,7 +94,7 @@ export function LogViewer({ log = [], currentClock, model }) {
         onChange={e => setSearch(e.target.value)}
         placeholder="Search log (entity ID, event name, message…)"
         style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4,
-          color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 9px", outline: "none", width: "100%", boxSizing: "border-box" }}
+          color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 9px", width: "100%", boxSizing: "border-box" }}
       />
 
       {/* Log entries */}

@@ -82,7 +82,7 @@ export function CsvImportModal({ onClose, onApply }) {
                 value={entityName}
                 onChange={(e) => setEntityName(e.target.value)}
                 placeholder="e.g. Customer"
-                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px", outline: "none" }}
+                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px" }}
               />
             </div>
             <input ref={fileRef} aria-label="CSV file" type="file" accept=".csv" style={{ display: "none" }} onChange={handleFile} />

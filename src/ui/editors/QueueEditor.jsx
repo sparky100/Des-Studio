@@ -45,7 +45,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
   const inpStyle = (color) => ({
     background:'transparent', border:`1px solid ${color||C.border}`,
     borderRadius:4, color:C.text, fontFamily:FONT, fontSize:12,
-    padding:'6px 8px', outline:'none', width:'100%', boxSizing:'border-box',
+    padding:'6px 8px', width:'100%', boxSizing:'border-box',
   });
 
   const lcFilter=filterText.toLowerCase();
@@ -71,7 +71,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
       {queues.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"
-            style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
+            style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px"}}/>
           {filteredQueueIds&&(
             <div style={{display:"flex",alignItems:"center",gap:4,background:`${C.amber}26`,border:`1px solid ${C.amber}80`,borderRadius:4,padding:"3px 8px",color:C.amber,fontSize:11,fontFamily:FONT,whiteSpace:"nowrap"}}>
               Filtered by error
@@ -149,7 +149,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
                   <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>ACCEPTS</span>
                   <select value={q.customerType||''} onChange={e=>upd(i,'customerType',e.target.value)}
                     style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
-                      color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
+                      color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',width:'100%'}}>
                     <option value=''>— select customer type —</option>
                     {customerTypes.map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
@@ -160,7 +160,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
                     const v=e.target.value;
                     upd(i,'discipline',v==='PRIORITY_ATTR'?`PRIORITY(${disciplineAttr(q.discipline)||'priority'})`:v);
                   }} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
-                    color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
+                    color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',width:'100%'}}>
                     <option value='FIFO'>FIFO — First In, First Out</option>
                     <option value='LIFO'>LIFO — Last In, First Out</option>
                     <option value='PRIORITY'>Priority (uses "priority" attr)</option>
@@ -173,7 +173,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
                       onChange={e=>upd(i,'discipline',`PRIORITY(${e.target.value})`)}
                       placeholder="attrName (e.g. severity)"
                       style={{background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,
-                        color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 7px',outline:'none'}}/>
+                        color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 7px'}}/>
                   )}
                 </div>
               </div>
@@ -196,7 +196,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
                       aria-label={`Overflow destination for ${q.name||'queue'}`}
                       value={q.overflowDestination||''} onChange={e=>upd(i,'overflowDestination',e.target.value||null)}
                       style={{background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
-                        color:q.overflowDestination?C.amber:C.muted,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
+                        color:q.overflowDestination?C.amber:C.muted,fontFamily:FONT,fontSize:12,padding:'6px 8px',width:'100%'}}>
                       <option value=''>Exit system (reject)</option>
                       {queues.filter((_,idx)=>idx!==i).map(oq=>(
                         <option key={oq.id||oq.name} value={oq.name}>{oq.name}</option>
@@ -217,7 +217,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
                 <div style={{display:"flex",gap:8,alignItems:"center"}}>
                   <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Mode:</span>
                   <select value={balkMode} onChange={e=>setBalkMode(e.target.value)}
-                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
                     <option value="none">No balking</option>
                     <option value="probability">Probability-based</option>
                     <option value="condition">Condition-based</option>
@@ -229,7 +229,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
                     <input aria-label="Balk probability" type="number" min="0" max="1" step="0.01"
                       value={q.balkProbability??''} onChange={e=>upd(i,'balkProbability',e.target.value===''?null:parseFloat(e.target.value))}
                       placeholder="e.g. 0.2"
-                      style={{width:100,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
+                      style={{width:100,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 8px'}}/>
                   </div>
                   {q.balkProbability>0&&(
                     <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
@@ -244,7 +244,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
                     ...queues.map(oq=>({label:`Queue.${oq.name}.length`,value:`Queue.${oq.name}.length`})),
                     ...stateVariables.filter(sv=>sv.name).map(sv=>({label:sv.name,value:sv.name})),
                   ];
-                  const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 6px',outline:'none'};
+                  const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 6px'};
                   return(<>
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>IF</span>
@@ -256,7 +256,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
                       {['==','!=','<','>','<=','>='].map(op=><option key={op} value={op}>{op}</option>)}
                     </select>
                     <input type="number" value={bc.value??''} onChange={e=>updBc({value:e.target.value===''?0:Number(e.target.value)})}
-                      style={{width:70,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 6px',outline:'none'}}/>
+                      style={{width:70,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 6px'}}/>
                   </div>
                   <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
                     Entity skips this queue whenever this condition is true — checked on every join, not just arrival.

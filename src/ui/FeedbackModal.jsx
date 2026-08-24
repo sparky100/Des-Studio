@@ -137,7 +137,6 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
     fontWeight: 600,
     cursor: "pointer",
     transition: TRANS.fast,
-    outline: "none",
   };
 
   return (
@@ -284,7 +283,6 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
                     fontFamily: FONT,
                     fontSize: 13,
                     padding: SPACE.sm,
-                    outline: "none",
                     boxSizing: "border-box",
                     lineHeight: 1.5,
                   }}
@@ -329,7 +327,6 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
                     fontFamily: FONT,
                     fontSize: 13,
                     padding: SPACE.sm,
-                    outline: "none",
                     boxSizing: "border-box",
                   }}
                 />

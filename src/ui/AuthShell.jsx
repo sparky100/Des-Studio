@@ -75,11 +75,11 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <input type="password" placeholder="New password (min 8 chars)" value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
-              style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px", outline: "none" }} />
+              style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px" }} />
             <input type="password" placeholder="Confirm new password" value={newPasswordConfirm}
               onChange={e => setNewPasswordConfirm(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handlePasswordReset(); }}
-              style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px", outline: "none" }} />
+              style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px" }} />
             {authError && <div style={{ fontSize: 11, color: C.red }}>{authError}</div>}
             <button type="button" onClick={handlePasswordReset}
               style={{ background: C.accent, color: C.bg, border: "none", borderRadius: 4, fontFamily: FONT, fontSize: 13, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
@@ -124,9 +124,9 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <input type="email" placeholder="Email" value={authEmail} onChange={e => setAuthEmail(e.target.value)}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px", outline: "none" }} />
+                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px" }} />
                 <input type="password" placeholder="Password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleAuth(); }}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px", outline: "none" }} />
+                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px" }} />
                 {authError && <div style={{ fontSize: 11, color: C.red }}>{authError}</div>}
                 <button type="button" onClick={handleAuth}
                   style={{ background: C.accent, color: C.bg, border: "none", borderRadius: 4, fontFamily: FONT, fontSize: 13, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>

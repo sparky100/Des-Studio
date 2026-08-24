@@ -68,7 +68,7 @@ export function RouteEdgeDialog({ edgeId, model, graph, canEdit, onApply, onClos
 
   const selectStyle = color => ({
     flex: 1, minWidth: 100, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4,
-    color: color || C.text, fontFamily: FONT, fontSize: 11, padding: "4px 6px", outline: "none",
+    color: color || C.text, fontFamily: FONT, fontSize: 11, padding: "4px 6px", 
   });
 
   return (
@@ -95,7 +95,7 @@ export function RouteEdgeDialog({ edgeId, model, graph, canEdit, onApply, onClos
             value={mode}
             disabled={!canEdit}
             onChange={e => setMode(e.target.value)}
-            style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "4px 8px", outline: "none" }}
+            style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "4px 8px" }}
           >
             <option value="none">Single queue (no routing)</option>
             <option value="conditional">Conditional routing</option>

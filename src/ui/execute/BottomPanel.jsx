@@ -505,7 +505,7 @@ function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeS
           value={phaseFilter}
           onChange={ev => setPhaseFilter(ev.target.value)}
           style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4,
-            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px" }}
         >
           <option value="all">All phases</option>
           <option value="B">B-Events</option>
@@ -869,13 +869,13 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
             value={filterText}
             onChange={ev => setFilterText(ev.target.value)}
             style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4,
-              color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 8px", outline: "none" }}
+              color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 8px" }}
           />
           <select
             value={filterStatus}
             onChange={ev => setFilterStatus(ev.target.value)}
             style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4,
-              color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+              color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px" }}
           >
             <option value="all">All</option>
             <option value="waiting">Waiting</option>
@@ -1046,13 +1046,13 @@ function ResourcesTab({ snap, model }) {
           onChange={ev => setFilterText(ev.target.value)}
           style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`,
             borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11,
-            padding: "5px 8px", outline: "none" }}
+            padding: "5px 8px" }}
         />
         <select
           value={filterStatus}
           onChange={ev => setFilterStatus(ev.target.value)}
           style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4,
-            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px" }}
         >
           <option value="all">All</option>
           <option value="busy">Has Busy</option>

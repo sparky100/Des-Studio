@@ -48,7 +48,7 @@ const DistanceRegistryEditor = ({ distances, queues = [], onChange }) => {
               style={{
                 background: "transparent", border: `1px solid ${C.accent}44`,
                 borderRadius: 4, color: C.accent, fontFamily: FONT, fontSize: 12,
-                padding: "5px 8px", outline: "none",
+                padding: "5px 8px", 
               }}
             >
               <option value="">— select queue —</option>
@@ -62,7 +62,7 @@ const DistanceRegistryEditor = ({ distances, queues = [], onChange }) => {
               style={{
                 background: "transparent", border: `1px solid ${C.accent}44`,
                 borderRadius: 4, color: C.accent, fontFamily: FONT, fontSize: 12,
-                padding: "5px 8px", outline: "none",
+                padding: "5px 8px", 
               }}
             >
               <option value="">— select queue —</option>
@@ -77,7 +77,7 @@ const DistanceRegistryEditor = ({ distances, queues = [], onChange }) => {
               style={{
                 width: 90, background: "transparent", border: `1px solid ${C.border}`,
                 borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
-                padding: "5px 8px", outline: "none",
+                padding: "5px 8px", 
               }}
             />
             <Btn small variant="danger" ariaLabel={`Remove distance ${i + 1}`} onClick={() => rem(i)}>✕</Btn>

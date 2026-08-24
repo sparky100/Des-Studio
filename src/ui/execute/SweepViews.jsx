@@ -900,12 +900,12 @@ export function EntitySummaryTable({ entitySummary, meanWait }) {
       {/* Filters */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 7px", outline: "none" }}>
+          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 7px" }}>
           <option value="all">All types</option>
           {entityTypes.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)}
-          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 7px", outline: "none" }}>
+          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 7px" }}>
           <option value="all">All outcomes</option>
           {outcomes.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
