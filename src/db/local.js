@@ -17,7 +17,7 @@ function writeAll(models) {
 }
 
 function genId() {
-  return "local_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  return "local_" + globalThis.crypto.randomUUID();
 }
 
 export function fetchLocalModels() {
