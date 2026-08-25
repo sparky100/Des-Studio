@@ -1,10 +1,24 @@
+// @ts-check
 // engine/distribution-fitting.js — Parse CSV, infer column types, fit distributions
 // Pure JavaScript. No React. No DOM. No external dependencies.
+
+/**
+ * @typedef {{
+ *   mean: number, variance: number, stdDev: number, min: number, max: number,
+ *   skewness: number, kurtosis: number, count: number,
+ * }} MomentStats
+ */
+
+/**
+ * @typedef {{ type: string, params: Record<string, any>, ks: number }} FitResult
+ */
 
 /**
  * Parse RFC-4180-ish CSV text into rows.
  * Handles quoted fields and commas inside quotes.
  * Returns { headers: string[], rows: string[][] }
+ * @param {any} text
+ * @returns {{ headers: string[], rows: string[][] }}
  */
 export function parseCsv(text) {
   if (!text || typeof text !== "string") {
@@ -18,6 +32,7 @@ export function parseCsv(text) {
   if (lines.length === 0) {
     return { headers: [], rows: [] };
   }
+  /** @param {string} line */
   const parseLine = (line) => {
     const fields = [];
     let field = "";
@@ -54,10 +69,12 @@ export function parseCsv(text) {
   return { headers, rows };
 }
 
+/** @param {any} v */
 function isNumeric(v) {
-  return v !== "" && !isNaN(parseFloat(v)) && isFinite(v);
+  return v !== "" && !isNaN(parseFloat(v)) && isFinite(Number(v));
 }
 
+/** @param {any} v */
 function isBoolean(v) {
   const s = String(v).trim().toLowerCase();
   return s === "true" || s === "false" || s === "1" || s === "0" || s === "yes" || s === "no";
@@ -66,6 +83,7 @@ function isBoolean(v) {
 /**
  * Infer valueType for a single column's values.
  * Priority: boolean > number > string
+ * @param {any[]} values
  */
 function inferType(values) {
   if (values.every(isBoolean)) return "boolean";
@@ -73,10 +91,15 @@ function inferType(values) {
   return "string";
 }
 
+/** @param {any} v */
 function toNumber(v) {
   return parseFloat(v);
 }
 
+/**
+ * @param {number[]} values
+ * @returns {MomentStats}
+ */
 function computeMoments(values) {
   const n = values.length;
   const mean = values.reduce((a, b) => a + b, 0) / n;
@@ -93,12 +116,15 @@ function computeMoments(values) {
   return { mean, variance, stdDev, min, max, skewness, kurtosis, count: n };
 }
 
+/** @param {number[]} values */
 function sorted(values) {
   return values.slice().sort((a, b) => a - b);
 }
 
 /**
  * Empirical CDF at point x for sorted values.
+ * @param {number[]} sortedValues
+ * @param {number} x
  */
 function empiricalCdf(sortedValues, x) {
   let count = 0;
@@ -112,6 +138,8 @@ function empiricalCdf(sortedValues, x) {
 /**
  * Compute max absolute difference between empirical and theoretical CDF
  * at sample quantile points.
+ * @param {number[]} sortedValues
+ * @param {(x: number) => number} theoreticalCdf
  */
 function ksStatistic(sortedValues, theoreticalCdf) {
   const n = sortedValues.length;
@@ -131,6 +159,11 @@ function ksStatistic(sortedValues, theoreticalCdf) {
   return maxDiff;
 }
 
+/**
+ * @param {number[]} values
+ * @param {MomentStats} stats
+ * @returns {FitResult|null}
+ */
 function fitFixed(values, stats) {
   if (stats.stdDev < 0.0001 * Math.abs(stats.mean) || stats.stdDev === 0) {
     return {
@@ -142,10 +175,15 @@ function fitFixed(values, stats) {
   return null;
 }
 
+/**
+ * @param {number[]} values
+ * @param {MomentStats} stats
+ * @returns {FitResult|null}
+ */
 function fitExponential(values, stats) {
   if (stats.mean <= 0 || stats.min < 0) return null;
   const rate = 1 / stats.mean;
-  const cdf = (x) => (x < 0 ? 0 : 1 - Math.exp(-rate * x));
+  const cdf = (/** @type {number} */ x) => (x < 0 ? 0 : 1 - Math.exp(-rate * x));
   const ks = ksStatistic(sorted(values), cdf);
   const cv = stats.stdDev / stats.mean;
   // Exponential has CV = 1. Allow some tolerance.
@@ -157,10 +195,15 @@ function fitExponential(values, stats) {
   };
 }
 
+/**
+ * @param {number[]} values
+ * @param {MomentStats} stats
+ * @returns {FitResult|null}
+ */
 function fitUniform(values, stats) {
   const range = stats.max - stats.min;
   if (range <= 0) return null;
-  const cdf = (x) => {
+  const cdf = (/** @type {number} */ x) => {
     if (x < stats.min) return 0;
     if (x > stats.max) return 1;
     return (x - stats.min) / range;
@@ -177,12 +220,17 @@ function fitUniform(values, stats) {
   };
 }
 
+/**
+ * @param {number[]} values
+ * @param {MomentStats} stats
+ * @returns {FitResult|null}
+ */
 function fitNormal(values, stats) {
   if (stats.stdDev <= 0) return null;
   const mean = stats.mean;
   const sd = stats.stdDev;
   // Approximate normal CDF using error function approximation
-  const erf = (z) => {
+  const erf = (/** @type {number} */ z) => {
     const a1 =  0.254829592, a2 = -0.284496736, a3 =  1.421413741;
     const a4 = -1.453152027, a5 =  1.061405429, p  =  0.3275911;
     const sign = z < 0 ? -1 : 1;
@@ -191,7 +239,7 @@ function fitNormal(values, stats) {
     const y = 1 - (((((a5 * t2 + a4) * t2) + a3) * t2 + a2) * t2 + a1) * t2 * Math.exp(-x * x);
     return sign * y;
   };
-  const cdf = (x) => 0.5 * (1 + erf((x - mean) / (sd * Math.SQRT2)));
+  const cdf = (/** @type {number} */ x) => 0.5 * (1 + erf((x - mean) / (sd * Math.SQRT2)));
   const ks = ksStatistic(sorted(values), cdf);
   // Normal: skewness near 0, kurtosis near 3
   if (ks > 0.35 || Math.abs(stats.skewness) > 1.2 || Math.abs(stats.kurtosis - 3) > 2.0) return null;
@@ -202,13 +250,18 @@ function fitNormal(values, stats) {
   };
 }
 
+/**
+ * @param {number[]} values
+ * @param {MomentStats} stats
+ * @returns {FitResult|null}
+ */
 function fitLognormal(values, stats) {
   if (stats.min <= 0 || stats.stdDev <= 0) return null;
   const logVals = values.map(Math.log);
   const logMean = logVals.reduce((a, b) => a + b, 0) / logVals.length;
   const logVar = logVals.reduce((sum, v) => sum + (v - logMean) ** 2, 0) / logVals.length;
   const logSd = Math.sqrt(logVar);
-  const erf = (z) => {
+  const erf = (/** @type {number} */ z) => {
     const a1 =  0.254829592, a2 = -0.284496736, a3 =  1.421413741;
     const a4 = -1.453152027, a5 =  1.061405429, p  =  0.3275911;
     const sign = z < 0 ? -1 : 1;
@@ -217,7 +270,7 @@ function fitLognormal(values, stats) {
     const y = 1 - (((((a5 * t2 + a4) * t2) + a3) * t2 + a2) * t2 + a1) * t2 * Math.exp(-x * x);
     return sign * y;
   };
-  const cdf = (x) => {
+  const cdf = (/** @type {number} */ x) => {
     if (x <= 0) return 0;
     return 0.5 * (1 + erf((Math.log(x) - logMean) / (logSd * Math.SQRT2)));
   };
@@ -233,9 +286,15 @@ function fitLognormal(values, stats) {
   };
 }
 
+/**
+ * @param {number[]} values
+ * @param {MomentStats} stats
+ * @returns {FitResult|null}
+ */
 function fitTriangular(values, stats) {
   if (stats.min >= stats.max) return null;
   // Estimate mode as the most frequent value (rounded to 2 significant digits)
+  /** @type {Map<number, number>} */
   const buckets = new Map();
   for (const v of values) {
     const k = Math.round(v * 100) / 100;
@@ -251,7 +310,7 @@ function fitTriangular(values, stats) {
   }
   // Clamp mode to [min, max]
   mode = Math.max(stats.min, Math.min(stats.max, mode));
-  const cdf = (x) => {
+  const cdf = (/** @type {number} */ x) => {
     if (x <= stats.min) return 0;
     if (x >= stats.max) return 1;
     if (x <= mode) {
@@ -271,6 +330,10 @@ function fitTriangular(values, stats) {
   };
 }
 
+/**
+ * @param {number[]} values
+ * @returns {FitResult}
+ */
 function fitEmpirical(values) {
   return {
     type: "empirical",
@@ -279,6 +342,7 @@ function fitEmpirical(values) {
   };
 }
 
+/** @param {number} x */
 function round4(x) {
   return Math.round(x * 10000) / 10000;
 }
@@ -286,20 +350,21 @@ function round4(x) {
 /**
  * Fit the best distribution to a numeric array.
  * Returns { type, params, score } where lower score = better fit.
+ * @param {any} values
  */
 export function fitDistribution(values) {
   if (!Array.isArray(values) || values.length === 0) {
     return { type: "fixed", params: { value: "0" }, score: Infinity };
   }
   const stats = computeMoments(values);
-  const parametric = [
+  const parametric = /** @type {FitResult[]} */ ([
     fitFixed(values, stats),
     fitExponential(values, stats),
     fitNormal(values, stats),
     fitLognormal(values, stats),
     fitUniform(values, stats),
     fitTriangular(values, stats),
-  ].filter(Boolean);
+  ].filter(Boolean));
 
   // Sort parametric by KS
   parametric.sort((a, b) => a.ks - b.ks);
@@ -327,12 +392,15 @@ export function fitDistribution(values) {
 /**
  * Infer column metadata from parsed CSV rows.
  * Returns array of column descriptors.
+ * @param {string[]} headers
+ * @param {string[][]} rows
  */
 export function inferColumns(headers, rows) {
   if (!headers.length || !rows.length) return [];
   return headers.map((header, colIdx) => {
     const rawValues = rows.map(r => r[colIdx] ?? "").filter(v => v !== "");
     const valueType = inferType(rawValues);
+    /** @type {ReturnType<typeof fitDistribution>|null} */
     let distResult = null;
     if (valueType === "number" && rawValues.length > 0) {
       const nums = rawValues.map(toNumber);
@@ -352,11 +420,14 @@ export function inferColumns(headers, rows) {
  * Generate an entity type definition from inferred columns.
  * The first numeric column (or first column overall) becomes the arrival/service attribute.
  * All columns become attrDefs.
+ * @param {string} name
+ * @param {ReturnType<typeof inferColumns>} columns
  */
 export function generateEntityType(name, columns) {
   const idSafe = name.replace(/[^a-z0-9]+/gi, "_").toLowerCase() || "imported_entity";
   const attrDefs = columns.map((col, i) => {
     const attrId = `a_${col.name.replace(/[^a-z0-9]+/gi, "_").toLowerCase() || i}`;
+    /** @type {Record<string, any>} */
     const def = {
       id: attrId,
       name: col.name,
@@ -383,6 +454,8 @@ export function generateEntityType(name, columns) {
 /**
  * Convenience: parse CSV text, infer columns, and generate entity type.
  * Returns { entityType, columns } or throws on parse error.
+ * @param {any} csvText
+ * @param {string} [entityName]
  */
 export function csvToEntityType(csvText, entityName = "Imported Entity") {
   const { headers, rows } = parseCsv(csvText);
