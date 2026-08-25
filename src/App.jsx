@@ -4,7 +4,8 @@
 // All DB operations are in db/
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { supabase, touchLastActive }         from "./db/supabase.js";
+import { touchLastActive }                  from "./db/supabase.js";
+import { applySessionTokens, getSession, onAuthStateChange, signOut as authSignOut } from "./db/auth.js";
 import { fetchModels, fetchProfiles,
          saveModel, deleteModel,
          setVisibility, setAccess, forkModel,
@@ -155,25 +156,23 @@ export default function App({ onThemeChange }){
     const access_token=params.get('access_token')
     const refresh_token=params.get('refresh_token')
     if(!access_token || !refresh_token)return
-    supabase.auth.setSession({access_token,refresh_token}).then(({error})=>{
-      if(error){
-        console.warn('[session-handoff] supabase.auth.setSession failed:',error.message)
-        return
-      }
+    applySessionTokens(access_token,refresh_token).then(()=>{
       params.delete('access_token')
       params.delete('refresh_token')
       const newSearch=params.toString()
       const newUrl=window.location.pathname+(newSearch?`?${newSearch}`:'')+window.location.hash
       window.history.replaceState(null,'',newUrl)
+    }).catch(error=>{
+      console.warn('[session-handoff] applySessionTokens failed:',error.message)
     })
   },[])
 
   useEffect(()=>{
-    supabase.auth.getSession().then(({data:{session}})=>{
+    getSession().then((session)=>{
       setSession(session)
       if(!session)setLoading(false)
     })
-    const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
+    const subscription=onAuthStateChange((event,session)=>{
       if(event==='PASSWORD_RECOVERY'){setIsRecoverySession(true)}
       if(session && (event==='SIGNED_IN'||event==='SIGNED_UP')){setLoading(true);setSignedInThisSession(true);welcomeShownRef.current=false}
       setSession(session)
@@ -282,7 +281,7 @@ export default function App({ onThemeChange }){
 
   const uid=session?.user?.id
   const isAdmin=profile?.isAdmin===true
-  const signOut=()=>supabase.auth.signOut()
+  const signOut=()=>authSignOut()
 
   const handleOpenModel = useCallback((model) => {
     setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });

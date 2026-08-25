@@ -1,7 +1,7 @@
 // ui/AuthShell.jsx — Authentication forms (sign-in, sign-up, password recovery)
 import { useState, useCallback } from "react";
 import { GOOGLE_FONT_URL } from "./shared/tokens.js";
-import { supabase } from "../db/supabase.js";
+import { signIn, signUp, resetPassword, updateUserPassword } from "../db/auth.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
@@ -20,11 +20,9 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
     setAuthError("");
     try {
       if (authMode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
-        if (error) throw error;
+        await signIn(authEmail, authPassword);
       } else {
-        const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
-        if (error) throw error;
+        await signUp(authEmail, authPassword);
         setShowVerifyPrompt(true);
         return;
       }
@@ -36,8 +34,7 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
     if (!authEmail) { setAuthError("Enter your email address first."); return; }
     try {
       const redirectTo = window.location.origin + window.location.pathname;
-      const { error } = await supabase.auth.resetPasswordForEmail(authEmail, { redirectTo });
-      if (error) throw error;
+      await resetPassword(authEmail, redirectTo);
       setShowResetSent(true);
     } catch (e) { setAuthError(e.message); }
   }, [authEmail]);
@@ -47,8 +44,7 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
     if (newPassword.length < 8) { setAuthError("Password must be at least 8 characters."); return; }
     if (newPassword !== newPasswordConfirm) { setAuthError("Passwords do not match."); return; }
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
+      await updateUserPassword(newPassword);
       onRecoveryComplete?.();
       setNewPassword(""); setNewPasswordConfirm("");
     } catch (e) { setAuthError(e.message); }
