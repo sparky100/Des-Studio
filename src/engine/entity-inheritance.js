@@ -1,3 +1,4 @@
+// @ts-check
 // engine/entity-inheritance.js — build-time merge for entity type inheritance.
 //
 // A child entity type with `parentTypeId` set inherits its ancestors'
@@ -8,19 +9,27 @@
 // mismatches are rejected by validation rule V67; resolveAncestorChain
 // defends against a lingering cycle with a `seen` guard regardless.
 
+/**
+ * @param {import('../contracts/model').EntityTypeDefinition} entityType
+ * @param {Map<string, import('../contracts/model').EntityTypeDefinition>} byId
+ */
 export function resolveAncestorChain(entityType, byId) {
   const chain = [];
   const seen = new Set([entityType.id]);
-  let current = byId.get(entityType.parentTypeId);
+  let current = entityType.parentTypeId ? byId.get(entityType.parentTypeId) : undefined;
   while (current) {
     if (seen.has(current.id)) break;
     seen.add(current.id);
     chain.unshift(current);
-    current = current.parentTypeId ? byId.get(current.parentTypeId) : null;
+    current = current.parentTypeId ? byId.get(current.parentTypeId) : undefined;
   }
   return chain;
 }
 
+/**
+ * @param {any[][]} chainLists
+ * @param {any[]} ownList
+ */
 function mergeByName(chainLists, ownList) {
   const byName = new Map();
   let anonIdx = 0;
@@ -33,6 +42,7 @@ function mergeByName(chainLists, ownList) {
   return [...byName.values()];
 }
 
+/** @param {import('../contracts/model').DesModelJson} model */
 export function applyEntityInheritance(model) {
   const entityTypes = model.entityTypes || [];
   if (!entityTypes.some(et => et.parentTypeId)) return model;

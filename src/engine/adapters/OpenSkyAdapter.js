@@ -1,3 +1,4 @@
+// @ts-check
 // engine/adapters/OpenSkyAdapter.js — Real-time aircraft arrival data from OpenSky Network
 //
 // Polls the OpenSky States API for aircraft within a radius of an airport.
@@ -13,6 +14,7 @@ const NM_TO_DEG_LAT = 1 / 60; // 1 NM ≈ 1 minute of latitude
 const POLL_INTERVAL_MS = 30000; // 30 seconds between polls
 
 // Airport coordinates (ICAO → [lat, lon])
+/** @type {Record<string, [number, number]>} */
 const AIRPORT_COORDS = {
   EGLL: [51.4700, -0.4543], // London Heathrow
   KJFK: [40.6413, -73.7781], // New York JFK
@@ -24,8 +26,13 @@ const AIRPORT_COORDS = {
   LFPG: [49.0097, 2.5479], // Paris CDG
 };
 
+/** @param {number} deg */
 function degToRad(deg) { return deg * Math.PI / 180; }
 
+/**
+ * @param {number} lat1 @param {number} lon1
+ * @param {number} lat2 @param {number} lon2
+ */
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3440.065; // Earth radius in nautical miles
   const dLat = degToRad(lat2 - lat1);
@@ -34,6 +41,10 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/**
+ * @param {string} icao
+ * @param {number} [radiusNm]
+ */
 function getAirportBounds(icao, radiusNm = DEFAULT_RADIUS_NM) {
   const coords = AIRPORT_COORDS[icao.toUpperCase()];
   if (!coords) return null;
@@ -50,17 +61,25 @@ function getAirportBounds(icao, radiusNm = DEFAULT_RADIUS_NM) {
 }
 
 export class OpenSkyAdapter {
+  /** @param {Record<string, any>} source */
   constructor(source) {
     this._source = source;
     this._icao = source.airportIcao || "EGLL";
     this._radius = source.radiusNm || DEFAULT_RADIUS_NM;
     this._pollInterval = source.pollIntervalMs || POLL_INTERVAL_MS;
+    /** @type {any} */
     this._cachedData = null;
+    /** @type {number|null} */
     this._fetchedAt = null;
+    /** @type {Promise<void>|null} */
     this._pending = null;
+    /** @type {number[]} */
     this._arrivalTimes = []; // timestamps of detected arrivals
+    /** @type {number[]} */
     this._interArrivals = []; // computed inter-arrival intervals (minutes)
+    /** @type {Set<string>} */
     this._lastSeen = new Set(); // tracks callsigns already counted
+    /** @type {ReturnType<typeof setInterval>|null} */
     this._intervalId = null;
   }
 
@@ -84,6 +103,7 @@ export class OpenSkyAdapter {
     return await res.json();
   }
 
+  /** @param {any} data */
   _processArrivals(data) {
     if (!data || !data.states) return;
     const bounds = getAirportBounds(this._icao, this._radius);
@@ -131,7 +151,7 @@ export class OpenSkyAdapter {
           this._fetchedAt = Date.now();
           this._processArrivals(data);
         })
-        .catch(err => {
+        .catch((/** @type {any} */ err) => {
           console.warn("[OpenSkyAdapter] Fetch failed:", err.message);
         })
         .finally(() => { this._pending = null; });
@@ -160,6 +180,7 @@ export class OpenSkyAdapter {
     return this._arrivalTimes.length;
   }
 
+  /** @param {string} field */
   getLatest(field) {
     if (this._cachedData == null) return null;
     if (field === "arrivalCount") return this._arrivalTimes.length;

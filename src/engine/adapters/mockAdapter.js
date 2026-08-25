@@ -1,3 +1,4 @@
+// @ts-check
 // engine/adapters/mockAdapter.js — Deterministic stub for Vitest; never makes network calls
 
 /**
@@ -12,6 +13,7 @@
  */
 export function makeMockAdapter(fieldValues = {}, options = {}) {
   let _fetched = false;
+  /** @type {string[]} */
   let _callLog = [];
 
   return {
@@ -20,6 +22,7 @@ export function makeMockAdapter(fieldValues = {}, options = {}) {
       _fetched = true;
     },
 
+    /** @param {string} field */
     getLatest(field) {
       _callLog.push(field);
       if (!_fetched) return null;
@@ -37,6 +40,7 @@ export function makeMockAdapter(fieldValues = {}, options = {}) {
     // Test helpers
     wasFetched() { return _fetched; },
     callLog()    { return [..._callLog]; },
+    /** @param {string} field @param {number|string|null} value */
     setField(field, value) { fieldValues[field] = value; },
   };
 }

@@ -1,3 +1,4 @@
+// @ts-check
 import { buildEngine } from "./index.js";
 
 export const WORKER_MESSAGE_TYPES = {
@@ -7,6 +8,10 @@ export const WORKER_MESSAGE_TYPES = {
   REPLICATION_ERROR: "REPLICATION_ERROR",
 };
 
+/**
+ * @param {Record<string, any>} [payload]
+ * @param {Record<string, any>|null} [shared]
+ */
 export function runReplicationPayload(payload = {}, shared = null) {
   const {
     replicationIndex,
@@ -43,7 +48,11 @@ export function runReplicationPayload(payload = {}, shared = null) {
   };
 }
 
-export function buildReplicationError(payload = {}, error) {
+/**
+ * @param {Record<string, any>} [payload]
+ * @param {any} [error]
+ */
+export function buildReplicationError(payload = {}, error = null) {
   return {
     replicationIndex: payload.replicationIndex,
     seed: payload.seed,
@@ -52,6 +61,10 @@ export function buildReplicationError(payload = {}, error) {
   };
 }
 
+/**
+ * @param {any} message
+ * @param {Record<string, any>|null} [shared]
+ */
 export function handleWorkerMessage(message, shared = null) {
   if (message?.type !== WORKER_MESSAGE_TYPES.RUN_REPLICATION) {
     return {
@@ -76,6 +89,7 @@ export function handleWorkerMessage(message, shared = null) {
 if (typeof self !== "undefined" && typeof self.postMessage === "function") {
   // Shared run config (model, schedules, termination settings) is sent once per
   // worker via INIT_RUN so each RUN_REPLICATION message only carries the seed.
+  /** @type {Record<string, any>|null} */
   let sharedRunConfig = null;
   self.onmessage = (event) => {
     const message = event.data;

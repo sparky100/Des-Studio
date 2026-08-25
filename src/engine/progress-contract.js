@@ -1,13 +1,23 @@
+// @ts-check
+/**
+ * @param {any} value
+ * @param {number} [fallback]
+ */
 function asNonNegativeInteger(value, fallback = 0) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return parsed;
 }
 
+/**
+ * @param {any} value
+ * @param {number} [fallback]
+ */
 function asFiniteNumber(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+/** @param {Record<string, any>} [progress] */
 export function makeBatchProgress(progress = {}) {
   const total = Math.max(1, asNonNegativeInteger(progress.total, 1));
   const completed = Math.min(total, asNonNegativeInteger(progress.completed, 0));
@@ -26,6 +36,7 @@ export function makeBatchProgress(progress = {}) {
   };
 }
 
+/** @param {Record<string, any>} [progress] */
 export function makeSingleRunProgress(progress = {}) {
   const total = Math.max(1, asNonNegativeInteger(progress.total, 1));
   const completed = Math.min(total, asNonNegativeInteger(progress.completed, 0));
