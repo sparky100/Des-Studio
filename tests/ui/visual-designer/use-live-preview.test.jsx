@@ -75,6 +75,29 @@ describe('useLivePreview', () => {
     expect(result.current.snap.clock).toBe(0);
   });
 
+  it('marks the frame stale (pending) for the whole debounce window after an edit, not just the moment of rebuild', () => {
+    // The previous run's stepping stops the instant an edit arrives (so it
+    // doesn't keep animating a now-outdated model), but the rebuild itself
+    // waits out the debounce — `pending` is what the panel uses to show
+    // "updating" instead of quietly holding that stale last frame as if it
+    // were still live for the whole wait.
+    const { result, rerender } = renderHook(({ model, enabled }) => useLivePreview(model, { enabled }), {
+      initialProps: { model: mm1Model, enabled: true },
+    });
+    act(() => { vi.advanceTimersByTime(800); });
+    expect(result.current.pending).toBe(false);
+
+    rerender({ model: { ...mm1Model, name: 'edited' }, enabled: true });
+    expect(result.current.pending).toBe(true); // true immediately, not after a delay
+
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(result.current.pending).toBe(true); // still pending mid-debounce
+
+    act(() => { vi.advanceTimersByTime(400); }); // debounce settles, engine rebuilds
+    expect(result.current.pending).toBe(false);
+    expect(result.current.snap.clock).toBe(0);
+  });
+
   it('clears state and stops timers when disabled', () => {
     const { result, rerender } = renderHook(({ model, enabled }) => useLivePreview(model, { enabled }), {
       initialProps: { model: mm1Model, enabled: true },

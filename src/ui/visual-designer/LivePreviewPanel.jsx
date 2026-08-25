@@ -6,7 +6,7 @@
 // See docs/decisions/ADR-020-draw-run-live-preview.md.
 import { lazy, Suspense, useState } from "react";
 import { useTheme } from "../shared/ThemeContext.jsx";
-import { useLivePreview } from "./useLivePreview.js";
+import { useLivePreview, PREVIEW_MAX_SIM_TIME } from "./useLivePreview.js";
 import { prefersReducedMotion } from "../shared/hooks.js";
 
 // Lazy — same code-splitting boundary ModelDetail already uses for
@@ -32,7 +32,7 @@ export function LivePreviewPanel({ model, hasBlockingErrors }) {
   };
 
   const active = enabled && !hasBlockingErrors;
-  const { snap, error } = useLivePreview(model, { enabled: active });
+  const { snap, error, pending } = useLivePreview(model, { enabled: active });
 
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, background: C.panel }}>
@@ -68,14 +68,16 @@ export function LivePreviewPanel({ model, hasBlockingErrors }) {
               {error}
             </div>
           ) : (
-            <div style={{ marginTop: 8, opacity: snap ? 1 : 0.4, transition: "opacity 200ms" }}>
+            <div style={{ marginTop: 8, opacity: snap && !pending ? 1 : 0.4, transition: "opacity 200ms" }}>
               <Suspense fallback={<div style={{ padding: "16px 8px", fontSize: 12, color: C.muted, fontFamily: FONT, textAlign: "center" }}>Loading preview…</div>}>
                 <ExecuteCanvas model={model} snap={snap} kpiSlots={[]} animationEnabled={!prefersReducedMotion()} />
               </Suspense>
             </div>
           )}
           <div style={{ marginTop: 8, fontSize: 10, color: C.muted, fontFamily: FONT }}>
-            A short, capped preview run (up to {60} sim-time units) — not saved, not a substitute for a real Run.
+            {pending
+              ? "Updating the preview for your last edit…"
+              : `A short, capped preview run (up to ${PREVIEW_MAX_SIM_TIME} sim-time units) — not saved, not a substitute for a real Run.`}
           </div>
         </div>
       )}
