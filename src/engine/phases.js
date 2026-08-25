@@ -1,3 +1,4 @@
+// @ts-check
 // engine/phases.js — Three-Phase execution loop
 //
 // This module implements Pidd's Three-Phase approach:
@@ -15,16 +16,28 @@ import { clearWaitingState, attemptQueueJoin, preemptCustomer, releaseServerClai
 import { hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
 
 // Distances are undirected — one declared entry covers travel in either direction.
+/**
+ * @param {any[]} distances
+ * @param {string} from
+ * @param {string} to
+ */
 function findDistancePair(distances, from, to) {
   const a = String(from ?? "").trim().toLowerCase();
   const b = String(to ?? "").trim().toLowerCase();
-  return (distances || []).find(d => {
+  return (distances || []).find((/** @type {any} */ d) => {
     const df = String(d.fromQueue ?? "").trim().toLowerCase();
     const dt = String(d.toQueue ?? "").trim().toLowerCase();
     return (df === a && dt === b) || (df === b && dt === a);
   });
 }
 
+/**
+ * @param {any} cust
+ * @param {any} ev
+ * @param {number} clock
+ * @param {any} state
+ * @param {any} [index]
+ */
 function completeEntity(cust, ev, clock, state, index = null) {
   const previousQueue = cust.queue ?? cust.lastQueue ?? null;
   clearWaitingState(cust, index);
@@ -48,6 +61,10 @@ function completeEntity(cust, ev, clock, state, index = null) {
 // servers simply stop being tracked entities. No separate "start tracking" step is
 // needed; this is already correct, called from both time-based (SHIFT_CHANGE FEL
 // event) and condition-based (`when`) shift triggers.
+/**
+ * @param {any} ev
+ * @param {any} ctx
+ */
 export function applyShiftChange(ev, ctx) {
   const serverTypeName = ev.serverTypeName || ev.payload?.serverTypeName;
   const target = parseInt(ev.newCapacity ?? ev.payload?.newCapacity, 10);
@@ -59,7 +76,7 @@ export function applyShiftChange(ev, ctx) {
     return [`SHIFT_CHANGE ignored: invalid capacity for ${serverTypeName || "unknown server type"}`];
   }
 
-  const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  const match = (/** @type {any} */ a, /** @type {any} */ b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
   ctx.state.__desiredServerCapacity = ctx.state.__desiredServerCapacity || {};
   ctx.state.__desiredServerCapacity[String(serverTypeName).trim().toLowerCase()] = target;
 
@@ -75,9 +92,9 @@ export function applyShiftChange(ev, ctx) {
   timeline.push({ startTime: ctx.clock, endTime: null, capacity: target, elapsed: 0 });
   ctx.state.__currentShiftLabel = ctx.state.__currentShiftLabel || {};
   ctx.state.__currentShiftLabel[serverTypeName] = `shift_${ctx.clock}_cap${target}`;
-  const servers = ctx.entities.filter(e => e.role === "server" && match(e.type, serverTypeName));
+  const servers = ctx.entities.filter((/** @type {any} */ e) => e.role === "server" && match(e.type, serverTypeName));
   const current = servers.length;
-  const entityType = (ctx.model?.entityTypes || []).find(et => et.role === "server" && match(et.name, serverTypeName));
+  const entityType = (ctx.model?.entityTypes || []).find((/** @type {any} */ et) => et.role === "server" && match(et.name, serverTypeName));
   const behavior = entityType?.shiftBehavior || "delay";
 
   if (target > current) {
@@ -107,7 +124,7 @@ export function applyShiftChange(ev, ctx) {
 
     if (behavior === "preempt") {
       // Preempt busy servers — store remaining service, re-queue entity, remove server
-      const busyServers = servers.filter(e => (e.status === "busy" || e.status === "serving") && !e._suspended);
+      const busyServers = servers.filter((/** @type {any} */ e) => (e.status === "busy" || e.status === "serving") && !e._suspended);
       for (const srv of busyServers) {
         if (excess <= 0) break;
         const cust = findEntityById(ctx.index, ctx.entities, srv.currentCustId);
@@ -129,7 +146,7 @@ export function applyShiftChange(ev, ctx) {
       }
     } else if (behavior === "suspend") {
       // Suspend busy servers — freeze work, mark unavailable
-      const busyServers = servers.filter(e => (e.status === "busy" || e.status === "serving") && !e._suspended);
+      const busyServers = servers.filter((/** @type {any} */ e) => (e.status === "busy" || e.status === "serving") && !e._suspended);
       for (const srv of busyServers) {
         if (excess <= 0) break;
         srv._suspended = true;
@@ -173,6 +190,10 @@ export function applyShiftChange(ev, ctx) {
 // ── Apply an effect string ────────────────────────────────────────────────────
 // Returns { msgs, felEntries }
 // lastCustId / lastSrvId are returned via the context refs object
+/**
+ * @param {string} effect
+ * @param {any} ctx
+ */
 export function applyEffect(effect, ctx) {
   const { entities, state, model, clock, felRef, helpers, fel } = ctx;
   if (!effect || !effect.trim()) {
@@ -184,11 +205,14 @@ export function applyEffect(effect, ctx) {
     ctx._lastSrvId  = ctx._lastSrvId  ?? felRef?._contextSrvId  ?? null;
     return { msgs: [], felEntries: [] };
   }
+  /** @type {any[]} */
   const msgs       = [];
+  /** @type {any[]} */
   const felEntries = [];
   let lastCustId   = felRef?._contextCustId ?? null;
   let lastSrvId    = felRef?._contextSrvId  ?? null;
 
+  /** @type {Record<string, any>} */
   const macroCtx = {
     entities, state, model, clock, felRef, helpers, fel,
     nextId: ctx.nextId,
@@ -203,13 +227,13 @@ export function applyEffect(effect, ctx) {
     index: ctx.index ?? null,
     getLastCustId: () => lastCustId,
     getLastSrvId:  () => lastSrvId,
-    setLastCustId: (id) => { lastCustId = id; },
-    setLastSrvId:  (id) => { lastSrvId  = id; },
-    scheduleEvent: (entry) => felEntries.push(entry),
+    setLastCustId: (/** @type {any} */ id) => { lastCustId = id; },
+    setLastSrvId:  (/** @type {any} */ id) => { lastSrvId  = id; },
+    scheduleEvent: (/** @type {any} */ entry) => felEntries.push(entry),
     msgs,
   };
 
-  for (const part of effect.split(";").map(s => s.trim()).filter(Boolean)) {
+  for (const part of effect.split(";").map((/** @type {string} */ s) => s.trim()).filter(Boolean)) {
     let handled = false;
 
     // Try each registered macro
@@ -228,7 +252,7 @@ export function applyEffect(effect, ctx) {
         if (!applyScalar(part, state, clock)) {
           msgs.push(`Unknown effect: ${part}`);
         }
-      } catch (e) {
+      } catch (/** @type {any} */ e) {
         msgs.push(`Effect error: ${e.message}`);
       }
     }
@@ -243,6 +267,10 @@ export function applyEffect(effect, ctx) {
 }
 
 // ── Phase B: fire one bound event ────────────────────────────────────────────
+/**
+ * @param {any} ev
+ * @param {any} ctx
+ */
 export function fireBEvent(ev, ctx) {
   const { entities, clock, model } = ctx;
   const log   = [];
@@ -285,10 +313,15 @@ export function fireBEvent(ev, ctx) {
   // Shared context for queue-join checks (F11.1/F11.2/F11.3) performed outside of
   // applyEffect — conditional/probabilistic routing and the loop-guard exit both
   // deliver an already-existing entity into a (possibly new) queue, same as RELEASE.
-  const joinCtx = { ...ctx, msgs, scheduleEvent: (entry) => felEntries.push(entry) };
+  const joinCtx = { ...ctx, msgs, scheduleEvent: (/** @type {any} */ entry) => felEntries.push(entry) };
 
   // ── Route helper: apply a resolved queueName to the customer.
   // null / "" means "exit system" — complete the customer immediately.
+  /**
+   * @param {any} cust
+   * @param {string|null} queueName
+   * @param {string} [note]
+   */
   const applyRoute = (cust, queueName, note) => {
     // A DELAY completion routed purely via the routing table (no COMPLETE()/RELEASE()
     // macro ran) would otherwise never get a stage record at the delay boundary, leaving
@@ -417,7 +450,7 @@ export function fireBEvent(ev, ctx) {
   for (const sched of ev.schedules || []) {
     // eventId may be absent when scheduleRef was linked without it — treat as self-referencing
     const selfId = sched.eventId ?? ev.id;
-    const tmpl = (model.bEvents || []).find(b => b.id === selfId);
+    const tmpl = (model.bEvents || []).find((/** @type {any} */ b) => b.id === selfId);
     if (!tmpl) continue;
     // Purge phase: suppress new arrivals (non-renege schedules create entities — skip them)
     if (ctx._purgePhase && !sched.isRenege) {
@@ -463,6 +496,10 @@ export function fireBEvent(ev, ctx) {
 }
 
 // ── Phase C: fire one conditional event ──────────────────────────────────────
+/**
+ * @param {any} ev
+ * @param {any} ctx
+ */
 export function fireCEvent(ev, ctx) {
   // Count C-event firing
   if (ev.id) ctx.incEventCount?.(ev.id);
@@ -478,7 +515,7 @@ export function fireCEvent(ev, ctx) {
   //   skip all remaining entries.
   // When NO entries have `when`, all entries fire (unchanged legacy behaviour).
   const allCSchedules = ev.cSchedules || [];
-  const hasAnyWhen = allCSchedules.some(cs => cs.when);
+  const hasAnyWhen = allCSchedules.some((/** @type {any} */ cs) => cs.when);
   let resolvedSchedules;
   if (!hasAnyWhen) {
     resolvedSchedules = allCSchedules;
@@ -491,7 +528,7 @@ export function fireCEvent(ev, ctx) {
       queues: {},
       ...ctx.state,
     };
-    const match = allCSchedules.find(cs =>
+    const match = allCSchedules.find((/** @type {any} */ cs) =>
       !cs.when || evaluatePredicate(cs.when, predicateState0)
     );
     resolvedSchedules = match ? [match] : [];
@@ -499,7 +536,7 @@ export function fireCEvent(ev, ctx) {
 
   // Process structured cSchedules
   for (const cs of resolvedSchedules) {
-    const tmpl = (model.bEvents || []).find(b => b.id === cs.eventId);
+    const tmpl = (model.bEvents || []).find((/** @type {any} */ b) => b.id === cs.eventId);
     if (!tmpl) { msgs.push(`cSchedule: B-event "${cs.eventId}" not found`); continue; }
 
     // Guard: if this cSchedule requires entity context but the effect produced no match, skip it.
