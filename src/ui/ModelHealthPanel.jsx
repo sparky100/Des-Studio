@@ -21,8 +21,7 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
         ? "This model can run, but a few things are worth checking before you rely on the results."
         : "No major issues found — ready to run.";
 
-  const showActions = !isGettingStarted && !hasBlockers && !isExecuteTab
-    && (true || latestResults || completedRuns > 0);
+  const showActions = !isGettingStarted && !hasBlockers && !isExecuteTab;
 
   return (
     <section

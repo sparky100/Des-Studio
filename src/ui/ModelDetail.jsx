@@ -571,11 +571,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const starterGuideAutoHidden = (model?.entityTypes?.length > 0) || (Number.isFinite(model?.stats?.runs) ? model.stats.runs > 0 : false);
   const showStarterGuide = canEdit && allowStarterGuide && !starterGuideDismissed && !starterGuideAutoHidden;
   const dismissStarterGuide = () => {
-    try { localStorage.setItem(`des_starter_${modelId}`, "1"); } catch {}
+    try { localStorage.setItem(`des_starter_${modelId}`, "1"); } catch { /* storage unavailable (private mode) — non-critical */ }
     setStarterGuideDismissed(true);
   };
   const reopenStarterGuide = () => {
-    try { localStorage.removeItem(`des_starter_${modelId}`); } catch {}
+    try { localStorage.removeItem(`des_starter_${modelId}`); } catch { /* storage unavailable (private mode) — non-critical */ }
     setStarterGuideDismissed(false);
   };
 
@@ -723,7 +723,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     }));
     setDirty(false);
     setVisualPending(false);
-    visualPendingRef.current=false;
     setPast([]);
     setFuture([]);
     setDiscardKey(k=>k+1);

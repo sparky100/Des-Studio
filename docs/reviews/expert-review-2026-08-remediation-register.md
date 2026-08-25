@@ -138,7 +138,30 @@ Not defects — enhancements that consolidate a strong product. Grouped by theme
 | R-18 Hygiene sweep | ✅ Done | Junk removed, `.bak`/tmp files deleted, landing pages archived to `docs/archived/landing/`, `.gitignore` extended |
 | Dev loop (user request) | ✅ Done | `test:quick` script (`vitest run --changed`), corrected README testing docs, CI sharded for wall-time |
 
-Full-suite verification at completion: 0 failures (result recorded in the closing commit message). Next: Sprint 91 (R-04, R-06, R-07, R-09, R-10, R-11, R-15) and Sprint 92 (R-08, R-12, R-14, R-16, R-17).
+Full-suite verification at completion: 0 failures (result recorded in the closing commit message).
+
+## 6. Status — Sprints 91 + 92 + lint adoption implemented (2026-08-24, same branch)
+
+| Item | Status | Notes |
+|---|---|---|
+| R-04 xlsx | ✅ Done | Replaced by `exceljs` behind `src/ui/shared/workbook.js` (dynamic import, code-split); round-trip test added |
+| R-06 Focus rings | ✅ Done | All ~192 inline `outline:none` sites removed; `src/ui` now at zero |
+| R-07 Undo | ✅ Done | `setWholeModel` dedupe guard; Ctrl+Z/Y skips editable elements (native text undo restored); new `undo-guard` tests |
+| R-09 Silent catches | ✅ Done | Snapshot-fallback now warns in both report paths + ExportPopover; share-link and canvas-init failures toast; Copy JSON shows failure; legitimate storage guards annotated |
+| R-10 beforeunload | ✅ Done | `visualPending` added to deps |
+| R-11 aria-hidden badges | ✅ Done | Badges decorative; counts remain in parent `aria-label`s; a11y test added |
+| R-15 Theme drift | ✅ Done | MarkdownContent themed; `errorLight` in all palettes; AdminPanel static import dropped |
+| Canvas trust (new) | ✅ Done | RouteEdgeDialog probability commits on blur via `CommitInput` (VisualNodeInspector was already fixed) |
+| Lint adoption | ✅ Done | ESLint flat config (react-hooks scoped to UI; engine is React-free by contract); `npm run lint`; CI Lint job; `exhaustive-deps` at warn (~285 warnings = visible debt) |
+| R-08 Baseline migration | ✅ Done | `20260504000000_baseline_core_tables.sql` from live DDL; PR-001 renamed to `20260630090000`; migrations README documents repair commands + out-of-band GUCs |
+| R-12 Docs truth-up | ✅ Done | AGENTS.md §3a/§5.1/§8/§10/§12 corrected (24 macros, authoritative validation pointer, C8/G1–G4 verified fixed); CLAUDE.md/README/capability docs updated |
+| R-14 Edge deploys | ✅ Done | All 5 functions deployed; CLI pinned |
+| R-16 Version | ✅ Done | `0.9.0` semver; "Beta" display-only via vite define |
+| R-17 IDs | ✅ Done | `crypto.randomUUID()`; guessable share-token fallback deleted |
+
+**Bugs found by the first lint run** (all fixed, validating the C-3 recommendation): `src/engine/phases.js` referenced an undefined `clock` (runtime crash when a suspended server reactivates on capacity increase); `ModelDetail.discard()` referenced undeclared `visualPendingRef` (runtime crash); duplicate `queues:` key in `renameEntityType` (dead first mapping); the ModelHealthPanel `(true || …)` dead condition; a conditionally-called `useMemo` in ResultsWorkspace's WaitHistogram; a `useTheme()` call in a non-component helper.
+
+Remaining from the register: the improvement recommendations (§3) — god-component decomposition, plain-language programme, picker scaling, scenario manager, capability roadmap — and the unified-canvas design work these sprints were prerequisites for.
 
 ---
 

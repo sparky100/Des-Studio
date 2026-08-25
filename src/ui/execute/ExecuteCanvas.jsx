@@ -874,7 +874,7 @@ export function ExecuteCanvas({
             showSections={showSections}
             onToggleSections={() => setShowSections(prev => {
               const next = !prev;
-              try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch {}
+              try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch { /* storage unavailable (private mode) — non-critical */ }
               return next;
             })}
           />

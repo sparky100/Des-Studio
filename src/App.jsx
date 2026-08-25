@@ -139,7 +139,7 @@ export default function App({ onThemeChange }){
         const model=decodeModelFromUrl(hash)
         const {errors,warnings}=validateLinkModel(model)
         setPendingImport({model,errors,warnings})
-      }catch(_){}
+      }catch(_){/* malformed or stale import link — ignore */}
     }
     const modelLinkMatch=hash.match(/^#model\/([^/?]+)/)
     if(modelLinkMatch){
@@ -188,7 +188,7 @@ export default function App({ onThemeChange }){
             const {errors,warnings}=validateLinkModel(model)
             setPendingImport({model,errors,warnings})
             sessionStorage.removeItem('des.pendingImport')
-          }catch(_){}
+          }catch(_){/* malformed or stale import link — ignore */}
         }
         const storedModelId=sessionStorage.getItem('des.pendingModelId')
         if(storedModelId){

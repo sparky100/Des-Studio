@@ -1254,7 +1254,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         ...current.settings,
         execute: { ...current.settings?.execute, ...patch },
       });
-    } catch {}
+    } catch { /* storage unavailable (private mode) — non-critical */ }
   }, [userId]);
 
   const toggleAnimation = useCallback(() => {

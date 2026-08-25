@@ -867,17 +867,19 @@ function WaitValuesPreview({ dist }) {
 function WaitHistogram({ dist, color }) {
   const { C, FONT } = useTheme();
   const [tip, setTip] = useState(null);
-  if (!dist || dist.n < 2) return null;
 
   // Prefer pre-computed histogram bins (present in "minimal" saves) over raw values.
   // Fall back to computing FD bins from raw values for live/compact/full runs.
+  // Hooks must run unconditionally, so the too-few-samples bail-out comes after.
   const histBins = useMemo(() => {
+    if (!dist || dist.n < 2) return null;
     if (dist.histogram?.bins?.length > 1) return dist.histogram.bins;
     if (Array.isArray(dist.values) && dist.values.length > 1) {
       return buildHistogramFD(dist.values, { maxBins: HIST_BINS }).bins;
     }
     return null;
   }, [dist]);
+  if (!dist || dist.n < 2) return null;
 
   if (!histBins || histBins.length < 2) return null;
   const minV = histBins[0].low;
@@ -1617,7 +1619,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     try {
       const stored = JSON.parse(localStorage.getItem("des.results.sections") || "null");
       if (stored && typeof stored === "object") return { ...SECTION_DEFAULTS, ...stored };
-    } catch {}
+    } catch { /* storage unavailable (private mode) — non-critical */ }
     return { ...SECTION_DEFAULTS };
   });
   const [activeSectionIds, setActiveSectionIds] = useState([]);
@@ -1625,7 +1627,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
 
   const toggleSection = id => setSectionsOpen(prev => {
     const next = { ...prev, [id]: !prev[id] };
-    try { localStorage.setItem("des.results.sections", JSON.stringify(next)); } catch {}
+    try { localStorage.setItem("des.results.sections", JSON.stringify(next)); } catch { /* storage unavailable (private mode) — non-critical */ }
     return next;
   });
 

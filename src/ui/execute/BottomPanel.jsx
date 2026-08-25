@@ -1204,7 +1204,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
       const delta = dragStateRef.current.startY - clientY;
       const newH = Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, dragStateRef.current.startHeight + delta));
       setBodyHeight(newH);
-      try { localStorage.setItem("des.bottomPanel.height", String(newH)); } catch {}
+      try { localStorage.setItem("des.bottomPanel.height", String(newH)); } catch { /* storage unavailable (private mode) — non-critical */ }
     };
     const handlePointerUp = () => {
       dragStateRef.current = null;
@@ -1279,7 +1279,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
               aria-selected={activeTab === tab.id}
               aria-disabled={tab.disabled}
               disabled={tab.disabled}
-              onClick={() => { if (!tab.disabled) { setActiveTab(tab.id); setCollapsed(false); try { localStorage.setItem("des.bottomPanel.tab", tab.id); localStorage.setItem("des.bottomPanel.collapsed", "0"); } catch {} } }}
+              onClick={() => { if (!tab.disabled) { setActiveTab(tab.id); setCollapsed(false); try { localStorage.setItem("des.bottomPanel.tab", tab.id); localStorage.setItem("des.bottomPanel.collapsed", "0"); } catch { /* storage unavailable (private mode) — non-critical */ } } }}
               style={{ ...tabBtnStyle(tab.id), opacity: tab.disabled ? 0.4 : 1, cursor: tab.disabled ? "not-allowed" : "pointer" }}
             >
               {tab.label}
@@ -1289,7 +1289,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
         <div style={{ flex: 1 }} />
         <button
           aria-label={collapsed ? "Expand details panel" : "Collapse details panel"}
-          onClick={() => setCollapsed(c => { const next = !c; try { localStorage.setItem("des.bottomPanel.collapsed", next ? "1" : "0"); } catch {} return next; })}
+          onClick={() => setCollapsed(c => { const next = !c; try { localStorage.setItem("des.bottomPanel.collapsed", next ? "1" : "0"); } catch { /* storage unavailable (private mode) — non-critical */ } return next; })}
           style={chevronStyle}
         >
           {collapsed ? "▼" : "▲"}

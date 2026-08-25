@@ -176,7 +176,7 @@ export function ThemeProvider({ themeId, onThemeChange, children }) {
   useEffect(() => {
     const C = paletteForId(resolvedId);
     document.body.style.background = C.bg;
-    try { localStorage.setItem("des.themeId", themeId); } catch (_) {}
+    try { localStorage.setItem("des.themeId", themeId); } catch (_) { /* storage unavailable (private mode) — non-critical */ }
   }, [resolvedId, themeId]);
 
   const value = {

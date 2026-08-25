@@ -63,7 +63,7 @@ export async function streamNarrative(prompt, {
 
     if (!response.ok) {
       let detail = "";
-      try { detail = await response.text(); } catch {}
+      try { detail = await response.text(); } catch { /* best-effort error-message enrichment */ }
       throw new Error(`LLM proxy returned ${response.status}${detail ? `: ${detail}` : ""}`);
     }
 
@@ -207,7 +207,7 @@ export async function streamModelBuilder(systemPrompt, messages = [], { onToken,
 
       if (!response.ok) {
         let detail = "";
-        try { detail = await response.text(); } catch {}
+        try { detail = await response.text(); } catch { /* best-effort error-message enrichment */ }
         const err = new Error(`LLM proxy returned ${response.status}${detail ? `: ${detail}` : ""}`);
         err.rawResponse = detail;
         throw err;
@@ -312,7 +312,7 @@ export async function callModelBuilder(systemPrompt, messages = [], onComplete, 
 
     if (!response.ok) {
       let detail = "";
-      try { detail = await response.text(); } catch {}
+      try { detail = await response.text(); } catch { /* best-effort error-message enrichment */ }
       throw new Error(`LLM proxy returned ${response.status}${detail ? `: ${detail}` : ""}`);
     }
 
@@ -354,7 +354,7 @@ export async function callLLMOnce(prompt) {
   });
   if (!response.ok) {
     let detail = "";
-    try { const err = await response.json(); detail = err?.error?.message || err?.message || ""; } catch {}
+    try { const err = await response.json(); detail = err?.error?.message || err?.message || ""; } catch { /* best-effort error-message enrichment */ }
     throw new Error(`LLM proxy returned ${response.status}${detail ? `: ${detail}` : ""}`);
   }
   const payload = await response.json();

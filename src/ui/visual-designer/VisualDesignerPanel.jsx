@@ -500,7 +500,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   const togglePalette = () => {
     setPaletteCollapsed(prev => {
       const next = !prev;
-      try { localStorage.setItem("des.palette.collapsed", next ? "1" : "0"); } catch {}
+      try { localStorage.setItem("des.palette.collapsed", next ? "1" : "0"); } catch { /* storage unavailable (private mode) — non-critical */ }
       return next;
     });
   };
@@ -707,7 +707,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   };
   const changeViewport = viewport => {
     if (!canEdit || !viewport) return;
-    try { localStorage.setItem(`des.vp.${model?.id}`, JSON.stringify(viewport)); } catch {}
+    try { localStorage.setItem(`des.vp.${model?.id}`, JSON.stringify(viewport)); } catch { /* storage unavailable (private mode) — non-critical */ }
   };
   const connectNodes = (from, to) => {
     if (!canEdit) return;
@@ -1234,7 +1234,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                   aria-pressed={showSections}
                   onClick={() => setShowSections(prev => {
                     const next = !prev;
-                    try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch {}
+                    try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch { /* storage unavailable (private mode) — non-critical */ }
                     return next;
                   })}
                   title={showSections ? "Hide section overlays" : "Show section overlays"}
