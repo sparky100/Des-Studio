@@ -161,7 +161,15 @@ Full-suite verification at completion: 0 failures (result recorded in the closin
 
 **Bugs found by the first lint run** (all fixed, validating the C-3 recommendation): `src/engine/phases.js` referenced an undefined `clock` (runtime crash when a suspended server reactivates on capacity increase); `ModelDetail.discard()` referenced undeclared `visualPendingRef` (runtime crash); duplicate `queues:` key in `renameEntityType` (dead first mapping); the ModelHealthPanel `(true || …)` dead condition; a conditionally-called `useMemo` in ResultsWorkspace's WaitHistogram; a `useTheme()` call in a non-component helper.
 
-Remaining from the register: the improvement recommendations (§3) — god-component decomposition, plain-language programme, picker scaling, scenario manager, capability roadmap — and the unified-canvas design work these sprints were prerequisites for.
+Remaining from the register: the improvement recommendations (§3) — god-component decomposition, plain-language programme, picker scaling, scenario manager, capability roadmap.
+
+## 7. Draw/Run integration — ADR-020 (2026-08-25, same branch)
+
+Following the reviews, the product owner raised a fundamental-experience gap the findings-list format under-weighted: building and executing a model are three separate rooms (Design → Run → Results), with no continuous feedback loop, despite the engine being fast and side-effect-free enough to support one. `docs/decisions/ADR-020-draw-run-live-preview.md` records the design, grounded in two deep-exploration passes over the Draw canvas and execution/worker architecture, and explains why a full dual-mode canvas merge is Phase 2+ (real, multi-sprint UI work) rather than a first move.
+
+**Phase 1 shipped, flagged off by default**: a collapsible Live Preview strip on the Draw canvas that runs a small, capped, non-persisting simulation — debounced 800ms after the last edit to avoid rewind-flicker, looping on completion — rendered through the existing, unmodified `ExecuteCanvas` component. No engine changes, no changes to Draw's editing behaviour or Execute's canvas. New tests (`use-live-preview.test.jsx`, `live-preview-panel.test.jsx`) exercise the real debounce/rebuild/loop/error behaviour via fake timers, not mocks. Full suite verified green before push (3101/3101 real cases).
+
+Next: dogfood/user-test Phase 1 before committing to Phase 2 (dual-mode node components, structural-vs-parametric rebuild skipping via `detectStructuralChanges()`, lifecycle unification) — see ADR-020's Open Questions.
 
 ---
 
