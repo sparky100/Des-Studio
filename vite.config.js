@@ -20,9 +20,10 @@ export default defineConfig({
   plugins: [react()],
   assetsInclude: ['**/*.md'],
   define: {
-    // Inject package.json version at build time; no manual version maintenance needed.
+    // Inject package.json version at build time; no manual version maintenance
+    // needed. The version field stays valid semver; "Beta" is display-only.
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(
-      process.env.npm_package_version
+      `${process.env.npm_package_version} Beta`
     ),
     'import.meta.env.VITE_BUILD_SHA': JSON.stringify(resolveBuildSha()),
     'import.meta.env.VITE_BUILD_TIME': JSON.stringify(new Date().toISOString()),

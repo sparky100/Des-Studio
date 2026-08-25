@@ -1,5 +1,15 @@
 # simmodlr — Capability Gap Analysis
 
+> ## Addendum 2026-08-24 — read before relying on this document
+>
+> This document is baselined at Sprint 68; the codebase is now at Sprint 89, and the historical body below has **not** been rewritten. Known corrections against the current codebase:
+>
+> - **24 effect macros** are implemented (`MACROS` array in `src/engine/macros.js`) — any smaller macro count below is stale. The additions since this baseline include DELAY, FINISH, RELEASE_COSEIZED, CANCEL, and ROUND_ROBIN.
+> - **26 templates** in `src/engine/templates.js` — not 20.
+> - **There is no `WebSocketAdapter` class.** WebSocket transport lives inside `ActualsStreamAdapter` (`src/engine/adapters/ActualsStreamAdapter.js`); references below to a separate WebSocketAdapter describe that capability, not a distinct file.
+> - The **Distance distribution** (`src/engine/distributions.js`) and **`DistanceRegistryEditor`** (`src/ui/editors/DistanceRegistryEditor.jsx`) partially mitigate the network-flows gap discussed below.
+> - For the verified, current capability inventory see `docs/reviews/expert-review-2026-08-functionality.md`.
+
 **Date:** 2026-05-21 (updated post Sprint 68)
 **Scope:** simmodlr vs SimPy 4.x, AnyLogic 8.x (Process Modelling Library), JaamSim 2024
 **Method:** Web-fetched reference feature lists + full codebase audit (engine, macros, UI, tests, templates)

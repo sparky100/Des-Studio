@@ -8,9 +8,9 @@ The app lets simulation modellers define entity types, queues, B-Events, C-Event
 
 ## Current Status
 
-Version: `0.9.0 - Beta`
+Version: `0.9.0` (Beta)
 
-The project has completed **79+ sprints** covering the full DES modelling lifecycle — from engine safety and correctness through advanced scheduling macros, resource reliability, statistical analytics, and AI-powered model authoring and analysis.
+The project has completed **89 sprints** covering the full DES modelling lifecycle — from engine safety and correctness through advanced scheduling macros, resource reliability, statistical analytics, and AI-powered model authoring and analysis.
 
 | Area | Status |
 |---|---|
@@ -30,7 +30,7 @@ The project has completed **79+ sprints** covering the full DES modelling lifecy
 | Statistical output analyzer (Welch, batch-means, Bonferroni) | Complete |
 | Shareable results dashboard + QR codes | Complete |
 | CSV import bridge with distribution fitting | Complete |
-| Community gallery and template library (22 templates) | Complete |
+| Community gallery and template library (26 templates) | Complete |
 | Resource preemption, breakdowns, MTBF/MTTR | Complete |
 | Advanced scheduling (SPLIT, COSEIZE, MATCH, dynamic BATCH) | Complete |
 | Queue disciplines (FIFO, LIFO, PRIORITY, SPT, EDD, PRIORITY(attr)) | Complete |
@@ -48,7 +48,7 @@ The project has completed **79+ sprints** covering the full DES modelling lifecy
 | Database/auth | Supabase JS client 2.45.0 |
 | Canvas / DAG | @xyflow/react |
 | Tests | Vitest, jsdom, React Testing Library |
-| CI | GitHub Actions (test + benchmark + build) |
+| CI | GitHub Actions — sharded Vitest suite + typecheck + analytical benchmarks + production build (`ci.yml`), plus benchmark gate with no-`Math.random` guard (`benchmark-gate.yml`) |
 
 ## Getting Started
 
@@ -119,19 +119,19 @@ Key rules:
 | Document | Purpose |
 |---|---|
 | `AGENTS.md` | Architectural contract, sprint history, coding conventions, test strategy |
-| `docs/simmodlr_Build_Plan.md` | Living roadmap, sprint status, implementation prompts |
-| `docs/simmodlr_User_Guide.md` | End-user guide for modellers |
-| `docs/Template Models Guide.md` | Detailed explanations of all 18 template models |
+| `docs/DES_Studio_Build_Plan.md` | Living roadmap, sprint status, implementation prompts |
+| `docs/DES_Studio_User_Guide.md` | End-user guide for modellers |
+| `docs/Template Models Guide.md` | Detailed explanations of the template models (26 templates in `src/engine/templates.js`) |
 | `docs/addition1_entity_model.md` | Entity model, macros, distributions, validation schema |
 | `docs/capability-gap-analysis.md` | flow vs professional tools (SimPy, AnyLogic, JaamSim) |
 | `docs/patterns/` | Reusable modelling pattern references (6 patterns) |
-| `docs/decisions/` | Architectural Decision Records (ADR-001 through ADR-016) |
+| `docs/decisions/` | Architectural Decision Records (ADR-001 through ADR-019) |
 | `docs/reviews/` | Sprint closure reports, capability guides, pre-sprint assessments |
 | `docs/archived/` | Superseded historical documents (reference only) |
 
 ## Macro Vocabulary
 
-flow supports 19 macros across B-Events and C-Events:
+flow supports 24 macros across B-Events and C-Events (the `MACROS` array in `src/engine/macros.js` is the authoritative list):
 
 | Macro | Phase | Purpose |
 |---|---|---|
@@ -154,6 +154,11 @@ flow supports 19 macros across B-Events and C-Events:
 | `SET` | B/C-Event | Computes state variable via safe arithmetic expression |
 | `SET_ATTR` | B/C-Event | Computes entity attribute via safe arithmetic expression |
 | `COST` | B/C-Event | Records cost events for economic analysis |
+| `DELAY` | C-Event | Resource-free timed activity — entities leave the queue without seizing a server; optional slot capacity |
+| `FINISH` | C-Event | Ends an in-progress service immediately when a condition becomes true |
+| `RELEASE_COSEIZED` | B-Event | Atomically releases all co-seized servers held by the entity |
+| `CANCEL` | B/C-Event | Removes a pending scheduled event for the context entity (e.g. a competing timeout) |
+| `ROUND_ROBIN` | B/C-Event | Cycles a state variable through 0..N-1 to rotate entities across N destinations |
 
 ## Roadmap
 
