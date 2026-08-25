@@ -3,7 +3,7 @@ import { normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { ConditionBuilder, buildConditionStr } from "./ConditionBuilder.jsx";
 import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
-import { EffectPicker, assignOptions, displayEventName, SectionFilterTabs, filterBySection } from "./helpers.jsx";
+import { EffectPicker, assignOptions, displayEventName, SectionFilterTabs, filterBySection, reorderCEventByPriority } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { summarizeBEventEffect } from "../../model/effectSummary.js";
 
@@ -44,6 +44,11 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
     const n=[...events];
     n[i]={...n[i],name:v};
     onChange(n);
+  };
+  // Numeric priority entry — same invariant as drag: reorder the array to the typed
+  // position, then renumber densely 1..n (see reorderCEventByPriority in helpers.jsx).
+  const commitPriority=(id,v)=>{
+    onChange(reorderCEventByPriority(events,id,parseInt(v,10)||1));
   };
   const rem=(i)=>{
     const remaining=events.filter((_,idx)=>idx!==i);
@@ -179,21 +184,35 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               <button onClick={()=>toggleExpand(ev.id)}
                 style={{background:"none",border:"none",cursor:"pointer",padding:"2px 3px",color:isExpanded?C.cEvent:C.muted,fontFamily:FONT,fontSize:11,lineHeight:1,flexShrink:0}}
                 aria-label={isExpanded?"Collapse":"Expand"}>{isExpanded?"▾":"▸"}</button>
-              {/* Priority badge — drag grip (only when not filtering) */}
-              {!lcFilter&&(
-                <div
-                  draggable="true"
-                  onDragStart={e=>{dragIdx.current=i;e.dataTransfer.effectAllowed='move';}}
-                  title="Drag to reorder"
-                  style={{cursor:'grab',userSelect:'none',flexShrink:0,display:'flex',alignItems:'center'}}>
-                  <span aria-label={`Priority ${ev.priority||i+1}`} style={{
+              {/* Priority — numeric entry (works even while filtered) + drag grip (drag needs the unfiltered list) */}
+              <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
+                {!lcFilter&&(
+                  <div
+                    draggable="true"
+                    onDragStart={e=>{dragIdx.current=i;e.dataTransfer.effectAllowed='move';}}
+                    title="Drag to reorder"
+                    aria-hidden="true"
+                    style={{cursor:'grab',userSelect:'none',display:'flex',alignItems:'center',color:C.muted,fontSize:11,padding:'0 1px'}}>
+                    ⠿
+                  </div>
+                )}
+                <CommitInput
+                  value={String(ev.priority||i+1)}
+                  onCommit={value=>commitPriority(ev.id,value)}
+                  transform={raw=>{
+                    const n=parseInt(String(raw||"").trim(),10);
+                    const fallback=ev.priority||i+1;
+                    const clamped=Number.isFinite(n)?Math.min(Math.max(n,1),events.length):fallback;
+                    return String(clamped);
+                  }}
+                  ariaLabel={`Priority ${ev.priority||i+1}`}
+                  style={{
                     background:C.cEvent+'22',border:`1px solid ${C.cEvent}55`,
                     borderRadius:4,color:C.cEvent,fontFamily:FONT,
-                    fontSize:11,fontWeight:700,padding:'3px 8px',
-                    minWidth:32,textAlign:'center',display:'inline-block',
-                  }}>P{ev.priority||i+1}</span>
-                </div>
-              )}
+                    fontSize:11,fontWeight:700,padding:'3px 4px',
+                    width:32,textAlign:'center',
+                  }}/>
+              </div>
               <Tag label="C-event" color={C.cEvent}/>
               <CommitInput value={ev.name} onCommit={value=>commitName(i,value)}
                 placeholder="Event name"

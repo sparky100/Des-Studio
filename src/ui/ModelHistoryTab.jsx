@@ -16,6 +16,7 @@ import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx
 import { buildLLMBundle } from "../llm/bundleExport.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 import { ExportPopover } from "./shared/ExportPopover.jsx";
+import { CiBadge } from "./shared/CiBadge.jsx";
 
 function slugifyModelName(name = "") {
 
@@ -482,15 +483,8 @@ export function ModelHistoryTab({
                       <td style={{ padding: "6px 12px" }}>
                         {(() => {
                           const ci = row.aggregate_stats?.["summary.avgWait"];
-                          if (!ci || ci.halfWidth == null || ci.mean == null || !Number.isFinite(ci.mean) || ci.mean === 0) return <span style={{ color: C.muted }}>—</span>;
-                          const relHw = (ci.halfWidth / Math.abs(ci.mean)) * 100;
-                          const color = relHw < 10 ? C.green : relHw < 25 ? C.amber : C.red;
-                          return (
-                            <span
-                              title={`±${ci.halfWidth.toFixed(1)} half-width, n=${ci.n} reps`}
-                              style={{ fontSize: 10, fontWeight: 700, color, background: `${color}18`, border: `1px solid ${color}44`, borderRadius: 999, padding: "2px 7px", whiteSpace: "nowrap" }}
-                            >±{relHw.toFixed(0)}%</span>
-                          );
+                          const badge = <CiBadge ci={ci} C={C} FONT={FONT} />;
+                          return badge || <span style={{ color: C.muted }}>—</span>;
                         })()}
                       </td>
                       <td style={{ padding: "6px 12px" }}>

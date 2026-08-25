@@ -199,23 +199,6 @@ async function hydrateResultsFromHistoryRow(row) {
   };
 }
 
-const MODEL_HEALTH_TAB_LABELS = {
-  overview: "Overview",
-  visual: "Design",
-  ai: "AI Designer",
-  entities: "Entity Types",
-  queues: "Queues",
-  containers: "Model Data",
-  bevents: "B-Events",
-  cevents: "C-Events",
-  schedules: "Time & Schedules",
-  state: "Data Sources",
-  execute: "Run",
-  results: "Results",
-  history: "Run History",
-  validate: "Model Health",
-};
-
 function isStarterBlankModel(model = {}) {
   const current = model && typeof model === "object" ? model : {};
   return !(current.entityTypes || []).length &&
@@ -959,6 +942,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     ...(isOwner?[{id:"versions",label:"Versions"}]:[]),
   ];
   const selectableTabs = TABS.filter(t => !t.disabled);
+  // Single source of truth for tab labels — previously a second hard-coded
+  // map here disagreed with TABS (e.g. "Design"/"AI Designer" vs the tab
+  // bar's "Draw"/"Describe"), showing users two different names for the
+  // same tab depending which panel they were looking at.
+  const tabLabel = id => TABS.find(t => t.id === id)?.label || "Overview";
   const NAV_MODES=[
     {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
     {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","containers","bevents","cevents","sections","schedules","goals","state","validate"]},
@@ -1517,13 +1505,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 {validation.errors.map((issue,index)=>(
                   <button key={`err-${issue.code}-${index}`} type="button" onClick={()=>{setTab(issue.tab||"overview");if(issue.affectedIds){setErrorFilter({tab:issue.tab,affectedEventIds:issue.affectedIds.eventIds,affectedQueueIds:issue.affectedIds.queueIds,affectedEntityTypeIds:issue.affectedIds.entityTypeIds});}}}
                     style={{background:alpha(C.red,0.1),border:`1px solid ${alpha(C.red,0.4)}`,borderRadius:6,color:C.red,cursor:"pointer",fontFamily:FONT,fontSize:11,padding:"9px 11px",textAlign:"left"}}>
-                    {MODEL_HEALTH_TAB_LABELS[issue.tab||"overview"]||"Overview"}: {issue.message}{issue.code?` · Code ${issue.code}`:""}
+                    {tabLabel(issue.tab||"overview")}: {issue.message}{issue.code?` · Code ${issue.code}`:""}
                   </button>
                 ))}
                 {validation.warnings.map((issue,index)=>(
                   <button key={`warn-${issue.code}-${index}`} type="button" onClick={()=>{setTab(issue.tab||"overview");if(issue.affectedIds){setErrorFilter({tab:issue.tab,affectedEventIds:issue.affectedIds.eventIds,affectedQueueIds:issue.affectedIds.queueIds,affectedEntityTypeIds:issue.affectedIds.entityTypeIds});}}}
                     style={{background:alpha(C.amber,0.1),border:`1px solid ${alpha(C.amber,0.4)}`,borderRadius:6,color:C.amber,cursor:"pointer",fontFamily:FONT,fontSize:11,padding:"9px 11px",textAlign:"left"}}>
-                    {MODEL_HEALTH_TAB_LABELS[issue.tab||"overview"]||"Overview"}: {issue.message}{issue.code?` · Code ${issue.code}`:""}
+                    {tabLabel(issue.tab||"overview")}: {issue.message}{issue.code?` · Code ${issue.code}`:""}
                   </button>
                 ))}
               </div>

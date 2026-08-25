@@ -7,6 +7,7 @@
 import { lazy, Suspense, useState } from "react";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useLivePreview } from "./useLivePreview.js";
+import { prefersReducedMotion } from "../shared/hooks.js";
 
 // Lazy — same code-splitting boundary ModelDetail already uses for
 // VisualDesignerPanel itself. Keeps the whole Execute canvas machinery (xyflow
@@ -69,7 +70,7 @@ export function LivePreviewPanel({ model, hasBlockingErrors }) {
           ) : (
             <div style={{ marginTop: 8, opacity: snap ? 1 : 0.4, transition: "opacity 200ms" }}>
               <Suspense fallback={<div style={{ padding: "16px 8px", fontSize: 12, color: C.muted, fontFamily: FONT, textAlign: "center" }}>Loading preview…</div>}>
-                <ExecuteCanvas model={model} snap={snap} kpiSlots={[]} animationEnabled />
+                <ExecuteCanvas model={model} snap={snap} kpiSlots={[]} animationEnabled={!prefersReducedMotion()} />
               </Suspense>
             </div>
           )}

@@ -10,7 +10,7 @@ const mockCEvents = [
 ];
 
 describe('CEventEditor — priority field', () => {
-  it('renders a priority badge on each C-Event row', () => {
+  it('renders a numeric priority input on each C-Event row, reflecting its current priority', () => {
     render(
       <CEventEditor
         events={mockCEvents}
@@ -21,12 +21,12 @@ describe('CEventEditor — priority field', () => {
         queues={[]}
       />
     );
-    expect(screen.getByText('P1')).toBeInTheDocument();
-    expect(screen.getByText('P2')).toBeInTheDocument();
-    expect(screen.getByText('P3')).toBeInTheDocument();
+    expect(screen.getByLabelText('Priority 1')).toHaveValue('1');
+    expect(screen.getByLabelText('Priority 2')).toHaveValue('2');
+    expect(screen.getByLabelText('Priority 3')).toHaveValue('3');
   });
 
-  it('priority is shown as an explicit integer — one badge per event', () => {
+  it('the priority input works even while the list is filtered (no grip needed)', () => {
     render(
       <CEventEditor
         events={mockCEvents}
@@ -37,11 +37,54 @@ describe('CEventEditor — priority field', () => {
         queues={[]}
       />
     );
-    const p1 = screen.getByText('P1');
-    const p2 = screen.getByText('P2');
-    const p3 = screen.getByText('P3');
-    expect(p1).not.toBe(p2);
-    expect(p2).not.toBe(p3);
+    fireEvent.change(screen.getByPlaceholderText('Filter by name…'), { target: { value: 'Doctor' } });
+    expect(screen.getByLabelText('Priority 2')).toBeInTheDocument();
+  });
+
+  it('typing a new priority reorders the list and renumbers all events densely', () => {
+    const handleChange = vi.fn();
+    render(
+      <CEventEditor
+        events={mockCEvents}
+        onChange={handleChange}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+      />
+    );
+    // Move "Discharge" (currently P3) to priority 1
+    const input = screen.getByLabelText('Priority 3');
+    fireEvent.change(input, { target: { value: '1' } });
+    fireEvent.blur(input);
+
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    const reordered = handleChange.mock.calls[0][0];
+    expect(reordered.map(e => e.id)).toEqual(['c3', 'c1', 'c2']);
+    expect(reordered.map(e => e.priority)).toEqual([1, 2, 3]);
+  });
+
+  it('clamps a typed priority above the list length down to the last position', () => {
+    const handleChange = vi.fn();
+    render(
+      <CEventEditor
+        events={mockCEvents}
+        onChange={handleChange}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+      />
+    );
+    // Move "Seize Nurse" (currently P1) to a typed priority of 99 on a 3-item list — clamps to 3
+    const input = screen.getByLabelText('Priority 1');
+    fireEvent.change(input, { target: { value: '99' } });
+    fireEvent.blur(input);
+
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    const reordered = handleChange.mock.calls[0][0];
+    expect(reordered.map(e => e.id)).toEqual(['c2', 'c3', 'c1']);
+    expect(reordered.map(e => e.priority)).toEqual([1, 2, 3]);
   });
 
   it('new C-Event receives priority = length + 1 of existing list', () => {
@@ -83,7 +126,7 @@ describe('CEventEditor — priority field', () => {
     expect(remaining[1].priority).toBe(2);
   });
 
-  it('each priority badge has an accessible aria-label', () => {
+  it('each priority input has an accessible aria-label', () => {
     render(
       <CEventEditor
         events={mockCEvents}

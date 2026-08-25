@@ -17,7 +17,6 @@ import { saveLocalModel, deleteLocalModel } from "./db/local.js";
 import { GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
 import { useTheme }                         from "./ui/shared/ThemeContext.jsx";
-import { KeyboardShortcutsModal }           from "./ui/shared/KeyboardShortcutsModal.jsx";
 import { HelpAssistant }                    from "./ui/HelpAssistant.jsx";
 import { AuthShell }                        from "./ui/AuthShell.jsx";
 import { AppNavBar }                        from "./ui/AppNavBar.jsx";
@@ -119,7 +118,6 @@ export default function App({ onThemeChange }){
   const [isRecoverySession,setIsRecoverySession]=useState(false)
   const [showSettings,setShowSettings]=useState(false)
   const [shareToken,setShareToken]=useState(null)
-  const [showKeyboardShortcuts,setShowKeyboardShortcuts]=useState(false)
   const [pendingImport,setPendingImport]=useState(null)
   const [pendingModelId,setPendingModelId]=useState(null)
   const [helpOpen,setHelpOpen]=useState(false)
@@ -772,9 +770,6 @@ export default function App({ onThemeChange }){
             </div>
           </div>
         </div>
-      )}
-      {showKeyboardShortcuts && (
-        <KeyboardShortcutsModal onClose={()=>setShowKeyboardShortcuts(false)}/>
       )}
       {helpOpen && (
         <HelpAssistant

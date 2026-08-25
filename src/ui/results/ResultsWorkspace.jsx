@@ -7,6 +7,7 @@ import { SectionFilterTabs } from "../editors/helpers.jsx";
 import { buildResultsViewModel } from "./resultsViewModel.js";
 import { evaluateResultsHealth } from "./healthFlags.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { CiBadge } from "../shared/CiBadge.jsx";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { buildGoalGaps } from "../../llm/prompts.js";
 import { downloadWorkbook } from "../shared/workbook.js";
@@ -275,25 +276,6 @@ function seriesHasVariation(points) {
   if (!Array.isArray(points) || points.length < 2) return false;
   const first = points[0].value;
   return points.some(p => p.value !== first);
-}
-
-function CiBadge({ ci, C, FONT }) {
-  if (!ci?.halfWidth || !ci?.mean || !Number.isFinite(ci.mean) || ci.mean === 0) return null;
-  const relHw = (ci.halfWidth / Math.abs(ci.mean)) * 100;
-  const color = relHw < 10 ? C.green : relHw < 25 ? C.amber : C.red;
-  return (
-    <span
-      title={`±${ci.halfWidth.toFixed(1)} half-width, n=${ci.n} reps`}
-      style={{
-        fontSize: 10, fontWeight: 700, color, fontFamily: FONT,
-        background: `${color}18`, border: `1px solid ${color}44`,
-        borderRadius: 999, padding: "2px 6px",
-        whiteSpace: "nowrap", marginLeft: 5,
-      }}
-    >
-      ±{relHw.toFixed(0)}%
-    </span>
-  );
 }
 
 function KeyFindingsBanner({ healthFlags, C, FONT }) {

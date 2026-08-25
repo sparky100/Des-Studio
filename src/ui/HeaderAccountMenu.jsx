@@ -41,6 +41,19 @@ function HelpIcon() {
   );
 }
 
+function KeyboardIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <line x1="6" y1="10" x2="6" y2="10" />
+      <line x1="10" y1="10" x2="10" y2="10" />
+      <line x1="14" y1="10" x2="14" y2="10" />
+      <line x1="18" y1="10" x2="18" y2="10" />
+      <line x1="8" y1="14" x2="16" y2="14" />
+    </svg>
+  );
+}
+
 const MENU_ITEM_HEIGHT = 44; // --menu-item-height
 const MENU_RADIUS = 12;      // --menu-radius
 const MENU_SHADOW = "0 4px 16px rgba(0,0,0,0.35)"; // --menu-shadow, adapted for dark surfaces
@@ -54,6 +67,7 @@ const MENU_DIVIDER_LIGHT = "#e5e7eb"; // --menu-divider-color (spec default, ove
  *   onFeedback: () => void,
  *   onAbout: () => void,
  *   onHelp: () => void,
+ *   onShortcuts: () => void,
  *   onAdminPanel?: () => void,
  *   onSignOut: () => void,
  * }} props
@@ -64,6 +78,7 @@ export function HeaderAccountMenu({
   onFeedback,
   onAbout,
   onHelp,
+  onShortcuts,
   onAdminPanel,
   onSignOut,
 }) {
@@ -208,6 +223,9 @@ export function HeaderAccountMenu({
           </button>
           <button role="menuitem" type="button" style={supportItemStyle} onClick={closeThen(onHelp)}>
             <HelpIcon /> Help
+          </button>
+          <button role="menuitem" type="button" style={supportItemStyle} onClick={closeThen(onShortcuts)}>
+            <KeyboardIcon /> Keyboard shortcuts
           </button>
 
           {/* Divider */}

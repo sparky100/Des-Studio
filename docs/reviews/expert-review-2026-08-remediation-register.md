@@ -161,7 +161,9 @@ Full-suite verification at completion: 0 failures (result recorded in the closin
 
 **Bugs found by the first lint run** (all fixed, validating the C-3 recommendation): `src/engine/phases.js` referenced an undefined `clock` (runtime crash when a suspended server reactivates on capacity increase); `ModelDetail.discard()` referenced undeclared `visualPendingRef` (runtime crash); duplicate `queues:` key in `renameEntityType` (dead first mapping); the ModelHealthPanel `(true || …)` dead condition; a conditionally-called `useMemo` in ResultsWorkspace's WaitHistogram; a `useTheme()` call in a non-component helper.
 
-Remaining from the register: the improvement recommendations (§3) — god-component decomposition, plain-language programme, picker scaling, scenario manager, capability roadmap.
+**Sprint 93 (2026-08-25, same branch) implemented six of §3.2's UX-polish items** — see `docs/reviews/sprint-93-plan.md`: UX-1 (shortcuts modal reachability), M-4 (C-event priority numeric entry), M-5 (persistent CI detail), CON-3 (unified tab labels), A-3 (live regions), A-5 (`prefers-reduced-motion`). Verified: full suite 3127/3127 real test cases, typecheck/lint/build clean.
+
+Remaining from the register: §3.1 engineering foundations (typecheck coverage, god-component decomposition, `src/db/auth.js` wrapper, dependency currency), the rest of §3.2 (Arrivals/Activities Phase 2, picker scaling, scenario manager, one-modal-system), and §3.3 capability roadmap.
 
 ## 7. Draw/Run integration — ADR-020 (2026-08-25, same branch)
 
