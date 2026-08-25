@@ -1,7 +1,7 @@
 # ADR-020: Draw/Run Integration — Live Preview While Authoring
 
 **Date:** 2026-08-25
-**Status:** Proposed (Phase 1 — Live Preview POC — implemented behind a flag)
+**Status:** On hold (2026-08-25) — Phase 1 was implemented, dogfooded, reviewed, and then removed at the product owner's decision; Phase 2+ is paused, not cancelled. See "On Hold" section at the end of this document.
 **Sprint:** Post-91/92 (unified-canvas prerequisite work)
 
 ---
@@ -80,3 +80,13 @@ Two independent close readings of the shipped Phase 1 code (one by the implement
 **Fixed — the preview froze instead of updating on every edit.** This document's own description above ("waits 800ms after the last edit settles before tearing down the current engine") was not quite what the code did: the previous run's stepping stopped the instant an edit landed, but nothing signalled that to the display, so the panel held that now-stale frame at full brightness — looking exactly as "live" as before — for the entire 800ms wait, then jumped straight to the new run. `useLivePreview` now tracks a `pending` flag that goes true the moment an edit is queued and false once the rebuilt engine's first frame is ready; the panel dims to the same faded state it already used for "not started yet" and its caption says "Updating the preview for your last edit…" during that window, so the wait reads as an honest pause rather than a frozen or broken feature.
 
 **Known, deliberately unaddressed — the preview can silently run on incomplete data.** A real Run resolves two things before simulating that this preview does not: live-data-bound parameters (`model.experimentDefaults.liveDataMode`), and named schedules stored outside the model (a bEvent schedule row with a `scheduleRef` and no inline `rows`, which resolves to *zero arrivals* rather than its real pattern when nothing supplies the referenced rows). For a model using either, the preview isn't wrong so much as it's quietly simulating a different, unresolved version of the model, with no indication that's happening. Detecting and warning about this was scoped out of this pass as more involved than the fix warrants right now; it remains open for a future pass — see Phase 2's data-fidelity considerations above, which this gap is a specific instance of.
+
+## On Hold (2026-08-25)
+
+After the fixes above shipped and the feature was dogfooded on a real model, the product owner decided to remove Phase 1 and put the whole Draw/Run integration direction on hold, rather than proceed to Phase 2.
+
+**What was removed:** `LivePreviewPanel.jsx`, `useLivePreview.js`, and their tests. The Draw canvas is back to exactly how it worked before this ADR — no preview strip, no toggle. Nothing about Phase 2 (dual-mode node components, structural-vs-parametric rebuild skipping, lifecycle unification) was started; it was never more than the "Phase 2+" section above.
+
+**Why this document stays.** This isn't a record of a mistake — Phase 1 did what it was for: it let the product owner try the idea cheaply, on a real model, before committing to the much larger Phase 2 investment, and the answer that came back was "not now." The two deep-exploration passes into the Draw canvas and execution architecture (Context/Why-not-a-full-merge sections above), the benchmarks, and the fixes made along the way (the freeze-on-edit bug, documented above) remain accurate and directly reusable if this direction is picked back up later — nothing here needs to be re-derived from scratch.
+
+**If this is revisited:** start from this document rather than a blank page. The "Why a Full Merge Is Not Phase 1" findings and the benchmark numbers are unlikely to have changed meaningfully; re-verify them rather than assuming they still hold, since the codebase will have moved on. The removed code is recoverable from git history (search the commit that fixed the freeze-on-edit bug) as a starting point, though it should be re-reviewed rather than restored as-is given the schedule/live-data gap noted above was never resolved.

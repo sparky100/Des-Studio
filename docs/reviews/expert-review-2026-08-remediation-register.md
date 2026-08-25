@@ -171,7 +171,7 @@ Following the reviews, the product owner raised a fundamental-experience gap the
 
 **Phase 1 shipped, flagged off by default**: a collapsible Live Preview strip on the Draw canvas that runs a small, capped, non-persisting simulation — debounced 800ms after the last edit to avoid rewind-flicker, looping on completion — rendered through the existing, unmodified `ExecuteCanvas` component. No engine changes, no changes to Draw's editing behaviour or Execute's canvas. New tests (`use-live-preview.test.jsx`, `live-preview-panel.test.jsx`) exercise the real debounce/rebuild/loop/error behaviour via fake timers, not mocks. Full suite verified green before push (3101/3101 real cases).
 
-Next: dogfood/user-test Phase 1 before committing to Phase 2 (dual-mode node components, structural-vs-parametric rebuild skipping via `detectStructuralChanges()`, lifecycle unification) — see ADR-020's Open Questions.
+**Update (2026-08-25): on hold.** Phase 1 was dogfooded and reviewed (one real bug found and fixed — a freeze-instead-of-updating display bug during the debounce window; one known limitation, the schedule/live-data fidelity gap, documented but deliberately left unfixed). After trying it on a real model, the product owner decided to remove Phase 1 (`LivePreviewPanel.jsx`, `useLivePreview.js`, and their tests) and put the whole Draw/Run integration direction on hold rather than proceed to Phase 2. See ADR-020's "On Hold" section for the full reasoning and what to reuse if this is revisited.
 
 ---
 

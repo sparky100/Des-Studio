@@ -6,7 +6,6 @@ import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode,
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { RouteEdgeDialog } from "./RouteEdgeDialog.jsx";
-import { LivePreviewPanel } from "./LivePreviewPanel.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { renameEntityType } from "../../engine/queue-refs.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -1496,8 +1495,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
         )}
 
       </div>
-
-      <LivePreviewPanel model={model} hasBlockingErrors={modelValidation.errors.length > 0} />
 
       {pendingDelete && (
         <DeleteNodeDialog
