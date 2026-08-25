@@ -36,7 +36,7 @@ import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
 import { ParamBrowserPanel, paramColor } from "./ParamBrowserPanel.jsx";
-import { alpha, RADIUS } from "../shared/tokens.js";
+import { alpha, RADIUS, SHADOW } from "../shared/tokens.js";
 import { prefersReducedMotion } from "../shared/hooks.js";
 import { generateReport, sanitizeFilename } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
@@ -2572,7 +2572,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 position: "absolute", top: "100%", right: 0, marginTop: 4,
                 background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8,
                 padding: 8, minWidth: 260, maxWidth: "90vw",
-                boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 200,
+                boxShadow: SHADOW.dropdown, zIndex: 200,
                 display: "flex", flexDirection: "column", gap: 6,
               }}>
                 {liveFlags.map((f, i) => {

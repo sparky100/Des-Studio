@@ -1,6 +1,6 @@
 // ui/AboutModal.jsx — Static About panel for flow
 import { useEffect, useRef } from "react";
-import { SPACE, RADIUS, TYPO, Z, alpha } from "./shared/tokens.js";
+import { SPACE, RADIUS, TYPO, Z, alpha, SHADOW } from "./shared/tokens.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION;
@@ -60,7 +60,7 @@ export function AboutModal({ isOpen, onClose }) {
           width: "min(420px, 100%)",
           display: "flex",
           flexDirection: "column",
-          boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
+          boxShadow: SHADOW.modal,
           overflow: "hidden",
         }}
       >

@@ -11,7 +11,7 @@
 // here as literal values / theme colors rather than Tailwind classes.
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "./shared/ThemeContext.jsx";
-import { SPACE, TYPO, Z } from "./shared/tokens.js";
+import { SPACE, TYPO, Z, SHADOW } from "./shared/tokens.js";
 
 function FeedbackIcon() {
   return (
@@ -56,8 +56,6 @@ function KeyboardIcon() {
 
 const MENU_ITEM_HEIGHT = 44; // --menu-item-height
 const MENU_RADIUS = 12;      // --menu-radius
-const MENU_SHADOW = "0 4px 16px rgba(0,0,0,0.35)"; // --menu-shadow, adapted for dark surfaces
-const MENU_DIVIDER_LIGHT = "#e5e7eb"; // --menu-divider-color (spec default, overridden by C.border where available)
 
 /**
  * @param {{
@@ -157,7 +155,7 @@ export function HeaderAccountMenu({
     textAlign: "left",
   };
 
-  const dividerColor = C.border || MENU_DIVIDER_LIGHT;
+  const dividerColor = C.border;
 
   return (
     <div style={{ position: "relative", display: "inline-flex" }}>
@@ -206,7 +204,7 @@ export function HeaderAccountMenu({
             background: C.panel,
             border: `1px solid ${C.border}`,
             borderRadius: MENU_RADIUS,
-            boxShadow: MENU_SHADOW,
+            boxShadow: SHADOW.dropdown,
             overflow: "hidden",
             zIndex: Z.dropdown,
           }}

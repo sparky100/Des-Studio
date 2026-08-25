@@ -48,6 +48,21 @@ export const GOOGLE_FONT_URL =
 
 export const TOKEN_COLORS = ["#06b6d4", "#f59e0b", "#8b5cf6", "#3fb950", "#f87171", "#a78bfa", "#34d399", "#fbbf24"];
 
+// Domain badge colours (ModelLibrary's model-card domain chips) — theme-invariant,
+// distinct set from TOKEN_COLORS above (which is for chart series).
+export const DOMAIN_COLORS = {
+  Academic: "#7c6fcd",
+  Healthcare: "#3b9e78",
+  "Service Systems": "#c0813a",
+  Manufacturing: "#3a82c0",
+  Logistics: "#9e3b7a",
+  Technology: "#3a9ec0",
+  Transport: "#6a8fa0",
+};
+
+// Section-editor colour swatches — theme-invariant, distinct from TOKEN_COLORS/DOMAIN_COLORS.
+export const SECTION_COLORS = ["#4A90D9", "#27AE60", "#E74C3C", "#9B59B6", "#F39C12", "#1ABC9C", "#E67E22", "#3498DB"];
+
 // Spacing scale (px)
 export const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 
@@ -56,9 +71,16 @@ export const RADIUS = { sm: 4, md: 6, lg: 10 };
 
 // Box shadows
 export const SHADOW = {
-  panel:   "-8px 0 32px rgba(0,0,0,0.6)",
-  overlay: "0 8px 32px rgba(0,0,0,0.5)",
-  card:    "0 2px 8px rgba(0,0,0,0.4)",
+  panel:    "-8px 0 32px rgba(0,0,0,0.6)",
+  overlay:  "0 8px 32px rgba(0,0,0,0.5)",
+  card:     "0 2px 8px rgba(0,0,0,0.4)",
+  // Dropdown/floating-panel shadow — was hand-typed identically across
+  // ModelHistoryTab.jsx (x2), ResultsWorkspace.jsx, ModelTabBar.jsx, execute/index.jsx.
+  dropdown: "0 4px 16px rgba(0,0,0,0.4)",
+  // Modal shadow — was hand-typed identically across AboutModal.jsx,
+  // FeedbackModal.jsx, ChartDataChoiceDialog.jsx, KeyboardShortcutsModal.jsx,
+  // ExportPopover.jsx. Distinct from `overlay` above (different blur/spread).
+  modal:    "0 12px 40px rgba(0,0,0,0.5)",
 };
 
 // Z-index stack

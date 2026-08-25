@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { SHADOW } from "./tokens.js";
 import { useTheme } from "./ThemeContext.jsx";
 import { useToast } from "./ToastContext.jsx";
 import { Btn } from "./components.jsx";
@@ -158,7 +159,7 @@ function SchemaInfoModal({ onClose }) {
           maxWidth: "95vw",
           maxHeight: "90vh",
           overflowY: "auto",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          boxShadow: SHADOW.overlay,
           fontFamily: FONT,
         }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -214,7 +215,7 @@ function CreateReportModal({ reportType, setReportType, reportFormat, setReportF
         borderRadius: 8,
         padding: 24,
         width: 380,
-        boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+        boxShadow: SHADOW.overlay,
         fontFamily: FONT,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -389,7 +390,7 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
         flexDirection: "column",
         gap: 0,
         minWidth: 240,
-        boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+        boxShadow: SHADOW.dropdown,
       }}>
         <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>RESULTS DATA</span>
         <PopoverRow label="Full model results (.json)" onClick={() => exportResultsJson(false)} />

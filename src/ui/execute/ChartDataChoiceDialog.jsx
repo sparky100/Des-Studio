@@ -2,7 +2,7 @@
 // when a run is estimated large enough that chart/time-series collection is
 // risky, instead of silently turning charts off behind a single OK button.
 import { useEffect, useRef } from "react";
-import { SPACE, RADIUS, TYPO, Z, alpha } from "../shared/tokens.js";
+import { SPACE, RADIUS, TYPO, Z, alpha, SHADOW } from "../shared/tokens.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 /**
@@ -70,7 +70,7 @@ export function ChartDataChoiceDialog({ isOpen, messages, onCancel, onProceedWit
           display: "flex",
           flexDirection: "column",
           gap: SPACE.md,
-          boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
+          boxShadow: SHADOW.modal,
           padding: SPACE.lg,
         }}
       >

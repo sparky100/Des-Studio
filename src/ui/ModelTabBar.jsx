@@ -1,5 +1,5 @@
 // ui/ModelTabBar.jsx — Two-level tab navigation: mode selector bar + contextual sub-tab bar
-import { RADIUS, Z, alpha } from "./shared/tokens.js";
+import { RADIUS, Z, alpha, SHADOW } from "./shared/tokens.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 // ── Inline SVG icons ─────────────────────────────────────────────────────────
@@ -343,7 +343,7 @@ export function ModelTabBar({
                   <div role="listbox" style={{
                     position: "absolute", top: "100%", right: 0,
                     background: C.panel, border: `1px solid ${C.border}`, borderRadius: RADIUS.md,
-                    zIndex: Z.dropdown, minWidth: 140, boxShadow: "0 4px 12px rgba(0,0,0,0.3)", padding: 4,
+                    zIndex: Z.dropdown, minWidth: 140, boxShadow: SHADOW.dropdown, padding: 4,
                   }}>
                     {moreTabs.map(t => (
                       <button key={t.id} type="button" role="option" aria-selected={tab === t.id}

@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { Btn, CommitInput, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { SECTION_COLORS } from "../shared/tokens.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
-const PRESET_COLORS = [
-  "#4A90D9", "#27AE60", "#E74C3C", "#9B59B6",
-  "#F39C12", "#1ABC9C", "#E67E22", "#3498DB",
-];
+const PRESET_COLORS = SECTION_COLORS;
 
 function ColorSwatch({ color, selected, onClick }) {
   const { C } = useTheme();
@@ -143,7 +141,7 @@ const SectionEditor = ({ sections = [], queues = [], entityTypes = [], bEvents =
                   ))}
                   <input
                     type="color"
-                    value={s.color || "#4A90D9"}
+                    value={s.color || PRESET_COLORS[0]}
                     onChange={e => upd(i, { color: e.target.value })}
                     title="Custom colour"
                     style={{ width: 20, height: 20, borderRadius: "50%", border: "none", padding: 0, cursor: "pointer", background: "none" }}
