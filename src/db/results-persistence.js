@@ -1,3 +1,4 @@
+// @ts-check
 import { buildHistogramFD } from "../engine/statistics.js";
 import { computeEstimateAccuracy } from "../engine/complexity-estimator.js";
 
@@ -5,6 +6,10 @@ const LARGE_RUN_RISK_LEVELS = new Set(["large", "too_large"]);
 const COMPACT_TIME_SERIES_MAX_POINTS = 200;
 const MINIMAL_TIME_SERIES_MAX_POINTS = 150;
 
+/**
+ * @param {any[]} items
+ * @param {number} maxPoints
+ */
 function sampleEvenly(items, maxPoints) {
   if (!Array.isArray(items)) return [];
   if (items.length <= maxPoints) return items.slice();
@@ -20,6 +25,7 @@ function sampleEvenly(items, maxPoints) {
     .map(index => items[index]);
 }
 
+/** @param {any[]} [logEntries] */
 function buildLogSummary(logEntries = []) {
   const lastEntry = logEntries.at(-1) || null;
   return {
@@ -37,6 +43,7 @@ function buildLogSummary(logEntries = []) {
  * This lets the WaitHistogram component render for any saved run, regardless of
  * detail level, without storing tens of KB of raw observation arrays.
  */
+/** @param {Record<string, any>} [d] */
 function compactifyDistEntry(d) {
   return d ? {
     n:    d.n    ?? 0,
@@ -51,6 +58,7 @@ function compactifyDistEntry(d) {
   } : null;
 }
 
+/** @param {Record<string, any>} [waitDist] */
 function compactifyWaitDist(waitDist = {}) {
   return Object.fromEntries(Object.entries(waitDist || {}).map(([qName, d]) => [qName, compactifyDistEntry(d)]));
 }
@@ -60,6 +68,7 @@ function compactifyWaitDist(waitDist = {}) {
 // with a small summary — same trade-off as compactifyDistEntry's histogram.
 const ARRIVAL_BUCKET_COUNT = 24;
 
+/** @param {Array<[number, number]>} points */
 function compactifyArrivalSeries(points) {
   if (!Array.isArray(points) || points.length === 0) return { buckets: [] };
   const sorted = [...points].sort((a, b) => a[0] - b[0]);
@@ -88,6 +97,7 @@ function compactifyArrivalSeries(points) {
 // Legacy alias — used only for the payload-size safety guard path below.
 const summarizeWaitDist = compactifyWaitDist;
 
+/** @param {Record<string, any>} [config] */
 export function resolveResultDetailLevel(config = {}) {
   if (config.resultDetailLevel === "minimal" || config.resultDetailLevel === "compact" || config.resultDetailLevel === "full") {
     return config.resultDetailLevel;
@@ -100,6 +110,10 @@ export function resolveResultDetailLevel(config = {}) {
   return "minimal";
 }
 
+/**
+ * @param {Record<string, any>} resultsJson
+ * @returns {Record<string, any>}
+ */
 export function withResultsPayloadSize(resultsJson) {
   const payloadSizeBytes = JSON.stringify(resultsJson).length;
   return {
@@ -108,8 +122,13 @@ export function withResultsPayloadSize(resultsJson) {
   };
 }
 
+/**
+ * @param {Record<string, any>} [result]
+ * @param {Record<string, any>} [config]
+ */
 export function buildPersistedResultsJson(result = {}, config = {}) {
   const summary = result?.summary || {};
+  /** @type {Record<string, any>} */
   let resultsJson = config.resultsJson ? { ...config.resultsJson } : {
     ...result,
     summary,

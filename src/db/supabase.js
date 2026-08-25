@@ -1,3 +1,4 @@
+// @ts-check
 // db/supabase.js — Supabase client singleton
 import { createClient } from "@supabase/supabase-js";
 
@@ -39,7 +40,7 @@ export const FEEDBACK_APP_NAME = 'simmodlr';
  * Inserts one row; throws on error.
  *
  * @param {{ category: string, message: string, userId: string|null, appVersion: string|undefined, pageContext: string|undefined, replyEmail?: string }} params
- * @param {object} [client] - Supabase client to use (defaults to the module singleton; injectable for tests).
+ * @param {typeof supabase} [client] - Supabase client to use (defaults to the module singleton; injectable for tests).
  */
 export async function submitFeedback({ category, message, userId, appVersion, pageContext, replyEmail }, client = supabase) {
   let accountEmail = null;

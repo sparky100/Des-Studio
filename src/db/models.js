@@ -1,3 +1,4 @@
+// @ts-check
 // db/models.js — All Supabase database operations
 //
 // All functions are async and throw on error.
@@ -23,10 +24,12 @@ export const DEFAULT_USER_SETTINGS = Object.freeze({
 
 const PLATFORM_ROLES = new Set(["user", "admin"]);
 
+/** @param {string} [role] */
 export function normalizeProfileRole(role) {
-  return PLATFORM_ROLES.has(role) ? role : "user";
+  return PLATFORM_ROLES.has(role ?? "") ? role : "user";
 }
 
+/** @param {Record<string, any>} [profile] */
 export function normalizeProfile(profile = {}) {
   const role = normalizeProfileRole(profile.role);
   return {
@@ -37,6 +40,7 @@ export function normalizeProfile(profile = {}) {
   };
 }
 
+/** @param {Record<string, any>} [row] */
 export function normalizeUserSettings(row = {}) {
   return {
     schemaVersion: row.schema_version ?? 1,
@@ -61,10 +65,12 @@ export function __resetDesModelsSchemaModeForTests() {
   desModelsSelectModeIndex = 0;
 }
 
+/** @param {any} error */
 function errorText(error) {
   return [error?.message, error?.details, error?.hint].filter(Boolean).join(" ").toLowerCase();
 }
 
+/** @param {any} error */
 function isSchemaCompatibilityError(error) {
   if (!error) return false;
   if (error.code === "42703" || error.code === "PGRST204") return true;
@@ -73,6 +79,7 @@ function isSchemaCompatibilityError(error) {
   return text.includes("column") || text.includes("select") || text.includes("schema");
 }
 
+/** @param {(selectClause: string) => PromiseLike<any>} buildQuery */
 async function runDesModelsSelect(buildQuery) {
   let lastError = null;
   for (let i = desModelsSelectModeIndex; i < DES_MODELS_SELECTS.length; i++) {
@@ -96,9 +103,12 @@ async function runDesModelsSelect(buildQuery) {
 }
 
 // ── Row normalisation ─────────────────────────────────────────────────────────
+/** @param {Record<string, any>} r */
 export function norm(r) {
   const modelJson = r.model_json || {};
-  return migrateBalkingToQueues(normalizeModelConditions({
+  // normalizeModelConditions/migrateBalkingToQueues live outside this pass's
+  // typecheck scope (src/model/) and are untyped — cast at the boundary.
+  return /** @type {Record<string, any>} */ (migrateBalkingToQueues(normalizeModelConditions({
     id:             r.id,
     name:           r.name,
     description:    r.description || "",
@@ -127,10 +137,12 @@ export function norm(r) {
     updatedAt:      r.updated_at,
     latestVersion:  r.latest_version || 0,
     parentModelId:  r.parent_model_id || null,
-  }));
+  })));
 }
 
+/** @param {Record<string, any>} [model] */
 function modelJsonFromModel(model = {}) {
+  /** @type {Record<string, any>} */
   const json = {
     schemaVersion:        model.schemaVersion ?? 1,
     entityTypes:          model.entityTypes || [],
@@ -154,8 +166,12 @@ function modelJsonFromModel(model = {}) {
 }
 
 // ── Model to row (for save/update) ────────────────────────────────────────────
+/**
+ * @param {Record<string, any>} model
+ * @param {string} userId
+ */
 function toRow(model, userId) {
-  const normalized = normalizeModelConditions(model);
+  const normalized = /** @type {Record<string, any>} */ (normalizeModelConditions(model));
   return {
     name:            normalized.name,
     description:     normalized.description    || "",
@@ -175,6 +191,7 @@ function toRow(model, userId) {
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
+/** @param {string} [userId] */
 export async function fetchModels(userId) {
   let data;
   if (userId) {
@@ -242,6 +259,7 @@ export async function fetchProfiles() {
   return (data || []).map(normalizeProfile);
 }
 
+/** @param {string} [userId] */
 export async function fetchUserSettings(userId) {
   if (!userId) {
     return normalizeUserSettings();
@@ -263,6 +281,11 @@ export async function fetchUserSettings(userId) {
   return normalizeUserSettings(data);
 }
 
+/**
+ * @param {string} userId
+ * @param {Record<string, any>} [settings]
+ * @param {number} [schemaVersion]
+ */
 export async function saveUserSettings(userId, settings = {}, schemaVersion = 1) {
   if (!userId) {
     throw new Error("User id is required to save user settings.");
@@ -286,8 +309,13 @@ export async function saveUserSettings(userId, settings = {}, schemaVersion = 1)
   return normalizeUserSettings(data);
 }
 
+/**
+ * @param {Record<string, any>} model
+ * @param {string} userId
+ */
 export async function saveModel(model, userId) {
   const row = toRow(model, userId);
+  /** @param {Record<string, any>} payload */
   const persist = async (payload) => {
     if (model.id) {
       return supabase
@@ -323,6 +351,10 @@ export async function saveModel(model, userId) {
   return norm(result.data);
 }
 
+/**
+ * @param {string} id
+ * @param {string} userId
+ */
 export async function deleteModel(id, userId) {
   if (!id || !userId) {
     return { ok: false, error: "Model id and user id are required to delete a model." };
@@ -342,6 +374,11 @@ export async function deleteModel(id, userId) {
   return { ok: true };
 }
 
+/**
+ * @param {string} id
+ * @param {string} visibility
+ * @param {string} userId
+ */
 export async function setVisibility(id, visibility, userId) {
   const { error } = await supabase
     .from("des_models")
@@ -351,6 +388,11 @@ export async function setVisibility(id, visibility, userId) {
   if (error) throw error;
 }
 
+/**
+ * @param {string} id
+ * @param {Record<string, any>} access
+ * @param {string} userId
+ */
 export async function setAccess(id, access, userId) {
   const { error } = await supabase
     .from("des_models")
@@ -360,6 +402,11 @@ export async function setAccess(id, access, userId) {
   if (error) throw error;
 }
 
+/**
+ * @param {string} modelId
+ * @param {string} userId
+ * @param {string[]} tags
+ */
 export async function updateModelTags(modelId, userId, tags) {
   const { error } = await supabase
     .from("des_models")
@@ -372,11 +419,18 @@ export async function updateModelTags(modelId, userId, tags) {
 
 // ── Simulation run history ────────────────────────────────────────────────────
 
+/**
+ * @param {string} modelId
+ * @param {string} userId
+ * @param {Record<string, any>} result
+ * @param {Record<string, any>} [config]
+ */
 export async function saveSimulationRun(modelId, userId, result, config = {}) {
   const s = result.summary || {};
   const runLabel = typeof config.runLabel === "string" ? config.runLabel.trim() : "";
   const resultsJson = buildPersistedResultsJson(result, config);
 
+  /** @type {Record<string, any>} */
   const runPayload = {
     model_id:            modelId,
     run_by:              userId,
@@ -405,6 +459,10 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
   return data?.id;
 }
 
+/**
+ * @param {string} runId
+ * @param {any} insights
+ */
 export async function saveAiInsights(runId, insights) {
   const { error } = await supabase
     .from("simulation_runs")
@@ -414,6 +472,7 @@ export async function saveAiInsights(runId, insights) {
   return { ok: true };
 }
 
+/** @param {Record<string, any>} [row] */
 export function normalizeRunHistoryRow(row = {}) {
   const totalArrived = row.total_arrived ?? 0;
   const totalServed = row.total_served ?? 0;
@@ -434,6 +493,10 @@ export function normalizeRunHistoryRow(row = {}) {
   };
 }
 
+/**
+ * @param {string} modelId
+ * @param {{ search?: string, tags?: string[], archived?: boolean }} [filters]
+ */
 export async function fetchRunHistory(modelId, filters = {}) {
   const { search, tags, archived = false } = filters;
   let query = supabase
@@ -458,6 +521,11 @@ export async function fetchRunHistory(modelId, filters = {}) {
 
 // --- F28.6: Run organisation helpers ---
 
+/**
+ * @param {string} runId
+ * @param {string} userId
+ * @param {string} label
+ */
 export async function updateRunLabel(runId, userId, label) {
   const { error } = await supabase
     .from("simulation_runs")
@@ -468,6 +536,11 @@ export async function updateRunLabel(runId, userId, label) {
   return { ok: true };
 }
 
+/**
+ * @param {string} runId
+ * @param {string} userId
+ * @param {string[]} tags
+ */
 export async function updateRunTags(runId, userId, tags) {
   const { error } = await supabase
     .from("simulation_runs")
@@ -478,6 +551,10 @@ export async function updateRunTags(runId, userId, tags) {
   return { ok: true };
 }
 
+/**
+ * @param {string} runId
+ * @param {string} userId
+ */
 export async function archiveRun(runId, userId) {
   const { error } = await supabase
     .from("simulation_runs")
@@ -488,6 +565,10 @@ export async function archiveRun(runId, userId) {
   return { ok: true };
 }
 
+/**
+ * @param {string} runId
+ * @param {string} userId
+ */
 export async function unarchiveRun(runId, userId) {
   const { error } = await supabase
     .from("simulation_runs")
@@ -498,6 +579,7 @@ export async function unarchiveRun(runId, userId) {
   return { ok: true };
 }
 
+/** @param {string} runId */
 export async function getRun(runId) {
   const { data, error } = await supabase
     .from('simulation_runs')
@@ -505,26 +587,27 @@ export async function getRun(runId) {
     .eq('id', runId)
     .single();
   if (error) throw error;
-  const rj = data.results_json || {};
+  const row = /** @type {Record<string, any>} */ (data);
+  const rj = row.results_json || {};
   // Prefer embedded snapshot (set only for "full" detail-level saves).
   // Fall back to the model_json from the linked model version when the run
   // recorded a version_id — this gives reproduce/diff full fidelity without
   // requiring the full model to be embedded in every results row.
-  const mv = data.model_versions ?? null;
+  const mv = row.model_versions ?? null;
   return {
-    id:             data.id,
+    id:             row.id,
     model_snapshot: rj._model_snapshot  ?? null,
     version_model:  mv?.model_json      ?? null,
-    version_id:     data.version_id     ?? null,
+    version_id:     row.version_id      ?? null,
     version_number: mv?.version         ?? null,
     version_name:   mv?.name            ?? null,
-    base_seed:      rj._base_seed       ?? data.seed ?? null,
+    base_seed:      rj._base_seed       ?? row.seed ?? null,
     engine_version: rj._engine_version  ?? null,
     experiment_config: rj._experiment_config ?? {
-      maxSimTime:           data.max_simulation_time ?? 500,
-      warmupPeriod:         data.warmup_period       ?? 0,
-      replications:         data.replications        ?? 1,
-      seed:                 rj._base_seed ?? data.seed ?? null,
+      maxSimTime:           row.max_simulation_time ?? 500,
+      warmupPeriod:         row.warmup_period       ?? 0,
+      replications:         row.replications        ?? 1,
+      seed:                 rj._base_seed ?? row.seed ?? null,
       terminationMode:      'time',
       terminationCondition: null,
     },
@@ -537,6 +620,7 @@ export async function getRun(runId) {
 // history-row actions (compare, LLM bundle export, results export) that
 // need the full payload only when the user actually triggers them, so the
 // run-history list query itself doesn't have to select results_json.
+/** @param {string} runId */
 export async function getRunResultsJson(runId) {
   const { data, error } = await supabase
     .from("simulation_runs")
@@ -547,6 +631,10 @@ export async function getRunResultsJson(runId) {
   return data?.results_json || {};
 }
 
+/**
+ * @param {string} runId
+ * @param {string} userId
+ */
 export async function deleteSimulationRun(runId, userId) {
   const { error } = await supabase
     .from("simulation_runs")
@@ -557,8 +645,13 @@ export async function deleteSimulationRun(runId, userId) {
   return { ok: true };
 }
 
+/**
+ * @param {string[]} [modelIds]
+ * @param {string} [userId]
+ */
 export async function fetchRunStatsForModels(modelIds = [], userId) {
   const ids = Array.from(new Set(modelIds.filter(Boolean)));
+  /** @type {Record<string, { runs: number }>} */
   const emptyStats = ids.reduce((stats, id) => ({ ...stats, [id]: { runs: 0 } }), {});
   if (!ids.length || !userId) return emptyStats;
 
@@ -576,6 +669,12 @@ export async function fetchRunStatsForModels(modelIds = [], userId) {
   }, emptyStats);
 }
 
+/**
+ * @param {string} sourceModelId
+ * @param {string} newUserId
+ * @param {string} [newName]
+ * @param {{ parentModelId?: string }} [options]
+ */
 export async function forkModel(sourceModelId, newUserId, newName = "", options = {}) {
   // 1. Fetch the original model — must be owned by or accessible to the user
   const { data: sourceModel, error: fetchError } = await runDesModelsSelect((selectClause) =>
@@ -615,6 +714,11 @@ export async function forkModel(sourceModelId, newUserId, newName = "", options 
 
 // ── Share links ───────────────────────────────────────────────────────────────
 
+/**
+ * @param {string} runId
+ * @param {string} userId
+ * @param {{ expiresAt?: string, pinnedWidgets?: any[], title?: string }} [config]
+ */
 export async function createShareLink(runId, userId, config = {}) {
   // No Math.random fallback: a share token must never be guessable, and
   // crypto.randomUUID is available in every supported browser and Node ≥ 16.
@@ -638,6 +742,7 @@ export async function createShareLink(runId, userId, config = {}) {
   return { id: data.id, token: data.token, createdAt: data.created_at, expiresAt: data.expires_at };
 }
 
+/** @param {string} token */
 export async function getShareLink(token) {
   const { data: link, error: linkError } = await supabase
     .from("share_links")
@@ -650,7 +755,7 @@ export async function getShareLink(token) {
   if (link.expires_at && new Date(link.expires_at) <= new Date()) throw new Error("This share link has expired.");
 
   // Fire-and-forget: record the view (non-blocking, best-effort)
-  supabase.rpc("increment_share_view", { p_token: token }).then(() => {}).catch(() => {});
+  supabase.rpc("increment_share_view", { p_token: token }).then(() => {}, () => {});
 
   const { data: run, error: runError } = await supabase
     .from("simulation_runs")
@@ -704,6 +809,10 @@ export async function getShareLink(token) {
   };
 }
 
+/**
+ * @param {string} id
+ * @param {string} userId
+ */
 export async function revokeShareLink(id, userId) {
   const { data, error } = await supabase
     .from("share_links")
@@ -717,6 +826,12 @@ export async function revokeShareLink(id, userId) {
   return { ok: true };
 }
 
+/**
+ * @param {string} modelId
+ * @param {string} userId
+ * @param {Record<string, any>} config
+ * @param {Record<string, any>} results
+ */
 export async function saveSweep(modelId, userId, config, results) {
   const { data, error } = await supabase
     .from("sweeps")
@@ -737,6 +852,7 @@ export async function saveSweep(modelId, userId, config, results) {
   };
 }
 
+/** @param {string} id */
 export async function getSweep(id) {
   const { data, error } = await supabase
     .from("sweeps")
@@ -753,6 +869,7 @@ export async function getSweep(id) {
   };
 }
 
+/** @param {string} modelId */
 export async function listSweeps(modelId) {
   const { data, error } = await supabase
     .from("sweeps")
@@ -768,6 +885,10 @@ export async function listSweeps(modelId) {
   }));
 }
 
+/**
+ * @param {string} id
+ * @param {string} userId
+ */
 export async function deleteSweep(id, userId) {
   const { error } = await supabase
     .from("sweeps")
@@ -778,6 +899,7 @@ export async function deleteSweep(id, userId) {
   return { ok: true };
 }
 
+/** @param {string} modelId */
 export async function listShareLinks(modelId) {
   const { data: runs, error: runsError } = await supabase
     .from("simulation_runs")
@@ -814,6 +936,7 @@ export async function listShareLinks(modelId) {
 
 // ── Platform config (admin only) ──────────────────────────────────────────────
 
+/** @param {string} key */
 export async function getPlatformConfig(key) {
   const { data, error } = await supabase
     .from("platform_config")
@@ -824,6 +947,11 @@ export async function getPlatformConfig(key) {
   return data?.value ?? null;
 }
 
+/**
+ * @param {string} key
+ * @param {any} value
+ * @param {string} userId
+ */
 export async function setPlatformConfig(key, value, userId) {
   const { error } = await supabase
     .from("platform_config")
@@ -835,6 +963,10 @@ export async function setPlatformConfig(key, value, userId) {
 export async function fetchTierPolicies() {
   return getPlatformConfig("tier_policies");
 }
+/**
+ * @param {any} policies
+ * @param {string} userId
+ */
 export async function saveTierPolicies(policies, userId) {
   return setPlatformConfig("tier_policies", policies, userId);
 }
@@ -848,6 +980,10 @@ export async function fetchAllUsers() {
   return (data || []).map(normalizeProfile);
 }
 
+/**
+ * @param {string} userId
+ * @param {string} role
+ */
 export async function updateUserRole(userId, role) {
   const { error } = await supabase
     .from("profiles")
@@ -857,6 +993,7 @@ export async function updateUserRole(userId, role) {
   return { ok: true };
 }
 
+/** @param {string} userId */
 export async function suspendUser(userId) {
   const { error } = await supabase
     .from("profiles")
@@ -866,6 +1003,7 @@ export async function suspendUser(userId) {
   return { ok: true };
 }
 
+/** @param {string} userId */
 export async function unsuspendUser(userId) {
   const { error } = await supabase
     .from("profiles")
@@ -875,6 +1013,13 @@ export async function unsuspendUser(userId) {
   return { ok: true };
 }
 
+/**
+ * @param {string} action
+ * @param {string|null} [targetId]
+ * @param {string|null} [targetKey]
+ * @param {any} [oldValue]
+ * @param {any} [newValue]
+ */
 export async function logAdminAction(action, targetId = null, targetKey = null, oldValue = null, newValue = null) {
   const { error } = await supabase.rpc("log_admin_action", {
     p_action:     action,
@@ -887,6 +1032,7 @@ export async function logAdminAction(action, targetId = null, targetKey = null, 
   return { ok: true };
 }
 
+/** @param {number} [limit] */
 export async function fetchAuditLog(limit = 100) {
   const { data, error } = await supabase
     .from("admin_audit_log")
@@ -908,6 +1054,7 @@ export async function fetchAuditLog(limit = 100) {
 
 // --- F28.1: Saved Experiment Definitions ---
 
+/** @param {Record<string, any>} [row] */
 function normalizeExperiment(row = {}) {
   return {
     id: row.id,
@@ -921,6 +1068,7 @@ function normalizeExperiment(row = {}) {
   };
 }
 
+/** @param {string} modelId */
 export async function fetchExperiments(modelId) {
   const { data, error } = await supabase
     .from("experiments")
@@ -931,6 +1079,7 @@ export async function fetchExperiments(modelId) {
   return (data || []).map(normalizeExperiment);
 }
 
+/** @param {{ modelId: string, userId: string, name: string, description?: string, config: Record<string, any> }} params */
 export async function saveExperiment({ modelId, userId, name, description, config }) {
   const { data, error } = await supabase
     .from("experiments")
@@ -941,7 +1090,12 @@ export async function saveExperiment({ modelId, userId, name, description, confi
   return normalizeExperiment(data);
 }
 
+/**
+ * @param {string} id
+ * @param {{ name?: string, description?: string, config?: Record<string, any> }} params
+ */
 export async function updateExperiment(id, { name, description, config }) {
+  /** @type {Record<string, any>} */
   const patch = {};
   if (name !== undefined) patch.name = name;
   if (description !== undefined) patch.description = description || null;
@@ -956,6 +1110,10 @@ export async function updateExperiment(id, { name, description, config }) {
   return normalizeExperiment(data);
 }
 
+/**
+ * @param {string} id
+ * @param {string} userId
+ */
 export async function cloneExperiment(id, userId) {
   const { data: src, error: fetchErr } = await supabase
     .from("experiments")
@@ -978,6 +1136,7 @@ export async function cloneExperiment(id, userId) {
   return normalizeExperiment(data);
 }
 
+/** @param {string} id */
 export async function deleteExperiment(id) {
   const { error } = await supabase
     .from("experiments")
@@ -989,6 +1148,7 @@ export async function deleteExperiment(id) {
 
 // ── Model Versions ────────────────────────────────────────────────────────────
 
+/** @param {Record<string, any>} row */
 function normalizeVersion(row) {
   return {
     id: row.id,
@@ -1003,6 +1163,7 @@ function normalizeVersion(row) {
   };
 }
 
+/** @param {string} modelId */
 export async function getNextVersion(modelId) {
   const { data, error } = await supabase
     .from("model_versions")
@@ -1014,6 +1175,11 @@ export async function getNextVersion(modelId) {
   return (data && data.length > 0) ? data[0].version + 1 : 1;
 }
 
+/**
+ * @param {string} modelId
+ * @param {string} userId
+ * @param {{ version: number, name?: string, notes?: string, modelJson: Record<string, any>, isStructural?: boolean }} params
+ */
 export async function createVersion(modelId, userId, { version, name, notes, modelJson, isStructural }) {
   const { data, error } = await supabase
     .from("model_versions")
@@ -1039,6 +1205,7 @@ export async function createVersion(modelId, userId, { version, name, notes, mod
   return normalizeVersion(data);
 }
 
+/** @param {string} modelId */
 export async function listVersions(modelId) {
   const { data, error } = await supabase
     .from("model_versions")
@@ -1049,6 +1216,10 @@ export async function listVersions(modelId) {
   return (data || []).map(normalizeVersion);
 }
 
+/**
+ * @param {string} modelId
+ * @param {number} version
+ */
 export async function getVersion(modelId, version) {
   const { data, error } = await supabase
     .from("model_versions")
@@ -1061,6 +1232,11 @@ export async function getVersion(modelId, version) {
   return normalizeVersion(data);
 }
 
+/**
+ * @param {string} modelId
+ * @param {string} versionId
+ * @param {string} userId
+ */
 export async function deleteVersion(modelId, versionId, userId) {
   const { data: model, error: modelError } = await runDesModelsSelect((selectClause) =>
     supabase
@@ -1102,7 +1278,7 @@ const FEEDBACK_STATUSES = ["new", "reviewed", "actioned", "dismissed"];
 /**
  * Fetch feedback rows for admin triage. Requires admin RLS policy.
  * @param {{ limit?: number, offset?: number, status?: string }} opts
- * @returns {Promise<Array<{id,createdAt,userId,accountEmail,replyEmail,category,message,appVersion,pageContext,status}>>}
+ * @returns {Promise<Array<{id: string, createdAt: string, userId: string|null, accountEmail: string|null, replyEmail: string|null, category: string, message: string, appVersion: string|null, pageContext: string|null, status: string}>>}
  */
 export async function fetchFeedback({ limit = 100, offset = 0, status } = {}) {
   let query = supabase
@@ -1157,7 +1333,7 @@ export async function updateFeedbackStatus(id, status) {
 export async function fetchAdminUserStats() {
   const { data, error } = await supabase.rpc("get_admin_user_stats");
   if (error) throw error;
-  return (data || []).map(row => ({
+  return /** @type {Record<string, any>[]} */ (data || []).map(row => ({
     id:           row.id,
     email:        row.email,
     role:         row.role,
@@ -1190,7 +1366,7 @@ export async function fetchPlatformStats() {
 export async function fetchSignupCounts(days = 30) {
   const { data, error } = await supabase.rpc("get_signup_counts", { p_days: days });
   if (error) throw error;
-  return (data || []).map(row => ({ day: row.day, count: Number(row.count) }));
+  return /** @type {Record<string, any>[]} */ (data || []).map(row => ({ day: row.day, count: Number(row.count) }));
 }
 
 /**
@@ -1215,6 +1391,7 @@ export async function updateUserPlan(userId, plan) {
 /**
  * Normalise a model_schedules row from Supabase into a plain JS object.
  */
+/** @param {Record<string, any>} row */
 function normSchedule(row) {
   return {
     id:           row.id,
@@ -1233,6 +1410,7 @@ function normSchedule(row) {
  * Fetch all schedules for a given model, ordered by is_default DESC, name ASC.
  * Returns an empty array when the model has no schedules.
  */
+/** @param {string} modelId */
 export async function fetchModelSchedules(modelId) {
   const { data, error } = await supabase
     .from('model_schedules')
@@ -1247,6 +1425,7 @@ export async function fetchModelSchedules(modelId) {
 /**
  * Fetch a single model_schedule by its UUID.
  */
+/** @param {string} scheduleId */
 export async function fetchModelSchedule(scheduleId) {
   const { data, error } = await supabase
     .from('model_schedules')
@@ -1267,7 +1446,9 @@ export async function fetchModelSchedule(scheduleId) {
  * resolveInlineSchedules() prefers the compound key when available so that each
  * bEvent gets its own rows rather than sharing the first stream's rows.
  */
+/** @param {Record<string, any>[]} scheduleRows */
 export function buildSchedulesMap(scheduleRows) {
+  /** @type {Record<string, any>} */
   const map = {};
   for (const sched of scheduleRows) {
     const entries = Array.isArray(sched.scheduleJson) ? sched.scheduleJson : [];
@@ -1291,9 +1472,9 @@ export function buildSchedulesMap(scheduleRows) {
 /**
  * Save (insert or update) a model_schedule row.
  *
- * @param {object} schedule  Object with: id? (omit for insert), modelId, name, description?, scheduleJson, isDefault?
+ * @param {Record<string, any>} schedule  Object with: id? (omit for insert), modelId, name, description?, scheduleJson, isDefault?
  * @param {string} userId    Authenticated user id (set as created_by on insert)
- * @returns {object} Normalised schedule row
+ * @returns {Promise<Record<string, any>>} Normalised schedule row
  */
 export async function saveModelSchedule(schedule, userId) {
   const payload = {
@@ -1328,6 +1509,10 @@ export async function saveModelSchedule(schedule, userId) {
  * Delete a model_schedule row by id.
  * Returns { ok: true } on success or { ok: false, error: string } on failure.
  */
+/**
+ * @param {string} scheduleId
+ * @param {string} userId
+ */
 export async function deleteModelSchedule(scheduleId, userId) {
   // RLS enforces ownership — we still pass userId for belt-and-braces.
   const { data, error } = await supabase
@@ -1347,6 +1532,10 @@ export async function deleteModelSchedule(scheduleId, userId) {
  * Clears the is_default flag on all other schedules for the same model, then
  * sets it on the target schedule. Uses two separate updates (Supabase does not
  * support conditional multi-row updates in a single call).
+ */
+/**
+ * @param {string} scheduleId
+ * @param {string} modelId
  */
 export async function setDefaultSchedule(scheduleId, modelId) {
   // Clear existing default
@@ -1370,18 +1559,19 @@ export async function setDefaultSchedule(scheduleId, modelId) {
  * Used by Phase 2 migration: takes a model with inline rows[] and creates a
  * model_schedules row for them, then returns updated bEvents with scheduleRef set.
  *
- * @param {object} model     Full model object with bEvents
+ * @param {Record<string, any>} model     Full model object with bEvents
  * @param {string} userId    Authenticated user id
  * @param {string} [name]    Schedule name (default: "Default Schedule")
- * @returns {{ savedSchedule, updatedBEvents }} The saved schedule and bEvents with scheduleRef
+ * @returns {Promise<{ savedSchedule: Record<string, any>|null, updatedBEvents: any[] }>} The saved schedule and bEvents with scheduleRef
  */
 export async function extractInlineSchedule(model, userId, name = 'Default Schedule') {
   if (!model.id) throw new Error('extractInlineSchedule: model must have an id');
 
   // Collect all bEvent schedule entries that have rows[]
+  /** @type {Array<{eventId: any, rows: any}>} */
   const scheduleJson = [];
-  const updatedBEvents = (model.bEvents || []).map(be => {
-    const updatedSchedules = (be.schedules || []).map(s => {
+  const updatedBEvents = (model.bEvents || []).map((/** @type {any} */ be) => {
+    const updatedSchedules = (be.schedules || []).map((/** @type {any} */ s) => {
       if (!Array.isArray(s.rows) || s.rows.length === 0) return s;
       // This entry has inline rows — add to scheduleJson
       scheduleJson.push({ eventId: s.eventId ?? be.id, rows: s.rows });
@@ -1405,9 +1595,9 @@ export async function extractInlineSchedule(model, userId, name = 'Default Sched
   }, userId);
 
   // Patch bEvents with scheduleRef pointing to the saved schedule
-  const patchedBEvents = updatedBEvents.map(be => ({
+  const patchedBEvents = updatedBEvents.map((/** @type {any} */ be) => ({
     ...be,
-    schedules: (be.schedules || []).map(s => {
+    schedules: (be.schedules || []).map((/** @type {any} */ s) => {
       // Match back: if this entry's eventId was extracted, add scheduleRef
       const wasExtracted = scheduleJson.some(e => e.eventId === (s.eventId ?? be.id));
       if (wasExtracted && !s.scheduleRef) {
