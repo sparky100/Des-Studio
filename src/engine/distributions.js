@@ -1,3 +1,4 @@
+// @ts-check
 // engine/distributions.js — Random variate samplers
 //
 // EXTENDING: To add a new distribution:
@@ -9,6 +10,8 @@
  * Mulberry32 — fast, seedable 32-bit PRNG.
  * Returns a function that produces values in [0, 1) from a fixed seed.
  * Every call to mulberry32(seed) starts an independent identical sequence.
+ * @param {number} seed
+ * @returns {() => number}
  */
 export function mulberry32(seed) {
   return function () {
@@ -23,6 +26,9 @@ export function mulberry32(seed) {
  * Derive a deterministic sub-seed from a master seed and a named stream.
  * Uses a simple djb2-style hash to spread stream names across the integer space.
  * Same (masterSeed, streamName) always produces the same sub-seed.
+ * @param {number} masterSeed
+ * @param {string} streamName
+ * @returns {number}
  */
 export function deriveSubSeed(masterSeed, streamName) {
   let hash = 5381;
@@ -44,15 +50,18 @@ export function deriveSubSeed(masterSeed, streamName) {
  * Sprint 84's per-stream isolation caused M/M/c benchmark to fail with 20% error
  * due to seed-dependent sub-seed correlation. Reverted to single-stream PRNG.
  * Kept as a no-op stub so existing call sites don't break.
+ * @param {number} [_masterSeed]
  */
 export function createStreamRegistry(_masterSeed) {
   return {
+    /** @param {string} [_streamName] */
     getRng(_streamName) {
       return null;
     },
   };
 }
 
+/** @type {Record<string, string>} */
 const DIST_ALIASES = {
   fixed: "Fixed",
   uniform: "Uniform",
@@ -77,16 +86,22 @@ const DIST_ALIASES = {
   weighted: "Categorical",
 };
 
+/** @param {any} dist */
 export function normalizeDistributionName(dist) {
   if (!dist) return "Fixed";
   if (DISTRIBUTIONS[dist]) return dist;
   return DIST_ALIASES[String(dist).trim().toLowerCase()] || dist;
 }
 
+/** @param {Record<string, any>} [params] */
 export function getPiecewisePeriods(params = {}) {
   return Array.isArray(params.periods) ? params.periods : [];
 }
 
+/**
+ * @param {Record<string, any>} [params]
+ * @param {number} [clock]
+ */
 export function getActivePiecewisePeriod(params = {}, clock = 0) {
   const periods = getPiecewisePeriods(params);
   if (!periods.length) return null;
@@ -101,9 +116,11 @@ export function getActivePiecewisePeriod(params = {}, clock = 0) {
   return active;
 }
 
+/** @param {Record<string, any>} [period] */
 function periodDistribution(period = {}) {
   const raw = period.distribution || period;
   const dist = normalizeDistributionName(raw.dist || raw.type || "Fixed");
+  /** @type {Record<string, any>} */
   const params = { ...(raw.distParams || raw.params || {}) };
   if (dist === "Exponential" && params.mean == null && raw.rate != null) {
     const rate = parseFloat(raw.rate);
@@ -115,7 +132,16 @@ function periodDistribution(period = {}) {
   return { dist, params };
 }
 
-export const DISTRIBUTIONS = {
+/**
+ * @typedef {{
+ *   params: string[],
+ *   label: string,
+ *   hint: string,
+ *   sample: (p: Record<string, any>, rng: () => number, serverAttrs?: Record<string, any>|null, context?: Record<string, any>) => any,
+ * }} DistributionDef
+ */
+
+export const DISTRIBUTIONS = /** @type {Record<string, DistributionDef>} */ ({
   Fixed: {
     params: ["value"],
     label:  "Fixed",
@@ -234,7 +260,7 @@ export const DISTRIBUTIONS = {
     sample: (p, rng) => {
       const options = Array.isArray(p.options) ? p.options : [];
       if (!options.length) return null;
-      const totalWeight = options.reduce((sum, o) => sum + Math.max(0, Number(o.weight) || 0), 0);
+      const totalWeight = options.reduce((/** @type {number} */ sum, /** @type {any} */ o) => sum + Math.max(0, Number(o.weight) || 0), 0);
       if (totalWeight <= 0) return null;
       let r = rng() * totalWeight;
       for (const opt of options) {
@@ -290,17 +316,17 @@ export const DISTRIBUTIONS = {
       return Math.max(0, plannedTime - clock + jitter);
     },
   },
-};
+});
 
 /**
  * Sample a delay value from a named distribution.
  * @param {string} dist - Distribution name (key of DISTRIBUTIONS)
- * @param {object} params - Distribution parameters (string values from UI)
- * @param {function} rng - Seeded PRNG — must be provided (use buildEngine's rng)
- * @param {object|null} serverAttrs - Server entity attributes (for ServerAttr)
- * @param {object} context - Optional runtime context such as { clock }
+ * @param {Record<string, any>} [params] - Distribution parameters (string values from UI)
+ * @param {any} [rng] - Seeded PRNG — must be provided (use buildEngine's rng)
+ * @param {Record<string, any>|null} [serverAttrs] - Server entity attributes (for ServerAttr)
+ * @param {Record<string, any>} [context] - Optional runtime context such as { clock }
  */
-export function sample(dist, params = {}, rng, serverAttrs = null, context = {}) {
+export function sample(dist, params = {}, rng = null, serverAttrs = null, context = {}) {
   if (typeof rng !== 'function') {
     throw new Error('sample() requires a seeded PRNG function (rng) — pass buildEngine(model, seed).rng or mulberry32(seed)');
   }
@@ -316,13 +342,16 @@ export function sample(dist, params = {}, rng, serverAttrs = null, context = {})
 /**
  * Sample all attrDefs for a new entity instance.
  * attrDefs: array of { name, dist, distParams } OR legacy string "k=v,k2=v2"
+ * @param {any} attrDefs
+ * @param {any} rng
  */
 export function sampleAttrs(attrDefs, rng) {
   if (!attrDefs) return {};
   // Legacy string format
   if (typeof attrDefs === "string") {
+    /** @type {Record<string, any>} */
     const o = {};
-    attrDefs.split(",").forEach(p => {
+    attrDefs.split(",").forEach((/** @type {string} */ p) => {
       const [k, v] = (p || "").split("=").map(x => x.trim());
       if (!k) return;
       const n = parseFloat(v);
@@ -335,8 +364,9 @@ export function sampleAttrs(attrDefs, rng) {
   // { name, valueType, defaultValue } (editor format). When dist is absent
   // but defaultValue is present, use it directly rather than sampling Fixed(0).
   if (Array.isArray(attrDefs)) {
+    /** @type {Record<string, any>} */
     const o = {};
-    attrDefs.forEach(a => {
+    attrDefs.forEach((/** @type {any} */ a) => {
       if (!a.name) return;
       if (a.dist) {
         o[a.name] = sample(a.dist, a.distParams || { value: "0" }, rng);
