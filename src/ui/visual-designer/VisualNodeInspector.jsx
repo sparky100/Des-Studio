@@ -2,6 +2,7 @@ import { useId } from "react";
 ;
 import { Btn, CommitInput, DistPicker, SH, Tag } from "../shared/components.jsx";
 import { ConditionBuilder, EntityFilterBuilder } from "../editors/index.jsx";
+import { reorderCEventByPriority } from "../editors/helpers.jsx";
 import { VISUAL_NODE_TYPES, conditionLabel } from "./graph.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { disciplineAttr, disciplineBase } from "../shared/utils.js";
@@ -263,7 +264,11 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
             value={String(cEvent.priority || 1)}
             disabled={!canEdit}
             transform={positiveIntTransform(String(cEvent.priority || 1))}
-            onChange={value => onPatchNode(node, { priority: value })}
+            // Priority isn't a single-event field — array order is the source of truth and
+            // priority is densely renumbered 1..n (same invariant CEventEditor's drag reorder
+            // maintains). Compute the reordered+renumbered array with the shared helper and
+            // hand it back whole via patch.cEvents, rather than writing the number in place.
+            onChange={value => onPatchNode(node, { cEvents: reorderCEventByPriority(model.cEvents || [], cEvent.id, value) })}
           />
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>

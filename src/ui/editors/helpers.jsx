@@ -707,6 +707,26 @@ const SectionFilterTabs = ({ sections = [], activeIds = [], onToggle }) => {
   );
 };
 
+// reorderCEventByPriority — moves the C-event with `id` to the array position implied
+// by `newPriority` (1-based, clamped to [1, events.length]) and densely renumbers every
+// event's priority to its new index+1. Array order is the source of truth for priority
+// (mirrors the drag-to-reorder semantics in CEventEditor's handleDrop) — this is the one
+// place that reconciles a typed priority value with that invariant, so both the C-event
+// list editor and the Visual Designer inspector route through it. Pure: returns a new
+// array, does not mutate `events`.
+function reorderCEventByPriority(events, id, newPriority) {
+  const list = Array.isArray(events) ? events : [];
+  const fromIdx = list.findIndex(ev => ev.id === id);
+  if (fromIdx === -1) return list;
+  const n = list.length;
+  const parsed = Math.round(Number(newPriority));
+  const clamped = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 1, 1), n);
+  const reordered = [...list];
+  const [moved] = reordered.splice(fromIdx, 1);
+  reordered.splice(clamped - 1, 0, moved);
+  return reordered.map((ev, idx) => ({ ...ev, priority: idx + 1 }));
+}
+
 // filterBySection — returns items whose id appears in any of the selected sections, or all/unassigned.
 export function filterBySection(items, sections, activeSectionIds = []) {
   if (!Array.isArray(activeSectionIds) || activeSectionIds.length === 0) return items;
@@ -723,4 +743,4 @@ export function filterBySection(items, sections, activeSectionIds = []) {
   return items.filter(item => memberSet.has(item.id));
 }
 
-export { displayEventName, queueDisplayName, conditionOptions, assignOptions, bEffectOptions, DropField, EffectPicker, toTitleCase, normTypeName, SectionFilterTabs };
+export { displayEventName, queueDisplayName, conditionOptions, assignOptions, bEffectOptions, DropField, EffectPicker, toTitleCase, normTypeName, SectionFilterTabs, reorderCEventByPriority };

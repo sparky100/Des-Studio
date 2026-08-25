@@ -37,6 +37,7 @@ import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
 import { ParamBrowserPanel, paramColor } from "./ParamBrowserPanel.jsx";
 import { alpha, RADIUS } from "../shared/tokens.js";
+import { prefersReducedMotion } from "../shared/hooks.js";
 import { generateReport, sanitizeFilename } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -365,7 +366,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const saveInProgressRef = useRef(false);
   const logRef = useRef([]);
   const runStartPerfRef = useRef(null);
-  const [animationEnabled, setAnimationEnabled] = useState(true);
+  const [animationEnabled, setAnimationEnabled] = useState(() => !prefersReducedMotion());
   const [collectTimeSeries, setCollectTimeSeries] = useState(true);
   const [forceTraceCollection, setForceTraceCollection] = useState(false);
   const [chartChoiceDialog, setChartChoiceDialog] = useState(null); // { messages } | null
@@ -2820,12 +2821,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       )}
 
       {saveStatus && (
-        <div style={{
-          background: saveStatus.state === 'error' ? C.errorBg : saveStatus.state === 'success' ? C.green + '18' : C.surface,
-          border: `1px solid ${saveStatus.state === 'error' ? C.danger : saveStatus.state === 'success' ? C.green + '44' : C.border}`,
-          borderRadius: 6, padding: 12, color: saveStatus.state === 'error' ? C.error : saveStatus.state === 'success' ? C.green : C.text,
-          fontSize: 12, fontFamily: FONT,
-        }}>
+        <div
+          role={saveStatus.state === 'error' ? 'alert' : 'status'}
+          style={{
+            background: saveStatus.state === 'error' ? C.errorBg : saveStatus.state === 'success' ? C.green + '18' : C.surface,
+            border: `1px solid ${saveStatus.state === 'error' ? C.danger : saveStatus.state === 'success' ? C.green + '44' : C.border}`,
+            borderRadius: 6, padding: 12, color: saveStatus.state === 'error' ? C.error : saveStatus.state === 'success' ? C.green : C.text,
+            fontSize: 12, fontFamily: FONT,
+          }}>
           {saveStatus.message}
         </div>
       )}
@@ -2846,11 +2849,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
       {singleRunStatus !== "idle" && (
         <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div role="status" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SINGLE RUN</div>
             <Tag label={singleRunStatus} color={singleRunStatus === "complete" ? C.green : singleRunStatus === "cancelled" ? C.red : C.amber} />
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div aria-live="off" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {[
               { label: "Sim time",       value: singleRunProgress?.clock != null ? fmt(singleRunProgress.clock) : "—" },
               { label: "Cycle",          value: `${singleRunProgress?.completed || 0}${singleRunProgress?.total ? `/${singleRunProgress.total}` : ""}` },
@@ -2864,7 +2867,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             ))}
           </div>
           {(singleRunStatus === "cancelling" || singleRunStatus === "cancelled") && (
-            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
+            <div role="status" style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
               Cancellation waits for the next safe engine checkpoint, then shows partial results without saving them.
             </div>
           )}
@@ -2876,13 +2879,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>REPLICATION BATCH</div>
             <Tag label={batchStatus} color={batchStatus === "complete" ? C.green : batchStatus === "error" || batchStatus === "cancelled" ? C.red : C.amber} />
-            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
+            <div role="status" style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
               {batchStatus === "complete"
                 ? `${replicationResults.length} replications complete`
                 : `Running ${batchProgress?.completed || replicationResults.length}/${batchProgress?.total || replications}`}
             </div>
             {batchStatus !== "complete" && (
-              <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>
+              <div aria-live="off" style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>
                 Pool: {batchProgress?.workerCount || "—"} · Running: {batchProgress?.running || 0} · Pending: {batchProgress?.pending || 0}
               </div>
             )}

@@ -1709,7 +1709,6 @@ export function updateVisualNode(model, node, patch = {}) {
       const nextEvent = {
         ...event,
         ...(patch.name !== undefined ? { name: patch.name } : {}),
-        ...(patch.priority !== undefined ? { priority: Number(patch.priority) || 1 } : {}),
         ...(patch.condition !== undefined ? { condition: patch.condition } : {}),
         ...(patch.entityFilter !== undefined ? { entityFilter: patch.entityFilter } : {}),
       };
@@ -1731,6 +1730,14 @@ export function updateVisualNode(model, node, patch = {}) {
       }
       return nextEvent;
     });
+    // Priority isn't a single-event field patch — array order is the source of truth
+    // and priority is densely renumbered 1..n (same invariant as CEventEditor's drag
+    // reorder). The inspector computes the reordered+renumbered array itself (via the
+    // shared reorderCEventByPriority helper) and hands it back whole through patch.cEvents,
+    // same idea as the sectionId cascade below reaching past this node's own fields.
+    if (patch.cEvents) {
+      next.cEvents = patch.cEvents;
+    }
   }
   if (node.type === VISUAL_NODE_TYPES.SINK) {
     const sinkRefId = node.refId?.startsWith("route-exit:") ? node.refId.slice("route-exit:".length) : node.refId;

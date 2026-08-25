@@ -4,6 +4,7 @@ import { useTheme } from "./shared/ThemeContext.jsx";
 import { FeedbackModal } from "./FeedbackModal.jsx";
 import { AboutModal }    from "./AboutModal.jsx";
 import { HeaderAccountMenu } from "./HeaderAccountMenu.jsx";
+import { KeyboardShortcutsModal } from "./shared/KeyboardShortcutsModal.jsx";
 
 // Inline SVG icon for settings (gear)
 function GearIcon() {
@@ -40,8 +41,9 @@ export function AppNavBar({
     alignItems: "center",
     gap: 5,
   };
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [aboutOpen,    setAboutOpen]    = useState(false);
+  const [feedbackOpen,   setFeedbackOpen]   = useState(false);
+  const [aboutOpen,      setAboutOpen]      = useState(false);
+  const [shortcutsOpen,  setShortcutsOpen]  = useState(false);
 
   return (
     <>
@@ -100,6 +102,7 @@ export function AppNavBar({
           onFeedback={() => setFeedbackOpen(true)}
           onAbout={() => setAboutOpen(true)}
           onHelp={onHelpOpen}
+          onShortcuts={() => setShortcutsOpen(true)}
           onAdminPanel={onAdmin}
           onSignOut={onSignOut}
         />
@@ -116,6 +119,9 @@ export function AppNavBar({
         isOpen={aboutOpen}
         onClose={() => setAboutOpen(false)}
       />
+      {shortcutsOpen && (
+        <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} />
+      )}
     </>
   );
 }

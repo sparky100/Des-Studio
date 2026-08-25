@@ -1,9 +1,95 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExecutePanel } from '../../src/ui/execute/index.jsx';
 import { ModelCard, ModelDetail, NewModelModal } from '../../src/ui/ModelDetail.jsx';
 import { ModelTabBar } from '../../src/ui/ModelTabBar.jsx';
+
+const mockBuildEngine = vi.hoisted(() => vi.fn());
+const mockRunReplications = vi.hoisted(() => vi.fn());
+const mockFetchUserSettings = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
+
+vi.mock('../../src/engine/index.js', async () => {
+  const actual = await vi.importActual('../../src/engine/index.js');
+  return { ...actual, buildEngine: mockBuildEngine };
+});
+
+vi.mock('../../src/engine/replication-runner.js', async () => {
+  const actual = await vi.importActual('../../src/engine/replication-runner.js');
+  return {
+    ...actual,
+    runReplications: mockRunReplications,
+    createReplicationPool: () => ({ destroyed: false, get: vi.fn(), destroy: vi.fn() }),
+  };
+});
+
+vi.mock('../../src/llm/apiClient.js', async () => {
+  const actual = await vi.importActual('../../src/llm/apiClient.js');
+  return { ...actual, streamNarrative: vi.fn() };
+});
+
+vi.mock('../../src/db/models.js', async () => {
+  const actual = await vi.importActual('../../src/db/models.js');
+  return { ...actual, fetchUserSettings: mockFetchUserSettings };
+});
+
+function makeMockEngine(totalCycles = 120) {
+  let cycle = 0;
+
+  const makeResult = (options = {}) => ({
+    finalTime: cycle,
+    log: options.cancelled
+      ? [{ phase: 'CANCEL', time: cycle, message: options.message }]
+      : [{ phase: 'END', time: cycle, message: 'done' }],
+    snap: { clock: cycle, entities: [], served: 0, reneged: 0, scalars: {} },
+    summary: { total: 0, served: 0, reneged: 0, avgWait: null, avgSvc: null, avgSojourn: null, warnings: [] },
+    runtimeMetrics: {
+      wall_clock_ms: null,
+      replications: 1,
+      events_processed: cycle,
+      c_event_scans: 0,
+      c_events_fired: 0,
+      entities_created: 0,
+      entities_completed: 0,
+    },
+    phaseCTruncated: false,
+    warnings: [],
+    entitySummary: [],
+    waitDist: {},
+    ...(options.cancelled ? { cancelled: true, partial: true, completionStatus: 'cancelled' } : {}),
+  });
+
+  return {
+    step() {
+      if (cycle >= totalCycles) {
+        return { done: true, phaseCTruncated: false };
+      }
+      cycle += 1;
+      return { done: false, phaseCTruncated: false };
+    },
+    getProgress(overrides = {}) {
+      const cancelled = !!overrides.cancelled;
+      const done = !!overrides.done || cancelled || cycle >= totalCycles;
+      return {
+        mode: 'single',
+        completed: cycle,
+        total: 5000,
+        running: done ? 0 : 1,
+        pending: 0,
+        cancelled,
+        workerCount: 1,
+        clock: cycle,
+        felSize: Math.max(0, totalCycles - cycle),
+        eventsProcessed: cycle,
+        maxCycles: 5000,
+        terminationMode: 'time',
+      };
+    },
+    buildResult(options = {}) {
+      return makeResult(options);
+    },
+  };
+}
 
 const validModel = {
   id: 'model-1',
@@ -30,7 +116,30 @@ const validModel = {
   updatedAt: '2026-05-04T10:00:00Z',
 };
 
+// Admission checks want a terminating bEvent alongside the arrival — validModel above
+// is only exercised for tab/dirty-state assertions, so it's kept minimal. The live-region
+// and animation-preference tests below actually start a run, so they need a model that
+// clears admission with no blockers.
+const runnableModel = {
+  ...validModel,
+  bEvents: [
+    ...validModel.bEvents,
+    {
+      id: 'b_complete',
+      name: 'Complete',
+      scheduledTime: '9999',
+      effect: 'COMPLETE()',
+      schedules: [],
+    },
+  ],
+};
+
 describe('accessibility pass', () => {
+  beforeEach(() => {
+    mockFetchUserSettings.mockReset();
+    mockFetchUserSettings.mockImplementation(() => new Promise(() => {}));
+  });
+
   it('opens model cards from the keyboard', async () => {
     const user = userEvent.setup();
     const onOpen = vi.fn();
@@ -170,4 +279,92 @@ describe('accessibility pass', () => {
     expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
   }, 15000);
+
+  it('exposes single-run status and cancellation-save-status as live regions, with the progress tiles muted', async () => {
+    mockBuildEngine.mockReset();
+    mockBuildEngine.mockImplementation(() => makeMockEngine(2000));
+
+    render(<ExecutePanel model={runnableModel} modelId="model-1" userId="user-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
+
+    const singleRunLabel = await screen.findByText('SINGLE RUN');
+    const singleRunHeader = singleRunLabel.closest('[role="status"]');
+    expect(singleRunHeader).not.toBeNull();
+
+    // The per-tick progress tiles churn every step and must not spam announcements.
+    const tiles = singleRunHeader.parentElement.querySelector('[aria-live="off"]');
+    expect(tiles).not.toBeNull();
+    expect(tiles.textContent).toMatch(/Sim time/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel run/i }));
+    await waitFor(() => expect(screen.getByText('cancelled')).toBeInTheDocument());
+
+    // Cancellation notice is an informational status region.
+    expect(screen.getByText(/Cancellation waits for the next safe engine checkpoint/i)).toHaveAttribute('role', 'status');
+
+    // The run-save status block escalates to role="alert" for the cancellation error state.
+    const alertRegion = screen.getByRole('alert');
+    expect(alertRegion).toHaveTextContent(/Run cancelled\. Partial results were not saved\./i);
+  });
+
+  it('exposes role="status" on the batch progress line and mutes the pool/running/pending line', async () => {
+    mockRunReplications.mockReset();
+    mockRunReplications.mockImplementation(({ onProgress }) => {
+      onProgress({ completed: 0, total: 3, running: 2, pending: 1, cancelled: false, workerCount: 2 });
+      return { cancel: vi.fn() };
+    });
+
+    render(<ExecutePanel model={runnableModel} modelId="model-1" userId="user-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+    fireEvent.change(screen.getByLabelText(/replication count/i), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
+
+    const progressLine = await screen.findByText('Running 0/3');
+    expect(progressLine).toHaveAttribute('role', 'status');
+
+    const poolLine = screen.getByText(/Pool: 2/i);
+    expect(poolLine).toHaveAttribute('aria-live', 'off');
+  });
+
+  it('defaults token-animation off when the OS signals prefers-reduced-motion', async () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockImplementation(query => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+
+    try {
+      render(<ExecutePanel model={runnableModel} modelId="model-1" userId="user-1" />);
+      fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+
+      const animateToggle = await screen.findByRole('checkbox', { name: /show movement during auto-run/i });
+      expect(animateToggle).not.toBeChecked();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('lets a stored user setting override the reduced-motion default', async () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockImplementation(query => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    mockFetchUserSettings.mockReset();
+    mockFetchUserSettings.mockResolvedValue({ settings: { execute: { animateTokens: true } } });
+
+    try {
+      render(<ExecutePanel model={runnableModel} modelId="model-1" userId="user-1" />);
+      fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+
+      const animateToggle = await screen.findByRole('checkbox', { name: /show movement during auto-run/i });
+      await waitFor(() => expect(animateToggle).toBeChecked());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

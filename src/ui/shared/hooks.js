@@ -29,3 +29,11 @@ export function useViewport() {
     isDesktop: width >= BP.compact,
   };
 }
+
+export function prefersReducedMotion() {
+  try {
+    return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}

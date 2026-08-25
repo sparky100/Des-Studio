@@ -174,4 +174,21 @@ describe("ModelDetail Model Health panel", () => {
     expect(screen.queryByText(/fix blocking validation issues/i)).not.toBeInTheDocument();
     expect(screen.getByText(/pick the path that feels most natural/i)).toBeInTheDocument();
   });
+
+  test("labels a Model Health issue with the tab bar's own label — single source, no second hard-coded map (93.4)", () => {
+    renderDetail({
+      ...baseModel,
+      entityTypes: [{ id: "bad-customer", name: "", role: "customer", attrDefs: [] }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /model health →/i }));
+    // Before 93.4 this prefix came from a second, independently hard-coded
+    // map (MODEL_HEALTH_TAB_LABELS) that could silently disagree with the
+    // tab bar's own labels (it said "Design"/"AI Designer" while the tab bar
+    // said "Draw"/"Describe"). That map is gone — both now read TABS, so
+    // this prefix and the tab bar button text can no longer drift apart.
+    fireEvent.click(screen.getByRole("button", { name: /^Entity Types: Entity class at position 1 has an empty name/i }));
+
+    expect(screen.getByRole("button", { name: /^entity types$/i })).toHaveAttribute("aria-pressed", "true");
+  });
 });

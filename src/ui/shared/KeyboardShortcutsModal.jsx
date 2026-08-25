@@ -7,12 +7,15 @@ import { useTheme } from "./ThemeContext.jsx";
 const SHORTCUTS = [
   { keys: ["Ctrl", "Z"],        description: "Undo last model edit" },
   { keys: ["Ctrl", "Shift", "Z"], description: "Redo last undone edit" },
+  { keys: ["Ctrl", "Y"],        description: "Redo last undone edit (alias)" },
   { keys: ["Ctrl", "S"],        description: "Save model" },
   { keys: ["Ctrl", "C"],        description: "Copy selected nodes (Visual Designer canvas)" },
   { keys: ["Ctrl", "V"],        description: "Paste copied nodes (Visual Designer canvas)" },
   { keys: ["Ctrl", "D"],        description: "Duplicate selected nodes in place (Visual Designer canvas)" },
   { keys: ["Delete"],           description: "Delete selected nodes or edge (Visual Designer canvas)" },
-  { keys: ["?"],                description: "Show this keyboard shortcuts list" },
+  { keys: ["Backspace"],        description: "Delete selected nodes or edge (Visual Designer canvas)" },
+  { keys: ["Arrow keys"],       description: "Nudge selected node(s) 1px (Visual Designer canvas); hold Shift for 24px" },
+  { keys: ["?"],                description: "Open Help Assistant" },
   { keys: ["Esc"],              description: "Close modal / cancel action" },
 ];
 
