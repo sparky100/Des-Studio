@@ -3,7 +3,7 @@
 import { TOKEN_COLORS } from "../shared/tokens.js";
 import { slugifyResultName, timestampForFilename, csvEscape, downloadTextFile } from "../shared/utils.js";
 import { buildWaitDistEntry, finalizeWeightedStats } from "../../engine/statistics.js";
-import * as XLSX from 'xlsx';
+import { downloadWorkbook } from "../shared/workbook.js";
 export { downloadTextFile };
 
 export const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
@@ -620,9 +620,9 @@ export function buildResultsCsv({ results, replicationResults = [], aggregateSta
   return rows.map(row => row.map(csvEscape).join(",")).join("\n");
 }
 
-export function buildResultsXlsx({ results, replicationResults = [], aggregateStats = {}, config = {}, model } = {}) {
+export async function buildResultsXlsx({ results, replicationResults = [], aggregateStats = {}, config = {}, model } = {}) {
   const modelName = model?.name || 'Untitled model';
-  const wb = XLSX.utils.book_new();
+  const sheets = [];
 
   // Sheet 1: Summary
   const summary = results?.summary || {};
@@ -647,9 +647,7 @@ export function buildResultsXlsx({ results, replicationResults = [], aggregateSt
     ['Total Cost', summary.totalCost ?? ''],
     ['Cost per Served', summary.costPerServed ?? ''],
   ];
-  const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
-  summaryWs['!cols'] = [{ wch: 22 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+  sheets.push({ name: 'Summary', rows: summaryRows, colWidths: [22, 18] });
 
   // Sheet 2: Replications
   const repRows = [['Replication', 'Seed', 'Arrived', 'Served', 'Reneged', 'Completion Rate', 'Avg Wait', 'Avg Svc', 'Avg Sojourn', 'Avg Time in System', 'Total Cost', 'Cost per Served', 'Final Time']];
@@ -679,9 +677,7 @@ export function buildResultsXlsx({ results, replicationResults = [], aggregateSt
       repRows.push([metric, stat.n, stat.mean, stat.lower, stat.upper, stat.halfWidth]);
     }
   }
-  const repWs = XLSX.utils.aoa_to_sheet(repRows);
-  repWs['!cols'] = Array(13).fill({ wch: 14 });
-  XLSX.utils.book_append_sheet(wb, repWs, 'Replications');
+  sheets.push({ name: 'Replications', rows: repRows, colWidths: Array(13).fill(14) });
 
   // Sheet 3: Entity Journeys (when present)
   const entitySummary = results?.entitySummary;
@@ -705,20 +701,11 @@ export function buildResultsXlsx({ results, replicationResults = [], aggregateSt
         ]);
       }
     }
-    const ejWs = XLSX.utils.aoa_to_sheet(ejRows);
-    ejWs['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ejWs, 'Entity Journeys');
+    sheets.push({ name: 'Entity Journeys', rows: ejRows, colWidths: [12, 14, 12, 12, 10, 14, 10, 14, 10, 14, 10] });
   }
 
   // Write to buffer and trigger download
-  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `flow-results-${slugifyResultName(modelName)}-${timestampForFilename()}.xlsx`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  await downloadWorkbook(sheets, `flow-results-${slugifyResultName(modelName)}-${timestampForFilename()}.xlsx`);
 }
 
 
