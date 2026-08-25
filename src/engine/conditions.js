@@ -282,8 +282,10 @@ function applyOperator(left, operator, right) {
  * Evaluate a predicate JSON object (Addition 1 §4) against simulation state.
  * Never calls eval, new Function, or any dynamic code execution.
  *
- * @param {object} predicate - Single: { variable, operator, value }
+ * @param {object|string} predicate - Single: { variable, operator, value }
  *                             Compound: { operator: 'AND'|'OR', clauses: [...] }
+ *                             A raw legacy-format condition string is also
+ *                             accepted — migrateLegacyCondition() below parses it.
  * @param {object} state     - { currentEntity, resources, queues, ...userVars }
  */
 export function evaluatePredicate(predicate, state) {

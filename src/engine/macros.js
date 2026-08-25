@@ -1,3 +1,4 @@
+// @ts-check
 // engine/macros.js — Effect macro registry
 //
 // EXTENDING: To add a new macro (e.g. BATCH, PRIORITY_ASSIGN):
@@ -13,8 +14,23 @@ import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
 import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
 
+// ctx is an intentionally loose bag — see the EXTENDING note above and the
+// per-macro usages below for the (large, and macro-specific) set of fields
+// that can be present. Record<string, any> reflects that honestly.
+/**
+ * @typedef {{
+ *   name: string,
+ *   pattern: RegExp,
+ *   apply: (match: RegExpMatchArray, ctx: Record<string, any>) => void,
+ * }} MacroDef
+ */
+
 // ── Private helpers shared across multiple macros ────────────────────────────
 
+/**
+ * @param {string} s
+ * @returns {any} a number, boolean, string, or raw string fallback
+ */
 function resolveScalarString(s) {
   if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))
     return s.slice(1, -1);
@@ -27,6 +43,11 @@ function resolveScalarString(s) {
   return s;
 }
 
+/**
+ * @param {Record<string, any>} state
+ * @param {number} clock
+ * @param {string} cName
+ */
 function flushContainerIntegral(state, clock, cName) {
   const key  = `__container_${cName}`;
   const prev = state[`__containerPrev_${cName}`] ?? clock;
@@ -35,6 +56,11 @@ function flushContainerIntegral(state, clock, cName) {
   state[`__containerPrev_${cName}`] = clock;
 }
 
+/**
+ * @param {Record<string, any>} state
+ * @param {string} cName
+ * @param {number} newLevel
+ */
 function updateContainerMinMax(state, cName, newLevel) {
   const minKey = `__containerMin_${cName}`;
   const maxKey = `__containerMax_${cName}`;
@@ -43,6 +69,7 @@ function updateContainerMinMax(state, cName, newLevel) {
 }
 
 
+/** @param {Record<string, any>} ctx */
 function resolveContextEntity(ctx) {
   const custId = ctx.getLastCustId();
   return custId != null ? findEntityById(ctx.index, ctx.entities, custId) : null;
@@ -51,9 +78,11 @@ function resolveContextEntity(ctx) {
 // ── Safe scalar expression evaluator (replaces new Function in applyScalar) ──
 
 // Recursive descent parser for arithmetic on number literals: + - * / ()
+/** @param {string} s */
 function safeArithmetic(s) {
   let i = 0;
   function skipWS() { while (i < s.length && s[i] === ' ') i++; }
+  /** @returns {number} */
   function parseNumber() {
     skipWS();
     let str = '';
@@ -61,6 +90,7 @@ function safeArithmetic(s) {
     while (i < s.length && /[\d.]/.test(s[i])) str += s[i++];
     return str ? parseFloat(str) : NaN;
   }
+  /** @returns {number} */
   function parsePrimary() {
     skipWS();
     // Math functions: min(a,b), max(a,b), abs(a), round(a), floor(a), ceil(a)
@@ -93,6 +123,7 @@ function safeArithmetic(s) {
     }
     return parseNumber();
   }
+  /** @returns {number} */
   function parseMulDiv() {
     let result = parsePrimary();
     skipWS();
@@ -104,6 +135,7 @@ function safeArithmetic(s) {
     }
     return result;
   }
+  /** @returns {number} */
   function parseAddSub() {
     let result = parseMulDiv();
     skipWS();
@@ -122,6 +154,10 @@ function safeArithmetic(s) {
 
 // Evaluate a scalar RHS expression after state variable substitution.
 // Returns a number, boolean, string, or raw string fallback — never executes code.
+/**
+ * @param {string} v
+ * @returns {any}
+ */
 function safeEvalScalar(v) {
   return resolveScalarString(v.trim());
 }
@@ -129,6 +165,11 @@ function safeEvalScalar(v) {
 // Evaluate an expression that may reference Entity.<attr>, state variables, clock,
 // arithmetic operators (+,-,*,/), parentheses, and math functions (min,max,abs,round,floor,ceil).
 // Never calls eval or new Function.
+/**
+ * @param {any} expr
+ * @param {{ state: Record<string, any>, clock: number, entity: Record<string, any>|null }} context
+ * @returns {any}
+ */
 function evalEntityExpr(expr, { state, clock, entity }) {
   let s = String(expr).trim();
   if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))
@@ -152,16 +193,21 @@ function evalEntityExpr(expr, { state, clock, entity }) {
   return resolveScalarString(s.trim());
 }
 
+/** @param {any} value */
 function normName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+/**
+ * @param {Record<string, any>} ctx
+ * @param {string} serverTypeName
+ */
 function retireIdleExcessServers(ctx, serverTypeName) {
   const key = normName(serverTypeName);
   const desired = ctx.state?.__desiredServerCapacity?.[key];
   if (!Number.isInteger(desired)) return 0;
 
-  const servers = ctx.entities.filter(e => e.role === "server" && normName(e.type) === key);
+  const servers = ctx.entities.filter((/** @type {any} */ e) => e.role === "server" && normName(e.type) === key);
   let excess = servers.length - desired;
   let retired = 0;
   for (let i = ctx.entities.length - 1; i >= 0 && excess > 0; i--) {
@@ -187,6 +233,11 @@ function retireIdleExcessServers(ctx, serverTypeName) {
 // of servers (a COSEIZE hold releasing more than one type at once) — pass the
 // full array so the stage record retains every co-seized resource type, not
 // just the first.
+/**
+ * @param {Record<string, any>} cust
+ * @param {Record<string, any>|Record<string, any>[]|null} srvOrServers
+ * @param {number} clock
+ */
 export function buildStageRecord(cust, srvOrServers, clock) {
   const servers = Array.isArray(srvOrServers) ? srvOrServers.filter(Boolean) : (srvOrServers ? [srvOrServers] : []);
   const waitStartedAt = cust.lastStageStart ?? cust.arrivalTime;
@@ -209,6 +260,10 @@ export function buildStageRecord(cust, srvOrServers, clock) {
   };
 }
 
+/**
+ * @param {Record<string, any>|null} customer
+ * @param {Record<string, any>|null} server
+ */
 function claimMatchesPair(customer, server) {
   if (!customer || !server) return false;
 
@@ -229,6 +284,10 @@ function claimMatchesPair(customer, server) {
   return true;
 }
 
+/**
+ * @param {Record<string, any>|null} entity
+ * @param {{ status: string, routeId?: string, routeLabel?: string, endedBy: string, endedAt: number, sourceEventId?: any, sourceEventName?: any }} outcome
+ */
 function setOutcome(entity, { status, routeId, routeLabel, endedBy, endedAt, sourceEventId = null, sourceEventName = null }) {
   if (!entity) return;
   entity.outcome = {
@@ -246,6 +305,12 @@ function setOutcome(entity, { status, routeId, routeLabel, endedBy, endedAt, sou
 // customer done, records the service stage, releases the primary server (and any
 // COSEIZE auxiliary servers still claimed by this customer). Callers are
 // responsible for validating cust/srv beforehand (status checks, claim matching).
+/**
+ * @param {Record<string, any>} cust
+ * @param {Record<string, any>|null} srv
+ * @param {Record<string, any>} ctx
+ * @param {{ felRef?: Record<string, any>|null, endedBy?: string }} [options]
+ */
 function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLETE" } = {}) {
   const { entities, state, clock, msgs } = ctx;
 
@@ -280,7 +345,7 @@ function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLE
   // Release any auxiliary servers that were co-seized with this customer (COSEIZE pattern).
   // They have currentCustId pointing to the now-done customer but were not tracked in
   // the primary server context, so completion would otherwise leave them permanently busy.
-  const auxiliaryBusy = entities.filter(e =>
+  const auxiliaryBusy = entities.filter((/** @type {any} */ e) =>
     e.role === "server" &&
     e.currentCustId === cust.id &&
     e.id !== srv?.id &&
@@ -292,6 +357,7 @@ function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLE
   }
 }
 
+/** @type {MacroDef[]} */
 export const MACROS = [
 
   // ── ARRIVE(Type[, QueueName]) ──────────────────────────────────────────────
@@ -303,7 +369,7 @@ export const MACROS = [
       const queueName = match[2]?.trim() || (typeName + "Queue");
       const { model, clock, helpers, msgs, felRef } = ctx;
       const et = (model.entityTypes || []).find(
-        e => e.name.trim().toLowerCase() === typeName.trim().toLowerCase()
+        (/** @type {any} */ e) => e.name.trim().toLowerCase() === typeName.trim().toLowerCase()
       );
 
       // ── Construct the entity, then run it through the centralized join
@@ -369,13 +435,14 @@ export const MACROS = [
       const discipline = matchedQ?.discipline || 'FIFO';
       const queueToken = matchedQ ? matchedQ.name : cType;
 
+      /** @type {any} */
       const filterFn = ctx.entityFilter
-        ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
+        ? (/** @type {any} */ entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
 
       const candidates = listWaiting(queueToken, discipline, entities, filterFn, !!matchedQ, true, ctx.index);
       const allIdleServers = isAnyType
-        ? (helpers.allServers ? helpers.allServers().filter(s => s.status === "idle" && !s._suspended) : [])
+        ? (helpers.allServers ? helpers.allServers().filter((/** @type {any} */ s) => s.status === "idle" && !s._suspended) : [])
         : (helpers.idleOf(sType) || []);
 
       const cust = candidates[0] ?? null;
@@ -392,28 +459,29 @@ export const MACROS = [
       const idleServers = skill
         ? (isAnyType
             ? (helpers.idleOfAnySkill ? helpers.idleOfAnySkill(skill) : []) || []
-            : allIdleServers.filter(s => helpers.hasSkillType(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill))))
+            : allIdleServers.filter((/** @type {any} */ s) => helpers.hasSkillType(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill))))
         : allIdleServers;
 
       // Skill-based preference: higher SkillProfile.priority wins; stable
       // sort preserves FIFO-by-idle-time order within the same tier.
       const rankedServers = skill
-        ? [...idleServers].sort((a, b) => (b._skillPriority || 0) - (a._skillPriority || 0))
+        ? [...idleServers].sort((/** @type {any} */ a, /** @type {any} */ b) => (b._skillPriority || 0) - (a._skillPriority || 0))
         : idleServers;
 
+      /** @type {Record<string, any>} */
       const arbitration = {
         type: "server",
         serverType: sType,
         skill: skill || undefined,
         discipline,
         queueName: matchedQ ? queueToken : null,
-        candidates: candidates.map(e => ({
+        candidates: candidates.map((/** @type {any} */ e) => ({
           entityId: e.id,
           type: e.type,
           key: "arrivalTime",
           value: e.arrivalTime || 0,
         })),
-        idleServers: rankedServers.map(s => ({ serverId: s.id, type: s.type, skill: skill || undefined, priority: s._skillPriority || 0 })),
+        idleServers: rankedServers.map((/** @type {any} */ s) => ({ serverId: s.id, type: s.type, skill: skill || undefined, priority: s._skillPriority || 0 })),
       };
 
       const srv = rankedServers[0] ?? null;
@@ -441,7 +509,7 @@ export const MACROS = [
           }
         }
 
-        if (!claimServerForEntity(cust, srv, clock, ctx.index, ctx, skill)) {
+        if (!claimServerForEntity(cust, srv, clock, ctx.index, /** @type {any} */ (ctx), /** @type {any} */ (skill))) {
           msgs.push(`ASSIGN(${cType},${sType}): claim failed`);
           return;
         }
@@ -499,8 +567,9 @@ export const MACROS = [
       const discipline = matchedQ?.discipline || 'FIFO';
       const token      = matchedQ ? matchedQ.name : queueToken;
 
+      /** @type {any} */
       const filterFn = ctx.entityFilter
-        ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
+        ? (/** @type {any} */ entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
 
       // DELAY has no server capacity — all waiting entities start simultaneously.
@@ -585,7 +654,7 @@ export const MACROS = [
       const { entities, msgs, setLastCustId, setLastSrvId } = ctx;
       const key = normName(sType);
 
-      const busyServers = entities.filter(e =>
+      const busyServers = entities.filter((/** @type {any} */ e) =>
         e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving")
       );
       if (busyServers.length === 0) {
@@ -631,7 +700,7 @@ export const MACROS = [
         srvById.type.trim().toLowerCase() === srvType.trim().toLowerCase();
       const srv    = srvByIdIsMatch
         ? srvById
-        : entities.find(e =>
+        : entities.find((/** @type {any} */ e) =>
             e.role === "server" &&
             e.type.trim().toLowerCase() === srvType.trim().toLowerCase() &&
             e.status === "busy" &&
@@ -691,7 +760,7 @@ export const MACROS = [
 
       const claimedServers = [];
       for (const t of typeList) {
-        const srv = entities.find(e =>
+        const srv = entities.find((/** @type {any} */ e) =>
           e.role === "server" &&
           e.currentCustId === cust.id &&
           e.type.trim().toLowerCase() === t.toLowerCase() &&
@@ -772,7 +841,7 @@ export const MACROS = [
       const { entities, model, clock, msgs, nextId } = ctx;
 
       const qDef = (model.queues || []).find(
-        q => q.name?.trim().toLowerCase() === queueName.trim().toLowerCase()
+        (/** @type {any} */ q) => q.name?.trim().toLowerCase() === queueName.trim().toLowerCase()
       );
       if (!qDef) {
         msgs.push(`BATCH(${queueName},${batchSizeArg}): queue not found`);
@@ -844,10 +913,10 @@ export const MACROS = [
         lastStageStart: null,
         loopCount: 0,
         batch: {
-          children: batched.map(e => ({
+          children: batched.map((/** @type {any} */ e) => ({
             ...e,
             attrs: { ...(e.attrs || {}) },
-            stages: e.stages ? e.stages.map(s => ({ ...s })) : [],
+            stages: e.stages ? e.stages.map((/** @type {any} */ s) => ({ ...s })) : [],
           })),
         },
       };
@@ -1009,7 +1078,7 @@ export const MACROS = [
       const { entities, clock, helpers, msgs, _arbitration } = ctx;
       const key = normName(sType);
 
-      const busyServers = entities.filter(e =>
+      const busyServers = entities.filter((/** @type {any} */ e) =>
         e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving")
       );
 
@@ -1056,7 +1125,7 @@ export const MACROS = [
       const { entities, clock, helpers, msgs } = ctx;
       const key = normName(sType);
 
-      const servers = entities.filter(e =>
+      const servers = entities.filter((/** @type {any} */ e) =>
         e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving" || e.status === "idle")
       );
 
@@ -1097,7 +1166,7 @@ export const MACROS = [
       const { entities, clock, msgs } = ctx;
       const key = normName(sType);
 
-      const failedServers = entities.filter(e =>
+      const failedServers = entities.filter((/** @type {any} */ e) =>
         e.role === "server" && normName(e.type) === key && e.status === "failed"
       );
 
@@ -1206,11 +1275,12 @@ export const MACROS = [
         return;
       }
 
+      /** @type {Record<string, any>} */
       const idleServersByType = {};
       for (const def of serverDefs) {
         const idle = helpers.idleOf(def.type) || [];
         const matched = def.skill
-          ? idle.filter(s => helpers.hasSkillType(s.type, def.skill) || (Array.isArray(s.skills) && s.skills.includes(def.skill)))
+          ? idle.filter((/** @type {any} */ s) => helpers.hasSkillType(s.type, def.skill) || (Array.isArray(s.skills) && s.skills.includes(def.skill)))
           : idle;
         if (matched.length === 0) {
           const typeLabel = def.skill ? `${def.type}[${def.skill}]` : def.type;
@@ -1225,7 +1295,7 @@ export const MACROS = [
       const serverEntries = Object.entries(idleServersByType);
       const primarySrv = serverEntries[0][1];
       const primarySkill = (serverDefs.find(d => d.type === serverEntries[0][0]) || serverDefs[0]).skill;
-      if (!claimServerForEntity(cust, primarySrv, clock, ctx.index, ctx, primarySkill)) {
+      if (!claimServerForEntity(cust, primarySrv, clock, ctx.index, /** @type {any} */ (ctx), /** @type {any} */ (primarySkill))) {
         msgs.push(`COSEIZE: claim failed for ${serverEntries[0][0]} #${primarySrv.id}`);
         return;
       }
@@ -1316,7 +1386,7 @@ export const MACROS = [
               }
             }
           }
-        } catch (e) {
+        } catch (/** @type {any} */ e) {
           predicateError = e.message;
         }
       } else {
@@ -1470,9 +1540,9 @@ export const MACROS = [
         return;
       }
       const _et = (ctx.model?.entityTypes || []).find(
-        t => (t.name || '').trim().toLowerCase() === (entity.type || '').toLowerCase()
+        (/** @type {any} */ t) => (t.name || '').trim().toLowerCase() === (entity.type || '').toLowerCase()
       );
-      const _attrDef = (_et?.attrDefs || []).find(a => a.name === attrName);
+      const _attrDef = (_et?.attrDefs || []).find((/** @type {any} */ a) => a.name === attrName);
       if (_attrDef?.mutable === false) {
         msgs.push(`SET_ATTR(${attrName}): attribute is immutable — write skipped`);
         return;
@@ -1511,6 +1581,9 @@ export const MACROS = [
 /**
  * Apply a single scalar effect part (VAR++, VAR--, VAR+=N, VAR=val).
  * Returns true if handled.
+ * @param {string} part
+ * @param {Record<string, any>} state
+ * @param {number} clock
  */
 export function applyScalar(part, state, clock) {
   const r1 = part.match(/^(\w+)\+\+$/);
@@ -1525,7 +1598,7 @@ export function applyScalar(part, state, clock) {
   if (r4) { state[r4[1]] = (Number(state[r4[1]]) || 0) - parseFloat(r4[2]); return true; }
   if (r5) {
     let v = r5[2].trim();
-    Object.keys(state).filter(k => !k.startsWith("__")).forEach(k => {
+    Object.keys(state).filter(k => !k.startsWith("__")).forEach((/** @type {string} */ k) => {
       v = v.replace(new RegExp(`\\b${k}\\b`, "g"),
         typeof state[k] === "string" ? `"${state[k]}"` : String(state[k]));
     });
