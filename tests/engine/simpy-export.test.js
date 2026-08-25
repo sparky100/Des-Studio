@@ -588,25 +588,50 @@ describe("exportToSimPy", () => {
     });
   });
 
-  describe("TODO macro stubs", () => {
+  describe("NOT SUPPORTED macro stubs", () => {
     it("includes RENEGE stub with pattern comment", () => {
       const result = exportToSimPy(todoModel);
-      expect(result.script).toContain("# TODO (RENEGE):");
+      expect(result.script).toContain("# NOT SUPPORTED (RENEGE):");
     });
 
     it("includes BATCH stub with pattern comment", () => {
       const result = exportToSimPy(todoModel);
-      expect(result.script).toContain("# TODO (BATCH):");
+      expect(result.script).toContain("# NOT SUPPORTED (BATCH):");
     });
 
     it("includes FAIL stub with pattern comment", () => {
       const result = exportToSimPy(todoModel);
-      expect(result.script).toContain("# TODO (FAIL):");
+      expect(result.script).toContain("# NOT SUPPORTED (FAIL):");
     });
 
     it("does not include RENEGE stub in category 1 script", () => {
       const result = exportToSimPy(minimalModel);
-      expect(result.script).not.toContain("# TODO (RENEGE):");
+      expect(result.script).not.toContain("# NOT SUPPORTED (RENEGE):");
+    });
+
+    it("includes a RELEASE_COSEIZED stub with pattern comment when the model uses it", () => {
+      const model = {
+        ...coseizeModel,
+        cEvents: [
+          ...coseizeModel.cEvents,
+          {
+            id: "c2", name: "EarlyRelease",
+            effect: "RELEASE_COSEIZED([Doctor, Nurse])",
+          },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.todoMacros).toContain("RELEASE_COSEIZED");
+      expect(result.script).toContain("# NOT SUPPORTED (RELEASE_COSEIZED):");
+    });
+
+    it("warns per actual usage site for a TODO macro, not just per macro name", () => {
+      const result = exportToSimPy(todoModel);
+      // todoModel's RENEGE usage is on the "CheckRenege" b-event, BATCH on "BatchUp",
+      // FAIL on "FailServer" — each should be individually traceable.
+      expect(result.warnings.some(w => /NOT SUPPORTED: RENEGE at "CheckRenege"/.test(w))).toBe(true);
+      expect(result.warnings.some(w => /NOT SUPPORTED: BATCH at "BatchUp"/.test(w))).toBe(true);
+      expect(result.warnings.some(w => /NOT SUPPORTED: FAIL at "FailServer"/.test(w))).toBe(true);
     });
   });
 
@@ -744,6 +769,69 @@ describe("exportToSimPy", () => {
     it("flags DRAIN's fail-fast-vs-blocking divergence", () => {
       const result = exportToSimPy(containerModel);
       expect(result.warnings.some(w => /DRAIN/.test(w))).toBe(true);
+    });
+
+    it("flags an untranslatable routing condition string as NOT SUPPORTED, and comments the always-taken branch", () => {
+      // A raw condition string (not the structured {variable, op, value} shape)
+      // can't be translated — the emitted branch is always taken, which
+      // actively diverges from the model rather than merely being incomplete.
+      const model = {
+        ...minimalModel,
+        bEvents: [
+          minimalModel.bEvents[0],
+          {
+            id: "b2", name: "AfterService",
+            effect: "COMPLETE()",
+            routing: [{ condition: "some raw expression the exporter can't parse", queueName: "WaitQueue" }],
+          },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.warnings.some(w => /NOT SUPPORTED: routing condition ".*could not be translated — branch always taken/.test(w))).toBe(true);
+      expect(result.script).toContain("# NOT SUPPORTED: translate condition string:");
+    });
+
+    it("flags an untranslatable routing condition variable (e.g. a queue-length reference) as NOT SUPPORTED", () => {
+      const model = {
+        ...minimalModel,
+        bEvents: [
+          minimalModel.bEvents[0],
+          {
+            id: "b2", name: "AfterService",
+            effect: "COMPLETE()",
+            routing: [{ condition: { variable: "Queue.WaitQueue.length", op: ">", value: 2 }, queueName: "WaitQueue" }],
+          },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.warnings.some(w => /NOT SUPPORTED: routing condition variable "Queue\.WaitQueue\.length"/.test(w))).toBe(true);
+      expect(result.script).toContain('# NOT SUPPORTED: translate condition variable "Queue.WaitQueue.length"');
+    });
+
+    it("flags a service C-event with no configured distribution (distinct from an unrecognised one)", () => {
+      // getServiceDist()'s placeholder path (nothing configured at all) is a
+      // separate gap from distUnsupportedNote()'s path (a recognised-but-
+      // unsupported distribution name) — both should warn, not just the latter.
+      const model = {
+        ...minimalModel,
+        cEvents: [{ ...minimalModel.cEvents[0], cSchedules: [{ eventId: "b2" }] }],
+      };
+      const result = exportToSimPy(model);
+      expect(result.warnings.some(w => /NOT SUPPORTED: no service distribution configured for "Service"/.test(w))).toBe(true);
+      expect(result.script).toContain("# NOT SUPPORTED: set service distribution");
+    });
+
+    it("flags a DELAY C-event with no configured distribution", () => {
+      const model = {
+        ...delayModel,
+        cEvents: [
+          { ...delayModel.cEvents[0], cSchedules: [{ eventId: "b2" }] },
+          delayModel.cEvents[1],
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.warnings.some(w => /NOT SUPPORTED: no delay distribution configured for "Recover"/.test(w))).toBe(true);
+      expect(result.script).toContain("# NOT SUPPORTED: set delay distribution");
     });
   });
 

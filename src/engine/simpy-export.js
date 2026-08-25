@@ -2,9 +2,11 @@
 //
 // exportToSimPy(model) → { script: string, category: 1 | 2, todoMacros: string[], warnings: string[] }
 //   category 1 — fully runnable; no manual edits needed
-//   category 2 — partial; sections marked with # TODO require user completion
-//   warnings   — semantic divergences from the native engine that aren't auto-translated
-//                (non-FIFO queue discipline, unsupported distributions, DRAIN semantics)
+//   category 2 — partial; sections marked with # NOT SUPPORTED require user completion
+//   warnings   — semantic divergences from the native engine that aren't auto-translated:
+//                non-FIFO queue discipline, unsupported/unconfigured distributions,
+//                DRAIN semantics, untranslatable routing conditions (branch always
+//                taken), and TODO_MACRO_SET macros (no code generated at all)
 
 // Macros whose SimPy translation requires manual completion
 const TODO_MACRO_SET = new Set([
@@ -203,17 +205,22 @@ function getServiceDist(cEvent) {
   return { dist: cs.dist || 'Exponential', distParams: cs.distParams || {}, placeholder: false };
 }
 
-// Translate a predicate condition to a Python boolean expression
-function predicateToExpr(condition) {
+// Translate a predicate condition to a Python boolean expression. When a
+// condition can't be translated, the emitted branch is always taken — this
+// actively diverges from the real model's behaviour, not just "incomplete" —
+// so it pushes a NOT SUPPORTED warning (surfaced in the export UI) alongside
+// the matching comment in the generated code.
+function predicateToExpr(condition, warnings, context) {
   if (!condition) return 'True';
   if (typeof condition === 'string') {
-    return `True  # TODO: translate condition string: ${condition.replace(/\n/g, ' ')}`;
+    warnings.push(`NOT SUPPORTED: routing condition "${condition}"${context ? ` on ${context}` : ''} could not be translated — branch always taken`);
+    return `True  # NOT SUPPORTED: translate condition string: ${condition.replace(/\n/g, ' ')}`;
   }
   if (typeof condition !== 'object') return 'True';
 
   if (condition.operator === 'AND' || condition.operator === 'OR') {
     const op = condition.operator === 'AND' ? ' and ' : ' or ';
-    const sub = (condition.clauses || []).map(predicateToExpr);
+    const sub = (condition.clauses || []).map(c => predicateToExpr(c, warnings, context));
     return sub.length ? `(${sub.join(op)})` : 'True';
   }
 
@@ -232,11 +239,12 @@ function predicateToExpr(condition) {
     return `getattr(entity, "${safeId(attrMatch[1])}", None) ${pyOp} ${JSON.stringify(value)}`;
   }
   // Queue length or other complex references
-  return `True  # TODO: translate condition variable "${variable}" ${opStr} ${JSON.stringify(value)}`;
+  warnings.push(`NOT SUPPORTED: routing condition variable "${variable}"${context ? ` on ${context}` : ''} could not be translated — branch always taken`);
+  return `True  # NOT SUPPORTED: translate condition variable "${variable}" ${opStr} ${JSON.stringify(value)}`;
 }
 
 // Generate routing code after service completion for one B-event
-function routingCode(completionBEvent, queues, statsRef = 'stats') {
+function routingCode(completionBEvent, queues, warnings, statsRef = 'stats') {
   if (!completionBEvent) {
     return `    # Entity completes journey\n    if env.now >= WARMUP_PERIOD:\n        ${statsRef}.served.append(entity)\n`;
   }
@@ -251,7 +259,7 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
   if (routing.length > 0) {
     lines.push(`    # Conditional routing from B-event "${completionBEvent.name}"`);
     routing.forEach((branch, i) => {
-      const cond = predicateToExpr(branch.condition);
+      const cond = predicateToExpr(branch.condition, warnings, `B-event "${completionBEvent.name}"`);
       const keyword = i === 0 ? 'if' : 'elif';
       lines.push(`    ${keyword} ${cond}:`);
       if (branch.queueName) {
@@ -353,12 +361,26 @@ function buildScript(model, todoSet, warnings = []) {
   const category = todoSet.size > 0 ? 2 : 1;
   const todoList = [...todoSet];
 
+  // These macros produce no generated code at all at their usage site — warn
+  // per actual event, not just per macro name, so it's traceable to what
+  // needs fixing (not just that something in the model does).
+  if (todoSet.size > 0) {
+    for (const ev of [...bEvents, ...cEvents]) {
+      const text = effectText(ev.effect);
+      for (const m of todoSet) {
+        if (new RegExp(`\\b${m}\\s*\\(`, 'i').test(text)) {
+          warnings.push(`NOT SUPPORTED: ${m} at "${ev.name}" — no code generated, see the "${m}" pattern near the end of the script`);
+        }
+      }
+    }
+  }
+
   const parts = [];
 
   // ── Header docstring ───────────────────────────────────────────────────────
   const catMsg = category === 1
     ? 'Category 1 — complete and runnable.'
-    : `Category 2 — partial; complete the # TODO sections before running.\n#   Macros requiring attention: ${todoList.join(', ')}`;
+    : `Category 2 — partial; complete the # NOT SUPPORTED sections before running.\n#   Macros requiring attention: ${todoList.join(', ')}`;
   parts.push(
 `"""
 flow → SimPy export
@@ -587,6 +609,7 @@ class Stats:
       const svcLabel = distLabel(svcDist, svcParams);
       const svcNote = distUnsupportedNote(svcDist);
       if (svcNote) warnings.push(`${c.name || 'service'}: ${svcNote.replace(/^#\s*/, '')}`);
+      if (placeholder) warnings.push(`NOT SUPPORTED: no service distribution configured for "${c.name || 'service'}" — using a fixed value of 1.0`);
 
       const completionBEvent = findCompletionBEvent(c, bEvents);
 
@@ -616,7 +639,7 @@ class Stats:
     entity.service_start_time = env.now
     entity.wait_time_acc += entity.service_start_time - entity.queue_join_time
     try:
-${svcNoteLineCoseize}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
+${svcNoteLineCoseize}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # NOT SUPPORTED: set service distribution' : ''}
         _svc_t = env.now - entity.service_start_time
         entity.svc_time_acc += _svc_t
 ${svcBusyLines}
@@ -631,7 +654,7 @@ ${svcBusyLines}
         yield _req
         entity.service_start_time = env.now
         entity.wait_time_acc += entity.service_start_time - entity.queue_join_time
-${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
+${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # NOT SUPPORTED: set service distribution' : ''}
         _svc_t = env.now - entity.service_start_time
         entity.svc_time_acc += _svc_t
         stats.resource_busy["${serverTypes[0]}"] = stats.resource_busy.get("${serverTypes[0]}", 0.0) + _svc_t`;
@@ -640,7 +663,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const todoNote = todoSet.has('COSEIZE') ? '' :
         (isCoseize ? '\n    # COSEIZE: simultaneous multi-resource seize via simpy.AllOf' : '');
 
-      const completionCode = routingCode(completionBEvent, queues);
+      const completionCode = routingCode(completionBEvent, queues, warnings);
 
       // Routing code may reference stores local to run_replication() — pass them explicitly.
       const routingStoreVarNames = [...new Set((completionCode.match(/\b\w+_store\b/g) || []))]
@@ -687,13 +710,14 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const delayLabel = distLabel(delayDist, delayParams);
       const delayNote = distUnsupportedNote(delayDist);
       if (delayNote) warnings.push(`${c.name || 'delay'}: ${delayNote.replace(/^#\s*/, '')}`);
+      if (placeholder) warnings.push(`NOT SUPPORTED: no delay distribution configured for "${c.name || 'delay'}" — using a fixed value of 1.0`);
 
       const completionBEvent = findCompletionBEvent(c, bEvents);
 
       const monFn = safeId(c.name || 'delay') + '_monitor';
       const dlyFn = safeId(c.name || 'delay') + '_delay';
 
-      const completionCode = routingCode(completionBEvent, queues);
+      const completionCode = routingCode(completionBEvent, queues, warnings);
       const routingStoreVarNames = [...new Set((completionCode.match(/\b\w+_store\b/g) || []))]
         .filter(v => v !== storeId);
       cEventRoutingStores.set(c.name, routingStoreVarNames);
@@ -708,7 +732,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const delayNoteLine = delayNote ? `    ${delayNote}\n` : '';
       let dlyBody = `def ${dlyFn}(env, entity${rStoreComma}, stats):\n`;
       dlyBody += delayNoteLine;
-      dlyBody += `    yield env.timeout(${delayExpr})  # delay: ${delayLabel}${placeholder ? '  # TODO: set delay distribution' : ''}\n`;
+      dlyBody += `    yield env.timeout(${delayExpr})  # delay: ${delayLabel}${placeholder ? '  # NOT SUPPORTED: set delay distribution' : ''}\n`;
       dlyBody += `    # DELAY: no resource claimed — duration counts toward sojourn only, not wait/service stats\n`;
       dlyBody += `    entity.sojourn_time = env.now - entity.arrival_time\n`;
       dlyBody += completionCode;
@@ -764,17 +788,18 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
     parts.push(shiftParts.join('\n') + '\n');
   }
 
-  // ── TODO macro stubs ───────────────────────────────────────────────────────
+  // ── NOT SUPPORTED macro stubs ─────────────────────────────────────────────
   if (todoSet.size > 0) {
     const stubParts = ['# ── Macros requiring manual completion ───────────────────────────────────────'];
     const stubs = {
-      RENEGE: `# TODO (RENEGE): Implement reneging via a timeout on the resource request.\n# Pattern:\n#   result = yield _req | env.timeout(patience_duration)\n#   if _req not in result:  # entity reneged\n#       if env.now >= WARMUP_PERIOD: stats.reneged.append(entity)\n#       return`,
-      BATCH: `# TODO (BATCH): Accumulate N entities from a store before processing.\n# Pattern:\n#   batch = []\n#   while len(batch) < BATCH_SIZE:\n#       batch.append(yield source_store.get())\n#   batch_entity = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(batch_entity)`,
-      RENEGE_OLDEST: `# TODO (RENEGE_OLDEST): Remove the oldest entity from a SimPy Store.\n# Pattern:\n#   if queue_store.items:\n#       oldest = queue_store.items.pop(0)  # FIFO: index 0 is oldest\n#       if env.now >= WARMUP_PERIOD: stats.reneged.append(oldest)`,
-      MATCH: `# TODO (MATCH): Pair entities from two stores.\n# Pattern:\n#   entity_a = yield store_a.get()\n#   entity_b = yield store_b.get()\n#   combined = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(combined)`,
-      FAIL: `# TODO (FAIL): Simulate server failure.\n# Pattern:\n#   resource._capacity = 0  # blocks new requests\n#   # In-flight requests are not automatically interrupted.\n#   # To interrupt: use simpy.PreemptiveResource and resource.request(preempt=True).`,
-      REPAIR: `# TODO (REPAIR): Restore server after failure (pair with FAIL).\n# Pattern:\n#   resource._capacity = ORIGINAL_CAPACITY`,
-      PREEMPT: `# TODO (PREEMPT): Use simpy.PreemptiveResource for the target server.\n# Replace simpy.Resource with simpy.PreemptiveResource at declaration.\n# Use: resource.request(priority=0, preempt=True)`,
+      RENEGE: `# NOT SUPPORTED (RENEGE): Implement reneging via a timeout on the resource request.\n# Pattern:\n#   result = yield _req | env.timeout(patience_duration)\n#   if _req not in result:  # entity reneged\n#       if env.now >= WARMUP_PERIOD: stats.reneged.append(entity)\n#       return`,
+      BATCH: `# NOT SUPPORTED (BATCH): Accumulate N entities from a store before processing.\n# Pattern:\n#   batch = []\n#   while len(batch) < BATCH_SIZE:\n#       batch.append(yield source_store.get())\n#   batch_entity = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(batch_entity)`,
+      RENEGE_OLDEST: `# NOT SUPPORTED (RENEGE_OLDEST): Remove the oldest entity from a SimPy Store.\n# Pattern:\n#   if queue_store.items:\n#       oldest = queue_store.items.pop(0)  # FIFO: index 0 is oldest\n#       if env.now >= WARMUP_PERIOD: stats.reneged.append(oldest)`,
+      MATCH: `# NOT SUPPORTED (MATCH): Pair entities from two stores.\n# Pattern:\n#   entity_a = yield store_a.get()\n#   entity_b = yield store_b.get()\n#   combined = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(combined)`,
+      FAIL: `# NOT SUPPORTED (FAIL): Simulate server failure.\n# Pattern:\n#   resource._capacity = 0  # blocks new requests\n#   # In-flight requests are not automatically interrupted.\n#   # To interrupt: use simpy.PreemptiveResource and resource.request(preempt=True).`,
+      REPAIR: `# NOT SUPPORTED (REPAIR): Restore server after failure (pair with FAIL).\n# Pattern:\n#   resource._capacity = ORIGINAL_CAPACITY`,
+      PREEMPT: `# NOT SUPPORTED (PREEMPT): Use simpy.PreemptiveResource for the target server.\n# Replace simpy.Resource with simpy.PreemptiveResource at declaration.\n# Use: resource.request(priority=0, preempt=True)`,
+      RELEASE_COSEIZED: `# NOT SUPPORTED (RELEASE_COSEIZED): Atomically release multiple previously co-seized resources for the current entity, mirroring COSEIZE's own AllOf() seize.\n# Pattern:\n#   for _req in entity.coseized_requests:  # however you tracked the requests from the matching COSEIZE\n#       try: _req.resource.release(_req)\n#       except: pass\n#   entity.coseized_requests = []`,
     };
     for (const m of todoList) {
       if (stubs[m]) stubParts.push(stubs[m]);
