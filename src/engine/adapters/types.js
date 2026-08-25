@@ -6,7 +6,7 @@
  * @typedef {{
  *   id: string,
  *   label: string,
- *   type: 'rest' | 'websocket' | 'stateSnapshot' | 'scheduleFeed' | 'actualsStream' | 'mock',
+ *   type: 'rest' | 'websocket' | 'stateSnapshot' | 'scheduleFeed' | 'actualsStream' | 'openSky' | 'mock',
  *   url?: string,
  *   authHeader?: string,
  *   authSecret?: string,
@@ -71,3 +71,8 @@
  *   queues: Record<string, { waiting: number, serving: number }>,
  * }} SystemSnapshot
  */
+
+// No runtime exports — this file is JSDoc typedefs only. The empty export
+// marks it as an ES module (not a global script) so `import('./types.js').Foo`
+// type references from other files resolve under TS's module checker.
+export {};
