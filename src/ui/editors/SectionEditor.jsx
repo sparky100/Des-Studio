@@ -124,7 +124,7 @@ const SectionEditor = ({ sections = [], queues = [], entityTypes = [], bEvents =
                 value={s.name || ""}
                 onCommit={v => { if (v !== (s.name || "")) upd(i, { name: v }); }}
                 placeholder="Section name"
-                style={{ flex: 1, minWidth: 120, background: "transparent", border: `1px solid ${s.color}55`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
+                style={{ flex: 1, minWidth: 120, background: "transparent", border: `1px solid ${s.color}55`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px" }}
               />
               {!isExpanded && (
                 <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, background: `${C.border}30`, borderRadius: 3, padding: "2px 6px" }}>

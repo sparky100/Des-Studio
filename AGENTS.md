@@ -1,13 +1,13 @@
 # simmodlr — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-06-09 | Reflects: Sprint 84 complete — PRNG Streams, Shift Behavior, Purge Period & Starvation Tracking.*
+*Last updated: 2026-08-24 | Reflects: Sprint 89 complete — Visual Designer inline probabilistic-branch editing. Sprint 86 (calendar scheduling — ADR-018, `schedule-pattern.js`, `WeeklyPatternEditor.jsx`) also shipped.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Current sprint plan: `docs/reviews/sprint-88-plan.md` — Export Consolidation & Data Portability
-- Previous sprint plan: `docs/reviews/sprint-87-plan.md` — Parameterised Weekly Schedule Patterns
-- Sprint 84 plan: `docs/reviews/sprint-84-plan.md` — Engine Fidelity
+- Latest sprint plan: `docs/reviews/sprint-89-probabilistic-routing-canvas-edit-plan.md` — Visual Designer: Inline Probabilistic-Branch Editing (shipped)
+- Previous sprint plan: `docs/reviews/sprint-88-plan.md` — Export Consolidation & Data Portability (see also `sprint-88-closure-report.md`)
+- Active work queue: `docs/reviews/expert-review-2026-08-remediation-register.md` — consolidated, prioritised remediation items from the 2026-08 expert reviews (ux / functionality / code)
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
@@ -32,7 +32,7 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 | Language | JavaScript (JSX) + incremental TypeScript | — | Existing JS/JSX remains valid. TypeScript is allowed for domain/schema boundaries under ADR-009. No linter currently installed. |
 | Styling | Inline style objects | — | No CSS classes. No CSS framework. Tokens in `ui/shared/tokens.js` |
 | Database / auth | Supabase JS client | 2.45.0 | PostgreSQL backend. Auth via Supabase Auth. |
-| Test runner | Vitest | 1.6.0 | Engine layer only. Node environment. |
+| Test runner | Vitest | 1.6.0 | All layers — engine/DB/LLM in Node, UI in jsdom (see §12). |
 | Canvas / DAG | `@xyflow/react` | — | ADR-010. Visual Designer authoring canvas and Execute live flow view, both lazy-loaded. `model_json.graph` drives layout. |
 | Animation | SVG `<animateMotion>` | — | Entity token animation on execute canvas edges. Toggle in `user_settings`. |
 
@@ -57,9 +57,9 @@ project root
 │   │   ├── phases.js                ← fireBEvent(), fireCEvent()
 │   │   ├── entities.js              ← Entity pool, queue discipline, waitingOf()
 │   │   ├── distributions.js         ← Sampler functions
-│   │   ├── conditions.js            ← Condition evaluator (currently uses new Function — MUST BE REPLACED)
+│   │   ├── conditions.js            ← Structured predicate evaluator (safe — ADR-003; no eval / new Function)
 │   │   ├── statistics.js            ← CI helpers, summarizeEntitySummary, histogram builders
-│   │   ├── macros.js                ← 19 effect macros — see §5.1 for full list
+│   │   ├── macros.js                ← 24 effect macros (MACROS array is authoritative) — see §5.1
 │   │   └── adapters/                ← Real-time data adapter layer (Sprint 57+)
 │   │       ├── index.js             ← AdapterRegistry + nullRegistry (default, zero-cost pass-through)
 │   │       ├── RestAdapter.js       ← Poll-based REST with TTL cache and 3× retry
@@ -95,7 +95,7 @@ project root
 │   │   └── supabase.js              ← Client singleton
 │   └── App.jsx                      ← Auth listener + model library shell only. No sim logic.
 ├── tests/                           ← All tests. Mirrors src/ structure.
-│   ├── engine/                      ← Engine unit tests (~120 existing + new)
+│   ├── engine/                      ← Engine unit tests (~76 files; see §12.1)
 │   │   ├── three-phase.test.js      ← Phase A/B/C, restart rule (node env)
 │   │   ├── distributions.test.js    ← Samplers, seeded RNG reproducibility
 │   │   ├── macros.test.js           ← ARRIVE, SEIZE, COMPLETE, ASSIGN, RENEGE
@@ -154,16 +154,16 @@ If Codex finds itself rewriting a file that the audit marked as working (✓), s
 | File | What works | What is wrong |
 |---|---|---|
 | `src/engine/index.js` | Three-Phase A/B/C loop structure; collectTrace/entityDetail batch options; runtimeModel WeakMap cache | Nothing known broken — preserve entirely |
-| `src/engine/macros.js` | All 19 macros correct (see §5.1 for full list) | Nothing — preserve entirely |
-| `src/engine/entities.js` | FIFO discipline correct | LIFO/Priority never read (extend waitingOf) |
-| `src/engine/conditions.js` | Condition evaluation structure | new Function() call (replace with safe eval) |
-| `src/engine/distributions.js` | All sampler functions | Math.random() (add seeded RNG) |
-| `src/ui/editors/index.jsx` | All five editors work | Operator filtering, priority field, token staleness |
+| `src/engine/macros.js` | All 24 macros correct (the `MACROS` array is the authoritative list — see §5.1) | Nothing — preserve entirely |
+| `src/engine/entities.js` | All six queue disciplines (FIFO, LIFO, PRIORITY, PRIORITY(attr), SPT, EDD) dispatched via `selectWaiting()` / `queueDisciplineComparator()` | Nothing known broken — preserve entirely |
+| `src/engine/conditions.js` | Structured predicate evaluator (ADR-003) — no `eval` / `new Function` anywhere in the engine | Nothing known broken — preserve entirely |
+| `src/engine/distributions.js` | All sampler functions; seeded `mulberry32` + `deriveSubSeed` stream registry (no-`Math.random` rule enforced in CI by `benchmark-gate.yml`) | Nothing known broken — preserve entirely |
+| `src/ui/editors/index.jsx` | All editors work; operator filtering, explicit C-Event priority field, and token refresh (C8) are in place | Nothing known broken — extend in place |
 | `src/ui/execute/index.jsx` | ExecuteCanvas, BottomPanel, StepLog, EntityTable, run history, replication runner | VisualView retained as fallback for empty models |
 | `src/db/models.js` | Multi-user CRUD wrappers | User-scoped model/run queries, run stats, result persistence, owner-guarded delete |
 | `src/App.jsx` | Auth listener, model library shell | Back button discards silently (Sprint 2) |
 | `src/ui/ModelLibrary.jsx` | Model library browser with search, sort, tag-chip filter (My Models / Public / Community tabs); Templates tab unchanged | Filter state is tab-scoped `useState` inside `ModelLibrary`; no new props on the component |
-| `tests/` | ~120 engine tests passing | UI and DB layers untested |
+| `tests/` | Strong coverage across engine, UI, DB, and LLM layers (see `tests/` and §12.1); full suite green and enforced in CI (`.github/workflows/ci.yml`) | Nothing — keep the suite green |
 
 ---
 
@@ -252,8 +252,13 @@ while (fel.length > 0 && !terminationConditionMet()) {
 | `SET` | B or C | `SET(varName, expr)` | Sets a model-level state variable to an arithmetic expression |
 | `SET_ATTR` | B or C | `SET_ATTR(attrName, expr)` | Sets a named attribute on the current entity instance |
 | `COST` | B or C | `COST(expr)` | Accumulates expression value to `summary.totalCost` and entity `__cost` |
+| `DELAY` | C-Event | `DELAY(QueueName[, N])` | Resource-free activity: moves waiting entities from the queue into a timed delay without seizing any server; duration comes from the C-Event's cSchedules. Optional N drains at most N entities per firing (slot-capacity pattern) |
+| `FINISH` | C-Event | `FINISH(ServerType)` | Ends the in-progress service on a busy server of the given type immediately — condition-driven completion for activities of unknown duration |
+| `RELEASE_COSEIZED` | B-Event | `RELEASE_COSEIZED([Srv1, Srv2, ...][, TargetQueue])` | Atomically releases all listed co-seized servers held by the context entity and returns it to a queue — the multi-resource counterpart to RELEASE (releases all or none) |
+| `CANCEL` | B or C | `CANCEL(EventName)` | Removes pending FEL entries named EventName that were scheduled for the context entity (e.g. a competing timeout); no-op with a log message if none pending |
+| `ROUND_ROBIN` | B or C | `ROUND_ROBIN(StateVar, N)` | Advances StateVar through a 0..N−1 rotation (wrapping after N−1); pair with routing rows comparing StateVar to each index to cycle entities across N destinations |
 
-**All 19 macros above are implemented in `src/engine/macros.js`.** New macros require updating `docs/addition1_entity_model.md` and adding tests before use.
+**All 24 macros above are implemented in `src/engine/macros.js` — the `MACROS` array in that file is the authoritative list.** All 24 are exposed in the editors via `src/ui/editors/helpers.jsx` (and, for DELAY, the C-Event editor's delay mode). New macros require updating `docs/addition1_entity_model.md` and adding tests before use.
 
 ### 5.2 Prohibited Action Patterns
 
@@ -330,7 +335,7 @@ ModelDetail (parent)
 - Every editor reads from and writes to `model_json` in Supabase via `src/db/models.js`. No editor stores local-only state that is not persisted.
 - Save is manual — the modeller clicks Save. Save feedback is delivered via the `ToastContext` toast system (success/error toasts). The old `saveStatus` state banner was removed in Sprint 50 and replaced with toasts.
 - The Back button currently discards unsaved changes silently. This is a known defect — it must warn the user before navigating away. Do not add new navigation without this guard.
-- Inline validation on save is absent — empty names, blank conditions, and malformed schedules are accepted silently. All editors must be updated to validate before persisting (see Section 8, validation rules V1–V11).
+- Editors must validate before persisting — `validateModel()` in `src/engine/validation.js` is the authoritative rule set (see Section 8).
 - No editor may introduce a free-text field for simulation logic. All logic entry uses structured pickers and the Predicate Builder only.
 
 ### 7.2 Entity Type Editor (`EntityTypeEditor` + `AttrEditor`)
@@ -378,9 +383,7 @@ ModelDetail (parent)
 - The Execute panel shows a "Timetable:" dropdown when `modelSchedules.length > 1`, letting the modeller choose which schedule to apply for the next run.
 
 **Known gaps:**
-- No stale reference detection on deletion (C6) — fix in Sprint 1 Task 5.
-- `DistPicker` has a latent `ReferenceError` due to a missing import in `components.jsx` (C11) — fix in Sprint 1 Task 6.
-- Distribution parameter inputs lack `type="number"` (C10) — fix in Sprint 1 Task 5.
+- None open. The Sprint 1 audit findings previously listed here (C6 stale-reference detection, C10 numeric inputs, C11 DistPicker import) are all resolved — see §10.1.
 
 ### 7.5 C-Event Editor (`CEventEditor` + `ConditionBuilder`)
 
@@ -393,12 +396,8 @@ ModelDetail (parent)
 - The condition must use the Predicate Builder exclusively — no free-text entry permitted.
 - Compound AND/OR conditions must be supported with explicit precedence display.
 
-**Known gaps (all are Sprint 1 or Sprint 2 work):**
-- Per-C-event priority field is absent — currently implicit array order with no drag-to-reorder (audit finding). Fix in Sprint 2.
-- AND/OR compound clauses are flat chains only — no nested grouping, mixed precedence undefined to user. Fix in Sprint 2.
-- Operator filtering by token `valueType` is not enforced — all tokens treated as numeric. Fix in Sprint 2.
-- Attribute-based entity filter is absent — type-level only, no "select entity where attr > N". Fix in Sprint 2.
-- `ConditionBuilder` token list goes stale after prop change (C8) — adding entity types while the C-Event editor is open does not refresh available tokens. Fix in Sprint 2.
+**Known gaps:**
+- None open from the original audit. The Sprint 1–2 findings previously listed here are resolved: explicit priority field with reorder (`CEventEditor.jsx`), `valueType`-driven operator filtering (`ConditionBuilder.jsx`, covered by `tests/ui/shared/predicate-builder.test.jsx`), and the C8 stale-token issue (fixed via `useMemo` in `ConditionBuilder.jsx` — see §10.1).
 
 ### 7.6 Queue Editor (`QueueEditor`)
 
@@ -406,15 +405,15 @@ ModelDetail (parent)
 
 **What it must do:**
 - Allow the modeller to create, rename, and delete Queue nodes.
-- Each Queue has: a name, a discipline (FIFO | LIFO | PRIORITY).
-- The discipline dropdown must only show options the engine actually implements. Until LIFO and PRIORITY are implemented in the engine (Sprint 1 Task 3), only FIFO may appear in this dropdown.
+- Each Queue has: a name, a discipline (FIFO | LIFO | PRIORITY | PRIORITY(attr) | SPT | EDD — all six implemented in the engine, see §6).
+- The discipline dropdown must only show options the engine actually implements.
 
 **Known gaps:**
-- LIFO and Priority are shown in the dropdown but the engine ignores `q.discipline` entirely (C2). Remove these options until the engine implements them (Sprint 1 Task 3).
+- None open. C2 (engine ignored `q.discipline`) was fixed in Sprint 1 — all six disciplines are enforced via `queueDisciplineComparator()` in `src/engine/entities.js`.
 
 ### 7.7 Distribution Picker (`DistPicker`)
 
-**What exists:** Partially. The `DistPicker` component is referenced in `components.jsx` but has a latent `ReferenceError` — it references `DISTRIBUTIONS` which is never imported. It will crash on render.
+**What exists:** Working. `DistPicker` in `components.jsx` renders family-grouped distribution options with sparkline previews (`DistSparkline.jsx`) and registry-driven parameter inputs. The old missing-import crash (C11) was fixed in Sprint 1.
 
 **What it must do:**
 - Render as a two-step picker: first select distribution type from a dropdown, then display parameter inputs appropriate for that type.
@@ -424,16 +423,14 @@ ModelDetail (parent)
 - The distribution registry in `distributions.js` drives the picker — the picker reads registered types to build its dropdown. Adding a new distribution type to the registry automatically makes it available in the picker.
 
 **Known gaps:**
-- Latent `ReferenceError` — missing import of `DISTRIBUTIONS` (C11). Fix in Sprint 1 Task 6 before any other DistPicker work.
-- `type="number"` missing on parameter inputs (C10). Fix in Sprint 1 Task 5.
-- CSV import not yet implemented. Sprint 2 feature.
+- None open from the original audit (C10 and C11 resolved — see §10.1).
 
 ### 7.8 Execute Panel (`execute/index.jsx`)
 
 **What exists:** Working. The execute panel provides: a Run button, an ExecuteCanvas (topology-derived live flow view with @xyflow/react), a StepLog (phase-tagged event log with clock timestamps), an EntityTable (entity status), a BottomPanel (collapsible tabs for log, entities, stage KPIs, charts), and a run history tab showing last 20 runs.
 
 **What it must do:**
-- Validate the model (V1–V11) before calling `buildEngine()`. Block Run if validation fails. Surface errors inline in the relevant editor tab, not only in the execute panel.
+- Run `validateModel()` before calling `buildEngine()` — `src/engine/validation.js` is the authoritative rule set (~86 codes; see Section 8). Block Run if validation fails. Surface errors inline in the relevant editor tab, not only in the execute panel.
 - Accept a seed input field — the modeller can set or randomise the seed. The seed is stored with the run record.
 - Display the Phase C truncation warning if the cap is hit during a run.
 - The stats panel overview tab currently always shows Runs count as 0 (`model.stats` never populated). This must be fixed so that completed runs update the stats count.
@@ -499,6 +496,8 @@ Examples:
 ## 8. Pre-Run Model Validation
 
 All validation runs before `buildEngine()` is called via `validateModel(model)` in `src/engine/validation.js`. Returns `{errors, warnings}`. Errors block the run; warnings show a banner but allow execution. Each issue carries `{code, message, tab}`.
+
+**`src/engine/validation.js` is the authoritative rule set — ~86 distinct codes as of Sprint 89.** The tables below are an illustrative partial reference (V1–V37 plus a few warning codes), not an exhaustive list. Beyond what is tabled here, the code implements: **V38–V70** (including sub-codes **V38b–V38e**), and the code families **V-SKILL-1..7** (skills matrix), **V-SLOT-1** (slot capacity), **V-CAL-1/2** (calendar scheduling, ADR-018), **W-CAP-01/02** (capacity warnings), and **W-FAIL-01** (failure-config warning). When in doubt, read the source — do not treat these tables as complete.
 
 Note: V7 does not exist — the numbering jumps from V6 to V8 in both docs and code.
 
@@ -704,7 +703,7 @@ The following invariants are non-negotiable and must be maintained across all en
 
 ### 10.1 Audit Tracker
 
-These are open defects from the audit. Do not work around them — fix them.
+Historical record of the original audit findings — all rows below are now resolved (✓). For current open work, use `docs/reviews/expert-review-2026-08-remediation-register.md`.
 
 | # | Severity | File | Issue | Sprint |
 |---|---|---|---|---|
@@ -715,14 +714,14 @@ These are open defects from the audit. Do not work around them — fix them.
 | C5 | **High** | `execute/index.jsx:141–147` | No pre-run model validation — invalid models run silently | Sprint 1 ✓ |
 | C6 | **Medium** | `phases.js:91,125` | Stale B-Event references after deletion become silent no-ops | Sprint 1 ✓ |
 | C7 | **Medium** | `distributions.js:84` | No seeded RNG — `Math.random()` throughout | Sprint 1 ✓ |
-| C8 | **Low** | `editors/index.jsx:495` | ConditionBuilder token list stale after prop change | Sprint 2 |
+| C8 | **Low** | `editors/ConditionBuilder.jsx` | ConditionBuilder token list stale after prop change — fixed: token list rebuilt via `useMemo` on `entityTypes`/`stateVariables`/`queues`/`containers` (see `ConditionBuilder.jsx:44`) | Sprint 2 ✓ |
 | C9 | **Low** | `db/models.js:127` | Resolved in Sprint 5: `avg_service_time` now stores `summary.avgSvc`; `results_json.summary` keeps service/sojourn details | Sprint 5 ✓ |
 | C10 | **Low** | `editors/index.jsx:171,241,731` | Distribution parameter inputs missing `type="number"` | Sprint 1 ✓ |
 | C11 | **Low** | `components.jsx` | `DistPicker` references `DISTRIBUTIONS` which is never imported — latent `ReferenceError` | Sprint 1 ✓ |
-| G1 | **Medium** | `engine/macros.js:121–132` | Queue discipline lookup uses entity type name match — silently falls back to FIFO if queue name ≠ type name | Sprint 2 |
-| G2 | **Medium** | `conditions.js:154`, `macros.js:272` | `waitingOf()` called without discipline in `evalCondition` and RENEGE macro — always FIFO regardless of configuration | Sprint 2 |
-| G3 | **Low** | `engine/index.js:127` | `firedThisPass` Set in Phase C is dead code — set is reset each pass and break fires before it can have effect | Sprint 2 |
-| G4 | **Low** | `engine/distributions.js:98,108` | `mulberry32(0)` default in `sample()` / `sampleAttrs()` silently uses seed 0 when `rng` is omitted rather than erroring | Sprint 2 |
+| G1 | **Medium** | `engine/macros.js` | Queue discipline lookup used entity type name match — fixed: macros resolve the queue via `helpers.findQueueConfig()` (`entities.js:517`) and pass its `discipline` to `listWaiting`/`selectWaiting` | Sprint 2 ✓ |
+| G2 | **Medium** | `conditions.js`, `macros.js` | `waitingOf()` called without discipline — fixed: `resolveQueueValue()` in `conditions.js` looks up the queue definition's discipline before counting, and the macros pass the resolved discipline (`matchedQ?.discipline`) | Sprint 2 ✓ |
+| G3 | **Low** | `engine/index.js` | `firedThisPass` Set in Phase C was dead code — fixed: removed from `index.js` (no occurrences remain) | Sprint 2 ✓ |
+| G4 | **Low** | `engine/distributions.js` | `mulberry32(0)` silent default when `rng` omitted — fixed: `sample()` now throws (`"sample() requires a seeded PRNG function (rng)"`, `distributions.js:305`) | Sprint 2 ✓ |
 
 ---
 
@@ -778,18 +777,23 @@ import { buildEngine } from '../../engine/index.js'; // in execute/index.jsx onl
 
 ## 12. Testing Strategy
 
-Testing is split into four layers. Each layer has a defined scope, tooling, and a completion gate that must pass before the relevant sprint is declared done. The current codebase has strong engine coverage (~120 tests) and zero UI or DB coverage — this imbalance must be corrected sprint by sprint.
+Testing is split into layers. Each layer has a defined scope, tooling, and a completion gate that must pass before the relevant sprint is declared done. The codebase now has strong coverage across all layers, and the full suite is enforced in CI (`.github/workflows/ci.yml`).
 
 ### 12.1 Current Test Coverage State
 
+Approximate counts as of 2026-08-24 (Sprint 89) — the `tests/` tree and `npm test` output are authoritative, not this table:
+
 | Layer | Files | Tests | Environment | Status |
 |---|---|---|---|---|
-| Engine (Three-Phase logic) | 5 | ~120 | Node | ✓ Good coverage |
-| UI components | 0 | 0 | None configured | ✗ Must be added Sprint 1 |
-| DB / Supabase wrappers | 0 | 0 | None | ✗ Must be added Sprint 2 |
-| Integration (end-to-end) | 0 | 0 | None | ✗ Target Sprint 3 |
+| Engine (Three-Phase logic, macros, validation, benchmarks) | ~76 | ~1,150 | Node | ✓ Strong coverage |
+| UI components | ~72 | ~760 | jsdom | ✓ Strong coverage |
+| DB / Supabase wrappers | 15 | ~215 | Node (mocked Supabase) | ✓ Covered |
+| LLM prompts / bundle export | 8 | ~185 | Node | ✓ Covered |
+| Other (model round-trips, root) | ~4 | ~40 | Node | ✓ Covered |
 
-**The test runner (`vite.config.js`) is currently set to `environment: 'node'`.** DOM tests will fail silently or error. The first task of UI test setup is switching to `jsdom` or `happy-dom` for UI test files while preserving `node` for engine tests.
+In total: ~175 test files, ~2,350 test cases, all green on this branch.
+
+**The test runner (`vite.config.js`) uses `environment: 'node'` by default, with `environmentMatchGlobs` routing `tests/ui/**` to `jsdom`** (see §12.3). No further environment setup is needed to add tests in either layer.
 
 ### 12.2 Test File Structure
 
@@ -1107,8 +1111,10 @@ These are the minimum test requirements before a sprint can be declared done. Co
 | Sprint 2 | No free-text field test passes (no `Custom...` option) | `npm test -- c-event-editor` |
 | Sprint 3 | DB layer tests pass (user_id filtering) | `npm test -- db` |
 | Sprint 3 | Execute panel validation block test passes | `npm test -- execute-panel` |
-| All sprints | Full test suite passes with zero failures | `npm test -- --run` |
+| All sprints | Full test suite passes with zero failures | `npm test` |
 | All sprints | Production build succeeds | `npm run build` |
+
+**The "full suite passes" gate is now enforced in CI, not aspirational** (commit `a4595c8`+): `.github/workflows/ci.yml` runs the Vitest suite sharded 2-ways plus a `typecheck` job, an analytical-benchmark job, and a production-build job on every push and PR; `.github/workflows/benchmark-gate.yml` additionally enforces the no-`Math.random`-in-engine rule.
 
 ### 12.9 What Must Never Be Tested
 
@@ -1127,8 +1133,9 @@ These are the minimum test requirements before a sprint can be declared done. Co
 npm run dev                          # Vite dev server (localhost:5173)
 
 # Testing — engine layer (node environment)
-npm test                             # Watch mode — all tests
-npm test -- --run                    # Single pass, no watch
+npm test                             # Full suite, single pass (vitest run) — this is what CI runs, sharded
+npm run test:watch                   # Watch mode (vitest)
+npm run test:quick                   # vitest run --changed — only tests related to uncommitted changes
 npm test -- three-phase              # Run three-phase tests only
 npm test -- distributions            # Run distribution tests only
 npm test -- conditions               # Run condition evaluator tests only

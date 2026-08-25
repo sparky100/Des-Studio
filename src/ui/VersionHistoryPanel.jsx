@@ -229,7 +229,7 @@ function CreateVersionModal({ model, versions, onClose, onCreate }) {
   const inputStyle = {
     width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5,
     color: C.text, fontFamily: SANS, fontSize: 13, padding: "8px 10px",
-    outline: "none", boxSizing: "border-box",
+    boxSizing: "border-box",
   };
 
   return (

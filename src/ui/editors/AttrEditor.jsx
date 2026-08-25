@@ -96,7 +96,7 @@ function WeightedOptionsEditor({ options = [], onChange, allowedValues, C, FONT 
   const inpStyle = {
     background: 'transparent', border: `1px solid ${C.border}`,
     borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 10,
-    padding: '3px 5px', outline: 'none',
+    padding: '3px 5px', 
   };
 
   return (
@@ -164,13 +164,13 @@ const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
   const inpStyle = (color) => ({
     background:'transparent', border:`1px solid ${color||C.border}`,
     borderRadius:4, color:C.text, fontFamily:FONT, fontSize:11,
-    padding:'4px 7px', outline:'none',
+    padding:'4px 7px', 
   });
 
   const selStyle = (color) => ({
     background:C.bg, border:`1px solid ${color||C.border}`,
     borderRadius:4, color:color||C.text, fontFamily:FONT, fontSize:11,
-    padding:'4px 7px', outline:'none',
+    padding:'4px 7px', 
   });
 
   return (

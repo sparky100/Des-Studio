@@ -91,7 +91,7 @@ const EntityFilterBuilder = ({ entityTypes = [], value, onChange }) => {
 
   const selSt = (extra = {}) => ({
     background: C.bg, border: `1px solid ${C.cEvent}55`, borderRadius: 4,
-    color: C.cEvent, fontFamily: FONT, fontSize: 12, padding: '5px 8px', outline: 'none',
+    color: C.cEvent, fontFamily: FONT, fontSize: 12, padding: '5px 8px', 
     ...extra,
   });
 
@@ -167,11 +167,11 @@ const EntityFilterBuilder = ({ entityTypes = [], value, onChange }) => {
               ) : vt === 'string' ? (
                 <input type="text" value={row.value} onChange={e => updRow(idx, { value: e.target.value })}
                   placeholder="value"
-                  style={{ width: 100, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: '5px 8px', outline: 'none' }}/>
+                  style={{ width: 100, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: '5px 8px' }}/>
               ) : (
                 <input type="number" value={row.value} onChange={e => updRow(idx, { value: e.target.value })}
                   placeholder="0"
-                  style={{ width: 70, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: '5px 8px', outline: 'none' }}/>
+                  style={{ width: 70, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: '5px 8px' }}/>
               )}
               <Btn small variant="danger" ariaLabel={`Remove entity filter clause ${idx + 1}`} onClick={() => removeRow(idx)}>✕</Btn>
             </div>

@@ -36,9 +36,12 @@ export function ImportPreview({ model, errors, warnings, user, onSave, onDismiss
   const copyJson = async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(model, null, 2));
-      setCopied(true);
+      setCopied('ok');
       setTimeout(() => setCopied(false), 2000);
-    } catch (_) {}
+    } catch (_) {
+      setCopied('failed');
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const dlRow = (term, def) => (
@@ -170,7 +173,7 @@ export function ImportPreview({ model, errors, warnings, user, onSave, onDismiss
               </div>
               {showRawJson && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <Btn small variant="ghost" onClick={copyJson}>{copied ? 'Copied!' : 'Copy JSON'}</Btn>
+                  <Btn small variant="ghost" onClick={copyJson}>{copied === 'ok' ? 'Copied!' : copied === 'failed' ? 'Copy failed' : 'Copy JSON'}</Btn>
                   <pre style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: RADIUS.md, padding: 12, color: C.text, fontFamily: FONT, fontSize: 11, overflowX: 'auto', maxHeight: 220, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                     {JSON.stringify(model, null, 2)}
                   </pre>

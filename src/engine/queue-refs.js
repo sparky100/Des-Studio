@@ -122,10 +122,6 @@ export function renameEntityType(model, oldName, newName, role = "customer") {
 
   return {
     ...model,
-    queues: (model.queues || []).map(queue => ({
-      ...queue,
-      customerType: role === "customer" && norm(queue.customerType) === norm(oldName) ? newName : queue.customerType,
-    })),
     bEvents: (model.bEvents || []).map(event => ({
       ...event,
       effect: mapEffects(event.effect, effect => {

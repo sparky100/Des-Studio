@@ -28,7 +28,6 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatMinutes(minutes) {
-  const { C, FONT } = useTheme();
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -218,7 +217,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, dataSources =
       let result;
       if (/\.(xlsx|xls|ods)$/i.test(file.name)) {
         const buf = await file.arrayBuffer();
-        result = parseXlsx(buf, { epoch, timeUnit });
+        result = await parseXlsx(buf, { epoch, timeUnit });
       } else {
         const text = await file.text();
         result = parsePlanCsv(text, { epoch, timeUnit });
@@ -622,8 +621,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, dataSources =
                             background: 'transparent', border: `1px solid ${C.border}44`,
                             borderRadius: 3, color: C.text, fontFamily: FONT, fontSize: 11,
                             padding: '2px 4px', width: String(h).length > 12 ? 110 : 80,
-                            outline: 'none',
-                          }}
+                            }}
                           onChange={e => {
                             const newAttrs = { ...(row.attrs || {}) };
                             if (e.target.type === 'checkbox') {

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, Fragment } from "react";
 ;
 import { Btn, Tag, SH, InfoBox, SectionPanel } from "./shared/components.jsx";
-import { SPACE, RADIUS, C } from "./shared/tokens.js";
+import { SPACE, RADIUS } from "./shared/tokens.js";
 import { useViewport } from "./shared/hooks.js";
 import { getPlatformConfig, setPlatformConfig, updateUserRole,
          suspendUser, unsuspendUser, logAdminAction, fetchAuditLog,
@@ -411,7 +411,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const inp = (extra = {}) => ({
     background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4,
     color: C.text, fontFamily: FONT, fontSize: 12,
-    padding: "6px 10px", outline: "none", ...extra,
+    padding: "6px 10px", ...extra,
   });
 
   const newFeedbackCount = feedback.filter(f => f.status === "new").length;

@@ -95,7 +95,7 @@ export function applyShiftChange(ev, ctx) {
       if (srv._suspended) {
         delete srv._suspended;
         srv.status = "idle";
-        srv._starvationStart = clock;
+        srv._starvationStart = ctx.clock;
       }
     }
     return [`SHIFT_CHANGE: ${serverTypeName} capacity -> ${target} (${addCount} added)`];

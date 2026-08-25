@@ -1191,7 +1191,7 @@ export const AiAssistantPanel = ({
               style={{
                 flex: 1, background: C.bg, border: `1px solid ${C.border}`,
                 borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12,
-                padding: "7px 8px", resize: "none", outline: "none",
+                padding: "7px 8px", resize: "none", 
                 opacity: isStreaming ? 0.6 : 1,
               }}
             />
@@ -1356,7 +1356,7 @@ export const AiAssistantPanel = ({
             style={{
               flex: 1, background: C.bg, border: `1px solid ${C.border}`,
               borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12,
-              padding: "7px 8px", resize: "none", outline: "none",
+              padding: "7px 8px", resize: "none", 
               opacity: isStreaming ? 0.6 : 1,
             }}
           />
@@ -1487,7 +1487,7 @@ export const AiAssistantPanel = ({
               style={{
                 flex: 1, background: C.bg, border: `1px solid ${C.border}`,
                 borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12,
-                padding: "7px 8px", resize: "none", outline: "none",
+                padding: "7px 8px", resize: "none", 
                 opacity: (!results || isStreaming) ? 0.6 : 1,
               }}
             />

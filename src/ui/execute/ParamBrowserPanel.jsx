@@ -38,7 +38,6 @@ function ParamRow({ p, color, added, selected, onSelect }) {
         opacity: added ? 0.4 : 1,
         fontFamily: FONT,
         transition: "border-color 0.1s, background 0.1s",
-        outline: "none",
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
@@ -115,7 +114,7 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPa
           style={{
             background: C.bg, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm,
             color: C.text, fontFamily: FONT, fontSize: 11,
-            padding: "5px 8px", outline: "none", width: "100%",
+            padding: "5px 8px", width: "100%",
           }}
         />
       )}

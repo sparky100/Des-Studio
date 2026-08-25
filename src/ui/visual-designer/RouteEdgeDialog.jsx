@@ -1,4 +1,4 @@
-import { Btn } from "../shared/components.jsx";
+import { Btn, CommitInput } from "../shared/components.jsx";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { VISUAL_NODE_TYPES } from "./graph.js";
@@ -68,7 +68,7 @@ export function RouteEdgeDialog({ edgeId, model, graph, canEdit, onApply, onClos
 
   const selectStyle = color => ({
     flex: 1, minWidth: 100, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4,
-    color: color || C.text, fontFamily: FONT, fontSize: 11, padding: "4px 6px", outline: "none",
+    color: color || C.text, fontFamily: FONT, fontSize: 11, padding: "4px 6px", 
   });
 
   return (
@@ -95,7 +95,7 @@ export function RouteEdgeDialog({ edgeId, model, graph, canEdit, onApply, onClos
             value={mode}
             disabled={!canEdit}
             onChange={e => setMode(e.target.value)}
-            style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "4px 8px", outline: "none" }}
+            style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "4px 8px" }}
           >
             <option value="none">Single queue (no routing)</option>
             <option value="conditional">Conditional routing</option>
@@ -107,12 +107,17 @@ export function RouteEdgeDialog({ edgeId, model, graph, canEdit, onApply, onClos
           <>
             {(bEvent.probabilisticRouting || []).map((row, idx) => (
               <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "8px 10px" }}>
-                <input
-                  type="number" min="0" max="100" step="1" disabled={!canEdit}
-                  value={Math.round((row.probability ?? 0) * 100)}
-                  onChange={e => updateProbability(idx, (parseFloat(e.target.value) || 0) / 100)}
-                  aria-label={`Probability for route ${idx + 1}`}
-                  style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px", outline: "none" }}
+                <CommitInput
+                  disabled={!canEdit}
+                  value={String(Math.round((row.probability ?? 0) * 100))}
+                  transform={raw => {
+                    const n = parseFloat(raw);
+                    if (!Number.isFinite(n)) return String(Math.round((row.probability ?? 0) * 100));
+                    return String(Math.min(100, Math.max(0, Math.round(n))));
+                  }}
+                  onCommit={next => updateProbability(idx, parseFloat(next) / 100)}
+                  ariaLabel={`Probability for route ${idx + 1}`}
+                  style={{ width: 60, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px" }}
                 />
                 <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>% →</span>
                 <select

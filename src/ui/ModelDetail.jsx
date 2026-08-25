@@ -571,11 +571,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const starterGuideAutoHidden = (model?.entityTypes?.length > 0) || (Number.isFinite(model?.stats?.runs) ? model.stats.runs > 0 : false);
   const showStarterGuide = canEdit && allowStarterGuide && !starterGuideDismissed && !starterGuideAutoHidden;
   const dismissStarterGuide = () => {
-    try { localStorage.setItem(`des_starter_${modelId}`, "1"); } catch {}
+    try { localStorage.setItem(`des_starter_${modelId}`, "1"); } catch { /* storage unavailable (private mode) — non-critical */ }
     setStarterGuideDismissed(true);
   };
   const reopenStarterGuide = () => {
-    try { localStorage.removeItem(`des_starter_${modelId}`); } catch {}
+    try { localStorage.removeItem(`des_starter_${modelId}`); } catch { /* storage unavailable (private mode) — non-critical */ }
     setStarterGuideDismissed(false);
   };
 
@@ -587,6 +587,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     setDirty(true);
   };
   const setWholeModel=(nextModel)=>{
+    if (valuesEqual(model, nextModel)) return;
     setPast(p=>[...p.slice(-19),model]);
     setFuture([]);
     setModel(normalizeModelConditions(nextModel));
@@ -661,8 +662,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   useEffect(()=>{
     const onKey=(e)=>{
       if(!(e.ctrlKey||e.metaKey))return;
-      if(e.key==='z'&&!e.shiftKey){e.preventDefault();_ur.current.undo();}
-      if((e.key==='z'&&e.shiftKey)||e.key==='y'){e.preventDefault();_ur.current.redo();}
+      // Ctrl+Z/Y inside an editable element belongs to the browser's native
+      // text undo — hijacking it there reverts the whole model mid-typing.
+      const el=document.activeElement;
+      const inEditable=el&&(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.tagName==='SELECT'||el.isContentEditable);
+      if(!inEditable){
+        if(e.key==='z'&&!e.shiftKey){e.preventDefault();_ur.current.undo();}
+        if((e.key==='z'&&e.shiftKey)||e.key==='y'){e.preventDefault();_ur.current.redo();}
+      }
       if(e.key==='s'){e.preventDefault();_ur.current.save?.();}
     };
     document.addEventListener('keydown',onKey);
@@ -716,7 +723,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     }));
     setDirty(false);
     setVisualPending(false);
-    visualPendingRef.current=false;
     setPast([]);
     setFuture([]);
     setDiscardKey(k=>k+1);
@@ -748,7 +754,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     };
     window.addEventListener('beforeunload',onBeforeUnload);
     return()=>window.removeEventListener('beforeunload',onBeforeUnload);
-  },[dirty]);
+  },[dirty,visualPending]);
 
   const validation = useMemo(() => model ? validateModel(model) : { errors: [], warnings: [] }, [model]);
 
@@ -875,7 +881,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           if (run?.model_snapshot) reportModel = run.model_snapshot;
           const scheduleRows = await fetchModelSchedules(reportModel.id || modelId);
           schedulesMap = buildSchedulesMap(scheduleRows);
-        } catch {}
+        } catch {
+          toast.warning("Couldn't load the run's saved snapshot — the report describes the current model instead");
+        }
       }
       const meta = {
         runId: selectedResultsRunId || null,
@@ -1147,7 +1155,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="visual"&&(
           renderAuthoringShell(
             <Suspense fallback={<SkeletonPanel rows={5} />}>
-              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
+              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch { setDirty(true); toast.error("Couldn't save the new canvas layout — use Save to retry"); } }}/>
             </Suspense>
           )
         )}
@@ -1186,7 +1194,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                       value={model.name||""}
                       onChange={e=>setField("name",e.target.value)}
                       placeholder="Model name"
-                      style={{background:"transparent",border:"none",borderBottom:`2px solid ${C.border}`,borderRadius:0,color:C.text,fontFamily:SANS,fontSize:22,fontWeight:700,padding:"4px 0",outline:"none",flex:1,minWidth:0}}
+                      style={{background:"transparent",border:"none",borderBottom:`2px solid ${C.border}`,borderRadius:0,color:C.text,fontFamily:SANS,fontSize:22,fontWeight:700,padding:"4px 0",flex:1,minWidth:0}}
                       onFocus={e=>e.target.style.borderBottomColor=C.accent}
                       onBlur={e=>e.target.style.borderBottomColor=C.border}
                     />
@@ -1202,7 +1210,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                     onChange={e=>setField("description",e.target.value)}
                     placeholder="Describe what this model represents — context, scope, key assumptions…"
                     rows={6}
-                    style={{background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,borderRadius:0,color:C.muted,fontFamily:SANS,fontSize:14,lineHeight:1.8,padding:"8px 0",outline:"none",width:"100%",resize:"vertical"}}
+                    style={{background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,borderRadius:0,color:C.muted,fontFamily:SANS,fontSize:14,lineHeight:1.8,padding:"8px 0",width:"100%",resize:"vertical"}}
                     onFocus={e=>e.target.style.borderBottomColor=C.accent}
                     onBlur={e=>e.target.style.borderBottomColor=C.border}
                   />
@@ -1228,7 +1236,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                       placeholder="Internal notes — assumptions, caveats, context for collaborators. Markdown supported (#, **bold**, *italic*, lists, `code`, tables). Not shown in the Model Library."
                       rows={4}
                       autoFocus
-                      style={{background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,borderRadius:0,color:C.muted,fontFamily:SANS,fontSize:14,lineHeight:1.8,padding:"8px 0",outline:"none",width:"100%",resize:"vertical"}}
+                      style={{background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,borderRadius:0,color:C.muted,fontFamily:SANS,fontSize:14,lineHeight:1.8,padding:"8px 0",width:"100%",resize:"vertical"}}
                       onFocus={e=>e.target.style.borderBottomColor=C.accent}
                       onBlur={e=>e.target.style.borderBottomColor=C.border}
                     />
@@ -1368,7 +1376,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                   value={model.timeUnit||"minutes"}
                   onChange={canEdit?(e=>setField("timeUnit",e.target.value)):undefined}
                   disabled={!canEdit}
-                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",width:180,outline:"none"}}
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",width:180}}
                 >
                   <option value="seconds">Seconds</option>
                   <option value="minutes">Minutes</option>
@@ -1383,7 +1391,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                   value={(model.epoch||"").slice(0,16)}
                   onChange={canEdit?(e=>setField("epoch", e.target.value ? `${e.target.value}:00` : "")):undefined}
                   disabled={!canEdit}
-                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:FONT,fontSize:12,padding:"5px 8px",width:240,outline:"none"}}
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:FONT,fontSize:12,padding:"5px 8px",width:240}}
                 />
                 <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>
                   Optional. Required for CSV timestamp import and real-time schedule display.
@@ -1447,7 +1455,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         e.target.value="";
                       }
                     }}
-                    style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}
+                    style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px"}}
                   />
                 </div>
               )}
@@ -1619,7 +1627,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                       aria-label="Saved run"
                       value={selectedResultsRunId}
                       onChange={e=>loadResultsRun(e.target.value)}
-                      style={{minWidth:260,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"6px 8px",outline:"none"}}
+                      style={{minWidth:260,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"6px 8px"}}
                     >
                       {historyRows.filter(hasResultsPayload).map(row=>{
                         const dt=new Date(row.ran_at);
@@ -1710,7 +1718,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                       if (run?.model_snapshot) reportModel = run.model_snapshot;
                       const scheduleRows = await fetchModelSchedules(reportModel.id || modelId);
                       schedulesMap = buildSchedulesMap(scheduleRows);
-                    } catch {}
+                    } catch {
+                      toast.warning("Couldn't load the run's saved snapshot — the report describes the current model instead");
+                    }
                     const meta = {
                       runId: row.id,
                       runLabel: row.run_label || '',
@@ -1827,7 +1837,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         </div>
                         <select value={model.access?.[u.id]||"viewer"}
                           onChange={e=>{const a={...(model.access||{}),[u.id]:e.target.value};setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}
-                          style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                          style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
                           <option value="viewer">Viewer</option>
                           <option value="editor">Editor</option>
                         </select>
@@ -1851,7 +1861,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                       placeholder="Search by name…"
                       value={collabQuery}
                       onChange={e=>setCollabQuery(e.target.value)}
-                      style={{width:"100%",padding:"8px 10px",border:`1px solid ${C.border}`,borderRadius:6,fontSize:13,background:C.surface||C.bg,color:C.text,fontFamily:FONT,outline:"none",boxSizing:"border-box"}}
+                      style={{width:"100%",padding:"8px 10px",border:`1px solid ${C.border}`,borderRadius:6,fontSize:13,background:C.surface||C.bg,color:C.text,fontFamily:FONT,boxSizing:"border-box"}}
                     />
                     {q.length>=2&&filtered.length===0&&(
                       <div style={{fontSize:12,color:C.muted,fontFamily:SANS,padding:"4px 0"}}>No users found matching "{collabQuery.trim()}"</div>
@@ -1865,7 +1875,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         <select
                           value={pendingRoles[u.id]||"viewer"}
                           onChange={e=>setPendingRoles(prev=>({...prev,[u.id]:e.target.value}))}
-                          style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                          style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
                           <option value="viewer">Viewer</option>
                           <option value="editor">Editor</option>
                         </select>
@@ -1909,7 +1919,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                   value={baselineName}
                   onChange={e=>setBaselineName(e.target.value)}
                   onKeyDown={e=>{if(e.key==="Enter")handleSaveAsBaseline();if(e.key==="Escape"){setShowBaselineModal(false);setBaselineName("");}}}
-                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",outline:"none"}}
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px"}}
                   placeholder="e.g. High-demand scenario"
                 />
               </div>

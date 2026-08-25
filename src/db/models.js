@@ -616,9 +616,9 @@ export async function forkModel(sourceModelId, newUserId, newName = "", options 
 // ── Share links ───────────────────────────────────────────────────────────────
 
 export async function createShareLink(runId, userId, config = {}) {
-  const token = globalThis.crypto?.randomUUID
-    ? globalThis.crypto.randomUUID()
-    : `share-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // No Math.random fallback: a share token must never be guessable, and
+  // crypto.randomUUID is available in every supported browser and Node ≥ 16.
+  const token = globalThis.crypto.randomUUID();
 
   const { data, error } = await supabase
     .from("share_links")

@@ -8,15 +8,15 @@ This project uses **OpenCode**, not Claude Code. See the following files for aut
 | `opencode.json` | Agent profiles, routing logic, permissions, MCP servers |
 | `.opencode/skills/` | Reusable skill workflows (run-tests, commit-push, build-verify) |
 | `docs/archived/code-quality-plan.md` | Prioritized code improvement plan (archived) |
-| `docs/simmodlr_Build_Plan.md` | Sprint-by-sprint build roadmap |
-| `docs/reviews/sprint-79-ai-explore-plan.md` | Current structured sprint plan — AI-Powered Adaptive Batch / Explore (Sprint 79) |
-| `docs/reviews/sprint-79-plan.md` | Sprint 79 — Consistent Panel Visibility UX (also Sprint 79, companion plan) |
-| `docs/reviews/sprint-78-plan.md` | Sprint 78 — Visual Designer Canvas Visibility |
+| `docs/DES_Studio_Build_Plan.md` | Sprint-by-sprint build roadmap |
+| `docs/reviews/sprint-89-probabilistic-routing-canvas-edit-plan.md` | Current sprint plan — Sprint 89: Visual Designer inline probabilistic-branch editing (latest shipped) |
+| `docs/reviews/sprint-88-plan.md` | Sprint 88 — Export Consolidation & Data Portability (shipped; see also `sprint-88-closure-report.md`) |
 | `docs/addition1_entity_model.md` | Entity model, action vocabulary, distribution specs |
 | `docs/reviews/expert-review-2026-08-remediation-register.md` | Consolidated 2026-08 expert-review remediation register (prioritised) |
 | `docs/reviews/expert-review-2026-08-ux.md` | 2026-08 UX expert / modeller review (maturity 7.5/10) |
 | `docs/reviews/expert-review-2026-08-functionality.md` | 2026-08 functionality & capability review |
 | `docs/reviews/expert-review-2026-08-code.md` | 2026-08 code review |
+| `docs/decisions/ADR-020-draw-run-live-preview.md` | Draw/Run integration — live preview strip (Phase 1, flagged) |
 
 ## Schema Contract
 

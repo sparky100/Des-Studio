@@ -399,7 +399,7 @@ const DropField = ({value, onChange, options, color}) => {
       <select value={value || ''}
         onChange={e => onChange(e.target.value)}
         style={{background:C.bg,border:`1px solid ${col}55`,borderRadius:4,
-          color:col,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
+          color:col,fontFamily:FONT,fontSize:12,padding:'6px 8px',width:'100%'}}>
         {options.map((o,i)=><option key={i} value={o.value} disabled={!!o.disabled}>{o.label}</option>)}
       </select>
     </div>
@@ -539,7 +539,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
           </div>
           <select value="" onChange={e=>{if(e.target.value)add(e.target.value);}}
             style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
-              color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
+              color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',width:'100%'}}>
             <option value="">— select effect —</option>
             {filteredOpts.filter(o=>o.value||o.disabled).map((o,i)=>(
               <option key={i} value={o.value} disabled={!!o.disabled}>{o.label}</option>
@@ -600,19 +600,19 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>A:</span>
                 <select value={matchQueueA} onChange={e=>setMatchQueueA(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
-                    color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}>
+                    color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
                   {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name} ({q.type})</option>)}
                 </select>
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>B:</span>
                 <select value={matchQueueB} onChange={e=>setMatchQueueB(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
-                    color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}>
+                    color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
                   {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name} ({q.type})</option>)}
                 </select>
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
                 <select value={matchTarget} onChange={e=>setMatchTarget(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
-                    color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}>
+                    color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
                   {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name}</option>)}
                 </select>
               </div>
@@ -621,21 +621,21 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
               {(exprMacro==='SET'||exprMacro==='ROUND_ROBIN')&&stateVars.length>0&&(
                 <select value={exprName||stateVars[0]} onChange={e=>setExprName(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
-                    color:C.amber,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:120,flexShrink:0}}>
+                    color:C.amber,fontFamily:FONT,fontSize:12,padding:'6px 8px',width:120,flexShrink:0}}>
                   {stateVars.map(v=><option key={v} value={v}>{v}</option>)}
                 </select>
               )}
               {exprMacro==='SET_ATTR'&&attrs.length>0&&(
                 <select value={exprName||attrs[0]} onChange={e=>setExprName(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
-                    color:C.amber,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:120,flexShrink:0}}>
+                    color:C.amber,fontFamily:FONT,fontSize:12,padding:'6px 8px',width:120,flexShrink:0}}>
                   {attrs.map(a=><option key={a} value={a}>{a}</option>)}
                 </select>
               )}
               {exprMacro==='CANCEL'&&eventNames.length>0&&(
                 <select value={exprName||eventNames[0]} onChange={e=>setExprName(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.red}55`,borderRadius:4,
-                    color:C.red,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:160,flexShrink:0}}>
+                    color:C.red,fontFamily:FONT,fontSize:12,padding:'6px 8px',width:160,flexShrink:0}}>
                   {eventNames.map(n=><option key={n} value={n}>{n}</option>)}
                 </select>
               )}
@@ -646,7 +646,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
                   placeholder={exprMacro==='COST'?'e.g. Entity.priority * 2.5':exprMacro==='ROUND_ROBIN'?'e.g. 3 (number of destinations)':exprMacro==='MATCH'?'e.g. Entity.bloodType == Other.bloodType':`e.g. ${exprName||stateVars[0]||'x'} + 1`}
                   style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
-                    color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}
+                    color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
                 />
               )}
               <Btn small variant="ghost" onClick={addExpr}

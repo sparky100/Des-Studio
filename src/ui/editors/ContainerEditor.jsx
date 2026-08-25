@@ -50,7 +50,7 @@ const ContainerEditor = ({ containers, onChange }) => {
               style={{
                 width: 160, background: "transparent", border: `1px solid ${C.accent}44`,
                 borderRadius: 4, color: C.accent, fontFamily: FONT, fontSize: 12,
-                padding: "5px 8px", outline: "none",
+                padding: "5px 8px", 
               }}
             />
             <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>capacity</span>
@@ -63,7 +63,7 @@ const ContainerEditor = ({ containers, onChange }) => {
               style={{
                 width: 90, background: "transparent", border: `1px solid ${C.border}`,
                 borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
-                padding: "5px 8px", outline: "none",
+                padding: "5px 8px", 
                 opacity: isUnbounded ? 0.5 : 1,
               }}
             />
@@ -84,7 +84,7 @@ const ContainerEditor = ({ containers, onChange }) => {
               style={{
                 width: 90, background: "transparent", border: `1px solid ${C.border}`,
                 borderRadius: 4, color: C.green, fontFamily: FONT, fontSize: 12,
-                padding: "5px 8px", outline: "none",
+                padding: "5px 8px", 
               }}
             />
             <Btn small variant="danger" ariaLabel={`Remove container ${ct.id || i + 1}`} onClick={() => rem(i)}>✕</Btn>

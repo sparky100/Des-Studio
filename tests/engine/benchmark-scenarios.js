@@ -488,7 +488,7 @@ function makeAEModel() {
     resolve(cwd, "tests/benchmarks/ae-model.json"),
   ];
   for (const p of candidatePaths) {
-    try { return JSON.parse(readFileSync(p, "utf-8")).model_json; } catch {}
+    try { return JSON.parse(readFileSync(p, "utf-8")).model_json; } catch { /* try next candidate path */ }
   }
   throw new Error("Cannot find tests/benchmarks/ae-model.json — run from project root");
 }
@@ -500,7 +500,7 @@ function makeRefugeeDisplacementCorridorModel() {
     resolve(cwd, "tests/benchmarks/refugee-displacement-model.json"),
   ];
   for (const p of candidatePaths) {
-    try { return JSON.parse(readFileSync(p, "utf-8")).model_json; } catch {}
+    try { return JSON.parse(readFileSync(p, "utf-8")).model_json; } catch { /* try next candidate path */ }
   }
   throw new Error("Cannot find tests/benchmarks/refugee-displacement-model.json — run from project root");
 }

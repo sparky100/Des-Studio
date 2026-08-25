@@ -139,12 +139,12 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
 
   const selectStyle = {
     background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4,
-    color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 7px", outline: "none",
+    color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 7px", 
   };
   const inputStyle = (valid) => ({
     background: "transparent", border: `1px solid ${valid ? C.amber : C.border}`,
     borderRadius: 4, color: valid ? C.amber : C.text, fontFamily: FONT, fontSize: 12,
-    padding: "5px 8px", outline: "none",
+    padding: "5px 8px", 
   });
 
   return (
@@ -269,7 +269,7 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
                   style={{
                     background: "transparent", border: `1px solid ${alpha(C.border, 0.25)}`,
                     borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 11,
-                    padding: "5px 8px", outline: "none", resize: "vertical", lineHeight: 1.5,
+                    padding: "5px 8px", resize: "vertical", lineHeight: 1.5,
                     width: "100%", boxSizing: "border-box",
                   }}
                 />

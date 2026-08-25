@@ -1,5 +1,6 @@
 // ui/shared/MarkdownContent.jsx — Lightweight markdown-to-React renderer
-import { C, RADIUS, SPACE } from "./tokens.js";
+import { RADIUS, SPACE } from "./tokens.js";
+import { useTheme } from "./ThemeContext.jsx";
 
 function parseInline(text) {
   const parts = [];
@@ -31,7 +32,7 @@ function parseInline(text) {
   return parts;
 }
 
-function renderInline(text, keyPrefix = "") {
+function renderInline(text, keyPrefix, C) {
   const parts = parseInline(text);
   if (parts.length === 1 && parts[0].type === "text") {
     return parts[0].content;
@@ -161,6 +162,7 @@ function parseBlocks(text) {
 }
 
 export function MarkdownContent({ text, style }) {
+  const { C } = useTheme();
   if (!text) return null;
 
   const blocks = parseBlocks(text);
@@ -177,13 +179,13 @@ export function MarkdownContent({ text, style }) {
                 marginBottom: SPACE.sm,
                 marginTop: i > 0 ? SPACE.md : 0,
               }}>
-                {renderInline(block.content, key)}
+                {renderInline(block.content, key, C)}
               </div>
             );
           case "paragraph":
             return (
               <div key={key} style={{ lineHeight: 1.7, marginBottom: SPACE.sm }}>
-                {renderInline(block.content, key)}
+                {renderInline(block.content, key, C)}
               </div>
             );
           case "ul":
@@ -195,7 +197,7 @@ export function MarkdownContent({ text, style }) {
                     position: "relative",
                   }}>
                     <span style={{ position: "absolute", left: 4 }}>•</span>
-                    {renderInline(item, `${key}-${j}`)}
+                    {renderInline(item, `${key}-${j}`, C)}
                   </div>
                 ))}
               </div>
@@ -209,7 +211,7 @@ export function MarkdownContent({ text, style }) {
                     position: "relative",
                   }}>
                     <span style={{ position: "absolute", left: 4, minWidth: 14 }}>{j + 1}.</span>
-                    {renderInline(item, `${key}-${j}`)}
+                    {renderInline(item, `${key}-${j}`, C)}
                   </div>
                 ))}
               </div>
@@ -221,7 +223,7 @@ export function MarkdownContent({ text, style }) {
                   <tr>
                     {block.headers.map((h, j) => (
                       <th key={j} style={{ padding: "4px 8px", textAlign: "left", borderBottom: `1px solid ${C.border}`, color: C.muted, fontWeight: 700, whiteSpace: "nowrap" }}>
-                        {renderInline(h, `${key}-h${j}`)}
+                        {renderInline(h, `${key}-h${j}`, C)}
                       </th>
                     ))}
                   </tr>
@@ -231,7 +233,7 @@ export function MarkdownContent({ text, style }) {
                     <tr key={j}>
                       {row.map((cell, k) => (
                         <td key={k} style={{ padding: "4px 8px", borderBottom: `1px solid ${C.border}33`, color: C.text, lineHeight: 1.5 }}>
-                          {renderInline(cell, `${key}-r${j}c${k}`)}
+                          {renderInline(cell, `${key}-r${j}c${k}`, C)}
                         </td>
                       ))}
                     </tr>

@@ -125,7 +125,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
       {events.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"
-            style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
+            style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px"}}/>
           {filteredEventIds&&(
             <div style={{display:"flex",alignItems:"center",gap:4,background:`${C.amber}26`,border:`1px solid ${C.amber}80`,borderRadius:4,padding:"3px 8px",color:C.amber,fontSize:11,fontFamily:FONT,whiteSpace:"nowrap"}}>
               Filtered by error
@@ -199,7 +199,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                 placeholder="Event name"
                 style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,
                 borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,
-                padding:"5px 8px",outline:"none"}}/>
+                padding:"5px 8px"}}/>
               {!isExpanded&&(
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT,background:`${C.cEvent}18`,borderRadius:3,padding:"2px 6px",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{condSummary}</span>
               )}
@@ -291,7 +291,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                           <select value={delayQueue}
                             onChange={e=>setDelayQueue(e.target.value)}
                             style={{flex:1,background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
-                              color:delayQueue?C.amber:C.muted,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}>
+                              color:delayQueue?C.amber:C.muted,fontFamily:FONT,fontSize:12,padding:"5px 8px"}}>
                             <option value="">— select queue to draw from —</option>
                             {(queues||[]).map(q=>(
                               <option key={q.id||q.name} value={q.name}>{q.name}</option>
@@ -304,7 +304,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                             onChange={e=>setDelayCapacity(e.target.value)}
                             placeholder="all"
                             style={{width:80,background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
-                              color:C.amber,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+                              color:C.amber,fontFamily:FONT,fontSize:12,padding:"5px 8px"}}/>
                           <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
                             {delayCapacity!==null?`Drain up to ${delayCapacity} entities per firing`:"Drain all waiting entities"}
                           </span>
@@ -373,7 +373,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                               placeholder="New B-event name"
                               aria-label="New B-event name"
                               style={{flex:1,minWidth:140,background:C.bg,border:`1px solid ${C.bEvent}55`,borderRadius:4,
-                              color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+                              color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px"}}/>
                             <Btn small variant="primary" onClick={confirmCreateBEvent}>Create &amp; use</Btn>
                             <Btn small variant="ghost" onClick={cancelCreateBEvent}>Cancel</Btn>
                           </>
@@ -384,7 +384,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                             updSched(i,j,{eventId:v});
                           }}
                             style={{flex:1,background:C.bg,border:`1px solid ${C.bEvent}55`,borderRadius:4,
-                            color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}>
+                            color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px"}}>
                             <option value="">— select B-event to schedule —</option>
                             {onCreateBEvent&&<option value="__new__">+ Create new B-event…</option>}
                             {bEvents.map(b=>(
@@ -484,7 +484,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               <input value={ev.description||""} onChange={e=>upd(i,"description",e.target.value)}
                 placeholder="When and why this event fires"
                 style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,
-                color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",
+                color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",
                 width:"100%",boxSizing:"border-box"}}/>
             </>}
           </div>

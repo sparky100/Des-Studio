@@ -173,7 +173,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
   const sel = (extra={}) => ({
     background:C.bg, border:`1px solid ${C.cEvent}55`, borderRadius:4,
     color:C.cEvent, fontFamily:FONT, fontSize:12,
-    padding:'6px 8px', outline:'none', ...extra,
+    padding:'6px 8px', ...extra,
   });
 
   if(tokens.length===0) return (
@@ -253,7 +253,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
                       placeholder="0"
                       style={{width:60,background:'transparent',border:`1px solid ${C.border}`,
                         borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,
-                        padding:'5px 8px',outline:'none'}}/>
+                        padding:'5px 8px'}}/>
                   )}
                 </>
               );
@@ -264,13 +264,13 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
                 placeholder="value"
                 style={{width:100,background:'transparent',border:`1px solid ${C.border}`,
                   borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,
-                  padding:'5px 8px',outline:'none'}}/>
+                  padding:'5px 8px'}}/>
             )}
             {valueType==='boolean' && (
               <select value={row.value} onChange={e=>updRow(idx,{value:e.target.value})}
                 style={{width:80,background:C.bg,border:`1px solid ${C.border}`,
                   borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,
-                  padding:'5px 8px',outline:'none'}}>
+                  padding:'5px 8px'}}>
                 <option value="true">true</option>
                 <option value="false">false</option>
               </select>

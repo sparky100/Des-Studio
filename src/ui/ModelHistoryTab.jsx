@@ -8,7 +8,7 @@ import { useToast } from "./shared/ToastContext.jsx";
 import { fetchRunHistory, getRun, getRunResultsJson, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink, fetchModelSchedules, buildSchedulesMap } from "../db/models.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { buildEngine } from "../engine/index.js";
-import * as XLSX from 'xlsx';
+import { downloadWorkbook } from './shared/workbook.js';
 import { compareResults } from "../db/runRecord.js";
 import { compareScenarios } from "../engine/statistics.js";
 import { CI_METRICS, METRIC_LABELS, fmt } from "./execute/executeHelpers.js";
@@ -187,11 +187,8 @@ export function ModelHistoryTab({
   const exportRunHistoryXlsx = () => {
     const csv = buildRunHistoryCsv(historyRows);
     const csvRows = csv.split("\n").map(line => line.split(",").map(cell => cell.replace(/^"|"$/g, '')));
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(csvRows);
-    ws['!cols'] = Array(csvRows[0]?.length || 13).fill({ wch: 16 });
-    XLSX.utils.book_append_sheet(wb, ws, 'Run History');
-    XLSX.writeFile(wb, `flow-run-history-${slugifyModelName(model?.name)}.xlsx`);
+    const sheets = [{ name: 'Run History', rows: csvRows, colWidths: Array(csvRows[0]?.length || 13).fill(16) }];
+    downloadWorkbook(sheets, `flow-run-history-${slugifyModelName(model?.name)}.xlsx`);
     toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as Excel`);
   };
 
@@ -302,7 +299,7 @@ export function ModelHistoryTab({
           value={historySearch}
           onChange={e => setHistorySearch(e.target.value)}
           placeholder="Search runs…"
-          style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "4px 8px", outline: "none", width: 160 }}
+          style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "4px 8px", width: 160 }}
         />
         <Btn small variant={historyShowArchived ? "primary" : "ghost"} onClick={() => {
           const next = !historyShowArchived;
@@ -432,7 +429,7 @@ export function ModelHistoryTab({
                             }}
                             onKeyDown={e => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") setHistoryEditLabelId(null); }}
                             autoFocus
-                            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.text, fontFamily: FONT, fontSize: 11, padding: "2px 6px", outline: "none", width: "100%" }}
+                            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.text, fontFamily: FONT, fontSize: 11, padding: "2px 6px", width: "100%" }}
                           />
                         ) : (
                           <span
@@ -513,7 +510,7 @@ export function ModelHistoryTab({
                             aria-label={`Add tag to run ${row.id}`}
                             type="text"
                             placeholder="+ tag"
-                            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 999, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 7px", outline: "none", width: 56 }}
+                            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 999, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 7px", width: 56 }}
                             onKeyDown={async (e) => {
                               if ((e.key === "Enter" || e.key === ",") && e.target.value.trim() && userId) {
                                 const tag = e.target.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
@@ -657,7 +654,9 @@ export function ModelHistoryTab({
                                           const result = await createShareLink(row.id, userId, {});
                                           setShareLinksMap?.(prev => ({ ...prev, [row.id]: result }));
                                           navigator.clipboard?.writeText(`${baseUrl}/#share/${result.token}`).catch(() => {});
-                                        } catch {}
+                                        } catch {
+                                          toast.error("Couldn't create the share link — please try again");
+                                        }
                                         setMoreMenuId(null);
                                       }}
                                       style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}

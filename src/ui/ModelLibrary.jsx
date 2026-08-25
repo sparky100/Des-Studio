@@ -57,7 +57,7 @@ function LibraryControls({ models, filter, onFilterChange }) {
             placeholder="Search models…"
             value={filter.search}
             onChange={e => onFilterChange({ ...filter, search: e.target.value })}
-            style={{ width: "100%", padding: "5px 28px 5px 10px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, outline: "none", boxSizing: "border-box" }}
+            style={{ width: "100%", padding: "5px 28px 5px 10px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, boxSizing: "border-box" }}
           />
           {filter.search && (
             <button type="button" aria-label="Clear search"
@@ -69,7 +69,7 @@ function LibraryControls({ models, filter, onFilterChange }) {
           value={filter.sort}
           onChange={e => onFilterChange({ ...filter, sort: e.target.value })}
           aria-label="Sort order"
-          style={{ padding: "5px 8px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, outline: "none", cursor: "pointer" }}>
+          style={{ padding: "5px 8px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, cursor: "pointer" }}>
           {SORT_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
       </div>
@@ -178,7 +178,7 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsC
                 if (result?.ok !== false) inputEl.value = "";
               }
             }}
-            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 8px", outline: "none", width: 56 }}
+            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 8px", width: 56 }}
           />
         </div>
       ) : visibleTags.length > 0 && (
@@ -251,7 +251,7 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
   const useAi = async () => { if (saving) return; setSaving(true); try { await onUseAi?.("", ""); } finally { setSaving(false); } onClose(); };
   const goPaste = () => { setMode("paste"); };
   const goDraw = () => { setMode("draw"); };
-  const inputStyle = { width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" };
+  const inputStyle = { width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "8px 10px", boxSizing: "border-box" };
   const optionBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 10, textAlign: "left", color: "inherit", fontFamily: FONT };
   const iconBox = { width: 30, height: 30, background: C.border + "44", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
   const importBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "10px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textAlign: "left", color: "inherit", fontFamily: FONT };
@@ -577,7 +577,7 @@ export function ModelLibrary({
         return (
           <div>
             <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-              <input type="search" placeholder="Search templates…" value={tmplSearch} onChange={e => setTmplSearch(e.target.value)} style={{ flex: "1 1 160px", minWidth: 120, padding: "5px 10px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, outline: "none" }} />
+              <input type="search" placeholder="Search templates…" value={tmplSearch} onChange={e => setTmplSearch(e.target.value)} style={{ flex: "1 1 160px", minWidth: 120, padding: "5px 10px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12 }} />
               <button type="button" onClick={() => setShowPatternsGuide(true)} style={{ padding: "5px 12px", borderRadius: 4, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontFamily: FONT, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }} onMouseEnter={e => e.currentTarget.style.color = C.accent} onMouseLeave={e => e.currentTarget.style.color = C.muted}>Patterns Guide</button>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                 {allDomains.map(d => (

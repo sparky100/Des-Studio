@@ -34,6 +34,7 @@ export const PALETTES = {
     warmup:       "#78350f",
     errorBg:      "#7f1d1d",
     error:        "#fca5a5",
+    errorLight:   "#f851491f",
     warnBg:       "#fde68a",
     kpiArr:       "#38bdf8",
     kpiSvc:       "#10b981",
@@ -74,6 +75,7 @@ export const PALETTES = {
     warmup:       "#92400e",
     errorBg:      "#fee2e2",
     error:        "#991b1b",
+    errorLight:   "#fee2e2",
     warnBg:       "#fef3c7",
     kpiArr:       "#0284c7",
     kpiSvc:       "#059669",
@@ -114,6 +116,7 @@ export const PALETTES = {
     warmup:       "#92350a",
     errorBg:      "#8f1d1d",
     error:        "#ffb3b3",
+    errorLight:   "#ff6b6b26",
     warnBg:       "#fde68a",
     kpiArr:       "#38bdf8",
     kpiSvc:       "#34d399",
@@ -173,7 +176,7 @@ export function ThemeProvider({ themeId, onThemeChange, children }) {
   useEffect(() => {
     const C = paletteForId(resolvedId);
     document.body.style.background = C.bg;
-    try { localStorage.setItem("des.themeId", themeId); } catch (_) {}
+    try { localStorage.setItem("des.themeId", themeId); } catch (_) { /* storage unavailable (private mode) — non-critical */ }
   }, [resolvedId, themeId]);
 
   const value = {

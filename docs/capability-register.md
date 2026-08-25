@@ -1,4 +1,15 @@
 # simmodlr — Capability Register v1.0
+
+> ## Addendum 2026-08-24 — read before relying on this document
+>
+> This register is baselined at Sprint 55a; the codebase is now at Sprint 89, and the historical body below has **not** been rewritten. Known corrections against the current codebase:
+>
+> - **24 effect macros** are implemented (`MACROS` array in `src/engine/macros.js`) — including DELAY, FINISH, RELEASE_COSEIZED, CANCEL, and ROUND_ROBIN, which post-date this register.
+> - **26 templates** in `src/engine/templates.js`.
+> - **There is no `WebSocketAdapter` class.** WebSocket transport lives inside `ActualsStreamAdapter` (`src/engine/adapters/ActualsStreamAdapter.js`).
+> - The **Distance distribution** plus **`DistanceRegistryEditor`** partially mitigate the network-flows gap.
+> - For the verified, current capability inventory see `docs/reviews/expert-review-2026-08-functionality.md`.
+
 Sprint baseline: 55a  |  Date: 2026-05-20
 
 All "Supported" statuses are backed by a passing benchmark in the

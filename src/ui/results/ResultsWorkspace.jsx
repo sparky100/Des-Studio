@@ -9,7 +9,7 @@ import { evaluateResultsHealth } from "./healthFlags.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { buildGoalGaps } from "../../llm/prompts.js";
-import * as XLSX from 'xlsx';
+import { downloadWorkbook } from "../shared/workbook.js";
 
 const HIST_W = 360;
 const HIST_H = 140;
@@ -867,17 +867,19 @@ function WaitValuesPreview({ dist }) {
 function WaitHistogram({ dist, color }) {
   const { C, FONT } = useTheme();
   const [tip, setTip] = useState(null);
-  if (!dist || dist.n < 2) return null;
 
   // Prefer pre-computed histogram bins (present in "minimal" saves) over raw values.
   // Fall back to computing FD bins from raw values for live/compact/full runs.
+  // Hooks must run unconditionally, so the too-few-samples bail-out comes after.
   const histBins = useMemo(() => {
+    if (!dist || dist.n < 2) return null;
     if (dist.histogram?.bins?.length > 1) return dist.histogram.bins;
     if (Array.isArray(dist.values) && dist.values.length > 1) {
       return buildHistogramFD(dist.values, { maxBins: HIST_BINS }).bins;
     }
     return null;
   }, [dist]);
+  if (!dist || dist.n < 2) return null;
 
   if (!histBins || histBins.length < 2) return null;
   const minV = histBins[0].low;
@@ -1219,7 +1221,7 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
               aria-label="Batch-means metric"
               value={batchMetric}
               onChange={e => { setBatchMetric(e.target.value); setBatchResult(null); }}
-              style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
+              style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px" }}
             >
               {ANALYSIS_METRICS.map(metric => (
                 <option key={metric.path} value={metric.path}>{metric.label}</option>
@@ -1617,7 +1619,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     try {
       const stored = JSON.parse(localStorage.getItem("des.results.sections") || "null");
       if (stored && typeof stored === "object") return { ...SECTION_DEFAULTS, ...stored };
-    } catch {}
+    } catch { /* storage unavailable (private mode) — non-critical */ }
     return { ...SECTION_DEFAULTS };
   });
   const [activeSectionIds, setActiveSectionIds] = useState([]);
@@ -1625,7 +1627,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
 
   const toggleSection = id => setSectionsOpen(prev => {
     const next = { ...prev, [id]: !prev[id] };
-    try { localStorage.setItem("des.results.sections", JSON.stringify(next)); } catch {}
+    try { localStorage.setItem("des.results.sections", JSON.stringify(next)); } catch { /* storage unavailable (private mode) — non-critical */ }
     return next;
   });
 
@@ -1684,8 +1686,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     const modelName = model?.name || 'model';
     const timestamp = timestampForFilename();
     const allSeriesSections = chartModel?.chartSections || [];
-    const wb = XLSX.utils.book_new();
-    let hasData = false;
+    const sheets = [];
     for (const section of allSeriesSections) {
       const sectionName = (section.title || section.id || 'chart').slice(0, 31);
       // Series data
@@ -1693,13 +1694,10 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         for (const series of section.series) {
           const pts = series.points || [];
           if (!pts.length) continue;
-          hasData = true;
           const rows = [['index', 'time', 'value']];
           pts.forEach((p, i) => rows.push([i + 1, p.t ?? '', p.value ?? '']));
-          const ws = XLSX.utils.aoa_to_sheet(rows);
-          ws['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 10 }];
           const sheetLabel = (series.label || sectionName).slice(0, 31);
-          XLSX.utils.book_append_sheet(wb, ws, sheetLabel);
+          sheets.push({ name: sheetLabel, rows, colWidths: [8, 10, 10] });
         }
       }
       // Distribution data
@@ -1707,25 +1705,15 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         for (const dist of section.distributions) {
           const values = dist.values || [];
           if (!values.length) continue;
-          hasData = true;
           const rows = [['rank', 'wait']];
           values.forEach((v, i) => rows.push([i + 1, v]));
-          const ws = XLSX.utils.aoa_to_sheet(rows);
-          ws['!cols'] = [{ wch: 8 }, { wch: 10 }];
           const sheetLabel = (dist.label || sectionName).slice(0, 31);
-          XLSX.utils.book_append_sheet(wb, ws, sheetLabel);
+          sheets.push({ name: sheetLabel, rows, colWidths: [8, 10] });
         }
       }
     }
-    if (!hasData) return;
-    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `flow-all-chart-data-${slugifyResultName(modelName)}-${timestamp}.xlsx`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (!sheets.length) return;
+    downloadWorkbook(sheets, `flow-all-chart-data-${slugifyResultName(modelName)}-${timestamp}.xlsx`);
   }, [model, chartModel]);
 
   const hasChartData = !!((chartModel?.chartSections || []).some(s => (s.series || []).length > 0 || (s.distributions || []).length > 0));

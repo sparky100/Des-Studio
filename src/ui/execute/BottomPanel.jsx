@@ -505,7 +505,7 @@ function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeS
           value={phaseFilter}
           onChange={ev => setPhaseFilter(ev.target.value)}
           style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4,
-            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px" }}
         >
           <option value="all">All phases</option>
           <option value="B">B-Events</option>
@@ -869,13 +869,13 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
             value={filterText}
             onChange={ev => setFilterText(ev.target.value)}
             style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4,
-              color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 8px", outline: "none" }}
+              color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 8px" }}
           />
           <select
             value={filterStatus}
             onChange={ev => setFilterStatus(ev.target.value)}
             style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4,
-              color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+              color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px" }}
           >
             <option value="all">All</option>
             <option value="waiting">Waiting</option>
@@ -1046,13 +1046,13 @@ function ResourcesTab({ snap, model }) {
           onChange={ev => setFilterText(ev.target.value)}
           style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`,
             borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11,
-            padding: "5px 8px", outline: "none" }}
+            padding: "5px 8px" }}
         />
         <select
           value={filterStatus}
           onChange={ev => setFilterStatus(ev.target.value)}
           style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4,
-            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px" }}
         >
           <option value="all">All</option>
           <option value="busy">Has Busy</option>
@@ -1204,7 +1204,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
       const delta = dragStateRef.current.startY - clientY;
       const newH = Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, dragStateRef.current.startHeight + delta));
       setBodyHeight(newH);
-      try { localStorage.setItem("des.bottomPanel.height", String(newH)); } catch {}
+      try { localStorage.setItem("des.bottomPanel.height", String(newH)); } catch { /* storage unavailable (private mode) — non-critical */ }
     };
     const handlePointerUp = () => {
       dragStateRef.current = null;
@@ -1279,7 +1279,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
               aria-selected={activeTab === tab.id}
               aria-disabled={tab.disabled}
               disabled={tab.disabled}
-              onClick={() => { if (!tab.disabled) { setActiveTab(tab.id); setCollapsed(false); try { localStorage.setItem("des.bottomPanel.tab", tab.id); localStorage.setItem("des.bottomPanel.collapsed", "0"); } catch {} } }}
+              onClick={() => { if (!tab.disabled) { setActiveTab(tab.id); setCollapsed(false); try { localStorage.setItem("des.bottomPanel.tab", tab.id); localStorage.setItem("des.bottomPanel.collapsed", "0"); } catch { /* storage unavailable (private mode) — non-critical */ } } }}
               style={{ ...tabBtnStyle(tab.id), opacity: tab.disabled ? 0.4 : 1, cursor: tab.disabled ? "not-allowed" : "pointer" }}
             >
               {tab.label}
@@ -1289,7 +1289,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
         <div style={{ flex: 1 }} />
         <button
           aria-label={collapsed ? "Expand details panel" : "Collapse details panel"}
-          onClick={() => setCollapsed(c => { const next = !c; try { localStorage.setItem("des.bottomPanel.collapsed", next ? "1" : "0"); } catch {} return next; })}
+          onClick={() => setCollapsed(c => { const next = !c; try { localStorage.setItem("des.bottomPanel.collapsed", next ? "1" : "0"); } catch { /* storage unavailable (private mode) — non-critical */ } return next; })}
           style={chevronStyle}
         >
           {collapsed ? "▼" : "▲"}

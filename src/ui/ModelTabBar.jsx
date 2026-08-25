@@ -89,10 +89,9 @@ export function ModelTabBar({
       <span
         aria-hidden="true"
         title={tabIssueTooltip(tabId)}
-        onClick={(e) => { e.stopPropagation(); setTab("validate"); }}
         style={{
           background: C.errorBg, border: `1px solid ${C.danger}66`, borderRadius: 10,
-          color: C.error, fontSize: 9, fontWeight: 700, padding: "1px 5px", cursor: "pointer",
+          color: C.error, fontSize: 9, fontWeight: 700, padding: "1px 5px",
         }}
       >
         {counts.errors}
@@ -102,10 +101,9 @@ export function ModelTabBar({
       <span
         aria-hidden="true"
         title={tabIssueTooltip(tabId)}
-        onClick={(e) => { e.stopPropagation(); setTab("validate"); }}
         style={{
           background: alpha(C.amber, 0.15), border: `1px solid ${alpha(C.amber, 0.4)}`,
-          borderRadius: 10, color: C.amber, fontSize: 9, fontWeight: 700, padding: "1px 5px", cursor: "pointer",
+          borderRadius: 10, color: C.amber, fontSize: 9, fontWeight: 700, padding: "1px 5px",
         }}
       >
         {counts.warnings}
@@ -274,11 +272,9 @@ export function ModelTabBar({
                 <span
                   aria-hidden="true"
                   title={`${modeCounts.errors} error${modeCounts.errors !== 1 ? "s" : ""} in ${mode.label} mode — click to view details`}
-                  onClick={(e) => { e.stopPropagation(); setTab("validate"); }}
                   style={{
                     background: C.errorBg, border: `1px solid ${C.danger}66`,
                     borderRadius: 10, color: C.error, fontSize: 9, padding: "1px 5px",
-                    cursor: "pointer",
                   }}
                 >
                   {modeCounts.errors}
@@ -288,11 +284,9 @@ export function ModelTabBar({
                 <span
                   aria-hidden="true"
                   title={`${modeCounts.warnings} warning${modeCounts.warnings !== 1 ? "s" : ""} in ${mode.label} mode — click to view details`}
-                  onClick={(e) => { e.stopPropagation(); setTab("validate"); }}
                   style={{
                     background: alpha(C.amber, 0.15), border: `1px solid ${alpha(C.amber, 0.4)}`,
                     borderRadius: 10, color: C.amber, fontSize: 9, padding: "1px 5px",
-                    cursor: "pointer",
                   }}
                 >
                   {modeCounts.warnings}

@@ -139,7 +139,7 @@ const Field=({label,value,onChange,multiline,rows=2,placeholder="",autoFocus=fal
   const generatedId=useId();
   const id=`field-${generatedId}`;
   const inputBase={background:C.bg,border:`1px solid ${C.border}`,borderRadius:RADIUS.sm,color:C.text,
-    fontFamily:FONT,fontSize:12,padding:`${SPACE.sm}px ${SPACE.sm+2}px`,outline:"none"};
+    fontFamily:FONT,fontSize:12,padding:`${SPACE.sm}px ${SPACE.sm+2}px`};
   return (
     <div style={{display:"flex",flexDirection:"column",gap:SPACE.xs+1}}>
       {label&&<label htmlFor={id} style={{...TYPO.label,color:C.muted,fontFamily:FONT,letterSpacing:"1.5px"}}>{label}</label>}
@@ -249,7 +249,7 @@ const PiecewiseEditor=({value,onChange,compact})=>{
           <label style={{display:"flex",alignItems:"center",gap:4}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from t:</span>
             <input type="number" value={period.startTime??""} disabled={i===0} onChange={e=>upd(i,{startTime:e.target.value})}
-              style={{width:70,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none",opacity:i===0?0.7:1}}/>
+              style={{width:70,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",opacity:i===0?0.7:1}}/>
           </label>
           <DistPicker value={period.distribution||{dist:"Exponential",distParams:{mean:"1"}}}
             onChange={distribution=>upd(i,{distribution})} compact={compact} allowPiecewise={false}/>
@@ -302,10 +302,10 @@ const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
     e.target.value="";
     const isXlsx=/\.(xlsx|xls|ods)$/i.test(file.name);
     const reader=new FileReader();
-    reader.onload=(ev)=>{
+    reader.onload=async (ev)=>{
       const opts={epoch:epoch||null,timeUnit:timeUnit||'minutes'};
       const result=isXlsx
-        ? parseXlsx(ev.target.result,opts)
+        ? await parseXlsx(ev.target.result,opts)
         : parsePlanCsv(ev.target.result,opts);
       if (result.format === 'multi') {
         setCsvPreview({
@@ -375,7 +375,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
   };
 
   const inpSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,
-    fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"};
+    fontFamily:FONT,fontSize:11,padding:"3px 6px"};
   const selSt={...inpSt,color:C.cEvent};
   const labelSt={fontSize:10,color:C.muted,fontFamily:FONT};
   const thSt={fontSize:10,color:C.muted,fontFamily:FONT,padding:"2px 6px",textAlign:"left",whiteSpace:"nowrap"};
@@ -569,7 +569,7 @@ const DistanceEditor=({value,onChange,queues=[],entityTypes=[]})=>{
     .flatMap(et=>(et.attrDefs||[]).filter(a=>a.valueType==="number").map(a=>a.name))
     .filter(Boolean);
   const uniqueAttrs=[...new Set(attrPool)];
-  const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"};
+  const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"};
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
@@ -626,7 +626,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
   const syncedFamily=getDistGroup(v.dist)?.id||selectedFamily;
 
   const selSt={width:compact?160:200,background:C.bg,border:`1px solid ${C.cEvent}55`,
-    borderRadius:4,color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"};
+    borderRadius:4,color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"4px 8px"};
 
   const handleDistChange=(sel)=>{
     if(sel==="__csv__"){fileRef.current?.click();return;}
@@ -762,7 +762,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
                     style={{width:60,background:"transparent",
                       border:`1px solid ${errMsg?C.red:C.border}`,
                       borderRadius:RADIUS.sm,color:C.amber,fontFamily:FONT,fontSize:11,
-                      padding:"3px 6px",outline:"none"}}/>
+                      padding:"3px 6px"}}/>
                 </div>
                 {errMsg&&(
                   <span role="alert" style={{fontSize:10,color:C.red,fontFamily:FONT}}>{errMsg}</span>

@@ -98,10 +98,10 @@ describe('RouteEdgeDialog', () => {
   it('shows one row per probabilistic branch with the right percentage and a green total', () => {
     setup();
     expect(screen.getByText(/Triage Complete/)).toBeInTheDocument();
-    const inputs = screen.getAllByRole('spinbutton');
+    const inputs = screen.getAllByRole('textbox', { name: /probability for route/i });
     expect(inputs).toHaveLength(2);
-    expect(inputs[0]).toHaveValue(70);
-    expect(inputs[1]).toHaveValue(30);
+    expect(inputs[0]).toHaveValue('70');
+    expect(inputs[1]).toHaveValue('30');
     expect(screen.getByText(/1\.000 ✓/)).toBeInTheDocument();
   });
 
@@ -112,10 +112,13 @@ describe('RouteEdgeDialog', () => {
     expect(screen.getByText(/≠ 1\.0 ✗/)).toBeInTheDocument();
   });
 
-  it('changing a branch percentage applies an updated model via onApply', () => {
+  it('changing a branch percentage applies an updated model on commit (blur), not per keystroke', () => {
     const { onApply } = setup();
-    const inputs = screen.getAllByRole('spinbutton');
+    const inputs = screen.getAllByRole('textbox', { name: /probability for route/i });
     fireEvent.change(inputs[0], { target: { value: '55' } });
+    // Typing alone must not push a model update (per-keystroke commits flood undo)
+    expect(onApply).not.toHaveBeenCalled();
+    fireEvent.blur(inputs[0]);
 
     expect(onApply).toHaveBeenCalledTimes(1);
     const nextModel = onApply.mock.calls[0][0];
@@ -158,7 +161,7 @@ describe('RouteEdgeDialog', () => {
 
   it('disables edit controls and hides add/remove buttons when canEdit is false', () => {
     setup(makeModel(), { canEdit: false });
-    const inputs = screen.getAllByRole('spinbutton');
+    const inputs = screen.getAllByRole('textbox', { name: /probability for route/i });
     inputs.forEach(input => expect(input).toBeDisabled());
     expect(screen.queryByRole('button', { name: /add branch/i })).not.toBeInTheDocument();
   });
