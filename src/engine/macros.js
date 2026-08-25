@@ -397,7 +397,7 @@ export const MACROS = [
         legacyBalkProbability: felRef?.balkProbability,
       });
       if (joined) {
-        const depth = ctx.index ? indexBucket(ctx.index, queueName).length : helpers.waitingOf(typeName).length;
+        const depth = ctx.index ? (indexBucket(ctx.index, queueName) || []).length : helpers.waitingOf(typeName).length;
         msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${queueName}, depth: ${depth}]`);
       }
     },
@@ -435,7 +435,6 @@ export const MACROS = [
       const discipline = matchedQ?.discipline || 'FIFO';
       const queueToken = matchedQ ? matchedQ.name : cType;
 
-      /** @type {any} */
       const filterFn = ctx.entityFilter
         ? (/** @type {any} */ entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
@@ -509,7 +508,7 @@ export const MACROS = [
           }
         }
 
-        if (!claimServerForEntity(cust, srv, clock, ctx.index, /** @type {any} */ (ctx), /** @type {any} */ (skill))) {
+        if (!claimServerForEntity(cust, srv, clock, ctx.index, ctx, skill)) {
           msgs.push(`ASSIGN(${cType},${sType}): claim failed`);
           return;
         }
@@ -567,7 +566,6 @@ export const MACROS = [
       const discipline = matchedQ?.discipline || 'FIFO';
       const token      = matchedQ ? matchedQ.name : queueToken;
 
-      /** @type {any} */
       const filterFn = ctx.entityFilter
         ? (/** @type {any} */ entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
@@ -1295,7 +1293,7 @@ export const MACROS = [
       const serverEntries = Object.entries(idleServersByType);
       const primarySrv = serverEntries[0][1];
       const primarySkill = (serverDefs.find(d => d.type === serverEntries[0][0]) || serverDefs[0]).skill;
-      if (!claimServerForEntity(cust, primarySrv, clock, ctx.index, /** @type {any} */ (ctx), /** @type {any} */ (primarySkill))) {
+      if (!claimServerForEntity(cust, primarySrv, clock, ctx.index, ctx, primarySkill)) {
         msgs.push(`COSEIZE: claim failed for ${serverEntries[0][0]} #${primarySrv.id}`);
         return;
       }

@@ -1,3 +1,4 @@
+// @ts-check
 // engine/entities.js — Entity lifecycle and status helpers
 //
 // EXTENDING: To add a new entity role (e.g. "resource"):
@@ -7,6 +8,15 @@
 
 import { evaluatePredicate } from "./conditions.js";
 import { sample } from "./distributions.js";
+
+/**
+ * @typedef {{
+ *   waitingByQueue: Map<string, Record<string, any>[]>,
+ *   servers: Record<string, any>[],
+ *   fifoSortedByQueue: Map<string, boolean>,
+ *   byId: Map<any, Record<string, any>>,
+ * }} QueueIndex
+ */
 
 export const ENTITY_ROLES = {
   customer: {
@@ -45,10 +55,15 @@ let _seq = 0;
 export const resetSeq = () => { _seq = 0; };
 export const nextId   = () => ++_seq;
 
+/** @param {any} value */
 function norm(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+/**
+ * @param {string} [discipline]
+ * @returns {(a: Record<string, any>, b: Record<string, any>) => number}
+ */
 export function queueDisciplineComparator(discipline = "FIFO") {
   const d = (discipline || "FIFO").toUpperCase();
 
@@ -58,7 +73,7 @@ export function queueDisciplineComparator(discipline = "FIFO") {
     const attrNameUpper = priorityMatch[1];
     return (a, b) => {
       // Case-insensitive attribute lookup — discipline is uppercased but attrs keep original casing
-      const findAttr = (entity) => {
+      const findAttr = (/** @type {Record<string, any>} */ entity) => {
         if (!entity.attrs) return Infinity;
         for (const key of Object.keys(entity.attrs)) {
           if (key.toUpperCase() === attrNameUpper) return Number(entity.attrs[key]);
@@ -107,6 +122,10 @@ export function queueDisciplineComparator(discipline = "FIFO") {
   }
 }
 
+/**
+ * @param {Record<string, any>[]} waiting
+ * @param {string} [discipline]
+ */
 export function sortWaitingEntities(waiting, discipline = "FIFO") {
   return [...waiting].sort(queueDisciplineComparator(discipline));
 }
@@ -136,6 +155,7 @@ export function sortWaitingEntities(waiting, discipline = "FIFO") {
 // indexAddServer/indexRemoveServer explicitly since they splice `entities`
 // directly. Status transitions (idle/busy/failed) happen in place on the
 // same object reference, so no add/remove bookkeeping is needed for those.
+/** @returns {QueueIndex} */
 export function createQueueIndex() {
   return { waitingByQueue: new Map(), servers: [], fifoSortedByQueue: new Map(), byId: new Map() };
 }
@@ -145,6 +165,11 @@ export function createQueueIndex() {
 // event — those scans are the dominant remaining cost on a congested model
 // once queue-membership and sort costs are already indexed. Maintained at
 // every entities.push/splice site (see indexTrackEntity/indexUntrackEntity).
+/**
+ * @param {QueueIndex|null} index
+ * @param {Record<string, any>[]} entities
+ * @param {any} id
+ */
 export function findEntityById(index, entities, id) {
   if (id == null) return null;
   return index ? (index.byId.get(id) ?? null) : (entities.find(e => e.id === id) ?? null);
@@ -152,6 +177,10 @@ export function findEntityById(index, entities, id) {
 
 // Registers an entity in the byId index. Call at every site that adds an
 // entity to the live `entities` array. Safe to call with a falsy index (no-op).
+/**
+ * @param {QueueIndex|null} index
+ * @param {Record<string, any>|null|undefined} entity
+ */
 export function indexTrackEntity(index, entity) {
   if (!index || !entity) return;
   index.byId.set(entity.id, entity);
@@ -161,6 +190,10 @@ export function indexTrackEntity(index, entity) {
 // an entity from the live `entities` array — including BATCH's children
 // splice, since a batched child is no longer live until UNBATCH re-tracks it
 // (under the same id, but as a new cloned object) via attemptQueueJoin.
+/**
+ * @param {QueueIndex|null} index
+ * @param {Record<string, any>|null|undefined} entity
+ */
 export function indexUntrackEntity(index, entity) {
   if (!index || !entity) return;
   if (index.byId.get(entity.id) === entity) index.byId.delete(entity.id);
@@ -179,6 +212,7 @@ export function indexUntrackEntity(index, entity) {
 // real sort on the *next* read to restore the invariant (sorting in place,
 // so the cost is amortised across however many reads happen before the
 // next out-of-order append) rather than falling back to sorting forever.
+/** @param {any} discipline */
 function isPlainFifo(discipline) {
   const d = norm(discipline);
   return !d || d === "fifo";
@@ -188,6 +222,11 @@ function isPlainFifo(discipline) {
 // out-of-order join left it dirty. Callers must treat the returned array as
 // read-only (it's the live bucket, not a copy) — copy before mutating/
 // returning to outside code that might splice/shift it.
+/**
+ * @param {QueueIndex} index
+ * @param {string} queueName
+ * @param {string} discipline
+ */
 function readSortedBucket(index, queueName, discipline) {
   const key = norm(queueName);
   const bucket = index.waitingByQueue.get(key) || [];
@@ -198,17 +237,30 @@ function readSortedBucket(index, queueName, discipline) {
   return bucket;
 }
 
+/**
+ * @param {QueueIndex|null} index
+ * @param {Record<string, any>|null|undefined} server
+ */
 export function indexAddServer(index, server) {
   if (!index || !server) return;
   index.servers.push(server);
 }
 
+/**
+ * @param {QueueIndex|null} index
+ * @param {Record<string, any>|null|undefined} server
+ */
 export function indexRemoveServer(index, server) {
   if (!index || !server) return;
   const i = index.servers.indexOf(server);
   if (i !== -1) index.servers.splice(i, 1);
 }
 
+/**
+ * @param {QueueIndex|null} index
+ * @param {string|null|undefined} queueName
+ * @param {Record<string, any>} entity
+ */
 export function indexAdd(index, queueName, entity) {
   if (!index || !queueName) return;
   const key = norm(queueName);
@@ -223,6 +275,11 @@ export function indexAdd(index, queueName, entity) {
   bucket.push(entity);
 }
 
+/**
+ * @param {QueueIndex|null} index
+ * @param {string|null|undefined} queueName
+ * @param {Record<string, any>} entity
+ */
 export function indexRemove(index, queueName, entity) {
   if (!index || !queueName) return;
   const bucket = index.waitingByQueue.get(norm(queueName));
@@ -231,6 +288,10 @@ export function indexRemove(index, queueName, entity) {
   if (i !== -1) bucket.splice(i, 1);
 }
 
+/**
+ * @param {QueueIndex|null} index
+ * @param {string} queueName
+ */
 export function indexBucket(index, queueName) {
   if (!index) return null;
   return index.waitingByQueue.get(norm(queueName)) || [];
@@ -242,6 +303,10 @@ export function indexBucket(index, queueName) {
 // removes done/reneged entities, which are never in the index — but this is
 // kept as a safety net for callers that construct/replace `entities` directly,
 // e.g. tests).
+/**
+ * @param {QueueIndex} index
+ * @param {Record<string, any>[]} entities
+ */
 export function rebuildQueueIndex(index, entities) {
   index.waitingByQueue.clear();
   index.fifoSortedByQueue.clear();
@@ -255,6 +320,14 @@ export function rebuildQueueIndex(index, entities) {
  * Returns the first entity from `entities` waiting in the named queue or type,
  * sorted by discipline. Set `isQueueName=true` to match entity.queue; false for entity.type.
  */
+/**
+ * @param {any} token
+ * @param {string} discipline
+ * @param {Record<string, any>[]} entities
+ * @param {((entity: any) => boolean)|null} [filterFn]
+ * @param {boolean} [isQueueName]
+ * @param {QueueIndex|null} [index]
+ */
 export function selectWaiting(token, discipline, entities, filterFn = null, isQueueName = false, index = null) {
   return listWaiting(token, discipline, entities, filterFn, isQueueName, true, index)[0] ?? null;
 }
@@ -264,6 +337,15 @@ export function selectWaiting(token, discipline, entities, filterFn = null, isQu
  * When `isQueueName` is true and `index` is supplied, reads the small per-queue
  * bucket instead of filtering the entire `entities` array — same resulting set
  * and sort order, just without the O(N) scan.
+ */
+/**
+ * @param {any} token
+ * @param {string} discipline
+ * @param {Record<string, any>[]} entities
+ * @param {((entity: any) => boolean)|null} [filterFn]
+ * @param {boolean} [isQueueName]
+ * @param {boolean} [includeBatches]
+ * @param {QueueIndex|null} [index]
  */
 export function listWaiting(token, discipline, entities, filterFn = null, isQueueName = false, includeBatches = true, index = null) {
   const key = norm(token);
@@ -286,6 +368,7 @@ export function listWaiting(token, discipline, entities, filterFn = null, isQueu
   return sortWaitingEntities(pool, discipline);
 }
 
+/** @param {Record<string, any>[]} resources */
 export function sortResourceEntities(resources) {
   return [...resources].sort((a, b) => {
     const timeDelta = (a.arrivalTime || 0) - (b.arrivalTime || 0);
@@ -294,6 +377,12 @@ export function sortResourceEntities(resources) {
   });
 }
 
+/**
+ * @param {Record<string, any>} customer
+ * @param {Record<string, any>} server
+ * @param {number} clock
+ * @param {string|null} [queueName]
+ */
 function claimSnapshot(customer, server, clock, queueName) {
   return {
     customerId: customer.id,
@@ -305,6 +394,11 @@ function claimSnapshot(customer, server, clock, queueName) {
   };
 }
 
+/**
+ * @param {Record<string, any>} entity
+ * @param {number} clock
+ * @param {string|null} [queueName]
+ */
 function waitingSnapshot(entity, clock, queueName) {
   return {
     kind: "queue",
@@ -313,6 +407,15 @@ function waitingSnapshot(entity, clock, queueName) {
   };
 }
 
+/**
+ * entity is genuinely required (the default queueName expression reads it
+ * unguarded), but the `if (!entity) return false` below stays as defensive
+ * belt-and-suspenders for callers this signature can't fully police.
+ * @param {Record<string, any>} entity
+ * @param {number} clock
+ * @param {string|null} [queueName]
+ * @param {QueueIndex|null} [index]
+ */
 export function markEntityWaiting(entity, clock, queueName = entity.queue ?? entity.lastQueue ?? null, index = null) {
   if (!entity) return false;
   if (entity.status === "done" || entity.status === "reneged") return false;
@@ -331,6 +434,10 @@ export function markEntityWaiting(entity, clock, queueName = entity.queue ?? ent
   return true;
 }
 
+/**
+ * @param {Record<string, any>|null} entity
+ * @param {QueueIndex|null} [index]
+ */
 export function clearWaitingState(entity, index = null) {
   if (!entity) return false;
   if (index && entity.status === "waiting" && entity.queue) {
@@ -341,6 +448,14 @@ export function clearWaitingState(entity, index = null) {
   return true;
 }
 
+/**
+ * @param {Record<string, any>|null} customer
+ * @param {Record<string, any>|null} server
+ * @param {number} clock
+ * @param {QueueIndex|null} [index]
+ * @param {Record<string, any>|null} [ctx]
+ * @param {string|null} [skill]
+ */
 export function claimServerForEntity(customer, server, clock, index = null, ctx = null, skill = null) {
   if (!customer || !server) return false;
   if (customer.status !== "waiting" || server.status !== "idle") return false;
@@ -376,6 +491,11 @@ export function claimServerForEntity(customer, server, clock, index = null, ctx 
   return true;
 }
 
+/**
+ * @param {Record<string, any>|null} customer
+ * @param {Record<string, any>|null} server
+ * @param {number} clock
+ */
 export function releaseServerClaim(customer, server, clock) {
   if (!customer && !server) return false;
 
@@ -410,6 +530,12 @@ export function releaseServerClaim(customer, server, clock) {
 // A preempted customer resumes an interrupted wait — it's not making a fresh decision
 // to join a queue, so balking is skipped, but capacity/overflow (F11.1/F11.3) still
 // applies (it could overflow/exit if its original queue is now full).
+/**
+ * @param {Record<string, any>} cust
+ * @param {Record<string, any>} srv
+ * @param {number} clock
+ * @param {Record<string, any>} ctx
+ */
 export function preemptCustomer(cust, srv, clock, ctx) {
   const scheduledDuration = srv._scheduledDuration || 0;
   const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
@@ -417,7 +543,7 @@ export function preemptCustomer(cust, srv, clock, ctx) {
   releaseServerClaim(cust, srv, clock);
   // Release any other co-seized servers still claimed by this customer (COSEIZE pattern) —
   // otherwise a PREEMPT/FAIL on one co-seized resource leaves the others stuck "busy" forever.
-  const auxiliaryBusy = (ctx?.entities || []).filter(e =>
+  const auxiliaryBusy = (ctx?.entities || []).filter((/** @type {any} */ e) =>
     e.role === "server" &&
     e.currentCustId === cust.id &&
     e.id !== srv.id &&
@@ -440,6 +566,10 @@ export function preemptCustomer(cust, srv, clock, ctx) {
 // calendar-constrained resource that opens and closes every day. Always
 // called on an idle server (releaseServerClaim/preemptCustomer already ran),
 // so there is no in-progress busy segment left to compute here.
+/**
+ * @param {Record<string, any>|null} srv
+ * @param {Record<string, any>|null} state
+ */
 export function flushRetiredServerStats(srv, state) {
   if (!srv || srv.role !== "server" || !state) return;
   state.__retiredResourceStats = state.__retiredResourceStats || {};
@@ -463,6 +593,10 @@ export function flushRetiredServerStats(srv, state) {
   }
 }
 
+/**
+ * @param {Record<string, any>[]} failedServers
+ * @param {number} clock
+ */
 export function repairServers(failedServers, clock) {
   let count = 0;
   for (const srv of failedServers) {
@@ -493,6 +627,10 @@ export function repairServers(failedServers, clock) {
  * flow entities. Shared by the one-time warmup prune and the periodic
  * in-run prune so the FEL carve-out rule never drifts between the two.
  */
+/**
+ * @param {Record<string, any>[]} entities
+ * @param {Record<string, any>[]} fel
+ */
 export function pruneTerminalEntities(entities, fel) {
   const kept = [];
   const removed = [];
@@ -514,9 +652,13 @@ export function pruneTerminalEntities(entities, fel) {
   return { entities: kept, fel: keptFel, removed };
 }
 
+/**
+ * @param {Record<string, any>|null} model
+ * @param {any} token
+ */
 export function findQueueConfig(model, token) {
   const key = norm(token);
-  return (model?.queues || []).find(queue => norm(queue.name) === key || norm(queue.customerType) === key) || null;
+  return (model?.queues || []).find((/** @type {any} */ queue) => norm(queue.name) === key || norm(queue.customerType) === key) || null;
 }
 
 /**
@@ -539,6 +681,14 @@ export function findQueueConfig(model, token) {
  * Returns true if the entity ended up waiting somewhere; false if it was discarded
  * (balked/blocked with no overflow destination, or an overflow cycle was detected).
  */
+/**
+ * @param {Record<string, any>} entity
+ * @param {string} queueName
+ * @param {number} clock
+ * @param {Record<string, any>} ctx
+ * @param {Record<string, any>} [opts]
+ * @returns {boolean}
+ */
 export function attemptQueueJoin(entity, queueName, clock, ctx, opts = {}) {
   const { model, entities } = ctx;
   const qDef = findQueueConfig(model, queueName);
@@ -552,8 +702,8 @@ export function attemptQueueJoin(entity, queueName, clock, ctx, opts = {}) {
   visited.add(qKey);
 
   const queueDepth = () => ctx.index
-    ? indexBucket(ctx.index, queueName).length
-    : entities.filter(e => e.status === "waiting" && norm(e.queue) === norm(queueName)).length;
+    ? (indexBucket(ctx.index, queueName) || []).length
+    : entities.filter((/** @type {any} */ e) => e.status === "waiting" && norm(e.queue) === norm(queueName)).length;
 
   if (!opts.skipBalk) {
     const balkCondition = qDef?.balkCondition ?? opts.legacyBalkCondition ?? null;
@@ -594,6 +744,17 @@ export function attemptQueueJoin(entity, queueName, clock, ctx, opts = {}) {
   return true;
 }
 
+/**
+ * @param {string} metricKey
+ * @param {string} reasonLabel
+ * @param {Record<string, any>} entity
+ * @param {Record<string, any>|null} qDef
+ * @param {string} queueName
+ * @param {number} clock
+ * @param {Record<string, any>} ctx
+ * @param {Set<any>} visited
+ * @returns {boolean}
+ */
 function rerouteOrExit(metricKey, reasonLabel, entity, qDef, queueName, clock, ctx, visited) {
   ctx.incQueueMetric?.(queueName, metricKey);
   const dest = qDef?.overflowDestination ?? null;
@@ -605,6 +766,11 @@ function rerouteOrExit(metricKey, reasonLabel, entity, qDef, queueName, clock, c
   return false;
 }
 
+/**
+ * @param {Record<string, any>} entity
+ * @param {Record<string, any>} ctx
+ * @param {string} msg
+ */
 function discardFailedJoin(entity, ctx, msg) {
   const { entities } = ctx;
   const idx = entities.indexOf(entity);
@@ -613,6 +779,12 @@ function discardFailedJoin(entity, ctx, msg) {
   ctx.msgs?.push(msg);
 }
 
+/**
+ * @param {Record<string, any>} entity
+ * @param {Record<string, any>} qDef
+ * @param {number} clock
+ * @param {Record<string, any>} ctx
+ */
 function scheduleAutoRenege(entity, qDef, clock, ctx) {
   if (typeof ctx.scheduleEvent !== "function") return;
   const qKey = qDef.id || norm(qDef.name);
@@ -632,6 +804,12 @@ function scheduleAutoRenege(entity, qDef, clock, ctx) {
 /**
  * Create a new customer entity.
  */
+/**
+ * @param {string} typeName
+ * @param {string|null} [role]
+ * @param {Record<string, any>} [attrs]
+ * @param {number} [clock]
+ */
 export function createCustomer(typeName, role, attrs, clock) {
   return {
     id:          nextId(),
@@ -648,6 +826,11 @@ export function createCustomer(typeName, role, attrs, clock) {
 
 /**
  * Pre-create all server entities from entity type definitions.
+ */
+/**
+ * @param {Record<string, any>[]} entityTypes
+ * @param {(attrDefs: any) => Record<string, any>} sampleAttrsFn
+ * @param {(() => number)|null} [rng]
  */
 export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
   const entities = [];
@@ -673,6 +856,7 @@ export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
     }
 
     for (let i = 0; i < count; i++) {
+      /** @type {Record<string, any>} */
       const server = {
         id:          nextId(),
         type:        et.name.trim(),
@@ -694,7 +878,7 @@ export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
         let slot = i;
         for (const { profile, count: c } of countAssignments) {
           if (slot < c) {
-            (profile.skills || []).forEach(s => instanceSkills.add(s));
+            (profile.skills || []).forEach((/** @type {any} */ s) => instanceSkills.add(s));
             skillPriority = Math.max(skillPriority, Number(profile.priority) || 0);
             break;
           }
@@ -706,7 +890,7 @@ export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
           for (const p of weightProfiles) {
             const w = Math.max(0, Math.min(100, Number(p.weight) || 0));
             if (w > 0 && rng() < w / 100) {
-              (p.skills || []).forEach(s => instanceSkills.add(s));
+              (p.skills || []).forEach((/** @type {any} */ s) => instanceSkills.add(s));
               skillPriority = Math.max(skillPriority, Number(p.priority) || 0);
             }
           }
@@ -725,21 +909,35 @@ export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
 /**
  * Status filter helpers — all case-insensitive on type name.
  */
+/**
+ * @param {Record<string, any>[]} entities
+ * @param {Record<string, any>|null} [model]
+ * @param {QueueIndex|null} [index]
+ */
 export function makeHelpers(entities, model = null, index = null) {
-  const match = (a, b) => norm(a) === norm(b);
+  const match = (/** @type {any} */ a, /** @type {any} */ b) => norm(a) === norm(b);
 
   // The small, stable server roster when an index is available, falling back
   // to scanning the full (potentially huge) entities array otherwise.
-  const serverPool = () => index ? index.servers : entities.filter(e => e.role === "server");
+  const serverPool = () => index ? index.servers : entities.filter((/** @type {any} */ e) => e.role === "server");
 
+  /**
+   * @param {(entity: any) => boolean} predicate
+   * @param {string} [discipline]
+   * @param {((entity: any) => boolean)|null} [filterFn]
+   */
   function filterWaiting(predicate, discipline = "FIFO", filterFn = null) {
-    let waiting = entities.filter(entity => entity.status === "waiting" && predicate(entity));
+    let waiting = entities.filter((/** @type {any} */ entity) => entity.status === "waiting" && predicate(entity));
     if (filterFn) waiting = waiting.filter(filterFn);
     return sortWaitingEntities(waiting, discipline);
   }
 
+  /**
+   * @param {any} queueName
+   * @param {boolean} includeBatches
+   */
   function makeQueueFilter(queueName, includeBatches) {
-    return entity => {
+    return (/** @type {any} */ entity) => {
       if (!entity.queue || !match(entity.queue, queueName)) return false;
       if (!includeBatches && entity.role === "batch") return false;
       return true;
@@ -751,9 +949,15 @@ export function makeHelpers(entities, model = null, index = null) {
   // dominant cost for congested models, since waitingInQueue backs both
   // queue(Name).length predicate evaluation and ASSIGN/DELAY/BATCH/MATCH/
   // COSEIZE candidate lookups.
+  /**
+   * @param {any} queueName
+   * @param {string} [discipline]
+   * @param {((entity: any) => boolean)|null} [filterFn]
+   * @param {boolean} [includeBatches]
+   */
   function waitingInQueue(queueName, discipline = "FIFO", filterFn = null, includeBatches = true) {
     let pool = index ? readSortedBucket(index, queueName, discipline) : entities.filter(makeQueueFilter(queueName, includeBatches));
-    if (index && !includeBatches) pool = pool.filter(e => e.role !== "batch");
+    if (index && !includeBatches) pool = pool.filter((/** @type {any} */ e) => e.role !== "batch");
     if (filterFn) pool = pool.filter(filterFn);
     if (index && isPlainFifo(discipline)) return [...pool];
     return sortWaitingEntities(pool, discipline);
@@ -762,57 +966,61 @@ export function makeHelpers(entities, model = null, index = null) {
   // A server "has" a skill either via its type's static skills[] or its own
   // per-instance skills[] (from skillProfiles) — shared by hasSkillType and
   // idleOfAnySkill (cross-type ASSIGN pooling).
+  /**
+   * @param {any} entity
+   * @param {any} skill
+   */
   function entityHasSkill(entity, skill) {
     if (Array.isArray(entity.skills) && entity.skills.includes(skill)) return true;
-    const et = (model?.entityTypes || []).find(t => t.role === "server" && match(t.name, entity.type));
+    const et = (model?.entityTypes || []).find((/** @type {any} */ t) => t.role === "server" && match(t.name, entity.type));
     return !!(et && Array.isArray(et.skills) && et.skills.includes(skill));
   }
 
   return {
     entities,
     model,
-    findQueueConfig: (token) => findQueueConfig(model, token),
+    findQueueConfig: (/** @type {any} */ token) => findQueueConfig(model, token),
 
-    waitingOf: (type, discipline = "FIFO", filterFn = null) =>
-      filterWaiting(entity => match(entity.type, type), discipline, filterFn),
+    waitingOf: (/** @type {any} */ type, /** @type {string} */ discipline = "FIFO", /** @type {any} */ filterFn = null) =>
+      filterWaiting((entity) => match(entity.type, type), discipline, filterFn),
 
     waitingInQueue,
 
-    selectWaitingOf: (type, discipline = "FIFO", filterFn = null) =>
-      filterWaiting(entity => match(entity.type, type), discipline, filterFn)[0],
+    selectWaitingOf: (/** @type {any} */ type, /** @type {string} */ discipline = "FIFO", /** @type {any} */ filterFn = null) =>
+      filterWaiting((entity) => match(entity.type, type), discipline, filterFn)[0],
 
-    selectWaitingInQueue: (queueName, discipline = "FIFO", filterFn = null, includeBatches = true) =>
+    selectWaitingInQueue: (/** @type {any} */ queueName, /** @type {string} */ discipline = "FIFO", /** @type {any} */ filterFn = null, includeBatches = true) =>
       waitingInQueue(queueName, discipline, filterFn, includeBatches)[0],
 
-    idleOf: (type) =>
-      sortResourceEntities(serverPool().filter(e => match(e.type, type) && e.status === "idle" && !e._suspended)),
+    idleOf: (/** @type {any} */ type) =>
+      sortResourceEntities(serverPool().filter((/** @type {any} */ e) => match(e.type, type) && e.status === "idle" && !e._suspended)),
 
     // Cross-type pooling for ASSIGN(Queue, ANY, "Skill") — idle servers of any
     // type that carry the given skill, still sorted FIFO by idle-since time.
-    idleOfAnySkill: (skill) =>
-      sortResourceEntities(serverPool().filter(e => e.status === "idle" && !e._suspended && entityHasSkill(e, skill))),
+    idleOfAnySkill: (/** @type {any} */ skill) =>
+      sortResourceEntities(serverPool().filter((/** @type {any} */ e) => e.status === "idle" && !e._suspended && entityHasSkill(e, skill))),
 
-    busyOf: (type) =>
-      sortResourceEntities(serverPool().filter(e => match(e.type, type) && (e.status === "busy" || e.status === "serving") && !e._suspended)),
+    busyOf: (/** @type {any} */ type) =>
+      sortResourceEntities(serverPool().filter((/** @type {any} */ e) => match(e.type, type) && (e.status === "busy" || e.status === "serving") && !e._suspended)),
 
-    failedOf: (type) =>
-      sortResourceEntities(serverPool().filter(e => match(e.type, type) && e.status === "failed")),
+    failedOf: (/** @type {any} */ type) =>
+      sortResourceEntities(serverPool().filter((/** @type {any} */ e) => match(e.type, type) && e.status === "failed")),
 
-    selectIdleOf: (type) =>
-      sortResourceEntities(serverPool().filter(e => match(e.type, type) && e.status === "idle" && !e._suspended))[0],
+    selectIdleOf: (/** @type {any} */ type) =>
+      sortResourceEntities(serverPool().filter((/** @type {any} */ e) => match(e.type, type) && e.status === "idle" && !e._suspended))[0],
 
-    hasSkillType: (typeName, skill) => {
-      const et = (model?.entityTypes || []).find(et =>
+    hasSkillType: (/** @type {any} */ typeName, /** @type {any} */ skill) => {
+      const et = (model?.entityTypes || []).find((/** @type {any} */ et) =>
         et.role === "server" && match(et.name, typeName)
       );
       return et && Array.isArray(et.skills) && et.skills.includes(skill);
     },
 
-    findById: (id) =>
+    findById: (/** @type {any} */ id) =>
       findEntityById(index, entities, id),
 
     allCustomers: () =>
-      entities.filter(e => e.role !== "server"),
+      entities.filter((/** @type {any} */ e) => e.role !== "server"),
 
     allServers: () =>
       serverPool(),
