@@ -2,7 +2,7 @@
 
 **Sprint:** 93
 **Theme:** Six small, independent, no-design-needed polish items from the 2026-08 UX review (§3.2 of the remediation register): shortcuts discoverability, priority numeric entry, persistent CI detail, tab-label consistency, live regions, reduced motion.
-**Status:** ⬜ Planned
+**Status:** ✅ Complete
 **Prerequisites:** PR #468 (Sprints 90–92 + ADR-020 Phase 1) — all items below build on that branch's state; file:line references are against it.
 
 Every item was re-verified against the current branch on 2026-08-25 (post-Sprint-91/92 drift); line numbers below are current. Items are independent — any subset can ship.
