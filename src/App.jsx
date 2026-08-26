@@ -509,7 +509,9 @@ export default function App({ onThemeChange }){
     </div>
   )
 
-  const myModels=models.filter(m=>m.owner_id===uid||m.access?.[uid])
+  // Strict role check — the legacy Remove flow wrote access[uid]="none",
+  // which is truthy and used to keep removed collaborators' models listed.
+  const myModels=models.filter(m=>m.owner_id===uid||['viewer','editor'].includes(m.access?.[uid]))
   const pubModels=models.filter(m=>m.visibility==='public'&&m.owner_id!==uid)
   const communityModels=models.filter(m=>m.visibility==='public')
 
@@ -579,9 +581,12 @@ export default function App({ onThemeChange }){
 
   if(openId){
     const model = models.find(m => m.id === openId) || localModel;
-    const isOwner = model?.owner_id === uid;
-    const canEdit = isOwner || model?.access?.[uid] === 'editor';
     const isLocal = !session && model?.id?.startsWith('local_');
+    // Local (signed-out) models are always fully editable by whoever holds
+    // the browser; cloud models gate on ownership and the access-map role.
+    const accessRole = model?.access?.[uid];
+    const isOwner = isLocal || model?.owner_id === uid;
+    const canEdit = isOwner || accessRole === 'editor';
     const parentModel = model?.parentModelId ? models.find(m => m.id === model.parentModelId) : null;
     const childScenarios = models.filter(m => m.parentModelId === openId);
     return(
@@ -618,7 +623,7 @@ export default function App({ onThemeChange }){
             overrides={{
               autoRun: openModelOptions.autoRun,
               showStarterGuide: openModelOptions.showStarterGuide,
-              isOwner: true, canEdit: true, profiles, userId: isLocal ? null : uid, isAdmin, plan: profile?.plan || 'free', tierPolicies: tierPolicies || undefined,
+              isOwner, canEdit, profiles, userId: isLocal ? null : uid, isAdmin, plan: profile?.plan || 'free', tierPolicies: tierPolicies || undefined,
               onHelpOpen: () => setHelpOpen(true),
               onSave: isLocal
                 ? async (m) => saveLocalModel(m)

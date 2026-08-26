@@ -1837,7 +1837,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                           <option value="viewer">Viewer</option>
                           <option value="editor">Editor</option>
                         </select>
-                        <Btn small variant="ghost" onClick={()=>{const a={...(model.access||{}),[u.id]:"none"};setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}>Remove</Btn>
+                        <Btn small variant="ghost" onClick={()=>{const a={...(model.access||{})};delete a[u.id];setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}>Remove</Btn>
                       </div>
                     ))}
                   </div>
