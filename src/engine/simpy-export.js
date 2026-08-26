@@ -1,10 +1,13 @@
+// @ts-check
 // engine/simpy-export.js — Export a DES Studio model as a runnable SimPy Python script
 //
 // exportToSimPy(model) → { script: string, category: 1 | 2, todoMacros: string[], warnings: string[] }
 //   category 1 — fully runnable; no manual edits needed
-//   category 2 — partial; sections marked with # TODO require user completion
-//   warnings   — semantic divergences from the native engine that aren't auto-translated
-//                (non-FIFO queue discipline, unsupported distributions, DRAIN semantics)
+//   category 2 — partial; sections marked with # NOT SUPPORTED require user completion
+//   warnings   — semantic divergences from the native engine that aren't auto-translated:
+//                non-FIFO queue discipline, unsupported/unconfigured distributions,
+//                DRAIN semantics, untranslatable routing conditions (branch always
+//                taken), and TODO_MACRO_SET macros (no code generated at all)
 
 // Macros whose SimPy translation requires manual completion
 const TODO_MACRO_SET = new Set([
@@ -13,9 +16,11 @@ const TODO_MACRO_SET = new Set([
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+/** @param {Record<string, any>} model */
 export function exportToSimPy(model) {
   const todoMacros = collectTodoMacros(model);
   const category = todoMacros.length > 0 ? 2 : 1;
+  /** @type {string[]} */
   const warnings = [];
   const script = buildScript(model, new Set(todoMacros), warnings);
   return { script, category, todoMacros, warnings };
@@ -23,6 +28,10 @@ export function exportToSimPy(model) {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
+/**
+ * @param {any} effect
+ * @returns {string}
+ */
 function effectText(effect) {
   if (!effect) return '';
   if (Array.isArray(effect)) return effect.map(effectText).filter(Boolean).join(';');
@@ -39,6 +48,7 @@ function effectText(effect) {
   return String(effect || '');
 }
 
+/** @param {Record<string, any>} model */
 function collectTodoMacros(model) {
   const found = new Set();
   const events = [...(model.bEvents || []), ...(model.cEvents || [])];
@@ -52,6 +62,7 @@ function collectTodoMacros(model) {
 }
 
 // Convert a name string to a valid Python identifier
+/** @param {any} name */
 function safeId(name) {
   const s = String(name || '')
     .trim()
@@ -62,6 +73,7 @@ function safeId(name) {
 }
 
 // Convert to PascalCase class name
+/** @param {any} name */
 function toPascal(name) {
   return String(name || '')
     .replace(/[^A-Za-z0-9]+/g, ' ')
@@ -72,8 +84,10 @@ function toPascal(name) {
     .join('') || 'Entity';
 }
 
+/** @param {any} dist */
 function normalizeDistName(dist) {
   const d = String(dist || '').toLowerCase().replace(/[_\s-]/g, '');
+  /** @type {Record<string, string>} */
   const map = {
     exponential: 'Exponential', exp: 'Exponential',
     uniform: 'Uniform',
@@ -86,6 +100,10 @@ function normalizeDistName(dist) {
   return map[d] || null;
 }
 
+/**
+ * @param {any} dist
+ * @param {Record<string, any>} [distParams]
+ */
 function distToExpr(dist, distParams) {
   const d = normalizeDistName(dist);
   const p = distParams || {};
@@ -109,6 +127,7 @@ function distToExpr(dist, distParams) {
 }
 
 // Returns a comment string for distributions that fall back to 1.0, null otherwise
+/** @param {any} dist */
 function distUnsupportedNote(dist) {
   if (!dist) return null;
   if (normalizeDistName(dist)) return null;
@@ -118,18 +137,24 @@ function distUnsupportedNote(dist) {
 }
 
 // Returns true if this schedule entry uses a Piecewise distribution
+/** @param {Record<string, any>} [sched] */
 function isPiecewiseDist(sched) {
   const raw = String(sched?.dist || '').toLowerCase().replace(/[_\s-]/g, '');
   return raw === 'piecewise';
 }
 
 // Returns true if this schedule entry uses a Schedule (planned absolute times) distribution
+/** @param {Record<string, any>} [sched] */
 function isScheduleDist(sched) {
   const raw = String(sched?.dist || '').toLowerCase().replace(/[_\s-]/g, '');
   return raw === 'schedule';
 }
 
 // Generate a _piecewise_NAME(t) helper function for a piecewise distribution
+/**
+ * @param {string} fnName
+ * @param {any[]} periods
+ */
 function buildPiecewiseFn(fnName, periods) {
   const validPeriods = (periods || []).filter(p => p.dist);
   if (validPeriods.length === 0) return `def ${fnName}(t):\n    return 1.0\n`;
@@ -150,6 +175,10 @@ ${entries.join(',\n')},
 `;
 }
 
+/**
+ * @param {any} dist
+ * @param {Record<string, any>} [distParams]
+ */
 function distLabel(dist, distParams) {
   const d = normalizeDistName(dist);
   const p = distParams || {};
@@ -166,21 +195,30 @@ function distLabel(dist, distParams) {
 }
 
 // Parse effect string into array of { name, rawArgs } macro calls
+/** @param {any} effectStr */
 function parseMacroCalls(effectStr) {
   if (!effectStr) return [];
   const calls = [];
-  for (const part of effectStr.split(';').map(s => s.trim()).filter(Boolean)) {
+  for (const part of effectStr.split(';').map((/** @type {any} */ s) => s.trim()).filter(Boolean)) {
     const m = part.match(/^(\w+)\((.*)\)$/is);
     if (m) calls.push({ name: m[1].toUpperCase(), rawArgs: m[2].trim(), raw: part });
   }
   return calls;
 }
 
+/**
+ * @param {any} effectStr
+ * @param {string} macroName
+ */
 function findMacroCall(effectStr, macroName) {
   return parseMacroCalls(effectStr).find(c => c.name === macroName) || null;
 }
 
 // Find the B-event that is the "completion" event for a C-event (via cSchedules[0].eventId)
+/**
+ * @param {Record<string, any>} cEvent
+ * @param {Record<string, any>[]} bEvents
+ */
 function findCompletionBEvent(cEvent, bEvents) {
   for (const cs of (cEvent.cSchedules || [])) {
     if (cs.eventId) {
@@ -197,29 +235,41 @@ function findCompletionBEvent(cEvent, bEvents) {
 }
 
 // Get service time distribution from a C-event's cSchedules
+/** @param {Record<string, any>} cEvent */
 function getServiceDist(cEvent) {
-  const cs = (cEvent.cSchedules || []).find(s => s.dist || s.distribution);
+  const cs = (cEvent.cSchedules || []).find((/** @type {any} */ s) => s.dist || s.distribution);
   if (!cs) return { dist: 'Fixed', distParams: { value: 1 }, placeholder: true };
   return { dist: cs.dist || 'Exponential', distParams: cs.distParams || {}, placeholder: false };
 }
 
-// Translate a predicate condition to a Python boolean expression
-function predicateToExpr(condition) {
+// Translate a predicate condition to a Python boolean expression. When a
+// condition can't be translated, the emitted branch is always taken — this
+// actively diverges from the real model's behaviour, not just "incomplete" —
+// so it pushes a NOT SUPPORTED warning (surfaced in the export UI) alongside
+// the matching comment in the generated code.
+/**
+ * @param {any} condition
+ * @param {string[]} warnings
+ * @param {string} [context]
+ */
+function predicateToExpr(condition, warnings, context) {
   if (!condition) return 'True';
   if (typeof condition === 'string') {
-    return `True  # TODO: translate condition string: ${condition.replace(/\n/g, ' ')}`;
+    warnings.push(`NOT SUPPORTED: routing condition "${condition}"${context ? ` on ${context}` : ''} could not be translated — branch always taken`);
+    return `True  # NOT SUPPORTED: translate condition string: ${condition.replace(/\n/g, ' ')}`;
   }
   if (typeof condition !== 'object') return 'True';
 
   if (condition.operator === 'AND' || condition.operator === 'OR') {
     const op = condition.operator === 'AND' ? ' and ' : ' or ';
-    const sub = (condition.clauses || []).map(predicateToExpr);
+    const sub = (condition.clauses || []).map((/** @type {any} */ c) => predicateToExpr(c, warnings, context));
     return sub.length ? `(${sub.join(op)})` : 'True';
   }
 
   const variable = String(condition.variable || '');
   const opStr = String(condition.op || condition.operator || '==');
   const value = condition.value ?? 0;
+  /** @type {Record<string, string>} */
   const opMap = {
     '==': '==', 'eq': '==', 'neq': '!=', '!=': '!=',
     '>': '>', 'gt': '>', '>=': '>=', 'gte': '>=',
@@ -232,11 +282,18 @@ function predicateToExpr(condition) {
     return `getattr(entity, "${safeId(attrMatch[1])}", None) ${pyOp} ${JSON.stringify(value)}`;
   }
   // Queue length or other complex references
-  return `True  # TODO: translate condition variable "${variable}" ${opStr} ${JSON.stringify(value)}`;
+  warnings.push(`NOT SUPPORTED: routing condition variable "${variable}"${context ? ` on ${context}` : ''} could not be translated — branch always taken`);
+  return `True  # NOT SUPPORTED: translate condition variable "${variable}" ${opStr} ${JSON.stringify(value)}`;
 }
 
 // Generate routing code after service completion for one B-event
-function routingCode(completionBEvent, queues, statsRef = 'stats') {
+/**
+ * @param {Record<string, any>|null} completionBEvent
+ * @param {Record<string, any>[]} queues
+ * @param {string[]} warnings
+ * @param {string} [statsRef]
+ */
+function routingCode(completionBEvent, queues, warnings, statsRef = 'stats') {
   if (!completionBEvent) {
     return `    # Entity completes journey\n    if env.now >= WARMUP_PERIOD:\n        ${statsRef}.served.append(entity)\n`;
   }
@@ -245,13 +302,13 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
   const lines = [];
 
   // Conditional routing table
-  const routing = (completionBEvent.routing || []).filter(r =>
+  const routing = (completionBEvent.routing || []).filter((/** @type {any} */ r) =>
     r.condition && (r.queueName !== undefined)
   );
   if (routing.length > 0) {
     lines.push(`    # Conditional routing from B-event "${completionBEvent.name}"`);
-    routing.forEach((branch, i) => {
-      const cond = predicateToExpr(branch.condition);
+    routing.forEach((/** @type {any} */ branch, /** @type {number} */ i) => {
+      const cond = predicateToExpr(branch.condition, warnings, `B-event "${completionBEvent.name}"`);
       const keyword = i === 0 ? 'if' : 'elif';
       lines.push(`    ${keyword} ${cond}:`);
       if (branch.queueName) {
@@ -282,7 +339,7 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
     lines.push(`    # Probabilistic routing from B-event "${completionBEvent.name}"`);
     lines.push(`    _r = random.random()`);
     let cumulative = 0;
-    probRouting.forEach((branch, i) => {
+    probRouting.forEach((/** @type {any} */ branch, /** @type {number} */ i) => {
       const prob = parseFloat(branch.probability) || 0;
       cumulative += prob;
       const keyword = i === 0 ? 'if' : 'elif';
@@ -313,7 +370,7 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
   // RELEASE with target queue
   const releaseCall = findMacroCall(effText, 'RELEASE');
   if (releaseCall) {
-    const releaseArgs = releaseCall.rawArgs.split(',').map(s => s.trim());
+    const releaseArgs = releaseCall.rawArgs.split(',').map((/** @type {any} */ s) => s.trim());
     const targetQ = releaseArgs[1];
     if (targetQ) {
       lines.push(`    # RELEASE — return entity to "${targetQ}"`);
@@ -332,6 +389,11 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
 
 // ── Script builder ────────────────────────────────────────────────────────────
 
+/**
+ * @param {Record<string, any>} model
+ * @param {Set<string>} todoSet
+ * @param {string[]} [warnings]
+ */
 function buildScript(model, todoSet, warnings = []) {
   const bEvents     = model.bEvents     || [];
   const cEvents     = model.cEvents     || [];
@@ -346,19 +408,33 @@ function buildScript(model, todoSet, warnings = []) {
   const replications = +(expDef.replications ?? model.replications ?? 1);
   const timeUnit     = model.timeUnit || 'minutes';
 
-  const servers   = entityTypes.filter(e => e.role === 'server');
-  const customers = entityTypes.filter(e => e.role !== 'server');
+  const servers   = entityTypes.filter((/** @type {any} */ e) => e.role === 'server');
+  const customers = entityTypes.filter((/** @type {any} */ e) => e.role !== 'server');
 
   const now = new Date().toISOString().split('T')[0];
   const category = todoSet.size > 0 ? 2 : 1;
   const todoList = [...todoSet];
+
+  // These macros produce no generated code at all at their usage site — warn
+  // per actual event, not just per macro name, so it's traceable to what
+  // needs fixing (not just that something in the model does).
+  if (todoSet.size > 0) {
+    for (const ev of [...bEvents, ...cEvents]) {
+      const text = effectText(ev.effect);
+      for (const m of todoSet) {
+        if (new RegExp(`\\b${m}\\s*\\(`, 'i').test(text)) {
+          warnings.push(`NOT SUPPORTED: ${m} at "${ev.name}" — no code generated, see the "${m}" pattern near the end of the script`);
+        }
+      }
+    }
+  }
 
   const parts = [];
 
   // ── Header docstring ───────────────────────────────────────────────────────
   const catMsg = category === 1
     ? 'Category 1 — complete and runnable.'
-    : `Category 2 — partial; complete the # TODO sections before running.\n#   Macros requiring attention: ${todoList.join(', ')}`;
+    : `Category 2 — partial; complete the # NOT SUPPORTED sections before running.\n#   Macros requiring attention: ${todoList.join(', ')}`;
   parts.push(
 `"""
 flow → SimPy export
@@ -459,19 +535,19 @@ class Stats:
 `);
 
   // ── Arrival processes ──────────────────────────────────────────────────────
-  const arrivalBEvents = bEvents.filter(b => /ARRIVE\s*\(/i.test(effectText(b.effect)));
+  const arrivalBEvents = bEvents.filter((/** @type {any} */ b) => /ARRIVE\s*\(/i.test(effectText(b.effect)));
   if (arrivalBEvents.length > 0) {
     const arrParts = ['# ── Arrival processes ───────────────────────────────────────────────────────'];
     for (const b of arrivalBEvents) {
       const effT = effectText(b.effect);
       const arriveCall = findMacroCall(effT, 'ARRIVE');
       if (!arriveCall) continue;
-      const arrArgs = arriveCall.rawArgs.split(',').map(s => s.trim());
+      const arrArgs = arriveCall.rawArgs.split(',').map((/** @type {any} */ s) => s.trim());
       const customerTypeName = arrArgs[0];
       const queueName = arrArgs[1] || (customerTypeName + 'Queue');
       const storeId = safeId(queueName) + '_store';
       const fnName = 'arrival_' + safeId(b.name || 'process');
-      const cls = customers.find(e =>
+      const cls = customers.find((/** @type {any} */ e) =>
         e.name.trim().toLowerCase() === customerTypeName.trim().toLowerCase()
       );
       const entityClass = cls ? toPascal(cls.name) : 'Entity';
@@ -481,7 +557,7 @@ class Stats:
       // — mirrors phases.js's own normalization for planned absolute-time arrivals,
       // which the SimPy export previously missed (falling back to Exponential(mean=1)
       // and silently dropping the real planned arrivals).
-      const sched = (b.schedules || []).find(s => s.dist || s.distribution || s.rows || s.times);
+      const sched = (b.schedules || []).find((/** @type {any} */ s) => s.dist || s.distribution || s.rows || s.times);
       const schedHasPlan = !!(sched && (sched.rows || sched.times));
       const iaDist = sched?.dist || (schedHasPlan ? 'Schedule' : 'Exponential');
       const iaParams = schedHasPlan
@@ -491,7 +567,7 @@ class Stats:
 
       // Check for balking — balking is configured on the queue itself (F11.2);
       // fall back to the legacy B-event field for pre-migration models.
-      const targetQueue = queues.find(q => (q.name || '').trim().toLowerCase() === queueName.trim().toLowerCase());
+      const targetQueue = queues.find((/** @type {any} */ q) => (q.name || '').trim().toLowerCase() === queueName.trim().toLowerCase());
       const balkProb = targetQueue?.balkProbability != null ? parseFloat(targetQueue.balkProbability)
         : (b.balkProbability != null ? parseFloat(b.balkProbability) : null);
 
@@ -501,8 +577,8 @@ class Stats:
 
       if (isScheduleDist({ dist: iaDist })) {
         // Planned absolute-time arrivals — fire once at each scheduled time
-        const rows = (iaParams?.rows || iaParams?.times?.map?.((t, i) => ({ time: t })) || []);
-        const entries = rows.map(r => {
+        const rows = (iaParams?.rows || iaParams?.times?.map?.((/** @type {any} */ t, /** @type {number} */ i) => ({ time: t })) || []);
+        const entries = rows.map((/** @type {any} */ r) => {
           const t = +(r.time ?? 0);
           const attrs = Object.entries(r.attrs || {})
             .filter(([k]) => k !== 'time')
@@ -561,11 +637,11 @@ class Stats:
   }
 
   // ── Service processes ──────────────────────────────────────────────────────
-  const assignCEvents = cEvents.filter(c => {
+  const assignCEvents = cEvents.filter((/** @type {any} */ c) => {
     const t = effectText(c.effect);
     return /ASSIGN\s*\(/i.test(t) || /COSEIZE\s*\(/i.test(t);
   });
-  const delayCEvents = cEvents.filter(c => /DELAY\s*\(/i.test(effectText(c.effect)));
+  const delayCEvents = cEvents.filter((/** @type {any} */ c) => /DELAY\s*\(/i.test(effectText(c.effect)));
   // Maps c.name → list of routing-target _store variable names, so run_replication()
   // can pass them as explicit parameters to monitor/serve functions.
   const cEventRoutingStores = new Map();
@@ -577,7 +653,7 @@ class Stats:
       if (!assignCall) continue;
 
       const isCoseize = assignCall.name === 'COSEIZE';
-      const args = assignCall.rawArgs.split(',').map(s => s.trim());
+      const args = assignCall.rawArgs.split(',').map((/** @type {any} */ s) => s.trim());
       const queueName = args[0];
       const serverTypes = isCoseize ? args.slice(1) : [args[1]];
       const storeId = safeId(queueName) + '_store';
@@ -587,6 +663,7 @@ class Stats:
       const svcLabel = distLabel(svcDist, svcParams);
       const svcNote = distUnsupportedNote(svcDist);
       if (svcNote) warnings.push(`${c.name || 'service'}: ${svcNote.replace(/^#\s*/, '')}`);
+      if (placeholder) warnings.push(`NOT SUPPORTED: no service distribution configured for "${c.name || 'service'}" — using a fixed value of 1.0`);
 
       const completionBEvent = findCompletionBEvent(c, bEvents);
 
@@ -594,8 +671,8 @@ class Stats:
       const svcFn = safeId(c.name || 'service') + '_serve';
 
       // Resource arguments string
-      const resArgs = serverTypes.map(st => safeId(st) + '_resource').join(', ');
-      const resVars = serverTypes.map(st => safeId(st) + '_resource');
+      const resArgs = serverTypes.map((/** @type {any} */ st) => safeId(st) + '_resource').join(', ');
+      const resVars = serverTypes.map((/** @type {any} */ st) => safeId(st) + '_resource');
 
       // C-event priority: lower number = served first, matching the native engine's
       // C-scan ordering (src/engine/index.js sorts by priority ?? 9999 ascending).
@@ -604,9 +681,9 @@ class Stats:
       // COSEIZE: AllOf across multiple resources
       let seizeBlock;
       if (isCoseize) {
-        const reqVars = resVars.map((r, i) => `_req${i}`);
-        const reqDecls = resVars.map((r, i) => `    ${reqVars[i]} = ${r}.request(priority=${priority})`).join('\n');
-        const svcBusyLines = serverTypes.map(st =>
+        const reqVars = resVars.map((/** @type {any} */ r, /** @type {number} */ i) => `_req${i}`);
+        const reqDecls = resVars.map((/** @type {any} */ r, /** @type {number} */ i) => `    ${reqVars[i]} = ${r}.request(priority=${priority})`).join('\n');
+        const svcBusyLines = serverTypes.map((/** @type {any} */ st) =>
           `        stats.resource_busy["${st}"] = stats.resource_busy.get("${st}", 0.0) + _svc_t`
         ).join('\n');
         const svcNoteLineCoseize = svcNote ? `        ${svcNote}\n` : '';
@@ -616,7 +693,7 @@ class Stats:
     entity.service_start_time = env.now
     entity.wait_time_acc += entity.service_start_time - entity.queue_join_time
     try:
-${svcNoteLineCoseize}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
+${svcNoteLineCoseize}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # NOT SUPPORTED: set service distribution' : ''}
         _svc_t = env.now - entity.service_start_time
         entity.svc_time_acc += _svc_t
 ${svcBusyLines}
@@ -631,7 +708,7 @@ ${svcBusyLines}
         yield _req
         entity.service_start_time = env.now
         entity.wait_time_acc += entity.service_start_time - entity.queue_join_time
-${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
+${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # NOT SUPPORTED: set service distribution' : ''}
         _svc_t = env.now - entity.service_start_time
         entity.svc_time_acc += _svc_t
         stats.resource_busy["${serverTypes[0]}"] = stats.resource_busy.get("${serverTypes[0]}", 0.0) + _svc_t`;
@@ -640,7 +717,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const todoNote = todoSet.has('COSEIZE') ? '' :
         (isCoseize ? '\n    # COSEIZE: simultaneous multi-resource seize via simpy.AllOf' : '');
 
-      const completionCode = routingCode(completionBEvent, queues);
+      const completionCode = routingCode(completionBEvent, queues, warnings);
 
       // Routing code may reference stores local to run_replication() — pass them explicitly.
       const routingStoreVarNames = [...new Set((completionCode.match(/\b\w+_store\b/g) || []))]
@@ -687,13 +764,14 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const delayLabel = distLabel(delayDist, delayParams);
       const delayNote = distUnsupportedNote(delayDist);
       if (delayNote) warnings.push(`${c.name || 'delay'}: ${delayNote.replace(/^#\s*/, '')}`);
+      if (placeholder) warnings.push(`NOT SUPPORTED: no delay distribution configured for "${c.name || 'delay'}" — using a fixed value of 1.0`);
 
       const completionBEvent = findCompletionBEvent(c, bEvents);
 
       const monFn = safeId(c.name || 'delay') + '_monitor';
       const dlyFn = safeId(c.name || 'delay') + '_delay';
 
-      const completionCode = routingCode(completionBEvent, queues);
+      const completionCode = routingCode(completionBEvent, queues, warnings);
       const routingStoreVarNames = [...new Set((completionCode.match(/\b\w+_store\b/g) || []))]
         .filter(v => v !== storeId);
       cEventRoutingStores.set(c.name, routingStoreVarNames);
@@ -708,7 +786,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const delayNoteLine = delayNote ? `    ${delayNote}\n` : '';
       let dlyBody = `def ${dlyFn}(env, entity${rStoreComma}, stats):\n`;
       dlyBody += delayNoteLine;
-      dlyBody += `    yield env.timeout(${delayExpr})  # delay: ${delayLabel}${placeholder ? '  # TODO: set delay distribution' : ''}\n`;
+      dlyBody += `    yield env.timeout(${delayExpr})  # delay: ${delayLabel}${placeholder ? '  # NOT SUPPORTED: set delay distribution' : ''}\n`;
       dlyBody += `    # DELAY: no resource claimed — duration counts toward sojourn only, not wait/service stats\n`;
       dlyBody += `    entity.sojourn_time = env.now - entity.arrival_time\n`;
       dlyBody += completionCode;
@@ -737,13 +815,13 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
   }
 
   // ── Shift schedule processes ───────────────────────────────────────────────
-  const serverWithShifts = servers.filter(s => Array.isArray(s.shiftSchedule) && s.shiftSchedule.length > 0);
+  const serverWithShifts = servers.filter((/** @type {any} */ s) => Array.isArray(s.shiftSchedule) && s.shiftSchedule.length > 0);
   if (serverWithShifts.length > 0) {
     const shiftParts = ['# ── Shift schedule processes ────────────────────────────────────────────────'];
     for (const srv of serverWithShifts) {
       const resId = safeId(srv.name) + '_resource';
       const fnName = 'shift_manager_' + safeId(srv.name);
-      const periods = srv.shiftSchedule.map(p => `(${+(p.time ?? 0)}, ${+(p.capacity ?? 1)})`).join(', ');
+      const periods = srv.shiftSchedule.map((/** @type {any} */ p) => `(${+(p.time ?? 0)}, ${+(p.capacity ?? 1)})`).join(', ');
       shiftParts.push(
 `def ${fnName}(env, ${resId}):
     """Shift schedule for server "${srv.name}"."""
@@ -764,17 +842,19 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
     parts.push(shiftParts.join('\n') + '\n');
   }
 
-  // ── TODO macro stubs ───────────────────────────────────────────────────────
+  // ── NOT SUPPORTED macro stubs ─────────────────────────────────────────────
   if (todoSet.size > 0) {
     const stubParts = ['# ── Macros requiring manual completion ───────────────────────────────────────'];
+    /** @type {Record<string, string>} */
     const stubs = {
-      RENEGE: `# TODO (RENEGE): Implement reneging via a timeout on the resource request.\n# Pattern:\n#   result = yield _req | env.timeout(patience_duration)\n#   if _req not in result:  # entity reneged\n#       if env.now >= WARMUP_PERIOD: stats.reneged.append(entity)\n#       return`,
-      BATCH: `# TODO (BATCH): Accumulate N entities from a store before processing.\n# Pattern:\n#   batch = []\n#   while len(batch) < BATCH_SIZE:\n#       batch.append(yield source_store.get())\n#   batch_entity = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(batch_entity)`,
-      RENEGE_OLDEST: `# TODO (RENEGE_OLDEST): Remove the oldest entity from a SimPy Store.\n# Pattern:\n#   if queue_store.items:\n#       oldest = queue_store.items.pop(0)  # FIFO: index 0 is oldest\n#       if env.now >= WARMUP_PERIOD: stats.reneged.append(oldest)`,
-      MATCH: `# TODO (MATCH): Pair entities from two stores.\n# Pattern:\n#   entity_a = yield store_a.get()\n#   entity_b = yield store_b.get()\n#   combined = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(combined)`,
-      FAIL: `# TODO (FAIL): Simulate server failure.\n# Pattern:\n#   resource._capacity = 0  # blocks new requests\n#   # In-flight requests are not automatically interrupted.\n#   # To interrupt: use simpy.PreemptiveResource and resource.request(preempt=True).`,
-      REPAIR: `# TODO (REPAIR): Restore server after failure (pair with FAIL).\n# Pattern:\n#   resource._capacity = ORIGINAL_CAPACITY`,
-      PREEMPT: `# TODO (PREEMPT): Use simpy.PreemptiveResource for the target server.\n# Replace simpy.Resource with simpy.PreemptiveResource at declaration.\n# Use: resource.request(priority=0, preempt=True)`,
+      RENEGE: `# NOT SUPPORTED (RENEGE): Implement reneging via a timeout on the resource request.\n# Pattern:\n#   result = yield _req | env.timeout(patience_duration)\n#   if _req not in result:  # entity reneged\n#       if env.now >= WARMUP_PERIOD: stats.reneged.append(entity)\n#       return`,
+      BATCH: `# NOT SUPPORTED (BATCH): Accumulate N entities from a store before processing.\n# Pattern:\n#   batch = []\n#   while len(batch) < BATCH_SIZE:\n#       batch.append(yield source_store.get())\n#   batch_entity = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(batch_entity)`,
+      RENEGE_OLDEST: `# NOT SUPPORTED (RENEGE_OLDEST): Remove the oldest entity from a SimPy Store.\n# Pattern:\n#   if queue_store.items:\n#       oldest = queue_store.items.pop(0)  # FIFO: index 0 is oldest\n#       if env.now >= WARMUP_PERIOD: stats.reneged.append(oldest)`,
+      MATCH: `# NOT SUPPORTED (MATCH): Pair entities from two stores.\n# Pattern:\n#   entity_a = yield store_a.get()\n#   entity_b = yield store_b.get()\n#   combined = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(combined)`,
+      FAIL: `# NOT SUPPORTED (FAIL): Simulate server failure.\n# Pattern:\n#   resource._capacity = 0  # blocks new requests\n#   # In-flight requests are not automatically interrupted.\n#   # To interrupt: use simpy.PreemptiveResource and resource.request(preempt=True).`,
+      REPAIR: `# NOT SUPPORTED (REPAIR): Restore server after failure (pair with FAIL).\n# Pattern:\n#   resource._capacity = ORIGINAL_CAPACITY`,
+      PREEMPT: `# NOT SUPPORTED (PREEMPT): Use simpy.PreemptiveResource for the target server.\n# Replace simpy.Resource with simpy.PreemptiveResource at declaration.\n# Use: resource.request(priority=0, preempt=True)`,
+      RELEASE_COSEIZED: `# NOT SUPPORTED (RELEASE_COSEIZED): Atomically release multiple previously co-seized resources for the current entity, mirroring COSEIZE's own AllOf() seize.\n# Pattern:\n#   for _req in entity.coseized_requests:  # however you tracked the requests from the matching COSEIZE\n#       try: _req.resource.release(_req)\n#       except: pass\n#   entity.coseized_requests = []`,
     };
     for (const m of todoList) {
       if (stubs[m]) stubParts.push(stubs[m]);
@@ -885,11 +965,11 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const effT = effectText(c.effect);
       const assignCall = findMacroCall(effT, 'ASSIGN') || findMacroCall(effT, 'COSEIZE');
       if (!assignCall) continue;
-      const args = assignCall.rawArgs.split(',').map(s => s.trim());
+      const args = assignCall.rawArgs.split(',').map((/** @type {any} */ s) => s.trim());
       const queueName = args[0];
       const serverTypes = assignCall.name === 'COSEIZE' ? args.slice(1) : [args[1]];
       const storeId = safeId(queueName) + '_store';
-      const resArgs = serverTypes.map(st => safeId(st) + '_resource').join(', ');
+      const resArgs = serverTypes.map((/** @type {any} */ st) => safeId(st) + '_resource').join(', ');
       const monFn = safeId(c.name || 'service') + '_monitor';
       const routingStoreVarNames = cEventRoutingStores.get(c.name) || [];
       const rStoreComma = routingStoreVarNames.length > 0 ? ', ' + routingStoreVarNames.join(', ') : '';
@@ -927,7 +1007,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
   runLines.push(`    env.run(until=MAX_SIM_TIME)`);
   runLines.push(``);
 
-  const resCapsEntries = servers.map(s => {
+  const resCapsEntries = servers.map((/** @type {any} */ s) => {
     const shiftSched = s.shiftSchedule || [];
     const cap = (() => {
       if (shiftSched.length > 0) {

@@ -1,3 +1,4 @@
+// @ts-check
 // engine/adapters/ActualsStreamAdapter.js
 // Receives actual start-time updates from an external system (e.g. a theatre
 // management system) and applies them to the engine's FEL via updateScheduledTime().
@@ -22,17 +23,25 @@
 import { parseTimeInput } from '../clockUtils.js';
 
 export class ActualsStreamAdapter {
+  /** @param {Record<string, any>} source */
   constructor(source) {
     this._source = source;
+    /** @type {any} */
     this._engine = null;
+    /** @type {string|null} */
     this._epoch  = null;
     this._timeUnit = 'minutes';
+    /** @type {WebSocket|null} */
     this._ws     = null;
+    /** @type {Array<{entityId: string, actualTime: any}>} */
     this._queue  = []; // buffered updates received before engine is attached
   }
 
   /**
    * Attach a running engine instance. Flushes any buffered updates immediately.
+   * @param {any} engine
+   * @param {string} [epoch]
+   * @param {string} [timeUnit]
    */
   attachEngine(engine, epoch = '', timeUnit = 'minutes') {
     this._engine   = engine;
@@ -53,7 +62,7 @@ export class ActualsStreamAdapter {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'batch' && Array.isArray(msg.updates)) {
-            msg.updates.forEach(u => this._handle(u));
+            msg.updates.forEach((/** @type {any} */ u) => this._handle(u));
           } else {
             this._handle(msg);
           }
@@ -65,15 +74,21 @@ export class ActualsStreamAdapter {
   /**
    * Push an actual-time update directly (used in tests and non-WebSocket scenarios).
    */
+  /**
+   * @param {string} entityId
+   * @param {any} actualTime
+   */
   pushUpdate(entityId, actualTime) {
     this._handle({ entityId, actualTime });
   }
 
+  /** @param {{ entityId: string, actualTime: any }} update */
   _handle(update) {
     if (!update?.entityId) return;
     this._applyUpdate(update);
   }
 
+  /** @param {{ entityId: string, actualTime: any }} params */
   _applyUpdate({ entityId, actualTime }) {
     const simTime = parseTimeInput(actualTime, this._epoch || null, this._timeUnit);
     if (simTime == null || !Number.isFinite(simTime)) return;

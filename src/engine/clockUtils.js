@@ -1,19 +1,32 @@
+// @ts-check
 // engine/clockUtils.js — Simulation ↔ real-world time conversion
 
+/** @type {Record<string, number>} */
 const UNIT_MS = { seconds: 1000, minutes: 60000, hours: 3600000, days: 86400000 };
 
+/**
+ * @param {number|string} t
+ * @param {string|null|undefined} epoch
+ * @param {string} [timeUnit]
+ */
 export function simToWall(t, epoch, timeUnit = 'minutes') {
   if (epoch == null || epoch === '') return null;
   const ms = UNIT_MS[timeUnit] ?? UNIT_MS.minutes;
   return new Date(new Date(epoch).getTime() + Number(t) * ms);
 }
 
+/**
+ * @param {Date|string|number} dt
+ * @param {string|null|undefined} epoch
+ * @param {string} [timeUnit]
+ */
 export function wallToSim(dt, epoch, timeUnit = 'minutes') {
   if (epoch == null || epoch === '' || dt == null) return null;
   const ms = UNIT_MS[timeUnit] ?? UNIT_MS.minutes;
   return (new Date(dt).getTime() - new Date(epoch).getTime()) / ms;
 }
 
+/** @param {Date|string|number|null|undefined} date */
 export function formatWallTime(date) {
   if (!date) return null;
   const d = date instanceof Date ? date : new Date(date);
@@ -24,12 +37,22 @@ export function formatWallTime(date) {
   });
 }
 
+/**
+ * @param {number|string} t
+ * @param {string|null|undefined} epoch
+ * @param {string} [timeUnit]
+ */
 export function formatSimWallTime(t, epoch, timeUnit = 'minutes') {
   return formatWallTime(simToWall(t, epoch, timeUnit));
 }
 
 // Parse a value that could be: plain number, HH:MM, or ISO datetime string.
 // Returns a sim-time number, or null if unparseable/epoch missing.
+/**
+ * @param {any} value
+ * @param {string|null|undefined} epoch
+ * @param {string} [timeUnit]
+ */
 export function parseTimeInput(value, epoch, timeUnit = 'minutes') {
   if (value == null || value === '') return null;
   const trimmed = String(value).trim();
@@ -56,6 +79,7 @@ export function parseTimeInput(value, epoch, timeUnit = 'minutes') {
 }
 
 // Returns true if a string looks like a timestamp (not a plain number)
+/** @param {any} value */
 export function looksLikeTimestamp(value) {
   const s = String(value ?? '').trim();
   return /^\d{1,2}:\d{2}(:\d{2})?$/.test(s) || /^\d{4}-\d{2}-\d{2}/.test(s);

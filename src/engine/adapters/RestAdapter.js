@@ -1,11 +1,22 @@
+// @ts-check
 // engine/adapters/RestAdapter.js — Poll-based REST adapter with TTL cache and retry
 
+/**
+ * @param {any} obj
+ * @param {string} path
+ */
 function getField(obj, path) {
   if (!path || obj == null) return obj;
   return path.split('.').reduce((acc, key) => (acc != null ? acc[key] : undefined), obj);
 }
 
+/**
+ * @param {string} url
+ * @param {Record<string, string>} headers
+ * @param {number} [maxAttempts]
+ */
 async function fetchWithRetry(url, headers, maxAttempts = 3) {
+  /** @type {any} */
   let lastErr;
   let delay = 2000;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -23,10 +34,14 @@ async function fetchWithRetry(url, headers, maxAttempts = 3) {
 }
 
 export class RestAdapter {
+  /** @param {Record<string, any>} source */
   constructor(source) {
     this._source = source;
+    /** @type {any} */
     this._cachedData = null;
+    /** @type {number|null} */
     this._fetchedAt = null;
+    /** @type {Promise<void>|null} */
     this._pending = null;
   }
 
@@ -54,6 +69,7 @@ export class RestAdapter {
     await this._pending;
   }
 
+  /** @param {string} field */
   getLatest(field) {
     if (this._cachedData == null) return null;
     const val = getField(this._cachedData, field);

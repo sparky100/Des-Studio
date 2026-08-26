@@ -368,22 +368,17 @@ describe("AiGeneratedModelPanel", () => {
     });
 
     it("shows error message when SpeechRecognition is unavailable", () => {
-      const origSpeech = window.SpeechRecognition;
-      const origWebkit = window.webkitSpeechRecognition;
-      delete window.SpeechRecognition;
-      delete window.webkitSpeechRecognition;
+      vi.stubGlobal("SpeechRecognition", undefined);
+      vi.stubGlobal("webkitSpeechRecognition", undefined);
 
       render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
 
       fireEvent.click(screen.getByRole("button", { name: /start voice input/i }));
       expect(screen.getByText(/voice input is not supported/i)).toBeInTheDocument();
-
-      window.SpeechRecognition = origSpeech;
-      window.webkitSpeechRecognition = origWebkit;
     });
 
     it("starts speech recognition and toggles to stop button", () => {
-      window.SpeechRecognition = mockSpeechRecognition;
+      vi.stubGlobal("SpeechRecognition", mockSpeechRecognition);
 
       render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
 
@@ -393,7 +388,7 @@ describe("AiGeneratedModelPanel", () => {
     });
 
     it("stops recognition and toggles back to mic when clicked again", () => {
-      window.SpeechRecognition = mockSpeechRecognition;
+      vi.stubGlobal("SpeechRecognition", mockSpeechRecognition);
 
       render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
 
@@ -406,7 +401,7 @@ describe("AiGeneratedModelPanel", () => {
     });
 
     it("configures the onresult callback during start", () => {
-      window.SpeechRecognition = mockSpeechRecognition;
+      vi.stubGlobal("SpeechRecognition", mockSpeechRecognition);
 
       render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
 
@@ -418,7 +413,7 @@ describe("AiGeneratedModelPanel", () => {
     });
 
     it("stops recognition and shows error on onerror callback", async () => {
-      window.SpeechRecognition = mockSpeechRecognition;
+      vi.stubGlobal("SpeechRecognition", mockSpeechRecognition);
 
       render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
 
@@ -430,7 +425,7 @@ describe("AiGeneratedModelPanel", () => {
     });
 
     it("stops recognition on onend callback", async () => {
-      window.SpeechRecognition = mockSpeechRecognition;
+      vi.stubGlobal("SpeechRecognition", mockSpeechRecognition);
 
       render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
 
@@ -441,7 +436,7 @@ describe("AiGeneratedModelPanel", () => {
     });
 
     it("disables mic button when loading", () => {
-      window.SpeechRecognition = mockSpeechRecognition;
+      vi.stubGlobal("SpeechRecognition", mockSpeechRecognition);
 
       mockCallModelBuilder.mockImplementation(() => new Promise(() => {}));
       render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
@@ -453,7 +448,7 @@ describe("AiGeneratedModelPanel", () => {
     });
 
     it("cleans up recognition on unmount", () => {
-      window.SpeechRecognition = mockSpeechRecognition;
+      vi.stubGlobal("SpeechRecognition", mockSpeechRecognition);
 
       const { unmount } = render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
 
@@ -674,7 +669,42 @@ describe("AiGeneratedModelPanel", () => {
         return Promise.resolve({
           intent: "build",
           explanation: "Built the post office.",
-          proposedModel: { ...model },
+          // Needs to be a model validateModel() accepts with zero errors — the
+          // bare top-level `model` fixture has no COMPLETE()/RENEGE() sink, so
+          // spreading it here used to trigger AiGeneratedModelPanel's *other*,
+          // unrelated validation-error retry loop (lines below react to
+          // validation.errors, separate from the missing-proposedModel retry
+          // this test is about), pushing the real call count past 3 and making
+          // the toHaveBeenCalledTimes(3) assertion below race against it.
+          proposedModel: {
+            entityTypes: [
+              { id: "cust", name: "Customer", role: "customer", attrDefs: [] },
+              { id: "clerk", name: "Clerk", role: "server", count: 1, attrDefs: [] },
+            ],
+            stateVariables: [],
+            queues: [{ id: "main", name: "Main Queue", discipline: "FIFO" }],
+            bEvents: [{
+              id: "arrive",
+              name: "Customer Arrival",
+              scheduledTime: "0",
+              effect: "ARRIVE(Customer, Main Queue)",
+              schedules: [{ eventId: "arrive", dist: "Exponential", distParams: { mean: "5" } }],
+            }, {
+              id: "complete",
+              name: "Service Complete",
+              scheduledTime: "9999",
+              effect: ["COMPLETE()"],
+              schedules: [],
+            }],
+            cEvents: [{
+              id: "start",
+              name: "Start Service",
+              priority: 1,
+              condition: { variable: "Queue.Main Queue.length", operator: ">", value: 0 },
+              actions: [{ macro: "ASSIGN", args: ["Main Queue", "Clerk"] }],
+              schedules: [{ eventId: "complete", type: "fixed", value: 7.5, useEntityCtx: true }],
+            }],
+          },
         });
       });
 

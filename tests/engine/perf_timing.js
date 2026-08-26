@@ -28,9 +28,15 @@ function maxQueueLength(runtimeMetrics = {}) {
     .reduce((max, value) => Math.max(max, value), 0);
 }
 
-export function runScenario(scenario) {
+// `overrides.result`, when supplied, is used instead of running the engine
+// here (see tests/engine/perf_timing.test.js — its full-suite test yields to
+// the event loop periodically while stepping the engine manually, to avoid
+// exceeding vitest's non-configurable ~60s worker RPC heartbeat on the
+// longest scenarios; buildEngine(...).runAll() itself stays fully
+// synchronous for the CLI usage below, which isn't subject to that limit).
+export function runScenario(scenario, overrides = {}) {
   const t0 = performance.now();
-  const result = buildEngine(
+  const result = overrides.result || buildEngine(
     scenario.model,
     scenario.seed,
     0,

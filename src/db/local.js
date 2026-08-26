@@ -1,3 +1,4 @@
+// @ts-check
 // LocalStorage CRUD backend for anonymous/local mode.
 // Mirrors the models.js API shape so callers can swap backends.
 import { normalizeModelConditions } from "../model/conditionFormat.js";
@@ -6,12 +7,14 @@ import { buildPersistedResultsJson } from "./results-persistence.js";
 const STORAGE_KEY = "simmodlr_models";
 const RUNS_KEY = "simmodlr_runs";
 
+/** @returns {Record<string, any>[]} */
 function readAll() {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   } catch { return []; }
 }
 
+/** @param {Record<string, any>[]} models */
 function writeAll(models) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(models));
 }
@@ -24,8 +27,11 @@ export function fetchLocalModels() {
   return readAll().map(model => normalizeModelConditions(model));
 }
 
+/** @param {Record<string, any>} model */
 export function saveLocalModel(model) {
-  const normalizedModel = normalizeModelConditions(model);
+  // normalizeModelConditions lives outside this pass's typecheck scope (src/model/)
+  // and returns an untyped object — cast at the boundary rather than widen its own signature.
+  const normalizedModel = /** @type {Record<string, any>} */ (normalizeModelConditions(model));
   const models = readAll();
   const idx = models.findIndex(m => m.id === normalizedModel.id);
   const now = new Date().toISOString();
@@ -39,6 +45,7 @@ export function saveLocalModel(model) {
   return saved;
 }
 
+/** @param {string} id */
 export function deleteLocalModel(id) {
   const models = readAll().filter(m => m.id !== id);
   writeAll(models);
@@ -49,16 +56,25 @@ export function deleteLocalModel(id) {
 }
 
 // Run history (per-model)
+/** @returns {Record<string, Record<string, any>[]>} */
 function readLocalRuns() {
   try {
     return JSON.parse(localStorage.getItem(RUNS_KEY) || "{}");
   } catch { return {}; }
 }
 
+/**
+ * @param {Record<string, any>} result
+ * @param {Record<string, any>} [config]
+ */
 function buildLocalResultsJson(result, config = {}) {
   return buildPersistedResultsJson(result, config);
 }
 
+/**
+ * @param {number|null|undefined} primary
+ * @param {number|null|undefined} summaryValue
+ */
 function preferSummaryValue(primary, summaryValue) {
   if (summaryValue == null) return primary ?? null;
   if (primary == null) return summaryValue;
@@ -66,6 +82,7 @@ function preferSummaryValue(primary, summaryValue) {
   return primary;
 }
 
+/** @param {Record<string, any>} [row] */
 function normalizeLocalRunRow(row = {}) {
   const resultsJson = row.results_json || row.resultsJson || buildLocalResultsJson(row, {
     runLabel: row.runLabel || row.run_label || "",
@@ -101,6 +118,11 @@ function normalizeLocalRunRow(row = {}) {
   };
 }
 
+/**
+ * @param {string} modelId
+ * @param {Record<string, any>} result
+ * @param {Record<string, any>} [config]
+ */
 export function saveLocalRun(modelId, result, config) {
   const allRuns = readLocalRuns();
   if (!allRuns[modelId]) allRuns[modelId] = [];
@@ -127,6 +149,7 @@ export function saveLocalRun(modelId, result, config) {
   localStorage.setItem(RUNS_KEY, JSON.stringify(allRuns));
 }
 
+/** @param {string} modelId */
 export function fetchLocalRunHistory(modelId) {
   const allRuns = readLocalRuns();
   return (allRuns[modelId] || [])
@@ -142,6 +165,11 @@ function readLocalSweeps() {
   catch { return {}; }
 }
 
+/**
+ * @param {string} modelId
+ * @param {Record<string, any>} config
+ * @param {Record<string, any>} results
+ */
 export function saveLocalSweep(modelId, config, results) {
   const allSweeps = readLocalSweeps();
   if (!allSweeps[modelId]) allSweeps[modelId] = [];
@@ -155,6 +183,7 @@ export function saveLocalSweep(modelId, config, results) {
   localStorage.setItem(SWEEPS_KEY, JSON.stringify(allSweeps));
 }
 
+/** @param {string} modelId */
 export function fetchLocalSweeps(modelId) {
   const allSweeps = readLocalSweeps();
   return allSweeps[modelId] || [];
@@ -165,6 +194,7 @@ export function fetchLocalSweeps(modelId) {
  * Provided so callers can import from either backend without branching.
  */
 // eslint-disable-next-line no-unused-vars
+/** @param {Record<string, any>} _params */
 export async function submitFeedback(_params) {
   // Local mode: silently discard feedback (no Supabase connection available)
 }

@@ -1,3 +1,4 @@
+// @ts-check
 // src/engine/adaptive-batch.js — Adaptive batch runner
 // Steps up replications until 95% CI relative half-width drops below the target
 // percentage of the mean, or the tier replication limit is reached.
@@ -5,6 +6,7 @@ import { runReplications, createReplicationPool } from './replication-runner.js'
 import { confidenceInterval95 } from './statistics.js';
 import { RUN_ADMISSION_TIERS } from './run-admission.js';
 
+/** @type {Record<string, string>} */
 const GOAL_METRIC_TO_PATH = {
   avgWait:    'summary.avgWait',
   avgSvc:     'summary.avgSvc',
@@ -16,6 +18,7 @@ const GOAL_METRIC_TO_PATH = {
   totalCost:  'summary.totalCost',
 };
 
+/** @param {import('../contracts/model').DesModelJson} model */
 function selectKpiPath(model) {
   const firstGoal = (model.goals || [])[0];
   if (firstGoal?.metric && GOAL_METRIC_TO_PATH[firstGoal.metric]) {
@@ -24,10 +27,18 @@ function selectKpiPath(model) {
   return 'summary.avgWait';
 }
 
+/**
+ * @param {any} obj
+ * @param {string} path
+ */
 function getPathValue(obj, path) {
-  return path.split('.').reduce((cur, key) => cur?.[key], obj);
+  return path.split('.').reduce((/** @type {any} */ cur, key) => cur?.[key], obj);
 }
 
+/**
+ * @param {Record<string, any>} opts
+ * @param {AbortSignal} [signal]
+ */
 function runReplicationsPromise(opts, signal) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -52,20 +63,25 @@ function runReplicationsPromise(opts, signal) {
  * Seeds across rounds are non-overlapping: round N starts at
  * baseSeed + (replications completed before this round).
  *
- * @param {Object}  options
- * @param {Object}  options.model
- * @param {string}  options.tier               - 'free' | 'standard' | 'pro'
- * @param {number} [options.baseSeed=0]
- * @param {number} [options.warmupPeriod=0]
- * @param {number} [options.maxSimTime=500]
- * @param {Object} [options.schedulesMap={}]
- * @param {number} [options.targetRelativeCI=5] - convergence threshold as % of mean
- * @param {function}[options.onRoundComplete]   - ({round, totalReps, ci, relativeHalfWidth}) => void
- * @param {number|null} [options.checkpointAt=100] - pause for user confirmation after this many reps (null disables)
- * @param {function}[options.onCheckpoint]      - async ({totalReps, relativeHalfWidth, ci}) => Promise<boolean> — resolve true to continue, false to stop
- * @param {AbortSignal} [options.signal]
- * @param {function}[options._createWorker]     - injectable worker factory for tests
- * @returns {Promise<{finalReps, converged, relativeHalfWidth, ci, kpiPath, results, roundHistory, stoppedAtCheckpoint?}>}
+ * @param {{
+ *   model?: import('../contracts/model').DesModelJson,
+ *   tier?: string,
+ *   baseSeed?: number,
+ *   warmupPeriod?: number,
+ *   maxSimTime?: number,
+ *   schedulesMap?: Record<string, any>,
+ *   targetRelativeCI?: number,
+ *   maxCycles?: number,
+ *   collectTimeSeries?: boolean,
+ *   onRoundComplete?: (info: { round: number, totalReps: number, ci: any, relativeHalfWidth: number|null }) => void,
+ *   onProgress?: (info: { completed: number, total: number, relativeHalfWidth: number|null }) => void,
+ *   onTimeSeriesSample?: (...args: any[]) => void,
+ *   checkpointAt?: number|null,
+ *   onCheckpoint?: (info: { totalReps: number, relativeHalfWidth: number|null, ci: any }) => Promise<boolean>,
+ *   signal?: AbortSignal,
+ *   _createWorker?: () => any,
+ * }} [options]
+ * @returns {Promise<{finalReps: number, converged: boolean, relativeHalfWidth: number|null, ci: any, kpiPath: string, results: any[], roundHistory: any[], stoppedAtCheckpoint?: boolean}>}
  */
 export async function runAdaptiveBatch(options = {}) {
   const {
@@ -89,13 +105,17 @@ export async function runAdaptiveBatch(options = {}) {
     _createWorker,
   } = options;
 
-  const tierPolicy = RUN_ADMISSION_TIERS[tier] || RUN_ADMISSION_TIERS.free;
+  const tierPolicy = /** @type {Record<string, any>} */ (RUN_ADMISSION_TIERS)[tier] || RUN_ADMISSION_TIERS.free;
   const tierMax = tierPolicy.maxReplications;
   const initialBatch = Math.min(10, tierMax);
   const stepSize = Math.max(5, Math.floor(tierMax / 5));
-  const kpiPath = selectKpiPath(model);
+  // model is logically required (selectKpiPath/model.goals below need it) despite
+  // being typed optional above so an empty `options = {}` default type-checks.
+  const kpiPath = selectKpiPath(/** @type {import('../contracts/model').DesModelJson} */ (model));
 
+  /** @type {any[]} */
   const allResults = [];
+  /** @type {number[]} */
   const liveKpiValues = [];
   let totalReps = 0;
   let round = 0;
@@ -133,7 +153,7 @@ export async function runAdaptiveBatch(options = {}) {
       onTimeSeriesSample,
       pool,
       ...(maxCycles != null ? { maxCycles } : {}),
-      onReplicationComplete: (payload, prog) => {
+      onReplicationComplete: (/** @type {any} */ payload, /** @type {any} */ prog) => {
         const kpiVal = getPathValue(payload?.result, kpiPath);
         if (typeof kpiVal === 'number' && Number.isFinite(kpiVal)) {
           liveKpiValues.push(kpiVal);

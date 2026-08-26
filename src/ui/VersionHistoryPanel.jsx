@@ -1,7 +1,8 @@
 // ui/VersionHistoryPanel.jsx — Version history list and create version dialog
 import { useState, useEffect } from "react";
-import { SHADOW, Z } from "./shared/tokens.js";
 import { Btn, Tag } from "./shared/components.jsx";
+import { ModalShell } from "./shared/ModalShell.jsx";
+import { useConfirm } from "./shared/useConfirm.jsx";
 import { listVersions, createVersion, deleteVersion, getNextVersion } from "../db/models.js";
 import { detectStructuralChanges } from "../engine/validation.js";
 import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
@@ -16,6 +17,7 @@ const fmtDate = iso => {
 
 export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersionChange, currentModel, onRestoreVersion }) {
   const { C, FONT } = useTheme();
+  const { confirm, confirmDialog } = useConfirm();
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -60,7 +62,7 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersion
   };
 
   const handleDelete = async (version) => {
-    if (!window.confirm(`Delete version v${version.version} "${version.name || ''}"? This cannot be undone.`)) return;
+    if (!(await confirm(`Delete version v${version.version} "${version.name || ''}"? This cannot be undone.`))) return;
     setDeleting(version.id);
     try {
       await deleteVersion(model.id, version.id, userId);
@@ -160,8 +162,8 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersion
                 <Btn small variant="ghost" onClick={() => setDiffVersion(v)}>Compare to current</Btn>
               )}
               {isOwner && onRestoreVersion && (
-                <Btn small variant="ghost" onClick={() => {
-                  if (!window.confirm(`Restore model to v${v.version} "${v.name || ''}"?\n\nCurrent unsaved changes will be overwritten. The model will be marked as modified — save manually to persist.`)) return;
+                <Btn small variant="ghost" onClick={async () => {
+                  if (!(await confirm(`Restore model to v${v.version} "${v.name || ''}"?\n\nCurrent unsaved changes will be overwritten. The model will be marked as modified — save manually to persist.`))) return;
                   onRestoreVersion(v.modelJson);
                   onToast?.("success", `Restored to v${v.version}`);
                 }}>
@@ -205,6 +207,7 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersion
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }
@@ -233,47 +236,47 @@ function CreateVersionModal({ model, versions, onClose, onCreate }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
-      <div role="dialog" aria-modal="true" aria-labelledby="create-version-title" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 28, width: 480, maxWidth: "95vw", fontFamily: SANS, display: "flex", flexDirection: "column", gap: 16 }}>
-        <div id="create-version-title" style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: SANS }}>Tag a version</div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: "0.5px" }}>VERSION NUMBER</label>
-          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "6px 10px" }}>v{nextVersion}</div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: "0.5px" }}>NAME (OPTIONAL)</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder={`e.g. Initial A&E design`} style={inputStyle} />
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: "0.5px" }}>NOTES</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="What changed? Why is this a milestone?" rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
-        </div>
-
-        {changes.isStructural && changes.changes.length > 0 && (
-          <div style={{ background: C.accent + "18", border: `1px solid ${C.accent}44`, borderRadius: 6, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontSize: 11, color: C.accent, fontWeight: 700, letterSpacing: "0.5px" }}>STRUCTURAL CHANGES SINCE LAST VERSION</div>
-            {changes.changes.map((c, i) => (
-              <div key={i} style={{ fontSize: 12, color: C.text, fontFamily: SANS }}>• {c}</div>
-            ))}
-          </div>
-        )}
-
-        {!changes.isStructural && versions.length > 0 && (
-          <div style={{ background: C.muted + "18", border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 12px" }}>
-            <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS }}>No structural changes since last version — only parameter tweaks detected.</div>
-          </div>
-        )}
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-          <Btn variant="primary" disabled={saving} onClick={handleSubmit}>
-            {saving ? "Saving…" : "Save version"}
-          </Btn>
-        </div>
+    <ModalShell
+      isOpen
+      onClose={onClose}
+      title="Tag a version"
+      width="min(480px, 95vw)"
+      footer={<>
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" disabled={saving} onClick={handleSubmit}>
+          {saving ? "Saving…" : "Save version"}
+        </Btn>
+      </>}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: "0.5px" }}>VERSION NUMBER</label>
+        <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "6px 10px" }}>v{nextVersion}</div>
       </div>
-    </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: "0.5px" }}>NAME (OPTIONAL)</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder={`e.g. Initial A&E design`} style={inputStyle} />
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: "0.5px" }}>NOTES</label>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="What changed? Why is this a milestone?" rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
+      </div>
+
+      {changes.isStructural && changes.changes.length > 0 && (
+        <div style={{ background: C.accent + "18", border: `1px solid ${C.accent}44`, borderRadius: 6, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ fontSize: 11, color: C.accent, fontWeight: 700, letterSpacing: "0.5px" }}>STRUCTURAL CHANGES SINCE LAST VERSION</div>
+          {changes.changes.map((c, i) => (
+            <div key={i} style={{ fontSize: 12, color: C.text, fontFamily: SANS }}>• {c}</div>
+          ))}
+        </div>
+      )}
+
+      {!changes.isStructural && versions.length > 0 && (
+        <div style={{ background: C.muted + "18", border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 12px" }}>
+          <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS }}>No structural changes since last version — only parameter tweaks detected.</div>
+        </div>
+      )}
+    </ModalShell>
   );
 }

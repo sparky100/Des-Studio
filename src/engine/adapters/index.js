@@ -1,3 +1,4 @@
+// @ts-check
 // engine/adapters/index.js — AdapterRegistry: resolves parameter values from data sources
 
 import { RestAdapter } from './RestAdapter.js';
@@ -10,6 +11,7 @@ import { OpenSkyAdapter } from './OpenSkyAdapter.js';
  * Ensures engine callers never need to null-check the registry.
  */
 export const nullRegistry = {
+  /** @param {Record<string, string>} distParams @param {any} [_paramSource] */
   resolve(distParams, _paramSource) { return distParams; },
   async prefetchAll()               { },
   dispose()                         { },
@@ -18,23 +20,27 @@ export const nullRegistry = {
 /**
  * Resolves distParams fields from named external data sources.
  * Constructed once per simulation run; disposed after the run completes.
- *
- * @param {import('./types.js').DataSource[]} dataSources
- * @param {Record<string, string>} envSecrets  resolved {{env.VAR}} values
  */
 export class AdapterRegistry {
+  /**
+   * @param {import('./types.js').DataSource[]} [dataSources]
+   * @param {Record<string, string>} [envSecrets]  resolved {{env.VAR}} values
+   */
   constructor(dataSources = [], envSecrets = {}) {
     this._sources   = Object.fromEntries((dataSources || []).map(ds => [ds.id, ds]));
     this._envSecrets = envSecrets;
+    /** @type {Record<string, any>} */
     this._adapters  = {};
   }
 
+  /** @param {string|undefined} secret */
   _resolveSecret(secret) {
     if (!secret) return secret;
     const m = secret.match(/^\{\{env\.(.+?)\}\}$/);
     return m ? (this._envSecrets[m[1]] ?? '') : secret;
   }
 
+  /** @param {import('./types.js').DataSource} source */
   _getAdapter(source) {
     if (this._adapters[source.id]) return this._adapters[source.id];
 
@@ -61,6 +67,9 @@ export class AdapterRegistry {
   /**
    * Register a pre-built adapter instance for a source ID.
    * Used in tests to inject mockAdapter instances.
+   *
+   * @param {string} sourceId
+   * @param {any} adapterInstance
    */
   registerMock(sourceId, adapterInstance) {
     this._adapters[sourceId] = adapterInstance;
@@ -133,8 +142,8 @@ export class AdapterRegistry {
    * B-event schedules in the model. Returns a new model object — does not
    * mutate the original. Call before engine.run().
    *
-   * @param {object} model  Full model object with dataSources[] and bEvents[]
-   * @returns {Promise<object>}  model with rows[] populated on targeted B-events
+   * @param {import('../../contracts/model').DesModelJson} model  Full model object with dataSources[] and bEvents[]
+   * @returns {Promise<import('../../contracts/model').DesModelJson>}  model with rows[] populated on targeted B-events
    */
   async prefetchScheduleFeeds(model) {
     const feedSources = Object.values(this._sources).filter(s => s.type === 'scheduleFeed');
@@ -143,6 +152,7 @@ export class AdapterRegistry {
     const epoch    = model.epoch ?? '';
     const timeUnit = model.timeUnit || 'minutes';
 
+    /** @type {Record<string, any[]>} */
     const rowsByBEvent = {};
     await Promise.all(feedSources.map(async source => {
       try {
@@ -190,10 +200,11 @@ export class AdapterRegistry {
    * cached by prefetchAll(). Call after prefetchAll(). Returns a new model —
    * does not mutate the original.
    *
-   * @param {object} model
-   * @returns {object}
+   * @param {import('../../contracts/model').DesModelJson} model
+   * @returns {import('../../contracts/model').DesModelJson}
    */
   resolveAllParamSources(model) {
+    /** @param {any} entry */
     const resolveEntry = (entry) => {
       if (!entry.paramSource) return entry;
       const resolved = this.resolve(entry.distParams || {}, entry.paramSource);

@@ -1,6 +1,6 @@
 // ui/ModelLibrary.jsx — Model library: My Models / Templates / Public / Community tabs
 import { useState, useRef, useMemo, useEffect } from "react";
-import { SHADOW, RADIUS, Z } from "./shared/tokens.js";
+import { SHADOW, RADIUS, Z, DOMAIN_COLORS } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, Empty } from "./shared/components.jsx";
 import { TEMPLATES } from "../engine/templates.js";
 import { validateModel } from "../engine/validation.js";
@@ -524,7 +524,6 @@ export function ModelLibrary({
   const [pubFilter, setPubFilter]  = useState(BLANK_FILTER);
   const [commFilter, setCommFilter] = useState(BLANK_FILTER);
 
-  const DOMAIN_COLORS = { Academic: "#7c6fcd", Healthcare: "#3b9e78", "Service Systems": "#c0813a", Manufacturing: "#3a82c0", Logistics: "#9e3b7a", Technology: "#3a9ec0", Transport: "#6a8fa0" };
   const allDomains = ["All", ...Array.from(new Set(TEMPLATES.map(t => t.domain)))];
 
   // filtered/sorted results for each tab

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 ;
 import { Btn, MicIcon, ArrowUpIcon, TypingIndicator } from "../shared/components.jsx";
-import { supabase } from "../../db/supabase.js";
+import { getAccessToken } from "../../db/auth.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { MarkdownContent } from "../shared/MarkdownContent.jsx";
 import { tryExtractJson } from "../../llm/apiClient.js";
@@ -14,8 +14,7 @@ function getProxyUrl() {
 }
 
 async function callDiagnosticsApi(messages, maxTokens = 2000) {
-  const sessionResponse = await supabase.auth.getSession();
-  const accessToken = sessionResponse?.data?.session?.access_token;
+  const accessToken = await getAccessToken();
 
   const response = await fetch(getProxyUrl(), {
     method: "POST",

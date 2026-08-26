@@ -1,10 +1,13 @@
+// @ts-check
 // sweep-params.js — Enumerate sweepable model parameters and apply values
 // No React, no DOM. Pure JS — can run in workers.
 
+/** @param {any} obj */
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
+/** @type {Record<string, string>} */
 const PARAM_LABELS = {
   mean: "mean", rate: "rate (λ)", lambda: "rate (λ)",
   alpha: "shape (α)", beta: "scale (β)", min: "minimum", max: "maximum",
@@ -12,15 +15,19 @@ const PARAM_LABELS = {
   n: "n", k: "k", mu: "mean (μ)",
 };
 
+/** @param {string} key */
 function humanParamKey(key) {
   return PARAM_LABELS[key] ?? key;
 }
 
+/** @param {any} dist */
 function isPiecewise(dist) {
   return typeof dist === "string" && dist.toLowerCase() === "piecewise";
 }
 
+/** @param {Record<string, any>} model */
 export function enumerateSweepableParams(model) {
+  /** @type {any[]} */
   const params = [];
 
   // 1a. Entity type count — only for servers WITHOUT a shift schedule
@@ -41,7 +48,7 @@ export function enumerateSweepableParams(model) {
   for (const et of (model.entityTypes || [])) {
     if (et.role !== "server") continue;
     if (!Array.isArray(et.shiftSchedule) || !et.shiftSchedule.length) continue;
-    et.shiftSchedule.forEach((period, pi) => {
+    et.shiftSchedule.forEach((/** @type {any} */ period, /** @type {number} */ pi) => {
       const time = period.time ?? period.startTime ?? 0;
       const timeUnit = model.timeUnit ?? "minute";
       params.push({
@@ -71,11 +78,11 @@ export function enumerateSweepableParams(model) {
 
   // 3. B-Event distribution parameters
   for (const b of (model.bEvents || [])) {
-    (b.schedules || []).forEach((s, si) => {
+    (b.schedules || []).forEach((/** @type {any} */ s, /** @type {number} */ si) => {
       if (!s.distParams) return;
       if (isPiecewise(s.dist)) {
         // Enumerate each period's inner distribution params
-        (s.distParams.periods || []).forEach((period, pi) => {
+        (s.distParams.periods || []).forEach((/** @type {any} */ period, /** @type {number} */ pi) => {
           const inner = period.distribution || period;
           const startTime = period.startTime ?? period.time ?? 0;
           const timeUnit = model.timeUnit ?? "minute";
@@ -113,10 +120,10 @@ export function enumerateSweepableParams(model) {
 
   // 4. C-Event distribution parameters
   for (const c of (model.cEvents || [])) {
-    (c.cSchedules || []).forEach((s, si) => {
+    (c.cSchedules || []).forEach((/** @type {any} */ s, /** @type {number} */ si) => {
       if (!s.distParams) return;
       if (isPiecewise(s.dist)) {
-        (s.distParams.periods || []).forEach((period, pi) => {
+        (s.distParams.periods || []).forEach((/** @type {any} */ period, /** @type {number} */ pi) => {
           const inner = period.distribution || period;
           const startTime = period.startTime ?? period.time ?? 0;
           const timeUnit = model.timeUnit ?? "minute";
@@ -167,35 +174,44 @@ export function enumerateSweepableParams(model) {
   return params;
 }
 
+/**
+ * @param {Record<string, any>} model
+ * @param {Record<string, any>} paramConfig
+ * @param {number} value
+ */
 export function applySweepValue(model, paramConfig, value) {
   return applySweepValues(model, [{ paramConfig, value }]);
 }
 
+/**
+ * @param {Record<string, any>} model
+ * @param {Array<{ paramConfig: Record<string, any>, value: number }>} [sweepConfigs]
+ */
 export function applySweepValues(model, sweepConfigs = []) {
   let clone = deepClone(model);
 
   for (const { paramConfig, value } of sweepConfigs) {
     switch (paramConfig.type) {
       case "entityTypeCount": {
-        const et = (clone.entityTypes || []).find(e => e.id === paramConfig.targetId);
+        const et = (clone.entityTypes || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
         if (et) et.count = String(Math.max(0, Math.round(value)));
         break;
       }
       case "shiftCapacity": {
-        const et = (clone.entityTypes || []).find(e => e.id === paramConfig.targetId);
+        const et = (clone.entityTypes || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
         const period = et?.shiftSchedule?.[paramConfig.periodIndex];
         if (period) period.capacity = String(Math.max(1, Math.round(value)));
         break;
       }
       case "queueCapacity": {
-        const q = (clone.queues || []).find(q => q.id === paramConfig.targetId);
+        const q = (clone.queues || []).find((/** @type {any} */ q) => q.id === paramConfig.targetId);
         if (q) {
           q.capacity = value === Infinity || value <= 0 ? "" : String(Math.round(value));
         }
         break;
       }
       case "bEventDistParam": {
-        const b = (clone.bEvents || []).find(e => e.id === paramConfig.targetId);
+        const b = (clone.bEvents || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
         if (b) {
           for (const s of (b.schedules || [])) {
             if (s.distParams && paramConfig.paramKey in s.distParams) {
@@ -206,7 +222,7 @@ export function applySweepValues(model, sweepConfigs = []) {
         break;
       }
       case "bEventPiecewisePeriodParam": {
-        const b = (clone.bEvents || []).find(e => e.id === paramConfig.targetId);
+        const b = (clone.bEvents || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
         const period = b?.schedules?.[paramConfig.scheduleIndex]?.distParams?.periods?.[paramConfig.periodIndex];
         if (period) {
           const inner = period.distribution || period;
@@ -216,7 +232,7 @@ export function applySweepValues(model, sweepConfigs = []) {
         break;
       }
       case "cEventDistParam": {
-        const c = (clone.cEvents || []).find(e => e.id === paramConfig.targetId);
+        const c = (clone.cEvents || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
         if (c) {
           for (const s of (c.cSchedules || [])) {
             if (s.distParams && paramConfig.paramKey in s.distParams) {
@@ -227,7 +243,7 @@ export function applySweepValues(model, sweepConfigs = []) {
         break;
       }
       case "cEventPiecewisePeriodParam": {
-        const c = (clone.cEvents || []).find(e => e.id === paramConfig.targetId);
+        const c = (clone.cEvents || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
         const period = c?.cSchedules?.[paramConfig.scheduleIndex]?.distParams?.periods?.[paramConfig.periodIndex];
         if (period) {
           const inner = period.distribution || period;
@@ -237,7 +253,7 @@ export function applySweepValues(model, sweepConfigs = []) {
         break;
       }
       case "stateVarInit": {
-        const sv = (clone.stateVariables || []).find(s => s.name === paramConfig.targetId);
+        const sv = (clone.stateVariables || []).find((/** @type {any} */ s) => s.name === paramConfig.targetId);
         if (sv) sv.initialValue = String(value);
         break;
       }
@@ -247,6 +263,11 @@ export function applySweepValues(model, sweepConfigs = []) {
   return clone;
 }
 
+/**
+ * @param {number} min
+ * @param {number} max
+ * @param {number} step
+ */
 export function generateSweepValues(min, max, step) {
   if (Math.abs(max - min) < 1e-9) return [min];
   const values = [];
@@ -265,9 +286,9 @@ export function generateSweepValues(min, max, step) {
 /**
  * Generate a cartesian product of two 1D sweep ranges.
  *
- * @param {Object} rangeA — { min, max, step }
- * @param {Object} rangeB — { min, max, step }
- * @returns {Array<{ valueA, valueB }>} cartesian product pairs
+ * @param {{ min: number, max: number, step: number }} rangeA
+ * @param {{ min: number, max: number, step: number }} rangeB
+ * @returns {Array<{ valueA: number, valueB: number }>} cartesian product pairs
  * @throws if total grid points exceed 50
  */
 export function generate2DSweepValues(rangeA, rangeB) {

@@ -1,6 +1,6 @@
 // ui/ModelHistoryTab.jsx — Run history tab extracted from ModelDetail
 import { useState } from "react";
-import { alpha } from "./shared/tokens.js";
+import { alpha, SHADOW } from "./shared/tokens.js";
 import { Btn, Empty } from "./shared/components.jsx";
 import { csvEscape, downloadTextFile, downloadJsonFile, buildRunHistoryExportPayload, buildRunHistoryCsv, slugifyResultName, timestampForFilename } from "./shared/utils.js";
 import { ScenarioComparisonTable } from "./shared/ScenarioComparisonTable.jsx";
@@ -15,6 +15,7 @@ import { CI_METRICS, METRIC_LABELS, fmt } from "./execute/executeHelpers.js";
 import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
 import { buildLLMBundle } from "../llm/bundleExport.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { useConfirm } from "./shared/useConfirm.jsx";
 import { ExportPopover } from "./shared/ExportPopover.jsx";
 import { CiBadge } from "./shared/CiBadge.jsx";
 
@@ -53,6 +54,7 @@ export function ModelHistoryTab({
   onExplainRun, onViewResults, onCreateReport,
 }) {
   const { C, FONT } = useTheme();
+  const { confirm, confirmDialog } = useConfirm();
   const toast = useToast();
   const [historySearch, setHistorySearch] = useState("");
   const [historySelected, setHistorySelected] = useState(new Set());
@@ -243,7 +245,7 @@ export function ModelHistoryTab({
 
   const deleteSelected = async () => {
     if (!userId) return;
-    if (!confirm(`Delete ${historySelected.size} selected run${historySelected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+    if (!(await confirm(`Delete ${historySelected.size} selected run${historySelected.size !== 1 ? "s" : ""}? This cannot be undone.`))) return;
     const ids = [...historySelected];
     await Promise.all(ids.map(id => deleteSimulationRun(id, userId).catch(() => {})));
     setHistoryRows(prev => prev.filter(r => !historySelected.has(r.id)));
@@ -315,7 +317,7 @@ export function ModelHistoryTab({
           <Btn small variant="ghost" disabled={!historyRows.length} onClick={() => setExportListMenuOpen(v => !v)}>Export list ▾</Btn>
           {exportListMenuOpen && (
             <div
-              style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 180, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 1000 }}
+              style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 180, boxShadow: SHADOW.dropdown, zIndex: 1000 }}
               onMouseLeave={() => setExportListMenuOpen(false)}
             >
               <button onClick={() => { exportRunHistoryJson(); setExportListMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export as JSON</button>
@@ -551,7 +553,7 @@ export function ModelHistoryTab({
                             {moreMenuId === row.id && (
                               <>
                                 <div style={{ position: "fixed", inset: 0, zIndex: 999 }} onClick={() => setMoreMenuId(null)} />
-                                <div style={{ position: "fixed", top: moreMenuPos.top, right: moreMenuPos.right, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 180, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 1000 }}>
+                                <div style={{ position: "fixed", top: moreMenuPos.top, right: moreMenuPos.right, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 180, boxShadow: SHADOW.dropdown, zIndex: 1000 }}>
                                   <button
                                     onClick={() => handleViewDiff(row.id)}
                                     disabled={snapshotDiffLoading}
@@ -632,7 +634,7 @@ export function ModelHistoryTab({
                                       </button>
                                       <button
                                         onClick={async () => {
-                                          if (!confirm("Remove the share link? Anyone with the link will lose access.")) return;
+                                          if (!(await confirm("Remove the share link? Anyone with the link will lose access."))) return;
                                           const link = shareLinksMap[row.id];
                                           await revokeShareLink(link.id, userId).catch(() => {});
                                           setShareLinksMap?.(prev => { const next = { ...prev }; delete next[row.id]; return next; });
@@ -669,7 +671,7 @@ export function ModelHistoryTab({
                                   {userId && (
                                     <button
                                       onClick={async () => {
-                                        if (!confirm("Delete this run? This cannot be undone.")) return;
+                                        if (!(await confirm("Delete this run? This cannot be undone."))) return;
                                         await deleteSimulationRun(row.id, userId).catch(() => {});
                                         setHistoryRows(prev => prev.filter(r => r.id !== row.id));
                                       }}
@@ -719,6 +721,7 @@ export function ModelHistoryTab({
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

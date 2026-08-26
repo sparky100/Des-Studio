@@ -1,3 +1,4 @@
+// @ts-check
 // engine/index.js — Public API
 //
 // Usage:
@@ -21,10 +22,23 @@ import { applyEntityInheritance } from "./entity-inheritance.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
+/**
+ * @typedef {{
+ *   all: boolean,
+ *   queues: Set<string>,
+ *   resources: Set<string>,
+ *   stateVars: Set<string>,
+ *   builtins: Set<string>,
+ * }} DirtySet
+ */
+
+
+/** @param {any} value */
 function normalizeImpactName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+/** @returns {DirtySet} */
 function createDirtySet() {
   return {
     all: false,
@@ -35,22 +49,42 @@ function createDirtySet() {
   };
 }
 
+/**
+ * @param {DirtySet} dirty
+ * @param {any} queueName
+ */
 function markDirtyQueue(dirty, queueName) {
   if (queueName) dirty.queues.add(normalizeImpactName(queueName));
 }
 
+/**
+ * @param {DirtySet} dirty
+ * @param {any} resourceName
+ */
 function markDirtyResource(dirty, resourceName) {
   if (resourceName) dirty.resources.add(normalizeImpactName(resourceName));
 }
 
+/**
+ * @param {DirtySet} dirty
+ * @param {any} stateVarName
+ */
 function markDirtyStateVar(dirty, stateVarName) {
   if (stateVarName) dirty.stateVars.add(stateVarName);
 }
 
+/**
+ * @param {DirtySet} dirty
+ * @param {any} builtinName
+ */
 function markDirtyBuiltin(dirty, builtinName) {
   if (builtinName) dirty.builtins.add(builtinName);
 }
 
+/**
+ * @param {DirtySet} target
+ * @param {DirtySet|null|undefined} source
+ */
 function mergeDirtyInto(target, source) {
   if (!source) return target;
   target.all = target.all || source.all;
@@ -61,6 +95,10 @@ function mergeDirtyInto(target, source) {
   return target;
 }
 
+/**
+ * @param {Set<any>} a
+ * @param {Set<any>} b
+ */
 function intersectsSet(a, b) {
   for (const value of a) {
     if (b.has(value)) return true;
@@ -68,6 +106,7 @@ function intersectsSet(a, b) {
   return false;
 }
 
+/** @param {DirtySet} dirty */
 function dirtyHasSignals(dirty) {
   return dirty.all
     || dirty.queues.size > 0
@@ -76,8 +115,13 @@ function dirtyHasSignals(dirty) {
     || dirty.builtins.size > 0;
 }
 
+/**
+ * @param {any} queueName
+ * @param {Record<string, any>} helpers
+ * @param {Record<string, any>} model
+ */
 function queueHasWaiting(queueName, helpers, model) {
-  const queueDef = (model.queues || []).find(q =>
+  const queueDef = (model.queues || []).find((/** @type {any} */ q) =>
     normalizeImpactName(q.name) === normalizeImpactName(queueName)
   );
   if (queueDef) {
@@ -86,6 +130,13 @@ function queueHasWaiting(queueName, helpers, model) {
   return (helpers.waitingOf?.(queueName, "FIFO") || []).length > 0;
 }
 
+/**
+ * @param {Record<string, any>} event
+ * @param {DirtySet|null} dirty
+ * @param {Record<string, any>} helpers
+ * @param {Record<string, any>} model
+ * @param {Map<any, any>|null} [queueWaitingCache]
+ */
 function shouldEvaluateCEvent(event, dirty, helpers, model, queueWaitingCache = null) {
   if (!dirty || !dirtyHasSignals(dirty) || dirty.all) return true;
   const deps = event._conditionDeps;
@@ -110,9 +161,14 @@ function shouldEvaluateCEvent(event, dirty, helpers, model, queueWaitingCache = 
   return false;
 }
 
+/**
+ * @param {any} effectStr
+ * @returns {Record<string, any>[]}
+ */
 function compileEffectImpactTemplate(effectStr) {
   const text = Array.isArray(effectStr) ? effectStr.filter(Boolean).join(";") : String(effectStr || "");
   const parts = text.split(";").map(part => part.trim()).filter(Boolean);
+  /** @type {Record<string, any>[]} */
   const actions = [];
 
   for (const part of parts) {
@@ -166,8 +222,10 @@ function compileEffectImpactTemplate(effectStr) {
 // compileEffectImpactTemplate can't see it. Without marking every statically-known
 // candidate destination dirty here, a C-event waiting on one of those queues can be
 // skipped by the dirty-set filter even though a routed entity just landed there.
+/** @param {Record<string, any>} event */
 function compileEventImpactTemplate(event) {
   const template = compileEffectImpactTemplate(event.effect);
+  /** @type {any[]} */
   const destinationQueues = [];
   for (const branch of event.routing || []) {
     if (branch?.queueName) destinationQueues.push(branch.queueName);
@@ -183,15 +241,20 @@ function compileEventImpactTemplate(event) {
   return template;
 }
 
+/**
+ * @param {Record<string, any>[]} template
+ * @param {Record<string, any>} event
+ * @param {Record<string, any>} ctx
+ */
 function deriveDirtyFromTemplate(template, event, ctx) {
   const dirty = createDirtySet();
   const currentCustomer = () => {
     const custId = ctx._lastCustId ?? event?._contextCustId;
-    return custId != null ? ctx.entities.find(entity => entity.id === custId) : null;
+    return custId != null ? ctx.entities.find((/** @type {any} */ entity) => entity.id === custId) : null;
   };
   const currentServer = () => {
     const srvId = ctx._lastSrvId ?? event?._contextSrvId;
-    return srvId != null ? ctx.entities.find(entity => entity.id === srvId) : null;
+    return srvId != null ? ctx.entities.find((/** @type {any} */ entity) => entity.id === srvId) : null;
   };
 
   for (const action of template || []) {
@@ -223,7 +286,7 @@ function deriveDirtyFromTemplate(template, event, ctx) {
       }
       case "releaseCoseized": {
         const customer = currentCustomer();
-        action.resourceNames.forEach(resourceName => markDirtyResource(dirty, resourceName));
+        action.resourceNames.forEach((/** @type {any} */ resourceName) => markDirtyResource(dirty, resourceName));
         markDirtyQueue(dirty, customer?.type);
         markDirtyQueue(dirty, customer?.lastQueue || customer?.queue);
         markDirtyQueue(dirty, action.targetQueue);
@@ -238,11 +301,11 @@ function deriveDirtyFromTemplate(template, event, ctx) {
       }
       case "coseize":
         markDirtyQueue(dirty, action.queueName);
-        action.resourceNames.forEach(resourceName => markDirtyResource(dirty, resourceName));
+        action.resourceNames.forEach((/** @type {any} */ resourceName) => markDirtyResource(dirty, resourceName));
         break;
       case "match":
       case "queueOnly":
-        action.queueNames.forEach(queueName => markDirtyQueue(dirty, queueName));
+        action.queueNames.forEach((/** @type {any} */ queueName) => markDirtyQueue(dirty, queueName));
         break;
       case "preempt": {
         const customer = currentCustomer();
@@ -271,6 +334,7 @@ function deriveDirtyFromTemplate(template, event, ctx) {
   return dirty;
 }
 
+/** @param {Record<string, any>} entityType */
 function getValidShiftSchedule(entityType) {
   if (!Array.isArray(entityType.shiftSchedule) || entityType.shiftSchedule.length === 0) return [];
   return entityType.shiftSchedule
@@ -287,8 +351,10 @@ function getValidShiftSchedule(entityType) {
 // Index 0 is always time-anchored by construction/validation (V14/V48), so it's
 // never a `when` entry — no special-casing needed here beyond the `step.when` filter.
 // Preserves original array index for stable id/priority assignment.
+/** @param {Record<string, any>} entityType */
 function getShiftWhenEntries(entityType) {
   if (!Array.isArray(entityType.shiftSchedule) || entityType.shiftSchedule.length === 0) return [];
+  /** @type {Record<string, any>[]} */
   const entries = [];
   entityType.shiftSchedule.forEach((step, index) => {
     if (!step.when) return;
@@ -299,10 +365,11 @@ function getShiftWhenEntries(entityType) {
   return entries;
 }
 
+/** @param {Record<string, any>} model */
 function modelWithShiftInitialCapacity(model) {
   return {
     ...model,
-    entityTypes: (model.entityTypes || []).map(entityType => {
+    entityTypes: (model.entityTypes || []).map((/** @type {any} */ entityType) => {
       if (entityType.role !== "server") return entityType;
       const resolved = resolveSchedulePattern(entityType.schedulePattern);
       const pattern = getPatternInitialCapacity(resolved.pattern, model.epoch, model.timeUnit);
@@ -316,10 +383,11 @@ function modelWithShiftInitialCapacity(model) {
   };
 }
 
+/** @param {Record<string, any>} model */
 function makeShiftChangeEvents(model) {
   return (model.entityTypes || [])
-    .filter(entityType => entityType.role === "server")
-    .flatMap(entityType => getValidShiftSchedule(entityType).map(step => ({
+    .filter((/** @type {any} */ entityType) => entityType.role === "server")
+    .flatMap((/** @type {any} */ entityType) => getValidShiftSchedule(entityType).map(step => ({
       id: `shift:${entityType.id || entityType.name}:${step.time}`,
       type: "SHIFT_CHANGE",
       name: `Shift change: ${entityType.name}`,
@@ -336,7 +404,9 @@ function makeShiftChangeEvents(model) {
 // become true at the same event, matching the existing "lower priority value
 // fires first" convention used by real C-events: `ev.priority ?? 9999`, sorted
 // ascending).
+/** @param {Record<string, any>} model */
 function makeShiftWhenEvents(model) {
+  /** @type {Record<string, any>[]} */
   const events = [];
   for (const entityType of model.entityTypes || []) {
     if (entityType.role !== "server") continue;
@@ -356,9 +426,11 @@ function makeShiftWhenEvents(model) {
   return events;
 }
 
+/** @param {Record<string, any>} model */
 function makeRateChangeEvents(model) {
+  /** @type {Record<string, any>[]} */
   const events = [];
-  const addPeriods = (ownerName, dist, distParams) => {
+  const addPeriods = (/** @type {any} */ ownerName, /** @type {any} */ dist, /** @type {any} */ distParams) => {
     if (normalizeDistributionName(dist) !== "Piecewise") return;
     for (const period of getPiecewisePeriods(distParams).slice(1)) {
       const startTime = parseFloat(period.startTime ?? period.time);
@@ -374,17 +446,23 @@ function makeRateChangeEvents(model) {
   };
 
   for (const bEvent of model.bEvents || []) {
-    (bEvent.schedules || []).forEach((schedule, index) =>
+    (bEvent.schedules || []).forEach((/** @type {any} */ schedule, /** @type {any} */ index) =>
       addPeriods(`${bEvent.name || bEvent.id} schedule ${index + 1}`, schedule.dist, schedule.distParams));
   }
   for (const cEvent of model.cEvents || []) {
-    (cEvent.cSchedules || []).forEach((schedule, index) =>
+    (cEvent.cSchedules || []).forEach((/** @type {any} */ schedule, /** @type {any} */ index) =>
       addPeriods(`${cEvent.name || cEvent.id} cSchedule ${index + 1}`, schedule.dist, schedule.distParams));
   }
   return events;
 }
 
+/**
+ * @param {Record<string, any>} model
+ * @param {any} rng
+ * @param {any} streamRegistry
+ */
 function makeFailureEvents(model, rng, streamRegistry) {
+  /** @type {Record<string, any>[]} */
   const events = [];
   for (const entityType of model.entityTypes || []) {
     if (entityType.role !== "server") continue;
@@ -460,13 +538,17 @@ function makeFailureEvents(model, rng, streamRegistry) {
 //   { "<uuid>": { eventId, rows }, "<uuid>:<eventId>": { eventId, rows }, ... }
 // The compound "<uuid>:<eventId>" key is preferred for multi-event schedules so
 // each bEvent gets its own rows; the plain "<uuid>" key is the single-event fallback.
+/**
+ * @param {Record<string, any>} model
+ * @param {Record<string, any>} [schedulesMap]
+ */
 export function resolveInlineSchedules(model, schedulesMap = {}) {
   if (!schedulesMap || Object.keys(schedulesMap).length === 0) return model;
   return {
     ...model,
-    bEvents: (model.bEvents || []).map(be => ({
+    bEvents: (model.bEvents || []).map((/** @type {any} */ be) => ({
       ...be,
-      schedules: (be.schedules || []).map(s => {
+      schedules: (be.schedules || []).map((/** @type {any} */ s) => {
         if (!s.scheduleRef) return s;                              // no ref — leave as-is
         // Always prefer schedulesMap when scheduleRef is present so updated named-schedule rows
         // override any stale inline rows[] left from a prior import.
@@ -486,19 +568,32 @@ export function resolveInlineSchedules(model, schedulesMap = {}) {
 // key is the raw model object so entries are GC'd when the model is released.
 const _runtimeModelCache = new WeakMap();
 
+/**
+ * @param {Record<string, any>} model
+ * @param {number} seed
+ * @param {number} [warmupPeriod]
+ * @param {number|null} [maxSimTime]
+ * @param {any} [terminationCondition]
+ * @param {number} [maxCycles]
+ * @param {number} [maxCPasses]
+ * @param {boolean} [collectTimeSeries]
+ * @param {any} [registry]
+ * @param {Record<string, any>} [options]
+ */
 export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 5000, collectTimeSeries = false, registry = nullRegistry, options = {}) {
   const engineOptions = options || {};
   const schedulesMap = engineOptions.schedulesMap;
   // Resolve external schedule references before any processing.
   // When options.schedulesMap is provided, inline rows[] are merged from the
   // model_schedules table. Falls back to inline rows if no map is provided.
+  /** @type {Record<string, any>} */
   let runtimeModel;
   const _cached = _runtimeModelCache.get(model);
   if (_cached && _cached.schedulesMap === schedulesMap) {
     runtimeModel = _cached.runtimeModel;
   } else {
     const resolvedModel = resolveInlineSchedules(model, schedulesMap);
-    runtimeModel = modelWithShiftInitialCapacity(applyEntityInheritance(resolvedModel));
+    runtimeModel = modelWithShiftInitialCapacity(applyEntityInheritance(/** @type {any} */ (resolvedModel)));
     _runtimeModelCache.set(model, { schedulesMap, runtimeModel });
   }
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
@@ -511,6 +606,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let _excludedCount = 0;
   let _statsResetTime = 0;
   let _purgePhase = false;
+  /** @type {number|null} */
   let _purgeStartedAt = null;
   let _servedInPurge = 0;
   const purgeConfig = engineOptions.purgePeriod || {};
@@ -522,18 +618,21 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // entityDetail=false (batch reps ≥ 1) builds entitySummaryCompact in the worker
   // instead of cloning every entity object, reducing structured-clone payload size.
   const entityDetail = engineOptions.entityDetail !== false;
+  /** @type {string[]} */
   const warnings = [];
 
   // ── Per-queue metrics (F11.4): blockingCount, balkCount per queue name ───────
+  /** @type {Record<string, any>} */
   const _perQueue = {};
-  const incQueueMetric = (qName, field) => {
+  const incQueueMetric = (/** @type {string} */ qName, /** @type {string} */ field) => {
     if (!_perQueue[qName]) _perQueue[qName] = { blockingCount: 0, balkCount: 0 };
     _perQueue[qName][field]++;
   };
 
   // ── Event fire counts: how many times each B/C-event has fired ─────────────
+  /** @type {Record<string, number>} */
   const _eventCounts = {};
-  const incEventCount = (id) => {
+  const incEventCount = (/** @type {any} */ id) => {
     if (id) _eventCounts[id] = (_eventCounts[id] || 0) + 1;
   };
   const _runtimeMetrics = {
@@ -541,6 +640,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     cEventScans: 0,
     cEventsFired: 0,
     entitiesCreated: 0,
+    /** @type {Record<string, number>} */
     maxQueueLengthByQueue: {},
     maxFutureEventListSize: 0,
   };
@@ -554,25 +654,25 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   // Core structured trace emitter. Returns a trace entry with all required
   // phase/A fields populated. Callers add phase-specific payload fields.
-  const _trace = (phase, extra = {}) => ({
+  const _trace = (/** @type {any} */ phase, extra = {}) => ({
     phase,
     time: clock,
     seq: nextSeq(),
     ...extra,
   });
 
-  const makeTraceEntry = (phase, extra = {}) => _trace(phase, extra);
-  const noteQueueDepth = (queueName) => {
+  const makeTraceEntry = (/** @type {any} */ phase, extra = {}) => _trace(phase, extra);
+  const noteQueueDepth = (/** @type {any} */ queueName) => {
     if (!queueName) return;
     // Servers never join queues via markEntityWaiting, so the index bucket
     // for a queue name is already customer/batch-only — no role filter needed.
-    const depth = indexBucket(queueIndex, queueName).length;
+    const depth = (indexBucket(queueIndex, queueName) || []).length;
     const currentMax = _runtimeMetrics.maxQueueLengthByQueue[queueName] || 0;
     if (depth > currentMax) {
       _runtimeMetrics.maxQueueLengthByQueue[queueName] = depth;
     }
   };
-  const noteEntityCreated = (entity) => {
+  const noteEntityCreated = (/** @type {any} */ entity) => {
     _runtimeMetrics.entitiesCreated++;
     if (entity?.queue) noteQueueDepth(entity.queue);
   };
@@ -583,6 +683,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   };
 
   // ── Initialise scalar state ───────────────────────────────────────────────
+  /** @type {Record<string, any>} */
   const state = { __served: 0, __reneged: 0, __completedSinceSample: 0 };
   for (const sv of runtimeModel.stateVariables || []) {
     try   { state[sv.name] = JSON.parse(sv.initialValue); }
@@ -630,6 +731,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // population, not cumulative throughput. Stats readers (snap/getSummary/
   // computeWaitDist etc.) read entities.concat(_completed) so end-of-run and
   // snapshot numbers are unaffected by when a sweep happened to run.
+  /** @type {Record<string, any>[]} */
   let _completed = [];
   const allEntitiesForStats = () => (_completed.length ? entities.concat(_completed) : entities);
   // Below this many live entities, a sweep isn't worth its own O(live) cost.
@@ -645,7 +747,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // Cheap periodic trigger — checking "what fraction is terminal" before
   // deciding to sweep would itself be an O(N) scan, defeating the purpose.
   const PRUNE_INTERVAL_CYCLES = 500;
-  const pruneStaleEntities = ({ intoAccumulator }) => {
+  const pruneStaleEntities = (/** @type {{ intoAccumulator: boolean }} */ { intoAccumulator }) => {
     const { entities: kept, fel: keptFel, removed } = pruneTerminalEntities(entities, fel);
     entities = kept;
     fel = keptFel;
@@ -657,6 +759,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   };
 
   // Lightweight per-resource utilisation streak tracking
+  /** @type {Record<string, any>} */
   const _utilStreaks = {};
   for (const srv of entities) {
     if (srv.role === "server" && !_utilStreaks[srv.type]) {
@@ -665,9 +768,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   }
 
   const helpers = () => makeHelpers(entities, runtimeModel, queueIndex);
-  const createServerEntity = (serverTypeName, arrivalTime = clock) => {
-    const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
-    const entityType = (runtimeModel.entityTypes || []).find(et => et.role === "server" && match(et.name, serverTypeName));
+  const createServerEntity = (/** @type {any} */ serverTypeName, arrivalTime = clock) => {
+    const match = (/** @type {any} */ a, /** @type {any} */ b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+    const entityType = (runtimeModel.entityTypes || []).find((/** @type {any} */ et) => et.role === "server" && match(et.name, serverTypeName));
     if (!entityType) return null;
     const created = {
       id: nextId(),
@@ -685,10 +788,11 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // sortedCEvents is built once per buildEngine() call (i.e. once per run, not
   // rebuilt per step()) — so `_fired` flags stored directly on synthetic shift-when
   // event objects persist correctly across the whole run.
+  /** @type {Record<string, any>[]} */
   const sortedCEvents = (runtimeModel.cEvents || []).slice()
     .concat(makeShiftWhenEvents(runtimeModel))
-    .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999))
-    .map(event => event._isShiftWhen ? {
+    .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.priority ?? 9999) - (b.priority ?? 9999))
+    .map((/** @type {any} */ event) => event._isShiftWhen ? {
       ...event,
       _compiledCondition: compilePredicate(event.condition),
       _conditionDeps: getPredicateDependencies(event.condition),
@@ -699,13 +803,15 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       _effectImpactTemplate: compileEventImpactTemplate(event),
     });
   const enableFilteredPhaseC = sortedCEvents.length >= 8;
+  /** @type {Map<any, any>|null} */
   const bEventImpactTemplates = enableFilteredPhaseC
-    ? new Map((runtimeModel.bEvents || []).map(event => [event.id, compileEventImpactTemplate(event)]))
+    ? new Map((runtimeModel.bEvents || []).map((/** @type {any} */ event) => [event.id, compileEventImpactTemplate(event)]))
     : null;
   const compiledTerminationCondition = terminationCondition ? compilePredicate(terminationCondition) : null;
+  /** @type {Record<string, any>} */
   const predicateState = {
-    currentEntity: null,
-    helpers: null,
+    currentEntity: /** @type {any} */ (null),
+    helpers: /** @type {any} */ (null),
     entities,
     model: runtimeModel,
     scalars: state,
@@ -714,7 +820,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     get __reneged() { return state.__reneged ?? 0; },
     get __loopCount() { return state.__loopCount ?? 0; },
   };
-  const usePredicateState = (helpers, currentEntity = null) => {
+  const usePredicateState = (/** @type {any} */ helpers, /** @type {any} */ currentEntity = null) => {
     predicateState.helpers = helpers;
     predicateState.currentEntity = currentEntity;
     predicateState.entities = entities;
@@ -722,35 +828,38 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   };
 
   // ── Snapshot ──────────────────────────────────────────────────────────────
-  function snap(clock) {
+  function snap(/** @type {any} */ clock) {
     const h = makeHelpers(entities, runtimeModel, queueIndex);
     const statsEntities = allEntitiesForStats();
-    const types = [...new Set(statsEntities.map(e => e.type))];
+    const types = [...new Set(statsEntities.map((/** @type {any} */ e) => e.type))];
+    /** @type {Record<string, any>} */
     const byType = {};
-    types.forEach(t => {
+    types.forEach((/** @type {any} */ t) => {
       byType[t] = {
         waiting: h.waitingOf(t).length,
         idle:    h.idleOf(t).length,
         busy:    h.busyOf(t).length,
         failed:  h.failedOf(t).length,
-        total:   statsEntities.filter(e => e.type === t).length,
+        total:   statsEntities.filter((/** @type {any} */ e) => e.type === t).length,
       };
     });
+    /** @type {Record<string, any>} */
     const byQueue = {};
-    (runtimeModel.queues || []).forEach(q => {
+    (runtimeModel.queues || []).forEach((/** @type {any} */ q) => {
       const qName = q.name;
       if (!qName) return;
-      const seenEntities = statsEntities.filter(e => e.role !== "server" && (e.queue === qName || e.lastQueue === qName));
-      const waitingEntities = entities.filter(e => e.role !== "server" && e.queue === qName && e.status === "waiting");
+      const seenEntities = statsEntities.filter((/** @type {any} */ e) => e.role !== "server" && (e.queue === qName || e.lastQueue === qName));
+      const waitingEntities = entities.filter((/** @type {any} */ e) => e.role !== "server" && e.queue === qName && e.status === "waiting");
       byQueue[qName] = {
         waiting: waitingEntities.length,
         total: seenEntities.length,
-        reneged: seenEntities.filter(e => e.status === "reneged").length,
+        reneged: seenEntities.filter((/** @type {any} */ e) => e.status === "reneged").length,
       };
     });
     // nextArrivals: maps each b-event id to its next scheduled time in the FEL.
     // Used by the Execute canvas to show countdowns on Source nodes.
     // FEL is already sorted; first occurrence of each id is the earliest.
+    /** @type {Record<string, any>} */
     const nextArrivals = {};
     const _seen = new Set();
     for (const entry of fel) {
@@ -761,6 +870,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     }
 
     // Container level snapshot for canvas display
+    /** @type {Record<string, any>} */
     const containers = {};
     for (const ct of runtimeModel.containerTypes || []) {
       containers[ct.id] = {
@@ -795,7 +905,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // ── Lightweight snapshot for time-series collection ───────────────────────
   // Single O(N) pass; produces the same shape as snap() byType/byQueue.
   function snapLite() {
+    /** @type {Record<string, any>} */
     const byType = {};
+    /** @type {Record<string, any>} */
     const byQueue = {};
     for (const e of allEntitiesForStats()) {
       const t = e.type;
@@ -819,7 +931,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   // ── Build initial FEL ─────────────────────────────────────────────────────
   let clock = 0;
+  /** @type {Record<string, any>[]} */
   const log = [];
+  /** @type {Record<string, any>[]|null} */
   const _timeSeries = collectTimeSeries ? [] : null; // null = disabled, zero overhead
   let _lastTimeSeriesSampleT = 0; // bucket start for the per-sample avgWait computed below
 
@@ -827,8 +941,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let _wipIntegral = 0;
   let _lastWipSnapTime = 0;
 
+  /** @type {Record<string, any>[]} */
   let fel = (runtimeModel.bEvents || [])
-    .map(ev => {
+    .map((/** @type {any} */ ev) => {
       let scheduledTime = parseFloat(ev.scheduledTime);
       if (!Number.isFinite(scheduledTime)) scheduledTime = 0;
 
@@ -843,7 +958,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         const dp = sched.distParams || {};
         const rows = sched.rows ? sched.rows : (Array.isArray(dp.rows) ? dp.rows : null);
         const rawTimes = rows
-          ? rows.map(r => Number(r.time))
+          ? rows.map((/** @type {any} */ r) => Number(r.time))
           : (sched.times ? sched.times.map(Number) : (Array.isArray(dp.times) ? dp.times.map(Number) : []));
         const isScheduleDist = (sched.dist || "") === "Schedule" || rows || sched.times || dp.rows || dp.times;
         if (isScheduleDist && rawTimes.length > 0 && Number.isFinite(rawTimes[0])) {
@@ -875,7 +990,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   // Inject FEL events from rate changes, shift changes (manual + weekly pattern),
   // and server failure schedules.
+  /** @type {Record<string, any>[]} */
   const patternShiftEvents = [];
+  /** @type {Set<string>} */
   const patternServerNames = new Set();
   for (const et of runtimeModel.entityTypes || []) {
     if (et.role !== "server") continue;
@@ -902,7 +1019,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   }
   // Filter manual shift changes for entity types that use schedulePattern
   const manualShiftEvents = makeShiftChangeEvents(runtimeModel)
-    .filter(ev => !patternServerNames.has(ev.serverTypeName));
+    .filter((/** @type {any} */ ev) => !patternServerNames.has(ev.serverTypeName));
   fel.push(...makeRateChangeEvents(runtimeModel), ...manualShiftEvents, ...patternShiftEvents, ...makeFailureEvents(runtimeModel, rng, streamRegistry));
 
   if (warmupPeriod > 0) {
@@ -917,8 +1034,10 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 // ── Shared execution context ──────────────────────────────────────────────
   // _arbitration: set by ASSIGN macro to record queue/server selection reasoning
   // for structured trace emission. Shape defined in F27.4 contract.
+  /** @type {Record<string, any>} */
   const _arbitration = {};
-  const makeCtx = (felRef = null) => ({
+  /** @returns {Record<string, any>} */
+  const makeCtx = (/** @type {any} */ felRef = null) => ({
     entities,
     state,
     model: runtimeModel,
@@ -952,13 +1071,13 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     return endEntry;
   }
 
-  function buildFelEventLog(phase, ev, msgs, ctx, felEntries) {
+  function buildFelEventLog(/** @type {any} */ phase, /** @type {any} */ ev, /** @type {any} */ msgs, /** @type {any} */ ctx, /** @type {any} */ felEntries) {
     const msg = [`${phase}: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
     const entityIds = [
       ...(ctx._lastCustId != null ? [ctx._lastCustId] : []),
       ...(ctx._lastSrvId  != null ? [ctx._lastSrvId]  : []),
     ];
-    const newEvents = felEntries.map(fe => ({
+    const newEvents = felEntries.map((/** @type {any} */ fe) => ({
       id:     fe.id || fe.name || "?",
       name:   fe.name || fe.id || "?",
       at:     fe.scheduledTime,
@@ -968,6 +1087,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   }
 
   // ── step(): one Phase A → B → C cycle ────────────────────────────────────
+  /** @param {{ captureSnap?: boolean }} [options] */
   function step(options = {}) {
     const captureSnap = options.captureSnap !== false;
     const stepSnapshot = () => (captureSnap ? snap(clock) : null);
@@ -1145,7 +1265,7 @@ const cycleLog = [];
           );
           if (srv) {
             repairServers([srv], clock);
-            const et = (runtimeModel.entityTypes || []).find(et => et.role === "server" && String(et.name || "").trim().toLowerCase() === key);
+            const et = (runtimeModel.entityTypes || []).find((/** @type {any} */ et) => et.role === "server" && String(et.name || "").trim().toLowerCase() === key);
             if (et && (et.mtbfDist || et.failureDist) && (et.mtbfDistParams || et.failureDistParams)) {
               const nextFailTime = clock + sample(
                 et.mtbfDist || et.failureDist,
@@ -1193,10 +1313,13 @@ const cycleLog = [];
       ctx.clock = clock;
       const { msgs, felEntries, skipped } = fireBEvent(ev, ctx);
       if (enableFilteredPhaseC) {
+        // enableFilteredPhaseC true guarantees phaseCDirty/bEventImpactTemplates
+        // were both initialised (see their declarations above) — the casts are
+        // for TS's flow analysis only, not a behavior change.
         mergeDirtyInto(
-          phaseCDirty,
+          /** @type {DirtySet} */ (phaseCDirty),
           deriveDirtyFromTemplate(
-            bEventImpactTemplates.get(ev.id),
+            /** @type {Map<any, any>} */ (bEventImpactTemplates).get(ev.id),
             { ...ev, _contextCustId: ctx._lastCustId ?? ev._contextCustId, _contextSrvId: ctx._lastSrvId ?? ev._contextSrvId },
             ctx
           )
@@ -1263,8 +1386,11 @@ const cycleLog = [];
           ({ msgs, felEntries } = fireCEvent(ev, ctx));
         }
         if (enableFilteredPhaseC) {
+          // enableFilteredPhaseC true guarantees phaseCDirty was initialised
+          // (see its declaration above) — this cast is for TS's flow analysis
+          // only, not a behavior change.
           mergeDirtyInto(
-            phaseCDirty,
+            /** @type {DirtySet} */ (phaseCDirty),
             ev._isShiftWhen
               ? (() => { const d = createDirtySet(); markDirtyResource(d, ev.entityTypeName); return d; })()
               : deriveDirtyFromTemplate(
@@ -1351,7 +1477,8 @@ const cycleLog = [];
     let liteSnap = null;
     if (_timeSeries !== null) {
       const recentWaits = computeRecentWaitsByQueue(_lastTimeSeriesSampleT, clock);
-      const withRecentWaits = (byQueueIn) => {
+      const withRecentWaits = (/** @type {any} */ byQueueIn) => {
+        /** @type {Record<string, any>} */
         const out = {};
         for (const [qName, qData] of Object.entries(byQueueIn || {})) {
           const w = recentWaits[qName];
@@ -1443,6 +1570,7 @@ const cycleLog = [];
     return { done: false, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated };
   }
 
+  /** @param {Record<string, any>} [overrides] */
   function getProgressSnapshot(overrides = {}) {
     const cancelled = !!overrides.cancelled;
     const done = !!overrides.done || cancelled || _terminationConditionMet || fel.length === 0 || _cycleCount >= maxCycles;
@@ -1459,6 +1587,7 @@ const cycleLog = [];
     });
   }
 
+  /** @param {Record<string, any>|null} [cancelMeta] */
   function buildRunResult(cancelMeta = null) {
     const cancellation = cancelMeta?.cancelled ? {
       cancelled: true,
@@ -1501,6 +1630,7 @@ const cycleLog = [];
   }
 
   // ── runAll(): run to completion ───────────────────────────────────────────
+  /** @param {Record<string, any>} [runOptions] */
   function runAll(runOptions = {}) {
     const onProgress = runOptions.onProgress || engineOptions.onProgress;
     const shouldCancel = runOptions.shouldCancel || engineOptions.shouldCancel;
@@ -1561,20 +1691,20 @@ const cycleLog = [];
     return buildRunResult();
   }
 
-  function truncateInterval(start, end) {
+  function truncateInterval(/** @type {any} */ start, /** @type {any} */ end) {
     if (start == null || end == null) return 0;
     return Math.max(0, end - Math.max(start, _statsResetTime));
   }
 
-  function entityWaitAfterWarmup(entity) {
+  function entityWaitAfterWarmup(/** @type {any} */ entity) {
     if (!entity?.stages?.length) {
       if (entity?.serviceStart == null) return 0;
       return truncateInterval(entity.arrivalTime, entity.serviceStart);
     }
-    return entity.stages.reduce((sum, stage) => sum + truncateInterval(stage.waitStartedAt, stage.serviceStartedAt), 0);
+    return entity.stages.reduce((/** @type {any} */ sum, /** @type {any} */ stage) => sum + truncateInterval(stage.waitStartedAt, stage.serviceStartedAt), 0);
   }
 
-  function entityServiceAfterWarmup(entity) {
+  function entityServiceAfterWarmup(/** @type {any} */ entity) {
     if (!entity?.stages?.length) {
       if (entity?.serviceStart == null || entity?.completionTime == null) return null;
       if (entity?._isDelay) return null;
@@ -1583,11 +1713,11 @@ const cycleLog = [];
     // "delay" stages hold no server, so their duration isn't service time —
     // it's accounted for separately (sojourn-only), not folded into avgSvc.
     return entity.stages
-      .filter(stage => stage.serverType !== "delay")
-      .reduce((sum, stage) => sum + truncateInterval(stage.serviceStartedAt, stage.serviceEndedAt), 0);
+      .filter((/** @type {any} */ stage) => stage.serverType !== "delay")
+      .reduce((/** @type {any} */ sum, /** @type {any} */ stage) => sum + truncateInterval(stage.serviceStartedAt, stage.serviceEndedAt), 0);
   }
 
-  function entitySojournAfterWarmup(entity) {
+  function entitySojournAfterWarmup(/** @type {any} */ entity) {
     const endTime = entity?.completionTime ?? entity?.renegeTime ?? null;
     if (endTime == null) return null;
     return truncateInterval(entity.arrivalTime, endTime);
@@ -1601,7 +1731,13 @@ const cycleLog = [];
   // stage is picked up exactly once, in the bucket where it became known —
   // answering "what was the typical wait for entities that cleared the queue
   // around this time?"
+  /**
+   * @param {any} sinceT
+   * @param {any} untilT
+   * @returns {Record<string, { sum: number, n: number }>}
+   */
   function computeRecentWaitsByQueue(sinceT, untilT) {
+    /** @type {Record<string, { sum: number, n: number }>} */
     const acc = {};
     for (const e of entities) {
       if (e.role === "server" || !e.stages || e.stages.length === 0) continue;
@@ -1621,7 +1757,8 @@ const cycleLog = [];
   // ── waitDist: per-queue wait-time distribution (F10.4b) ───────────────────
   // Wait time = serviceStart − arrivalTime, recorded for every served customer.
   // Always computed (cheap O(n)) regardless of collectTimeSeries flag.
-  function computeWaitDist(allEntities) {
+  function computeWaitDist(/** @type {any} */ allEntities) {
+    /** @type {Record<string, number[]>} */
     const byQueue = {};
     for (const e of allEntities) {
       if (e.role === "server" || !e.stages || e.stages.length === 0) continue;
@@ -1634,6 +1771,7 @@ const cycleLog = [];
         byQueue[qName].push(wait);
       }
     }
+    /** @type {Record<string, any>} */
     const dist = {};
     for (const [q, waits] of Object.entries(byQueue)) {
       const sorted = [...waits].sort((a, b) => a - b);
@@ -1646,7 +1784,7 @@ const cycleLog = [];
   // ── sojournDist: system-wide total-time-in-system distribution ───────────
   // Pools sojournTime (clock − arrivalTime) across every completed entity,
   // independent of which queues/stages it passed through.
-  function computeSojournDist(allEntities) {
+  function computeSojournDist(/** @type {any} */ allEntities) {
     const sojourns = [];
     for (const e of allEntities) {
       if (e.role === "server" || e.status !== "done") continue;
@@ -1659,7 +1797,7 @@ const cycleLog = [];
 
   // ── waitByArrival: total wait (across every queue/stage) vs. arrival time,
   // pooled across all completed entities.
-  function computeWaitByArrival(allEntities) {
+  function computeWaitByArrival(/** @type {any} */ allEntities) {
     const points = [];
     for (const e of allEntities) {
       if (e.role === "server" || e.status !== "done" || !e.stages || e.stages.length === 0) continue;
@@ -1684,7 +1822,7 @@ const cycleLog = [];
       .filter(w => w > 0);
     const inProgressWaits = waitingAtEnd.map(e => {
       const completed = e.stages?.length
-        ? e.stages.reduce((sum, st) => sum + truncateInterval(st.waitStartedAt, st.serviceStartedAt), 0)
+        ? e.stages.reduce((/** @type {any} */ sum, /** @type {any} */ st) => sum + truncateInterval(st.waitStartedAt, st.serviceStartedAt), 0)
         : 0;
       const partial = truncateInterval(e.lastStageStart ?? e.arrivalTime, clock);
       return Math.max(0, completed + partial);
@@ -1742,8 +1880,9 @@ const cycleLog = [];
       ? +(served.length / customers.length).toFixed(4)
       : null;
 
+    /** @type {Record<string, any>} */
     const outcomes = {};
-    const ensureOutcome = (entity) => {
+    const ensureOutcome = (/** @type {any} */ entity) => {
       const fallbackStatus = entity.status === "reneged" ? "reneged" : "completed";
       const fallbackRoute = entity.status === "reneged" ? "status:reneged" : "status:done";
       return entity.outcome || {
@@ -1787,7 +1926,9 @@ const cycleLog = [];
       ? Math.round((Math.abs(avgWait - avgWaitByLittle) / avgWaitByLittle) * 100)
       : null;
 
+    /** @type {Record<string, any>} */
     const perResource = {};
+    /** @type {Record<string, any>} */
     const perShiftBuckets = {}; // { type: { label: { busyTimeSum, completions } } }
     // Seed every server-role type up front, not just ones with a currently-alive
     // instance — a calendar-closed resource legitimately has 0 current entities
@@ -1883,7 +2024,7 @@ const cycleLog = [];
       const timeline = state.__shiftTimeline?.[type] || [];
       const buckets = perShiftBuckets[type] || {};
       if (timeline.length > 0) {
-        r.perShiftUtil = timeline.map(period => {
+        r.perShiftUtil = timeline.map((/** @type {any} */ period) => {
           const label = `shift_${period.startTime}_cap${period.capacity}`;
           const bucket = buckets[label] || { busyTimeSum: 0 };
           // Clip to the post-warmup window: busyTimeSum only ever accrues after
@@ -1909,8 +2050,8 @@ const cycleLog = [];
         // open-capacity-time the per-shift breakdown above already computes,
         // instead of the plain wall-clock elapsed*headcount denominator used
         // for `r.utilisation`.
-        const busySum = r.perShiftUtil.reduce((s, p) => s + p.busyTimeSum, 0);
-        const denomSum = r.perShiftUtil.reduce((s, p) => s + p.elapsed * p.plannedCapacity, 0);
+        const busySum = r.perShiftUtil.reduce((/** @type {any} */ s, /** @type {any} */ p) => s + p.busyTimeSum, 0);
+        const denomSum = r.perShiftUtil.reduce((/** @type {any} */ s, /** @type {any} */ p) => s + p.elapsed * p.plannedCapacity, 0);
         r.calendarUtilisation = denomSum > 0 ? +(busySum / denomSum).toFixed(4) : 0;
         // Overwrite r.utilisation with the shift-correct value so downstream
         // consumers that do not check calendarUtilisation first get the right
@@ -1918,8 +2059,8 @@ const cycleLog = [];
         r.utilisation = r.calendarUtilisation;
       }
       // Schedule adherence (F86.5) — weekly patterns only
-      const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
-      const et = (runtimeModel.entityTypes || []).find(et => et.role === "server" && match(et.name, type));
+      const match = (/** @type {any} */ a, /** @type {any} */ b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+      const et = (runtimeModel.entityTypes || []).find((/** @type {any} */ et) => et.role === "server" && match(et.name, type));
       if (et?.schedulePattern?.type === 'weekly') {
         const adhSamples = state.__scheduleAdherenceSamples?.[type.toLowerCase()];
         if (adhSamples && adhSamples.total > 0) {
@@ -1953,6 +2094,7 @@ const cycleLog = [];
     const costPerServed = served.length > 0 ? +(totalCost / served.length).toFixed(4) : null;
 
     // Container level summary (G21)
+    /** @type {Record<string, any>} */
     const containerLevels = {};
     for (const ct of runtimeModel.containerTypes || []) {
       const level = state[`__container_${ct.id}`] ?? 0;
@@ -1975,13 +2117,17 @@ const cycleLog = [];
       : null;
 
     // Per-section metrics
+    /** @type {Record<string, any>} */
     const sectionStats = {};
+    /** @type {Record<string, any>} */
     const journeys = {};
     if (runtimeModel.sections?.length) {
+      /** @type {Record<string, any>} */
       const queueIdByName = {};
       for (const q of runtimeModel.queues || []) {
         if (q.id && q.name) queueIdByName[q.name.trim().toLowerCase()] = q.id;
       }
+      /** @type {Record<string, any>} */
       const sectionMemberSet = {};
       for (const sec of runtimeModel.sections) {
         sectionMemberSet[sec.id] = new Set(sec.memberIds || []);
@@ -2026,10 +2172,11 @@ const cycleLog = [];
       }
     }
 
+    /** @type {Record<string, any>} */
     const queueJourneys = {};
     for (const entity of customers) {
       if (!entity.stages?.length) continue;
-      const queueParts = entity.stages.map(s => s.queueName).filter(Boolean);
+      const queueParts = entity.stages.map((/** @type {any} */ s) => s.queueName).filter(Boolean);
       if (!queueParts.length) continue;
       const isDone = entity.status === "done" || entity.status === "reneged";
       let sink;
@@ -2128,7 +2275,7 @@ const cycleLog = [];
   return {
     step,
     runAll,
-    buildResult:          (options = {}) => buildRunResult(options?.cancelled ? options : null),
+    buildResult:          (/** @type {Record<string, any>} */ options = {}) => buildRunResult(options?.cancelled ? options : null),
     getSnap:              () => snap(clock),
     getFelSize:           () => fel.length,
     getCycleCount:        () => _cycleCount,

@@ -1,3 +1,4 @@
+// @ts-check
 // engine/adapters/ScheduleFeedAdapter.js
 // Fetches a list of planned activities from a REST endpoint and converts them
 // to a rows[] array (the planned-arrival schedule format) using wallToSim().
@@ -20,7 +21,13 @@
 
 import { parseTimeInput } from '../clockUtils.js';
 
+/**
+ * @param {string} url
+ * @param {Record<string, string>} headers
+ * @param {number} [maxAttempts]
+ */
 async function fetchWithRetry(url, headers, maxAttempts = 3) {
+  /** @type {any} */
   let lastErr;
   let delay = 2000;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -40,14 +47,20 @@ async function fetchWithRetry(url, headers, maxAttempts = 3) {
   throw lastErr;
 }
 
+/**
+ * @param {any} obj
+ * @param {string} path
+ */
 function getField(obj, path) {
   if (!path || obj == null) return undefined;
   return path.split('.').reduce((acc, key) => (acc != null ? acc[key] : undefined), obj);
 }
 
 export class ScheduleFeedAdapter {
+  /** @param {Record<string, any>} source */
   constructor(source) {
     this._source = source;
+    /** @type {Array<{time: number, attrs: Record<string, any>}>|null} */
     this._rows = null;
   }
 
@@ -84,6 +97,7 @@ export class ScheduleFeedAdapter {
       if (simTime == null || !Number.isFinite(simTime)) continue;
 
       // Map API fields to entity attrs
+      /** @type {Record<string, any>} */
       const attrs = {};
       for (const [apiField, attrName] of Object.entries(attrMap)) {
         const val = getField(activity, apiField);

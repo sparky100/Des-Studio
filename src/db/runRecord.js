@@ -1,5 +1,10 @@
+// @ts-check
 import { supabase } from './supabase.js';
 
+/**
+ * @param {{ summary: Record<string, number|undefined> }} newResult
+ * @param {{ summary: Record<string, number|undefined> }} storedResult
+ */
 export function compareResults(newResult, storedResult) {
   const fields = ['served', 'avgWait', 'avgSvc', 'avgSojourn', 'avgTimeInSystem', 'servedRatio', 'reneged'];
   return fields.every(f =>
@@ -7,6 +12,13 @@ export function compareResults(newResult, storedResult) {
   );
 }
 
+/**
+ * @param {Record<string, any>} model
+ * @param {Record<string, any>} results
+ * @param {Record<string, any>} experimentConfig
+ * @param {number} resolvedSeed
+ * @param {{ includeModelSnapshot?: boolean }} [options]
+ */
 export const buildRunRecord = (model, results, experimentConfig, resolvedSeed, options = {}) => {
   const includeModelSnapshot = options.includeModelSnapshot === true;
   const snapshot = includeModelSnapshot ? JSON.parse(JSON.stringify(model)) : null;
@@ -34,6 +46,11 @@ export const buildRunRecord = (model, results, experimentConfig, resolvedSeed, o
 // Each field may only be SET once (from null); the DB trigger enforces this.
 // The WHERE narrative_text IS NULL guard avoids triggering a DB error when
 // a narrative has already been written.
+/**
+ * @param {string} runId
+ * @param {string} narrativeText
+ * @param {string} modelDescriptionText
+ */
 export const updateRunNarrative = async (runId, narrativeText, modelDescriptionText) => {
   const { error } = await supabase
     .from('simulation_runs')

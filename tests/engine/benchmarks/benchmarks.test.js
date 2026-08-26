@@ -101,8 +101,8 @@ function mmcModel() {
 describe('Benchmark 1 — M/M/1 mean queue wait (λ=0.9, μ=1.0)', () => {
   const ANALYTICAL = 9.0;
 
-  test('mean queue wait within ±2% of analytical 9.0 (seed=42, N=500, warmup=200)', () => {
-    const meanWait = runUntilServed(mm1Model(), 500, 42, 200);
+  test('mean queue wait within ±2% of analytical 9.0 (seed=42, N=500, warmup=200)', async () => {
+    const meanWait = await runUntilServed(mm1Model(), 500, 42, 200);
     const pctError = Math.abs(meanWait - ANALYTICAL) / ANALYTICAL;
     expect(pctError).toBeLessThanOrEqual(0.02);
   });
@@ -115,8 +115,8 @@ describe('Benchmark 1 — M/M/1 mean queue wait (λ=0.9, μ=1.0)', () => {
 describe('Benchmark 2 — M/M/c mean queue wait (λ=1.6, μ=1.0, c=2)', () => {
   const ANALYTICAL = 1.7778;
 
-  test('mean queue wait within ±5% of Erlang-C analytical 1.7778 (seed=42, N=2000, warmup=500)', () => {
-    const meanWait = runUntilServed(mmcModel(), 2000, 42, 500);
+  test('mean queue wait within ±5% of Erlang-C analytical 1.7778 (seed=42, N=2000, warmup=500)', { timeout: 30000 }, async () => {
+    const meanWait = await runUntilServed(mmcModel(), 2000, 42, 500);
     const pctError = Math.abs(meanWait - ANALYTICAL) / ANALYTICAL;
     expect(pctError).toBeLessThanOrEqual(0.05);
   });

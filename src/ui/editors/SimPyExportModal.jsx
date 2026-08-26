@@ -55,7 +55,7 @@ export function SimPyExportModal({ model, onClose }) {
           </div>
           <div style={{ fontSize:12,color:C.muted,lineHeight:1.6 }}>
             {isCategory2
-              ? "This script runs but requires manual completion. The macros listed below have been replaced with annotated # TODO stubs."
+              ? "This script runs but requires manual completion. The macros listed below have been replaced with annotated # NOT SUPPORTED stubs."
               : warnings.length > 0
                 ? "This script is runnable with no manual edits, but see the caveats below — results in those areas may diverge from this model's own simulation engine."
                 : "This script is fully runnable. No manual edits are required before executing it."}
@@ -72,7 +72,7 @@ export function SimPyExportModal({ model, onClose }) {
         {/* Caveats */}
         {warnings.length > 0 && (
           <div style={{ background:C.surface,border:`1px solid ${C.amber}66`,borderRadius:8,padding:14,display:"flex",flexDirection:"column",gap:8 }}>
-            <div style={{ fontSize:12,fontWeight:700,color:C.amber }}>Caveats — not auto-translated</div>
+            <div style={{ fontSize:12,fontWeight:700,color:C.amber }}>Not supported</div>
             <ul style={{ margin:0,paddingLeft:18,display:"flex",flexDirection:"column",gap:4 }}>
               {warnings.map((w, i) => (
                 <li key={i} style={{ fontSize:11,color:C.muted,lineHeight:1.5 }}>{w}</li>

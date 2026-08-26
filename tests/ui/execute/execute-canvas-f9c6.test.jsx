@@ -5,8 +5,8 @@ import { vi, describe, test, expect, beforeEach } from "vitest";
 import { ExecuteCanvas } from "../../../src/ui/execute/ExecuteCanvas.jsx";
 
 // Mock @xyflow/react so we don't need a real DOM canvas
-vi.mock("@xyflow/react", async () => {
-  const actual = await vi.importActual("@xyflow/react");
+vi.mock("../../../src/ui/shared/xyflow.js", async () => {
+  const actual = await vi.importActual("../../../src/ui/shared/xyflow.js");
   return {
     ...actual,
     ReactFlow: ({ children, onNodeClick, onPaneClick }) => (

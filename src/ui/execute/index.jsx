@@ -36,11 +36,12 @@ import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
 import { ParamBrowserPanel, paramColor } from "./ParamBrowserPanel.jsx";
-import { alpha, RADIUS } from "../shared/tokens.js";
+import { alpha, RADIUS, SHADOW } from "../shared/tokens.js";
 import { prefersReducedMotion } from "../shared/hooks.js";
 import { generateReport, sanitizeFilename } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { useConfirm } from "../shared/useConfirm.jsx";
 import { ExportPopover } from "../shared/ExportPopover.jsx";
 
 /** Collect {{env.VAR}} secrets from sessionStorage for live-data adapters. */
@@ -264,6 +265,7 @@ function ExperimentRunSettingsFields({
 
 const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true }) => {
   const { C, FONT } = useTheme();
+  const { confirm, confirmDialog } = useConfirm();
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
@@ -1877,7 +1879,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         <Btn small variant="primary" onClick={loadCfg}>Load</Btn>
                         <Btn small variant="ghost" onClick={runCfg}>Run</Btn>
                         <Btn small variant="danger" ariaLabel={`Delete experiment ${exp.name}`} onClick={async () => {
-                          if (!confirm(`Delete "${exp.name}"?`)) return;
+                          if (!(await confirm(`Delete "${exp.name}"?`))) return;
                           try { await deleteExperiment(exp.id); setExperiments(prev => prev.filter(e => e.id !== exp.id)); setExpandedExpIds(prev => { const n = new Set(prev); n.delete(exp.id); return n; }); }
                           catch (err) { setExperimentsError(err?.message || "Delete failed"); }
                         }}>✕</Btn>
@@ -2572,7 +2574,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 position: "absolute", top: "100%", right: 0, marginTop: 4,
                 background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8,
                 padding: 8, minWidth: 260, maxWidth: "90vw",
-                boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 200,
+                boxShadow: SHADOW.dropdown, zIndex: 200,
                 display: "flex", flexDirection: "column", gap: 6,
               }}>
                 {liveFlags.map((f, i) => {
@@ -3383,6 +3385,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         onProceedWithoutCharts={() => resolveChartDataChoice("without")}
         onProceedWithCharts={() => resolveChartDataChoice("force")}
       />
+      {confirmDialog}
     </div>
   );
 };

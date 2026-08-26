@@ -1,3 +1,4 @@
+// @ts-check
 // sweep-runner.js — Orchestrate parametric sweeps across model parameter values
 // Pure JS — no React, no DOM. Can run from main thread or worker.
 // Sweep points are independent (applySweepValues deep-clones the model);
@@ -15,6 +16,10 @@ const SWEEP_METRICS = [
 
 // Compute how many grid points to run in parallel and how many replication workers
 // each slot gets, given the available hardware concurrency.
+/**
+ * @param {number} totalPoints
+ * @param {number} replications
+ */
 function sweepParallelism(totalPoints, replications) {
   const cores = typeof navigator !== "undefined" && Number.isFinite(navigator.hardwareConcurrency)
     ? navigator.hardwareConcurrency : 2;
@@ -30,12 +35,15 @@ function sweepParallelism(totalPoints, replications) {
   return { concurrentPoints, workersPerPoint };
 }
 
+// options is a runReplications()-shaped bag plus an internal _cancelRef used to
+// expose that point's cancel() back to the caller before the promise settles.
+/** @param {Record<string, any>} options */
 function wrapReplications(options) {
   return new Promise((resolve, reject) => {
     const runner = runReplications({
       ...options,
-      onComplete(results) { resolve(results); },
-      onError(error) { reject(error); },
+      onComplete(/** @type {any} */ results) { resolve(results); },
+      onError(/** @type {any} */ error) { reject(error); },
       onCancelled() { resolve(null); },
     });
     if (options._cancelRef) {
@@ -44,12 +52,34 @@ function wrapReplications(options) {
   });
 }
 
+/**
+ * @param {{
+ *   model?: import('../contracts/model').DesModelJson,
+ *   paramConfig?: Record<string, any>,
+ *   min?: number,
+ *   max?: number,
+ *   step?: number,
+ *   replications?: number,
+ *   baseSeed?: number,
+ *   warmupPeriod?: number,
+ *   maxSimTime?: number|null,
+ *   terminationCondition?: any,
+ *   collectTimeSeries?: boolean,
+ *   schedulesMap?: Record<string, any>,
+ *   onProgress?: (progress: Record<string, any>) => void,
+ *   onPointComplete?: (pointResult: Record<string, any>, meta: Record<string, any>) => void,
+ *   onError?: (error: Record<string, any>) => void,
+ *   onComplete?: (results: any[]) => void,
+ *   onCancelled?: (info: Record<string, any>) => void,
+ * }} [options]
+ * @returns {{ cancel: () => void }}
+ */
 export function runSweep({
   model,
   paramConfig,
-  min,
-  max,
-  step,
+  min = 0,
+  max = 0,
+  step = 1,
   replications = 1,
   baseSeed = 0,
   warmupPeriod = 0,
@@ -65,12 +95,14 @@ export function runSweep({
 } = {}) {
   const values = generateSweepValues(min, max, step);
   const totalPoints = values.length;
+  /** @type {any[]} */
   const results = [];
   let nextPoint = 0;
   let completedCount = 0;
   let cancelled = false;
   let errored = false;
   let activeSlots = 0;
+  /** @type {Set<() => void>} */
   const activeCancelFns = new Set();
 
   const { concurrentPoints, workersPerPoint } = sweepParallelism(totalPoints, replications);
@@ -91,6 +123,7 @@ export function runSweep({
 
   const makeSlot = () => {
     const pool = createReplicationPool();
+    /** @type {{ current: (() => void) | null }} */
     const pointCancelRef = { current: null };
     const slotCancel = () => pointCancelRef.current?.();
     activeCancelFns.add(slotCancel);
@@ -115,7 +148,7 @@ export function runSweep({
       });
 
       try {
-        const pointModel = applySweepValue(model, paramConfig, value);
+        const pointModel = applySweepValue(/** @type {any} */ (model), /** @type {any} */ (paramConfig), value);
         const pointSeed = baseSeed + pointIndex * 10000;
 
         const replicationPayloads = await wrapReplications({
@@ -130,7 +163,7 @@ export function runSweep({
           pool,
           workerCount: workersPerPoint,
           _cancelRef: pointCancelRef,
-          onProgress(progress) {
+          onProgress(/** @type {any} */ progress) {
             onProgress?.({
               totalPoints,
               currentPoint: pointIndex,
@@ -139,7 +172,7 @@ export function runSweep({
               pointReplications: progress,
             });
           },
-          onReplicationComplete(payload, progress) {
+          onReplicationComplete(/** @type {any} */ payload, /** @type {any} */ progress) {
             onProgress?.({
               totalPoints,
               currentPoint: pointIndex,
@@ -173,7 +206,7 @@ export function runSweep({
         });
 
         runNext();
-      } catch (error) {
+      } catch (/** @type {any} */ error) {
         if (!errored) {
           errored = true;
           cancel();
@@ -204,6 +237,26 @@ export function runSweep({
   return { cancel };
 }
 
+/**
+ * @param {{
+ *   model?: import('../contracts/model').DesModelJson,
+ *   paramConfigs?: Record<string, any>[],
+ *   ranges?: Array<{ min: number, max: number, step: number }>,
+ *   replications?: number,
+ *   baseSeed?: number,
+ *   warmupPeriod?: number,
+ *   maxSimTime?: number|null,
+ *   terminationCondition?: any,
+ *   collectTimeSeries?: boolean,
+ *   schedulesMap?: Record<string, any>,
+ *   onProgress?: (progress: Record<string, any>) => void,
+ *   onPointComplete?: (pointResult: Record<string, any>, meta: Record<string, any>) => void,
+ *   onError?: (error: Record<string, any>) => void,
+ *   onComplete?: (results: any[]) => void,
+ *   onCancelled?: (info: Record<string, any>) => void,
+ * }} [options]
+ * @returns {{ cancel: () => void }}
+ */
 export function run2DSweep({
   model,
   paramConfigs = [],
@@ -232,12 +285,14 @@ export function run2DSweep({
   const rows = generateSweepValues(rangeA.min, rangeA.max, rangeA.step).length;
   const cols = generateSweepValues(rangeB.min, rangeB.max, rangeB.step).length;
   const totalPoints = grid.length;
+  /** @type {any[]} */
   const results = [];
   let nextPoint = 0;
   let completedCount = 0;
   let cancelled = false;
   let errored = false;
   let activeSlots = 0;
+  /** @type {Set<() => void>} */
   const activeCancelFns = new Set();
 
   const { concurrentPoints, workersPerPoint } = sweepParallelism(totalPoints, replications);
@@ -258,6 +313,7 @@ export function run2DSweep({
 
   const makeSlot = () => {
     const pool = createReplicationPool();
+    /** @type {{ current: (() => void) | null }} */
     const pointCancelRef = { current: null };
     const slotCancel = () => pointCancelRef.current?.();
     activeCancelFns.add(slotCancel);
@@ -282,7 +338,7 @@ export function run2DSweep({
       });
 
       try {
-        const pointModel = applySweepValues(model, [
+        const pointModel = applySweepValues(/** @type {any} */ (model), [
           { paramConfig: paramA, value: valueA },
           { paramConfig: paramB, value: valueB },
         ]);
@@ -300,7 +356,7 @@ export function run2DSweep({
           pool,
           workerCount: workersPerPoint,
           _cancelRef: pointCancelRef,
-          onProgress(progress) {
+          onProgress(/** @type {any} */ progress) {
             onProgress?.({
               totalPoints,
               currentPoint: pointIndex,
@@ -309,7 +365,7 @@ export function run2DSweep({
               pointReplications: progress,
             });
           },
-          onReplicationComplete(payload, progress) {
+          onReplicationComplete(/** @type {any} */ payload, /** @type {any} */ progress) {
             onProgress?.({
               totalPoints,
               currentPoint: pointIndex,
@@ -345,7 +401,7 @@ export function run2DSweep({
         });
 
         runNext();
-      } catch (error) {
+      } catch (/** @type {any} */ error) {
         if (!errored) {
           errored = true;
           cancel();
@@ -379,6 +435,7 @@ export function run2DSweep({
 
 // Runs run2DSweep inside a dedicated Web Worker so the main thread stays free.
 // Falls back to run2DSweep() in-thread when Worker is unavailable (node / tests).
+/** @param {Record<string, any>} [options] */
 export function runSweepOffthread(options = {}) {
   if (typeof Worker === "undefined") return run2DSweep(options);
 
@@ -400,7 +457,7 @@ export function runSweepOffthread(options = {}) {
     if (t === "SWEEP_CANCELLED")      { terminate(); onCancelled?.(p); return; }
   };
 
-  worker.onerror = (e) => {
+  worker.onerror = (/** @type {any} */ e) => {
     terminate();
     onError?.({ message: e?.message || "Sweep worker failed." });
   };

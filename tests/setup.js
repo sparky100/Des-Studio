@@ -5,6 +5,14 @@ import { cleanup } from '@testing-library/react';
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // jsdom's localStorage/sessionStorage are tied to the environment, not to
+  // any one test file — under vitest 3 the same jsdom environment can be
+  // reused across files that land on the same worker, so a value one file's
+  // component writes (e.g. BottomPanel.jsx's "des.bottomPanel.tab" preference)
+  // can leak into a later, unrelated file's fresh render and change what it
+  // defaults to. Clear both after every test, same rationale as clearAllMocks.
+  try { globalThis.localStorage?.clear(); } catch { /* storage unavailable outside jsdom */ }
+  try { globalThis.sessionStorage?.clear(); } catch { /* storage unavailable outside jsdom */ }
 });
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
@@ -13,6 +21,23 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
     unobserve() {}
     disconnect() {}
   };
+}
+
+// jsdom never runs layout, so offsetParent is hardcoded to always return
+// null (https://github.com/jsdom/jsdom/issues/1590) — that breaks
+// useFocusTrap.js's/FeedbackModal.jsx's getFocusable() filter
+// (`el.offsetParent !== null`, used to skip display:none elements), which
+// would otherwise treat every element as hidden and never autofocus or
+// trap focus in tests. Approximate "visible" as "attached under a parent"
+// instead, which is enough for jsdom-rendered dialog content. This setup
+// file is shared by every test environment (including plain `node`, used
+// by most engine/db tests, which has no HTMLElement at all) — guard the
+// reference so those files don't crash on load.
+if (typeof HTMLElement !== 'undefined') {
+  Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
+    configurable: true,
+    get() { return this.parentNode; },
+  });
 }
 
 // Mock Supabase client — never hit real DB in tests

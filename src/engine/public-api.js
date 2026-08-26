@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * flow — Public Engine API
  *
@@ -26,6 +27,6 @@ export {
   batchMeansCI,
   oneWayANOVA,
   tukeyHSD,
-  fitDistribution,
 }                               from './statistics.js';
+export { fitDistribution }      from './distribution-fitting.js';
 export { mulberry32 }           from './distributions.js';

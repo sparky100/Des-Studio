@@ -1,4 +1,4 @@
-import { supabase } from "../db/supabase.js";
+import { getAccessToken } from "../db/auth.js";
 import { LLM_RESPONSE_FORMATS, LLM_TASKS, buildLlmRequest } from "./contracts.js";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
@@ -43,8 +43,7 @@ export async function streamNarrative(prompt, {
   signal,
 } = {}) {
   try {
-    const sessionResponse = await supabase.auth.getSession();
-    const accessToken = sessionResponse?.data?.session?.access_token;
+    const accessToken = await getAccessToken();
     const response = await fetch(getProxyUrl(), {
       method: "POST",
       headers: {
@@ -169,8 +168,7 @@ function parseModelBuilderJson(text) {
 }
 
 export async function streamModelBuilder(systemPrompt, messages = [], { onToken, onComplete, onError, signal } = {}) {
-  const sessionResponse = await supabase.auth.getSession();
-  const accessToken = sessionResponse?.data?.session?.access_token;
+  const accessToken = await getAccessToken();
   const requestMessages = [
     { role: "system", content: systemPrompt },
     ...messages,
@@ -285,8 +283,7 @@ export async function callModelBuilder(systemPrompt, messages = [], onComplete, 
     : timeout.signal;
 
   try {
-    const sessionResponse = await supabase.auth.getSession();
-    const accessToken = sessionResponse?.data?.session?.access_token;
+    const accessToken = await getAccessToken();
     const requestMessages = [
       { role: "system", content: systemPrompt },
       ...messages,
@@ -336,8 +333,7 @@ export async function callModelBuilder(systemPrompt, messages = [], onComplete, 
 }
 
 export async function callLLMOnce(prompt) {
-  const sessionResponse = await supabase.auth.getSession();
-  const accessToken = sessionResponse?.data?.session?.access_token;
+  const accessToken = await getAccessToken();
   const response = await fetch(getProxyUrl(), {
     method: "POST",
     headers: {

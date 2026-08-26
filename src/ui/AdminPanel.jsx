@@ -10,7 +10,7 @@ import { getPlatformConfig, setPlatformConfig, updateUserRole,
          updateUserPlan, fetchFeedback, updateFeedbackStatus } from "../db/models.js";
 import { RUN_ADMISSION_TIERS } from "../engine/run-admission.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
-import { supabase } from "../db/supabase.js";
+import { getAccessToken } from "../db/auth.js";
 
 const LLM_PROVIDERS = [
   { value: "anthropic",    label: "Anthropic" },
@@ -335,10 +335,10 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       const proxyUrl = supabaseUrl
         ? `${supabaseUrl.replace(/\/$/, "")}/functions/v1/llm-proxy`
         : "/functions/v1/llm-proxy";
-      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = await getAccessToken();
       const headers = {};
-      if (session?.access_token) {
-        headers["Authorization"] = `Bearer ${session.access_token}`;
+      if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
       }
       const res = await fetch(proxyUrl, { method: "GET", headers });
       const data = await res.json();

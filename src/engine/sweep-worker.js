@@ -1,3 +1,4 @@
+// @ts-check
 // sweep-worker.js — Web Worker entry point for 2D sweep orchestration.
 // Vite detects this file as a worker via the new Worker(new URL(...)) call in runSweepOffthread().
 // run2DSweep() internally creates per-slot replication pools (nested workers), which are
@@ -6,9 +7,10 @@
 import { run2DSweep } from "./sweep-runner.js";
 
 if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+  /** @type {{ cancel: () => void }|null} */
   let cancelHandle = null;
 
-  self.onmessage = ({ data }) => {
+  self.onmessage = (/** @type {MessageEvent} */ { data }) => {
     const { type, payload } = data ?? {};
 
     if (type === "SWEEP_CANCEL") {
@@ -20,19 +22,19 @@ if (typeof self !== "undefined" && typeof self.postMessage === "function") {
 
     cancelHandle = run2DSweep({
       ...payload,
-      onProgress(p) {
+      onProgress(/** @type {any} */ p) {
         self.postMessage({ type: "SWEEP_PROGRESS", payload: p });
       },
-      onPointComplete(pointResult, meta) {
+      onPointComplete(/** @type {any} */ pointResult, /** @type {any} */ meta) {
         self.postMessage({ type: "SWEEP_POINT_COMPLETE", payload: { pointResult, meta } });
       },
-      onComplete(results) {
+      onComplete(/** @type {any} */ results) {
         self.postMessage({ type: "SWEEP_COMPLETE", payload: { results } });
       },
-      onError(e) {
+      onError(/** @type {any} */ e) {
         self.postMessage({ type: "SWEEP_ERROR", payload: e });
       },
-      onCancelled(p) {
+      onCancelled(/** @type {any} */ p) {
         self.postMessage({ type: "SWEEP_CANCELLED", payload: p });
       },
     });

@@ -2,12 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker, SectionFilterTabs, filterBySection, normTypeName } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { useConfirm } from "../shared/useConfirm.jsx";
 import { setBEventRoutingMode } from "../visual-designer/graph-operations.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
 const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],sections=[],containerTypes=[],dataSources=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule,onGoToCEvent,errorFilter=null,onClearErrorFilter})=>{
   const { C, FONT } = useTheme();
+  const { confirm, confirmDialog } = useConfirm();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
   const [activeSectionIds,setActiveSectionIds]=useState([]);
@@ -39,12 +41,12 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
     n[i]={...n[i],name:v};
     onChange(n);
   };
-  const rem=(i)=>{
+  const rem=async (i)=>{
     const ev=events[i];
     const refs=cEvents.filter(c=>(c.cSchedules||[]).some(s=>s.eventId===ev.id));
     if(refs.length>0){
       const names=refs.map(c=>`'${c.name||c.id}'`).join(', ');
-      if(!window.confirm(`B-Event '${ev.name||ev.id}' is referenced by C-Event${refs.length>1?'s':''} ${names}.\n\nDeleting it will leave a stale reference. Delete anyway?`))return;
+      if(!(await confirm(`B-Event '${ev.name||ev.id}' is referenced by C-Event${refs.length>1?'s':''} ${names}.\n\nDeleting it will leave a stale reference. Delete anyway?`)))return;
     }
     onChange(events.filter((_,idx)=>idx!==i));
   };
@@ -230,7 +232,12 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                   expressionContext={{
                     stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
                     attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean)),
-                    eventNames: [...(events||[]),...(cEvents||[])].map(e=>e.name).filter(Boolean)
+                    eventNames: [...(events||[]),...(cEvents||[])].map(e=>e.name).filter(Boolean),
+                    matchQueues: (queues||[]).map(q=>({
+                      name: q.name,
+                      type: q.customerType ? normTypeName(q.customerType) : (normTypeName((entityTypes||[]).find(e=>e.role==='customer')?.name)||'Entity'),
+                    })),
+                    containerTypes,
                   }}
                   onChange={updEffects}
                 />
@@ -523,6 +530,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
           </div>
         );
       })}
+      {confirmDialog}
     </div>
   );
 };

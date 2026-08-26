@@ -1,6 +1,17 @@
+// @ts-check
 import { makeBatchProgress } from "./progress-contract.js";
 import { runReplicationPayload, WORKER_MESSAGE_TYPES } from "./worker.js";
 
+/**
+ * @typedef {{
+ *   onmessage: ((event: { data: any }) => void) | null,
+ *   onerror: ((error: any) => void) | null,
+ *   postMessage: (message: any) => void,
+ *   terminate?: () => void,
+ * }} ReplicationWorker
+ */
+
+/** @param {number} replications */
 function defaultWorkerCount(replications) {
   const cores = typeof navigator !== "undefined" && Number.isFinite(navigator.hardwareConcurrency)
     ? navigator.hardwareConcurrency
@@ -8,17 +19,23 @@ function defaultWorkerCount(replications) {
   return Math.min(replications, Math.max(1, cores - 1));
 }
 
+/** @returns {ReplicationWorker} */
 function createBrowserWorker() {
   if (typeof Worker === "undefined") {
     return createInlineWorker();
   }
-  return new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+  return /** @type {ReplicationWorker} */ (
+    new Worker(new URL("./worker.js", import.meta.url), { type: "module" })
+  );
 }
 
+/** @returns {ReplicationWorker} */
 function createInlineWorker() {
   let terminated = false;
+  /** @type {Record<string, any>|null} */
   let shared = null;
-  return {
+  /** @type {ReplicationWorker} */
+  const worker = {
     onmessage: null,
     onerror: null,
     postMessage(message) {
@@ -30,9 +47,9 @@ function createInlineWorker() {
         if (terminated) return;
         try {
           const payload = runReplicationPayload(message.payload, shared);
-          this.onmessage?.({ data: { type: WORKER_MESSAGE_TYPES.REPLICATION_COMPLETE, payload } });
-        } catch (error) {
-          this.onmessage?.({
+          worker.onmessage?.({ data: { type: WORKER_MESSAGE_TYPES.REPLICATION_COMPLETE, payload } });
+        } catch (/** @type {any} */ error) {
+          worker.onmessage?.({
             data: {
               type: WORKER_MESSAGE_TYPES.REPLICATION_ERROR,
               payload: {
@@ -50,8 +67,10 @@ function createInlineWorker() {
       terminated = true;
     },
   };
+  return worker;
 }
 
+/** @param {Record<string, any>} payload */
 export function compactReplicationPayload(payload) {
   if (!payload?.result) return payload;
   const { result } = payload;
@@ -80,13 +99,18 @@ export function compactReplicationPayload(payload) {
 // calls (e.g. adaptive-batch rounds, sweep points) so workers are spawned once
 // instead of once per round. The pool is destroyed automatically if a run is
 // cancelled or fails; otherwise the owner must call destroy() when finished.
+/**
+ * @param {{ createWorker?: () => ReplicationWorker }} [options]
+ */
 export function createReplicationPool({ createWorker = createBrowserWorker } = {}) {
+  /** @type {ReplicationWorker[]} */
   const workers = [];
   let destroyed = false;
   return {
     get destroyed() {
       return destroyed;
     },
+    /** @param {number} index */
     get(index) {
       if (destroyed) throw new Error("Replication pool has been destroyed.");
       while (workers.length <= index) {
@@ -105,6 +129,35 @@ export function createReplicationPool({ createWorker = createBrowserWorker } = {
   };
 }
 
+/**
+ * @typedef {{
+ *   model?: import('../contracts/model').DesModelJson,
+ *   replications?: number|string,
+ *   baseSeed?: number,
+ *   warmupPeriod?: number,
+ *   maxSimTime?: number|null,
+ *   terminationCondition?: any,
+ *   maxCycles?: number,
+ *   maxCPasses?: number,
+ *   collectTimeSeries?: boolean,
+ *   collectTrace?: boolean,
+ *   schedulesMap?: Record<string, any>,
+ *   workerCount?: number,
+ *   pool?: ReturnType<typeof createReplicationPool>,
+ *   onProgress?: (progress: Record<string, any>) => void,
+ *   onReplicationComplete?: (payload: Record<string, any>, progress: Record<string, any>) => void,
+ *   onTimeSeriesSample?: (timeSeries: any) => void,
+ *   onError?: (error: any) => void,
+ *   onComplete?: (results: any[]) => void,
+ *   onCancelled?: (progress: Record<string, any>) => void,
+ *   createWorker?: () => ReplicationWorker,
+ * }} RunReplicationsOptions
+ */
+
+/**
+ * @param {RunReplicationsOptions} [options]
+ * @returns {{ cancel: () => void }}
+ */
 export function runReplications(options = {}) {
   const {
     model,
@@ -128,8 +181,9 @@ export function runReplications(options = {}) {
     createWorker = createBrowserWorker,
   } = options;
 
-  const total = Math.max(1, Number.parseInt(replications, 10) || 1);
+  const total = Math.max(1, Number.parseInt(String(replications), 10) || 1);
   const poolSize = Math.max(1, Math.min(workerCount || defaultWorkerCount(total), total));
+  /** @type {any[]} */
   const results = new Array(total);
 
   // Sent once per worker via INIT_RUN; RUN_REPLICATION messages then only carry
@@ -148,8 +202,11 @@ export function runReplications(options = {}) {
     schedulesMap,
   };
 
+  /** @type {ReplicationWorker[]} */
   const workers = [];
+  /** @type {ReplicationWorker[]} */
   const idleWorkers = [];
+  /** @type {Map<ReplicationWorker, { replicationIndex: number, seed: number }>} */
   const activeJobs = new Map();
   let nextIndex = 0;
   let completed = 0;
@@ -193,6 +250,7 @@ export function runReplications(options = {}) {
     activeJobs.clear();
   };
 
+  /** @param {any} error */
   const failRun = (error) => {
     if (cancelled || failed) return;
     failed = true;
@@ -201,6 +259,7 @@ export function runReplications(options = {}) {
     emitProgress();
   };
 
+  /** @param {ReplicationWorker} worker */
   const attachWorker = (worker) => {
     worker.onmessage = (event) => {
       if (cancelled || failed) return;
@@ -247,6 +306,7 @@ export function runReplications(options = {}) {
     };
   };
 
+  /** @returns {ReplicationWorker} */
   const spawnWorker = () => {
     const worker = pool ? pool.get(workers.length) : createWorker();
     workers.push(worker);
@@ -265,7 +325,7 @@ export function runReplications(options = {}) {
       if (!worker) {
         try {
           worker = spawnWorker();
-        } catch (error) {
+        } catch (/** @type {any} */ error) {
           failRun({
             replicationIndex,
             seed,
@@ -282,7 +342,7 @@ export function runReplications(options = {}) {
           type: WORKER_MESSAGE_TYPES.RUN_REPLICATION,
           payload: { replicationIndex, seed, entityDetail: replicationIndex === 0 },
         });
-      } catch (error) {
+      } catch (/** @type {any} */ error) {
         failRun({
           replicationIndex,
           seed,

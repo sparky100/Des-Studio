@@ -63,14 +63,14 @@ describe('M/M/1 golden fixture (seed=42, λ=0.9, μ=1.0)', () => {
   const N_SERVED = 500;
   const N_WARMUP = 200;
 
-  test('mean queue wait is within 2% of analytical value (9.0)', () => {
-    const meanWait = runUntilServed(mm1Model(), N_SERVED, SEED, N_WARMUP);
+  test('mean queue wait is within 2% of analytical value (9.0)', async () => {
+    const meanWait = await runUntilServed(mm1Model(), N_SERVED, SEED, N_WARMUP);
     const pctError = Math.abs(meanWait - ANALYTICAL) / ANALYTICAL;
     expect(pctError).toBeLessThanOrEqual(0.02);
   });
 
-  test('mean queue wait is pinned to window 8.0–10.0 (regression lock)', () => {
-    const meanWait = runUntilServed(mm1Model(), N_SERVED, SEED, N_WARMUP);
+  test('mean queue wait is pinned to window 8.0–10.0 (regression lock)', async () => {
+    const meanWait = await runUntilServed(mm1Model(), N_SERVED, SEED, N_WARMUP);
     expect(meanWait).toBeGreaterThanOrEqual(8.0);
     expect(meanWait).toBeLessThanOrEqual(10.0);
   });
@@ -88,14 +88,14 @@ describe('M/M/c golden fixture (seed=42, λ=1.6, μ=1.0, c=2)', () => {
   const N_SERVED = 2000;
   const N_WARMUP = 500;
 
-  test('mean queue wait is within 5% of Erlang-C analytical value (1.7778)', () => {
-    const meanWait = runUntilServed(mmcModel(), N_SERVED, SEED, N_WARMUP);
+  test('mean queue wait is within 5% of Erlang-C analytical value (1.7778)', { timeout: 30000 }, async () => {
+    const meanWait = await runUntilServed(mmcModel(), N_SERVED, SEED, N_WARMUP);
     const pctError = Math.abs(meanWait - ANALYTICAL) / ANALYTICAL;
     expect(pctError).toBeLessThanOrEqual(0.05);
   });
 
-  test('mean queue wait is pinned to window 1.5–2.1 (regression lock)', () => {
-    const meanWait = runUntilServed(mmcModel(), N_SERVED, SEED, N_WARMUP);
+  test('mean queue wait is pinned to window 1.5–2.1 (regression lock)', { timeout: 30000 }, async () => {
+    const meanWait = await runUntilServed(mmcModel(), N_SERVED, SEED, N_WARMUP);
     expect(meanWait).toBeGreaterThanOrEqual(1.5);
     expect(meanWait).toBeLessThanOrEqual(2.1);
   });

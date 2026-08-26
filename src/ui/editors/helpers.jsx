@@ -149,15 +149,11 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       }
     });
   }
-  // BATCH options — C-Event macro
-  if(queues.length > 0) {
-    opts.push({label:'── BATCH (accumulate entities, fire when queue >= batchSize) ──',value:'',disabled:true});
-    queues.forEach(q => {
-      opts.push({label:`Batch 2 entities from ${queueDisplayName(q.name)}`, value:`BATCH(${q.name}, 2)`});
-      opts.push({label:`Batch 5 entities from ${queueDisplayName(q.name)}`, value:`BATCH(${q.name}, 5)`});
-      opts.push({label:`Batch 10 entities from ${queueDisplayName(q.name)}`, value:`BATCH(${q.name}, 10)`});
-    });
-  }
+  // BATCH is added via the EffectPicker's expression-macro row (a queue picker
+  // plus an editable, validated quantity — see EffectPicker's 'BATCH' case)
+  // rather than enumerated here at fixed sizes; the engine has no ceiling
+  // (V22 only requires size >= 2), so a fixed 2/5/10 list was an artificial
+  // cliff, not a real constraint (M-3).
   // Scalar effects on state variables
   const svNames = (stateVariables||[]).map(sv=>sv.name).filter(Boolean);
   if(svNames.length>0){
@@ -190,18 +186,19 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
   opts.push({label:'── COST (accumulate to summary.totalCost) ──',value:'',disabled:true});
   opts.push({label:'COST(1) — flat rate',value:'COST(1)'});
   custAttrs.forEach(a=>{opts.push({label:`COST(Entity.${a})`,value:`COST(Entity.${a})`});});
-  const ctNames = (containerTypes||[]).map(ct=>ct.id).filter(Boolean);
-  if(ctNames.length>0){
-    opts.push({label:'── DRAIN container (fires when level ≥ amount) ──',value:'',disabled:true});
-    ctNames.forEach(c=>{
-      opts.push({label:`Drain ${c} by 10`,value:`DRAIN(${c}, 10)`});
-      opts.push({label:`Drain ${c} by 50`,value:`DRAIN(${c}, 50)`});
-      opts.push({label:`Drain ${c} by 100`,value:`DRAIN(${c}, 100)`});
-    });
-  }
+  // DRAIN is added via the EffectPicker's expression-macro row (a container
+  // picker plus an editable, validated amount) rather than enumerated here
+  // at fixed amounts — the engine accepts any positive amount (M-3).
   // MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue) — pairs one entity from each
   // of two queues, merges attrs (B overwrites A on collision), routes pair to TargetQueue.
-  if(queues.length>=2){
+  // Capped (F-8): this is O(|Q|³) — for a realistic model this can generate
+  // hundreds of entries in a single flat <select>, which stops being findable
+  // long before it stops being technically valid. Above the cap, the option
+  // list stays empty for this family and the EffectPicker's own MATCH
+  // composer (queue A / queue B / target pickers) is the only path — same
+  // result, no enumeration cost.
+  const MATCH_OPTION_CAP = 50;
+  if(queues.length>=2 && queues.length*(queues.length-1)/2*queues.length <= MATCH_OPTION_CAP){
     opts.push({label:'── MATCH (pair one entity from each of two queues) ──',value:'',disabled:true});
     for(let i=0;i<queues.length;i++){
       for(let j=i+1;j<queues.length;j++){
@@ -219,7 +216,18 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
   }
   // COSEIZE(QueueName, ServerType1, ServerType2[, ...]) — atomically seizes one
   // customer and multiple server types together; fails cleanly if any is unavailable.
-  if(queues.length>0&&servers.length>=2){
+  // Capped (F-8): O(|Q|·|S|²·skills) — same rationale as MATCH above. The
+  // EffectPicker's COSEIZE composer (queue + two server-type pickers, no
+  // skill variants) covers the capped case; skill-specific combinations
+  // stay available via the enumerated list while it's under the cap.
+  const COSEIZE_OPTION_CAP = 50;
+  let coseizeCombosPerQueue = 0;
+  for(let i=0;i<servers.length;i++){
+    for(let j=i+1;j<servers.length;j++){
+      coseizeCombosPerQueue += 1 + (serverSkills[servers[i]]||[]).length + (serverSkills[servers[j]]||[]).length;
+    }
+  }
+  if(queues.length>0&&servers.length>=2&&queues.length*coseizeCombosPerQueue<=COSEIZE_OPTION_CAP){
     opts.push({label:'── COSEIZE (seize entity + 2 server types at once) ──',value:'',disabled:true});
     queues.forEach(q=>{
       const entityLabel = q.customerType ? normTypeName(q.customerType) : 'entity';
@@ -368,25 +376,10 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerType
       opts.push({label:`REPAIR ${s} servers`,value:`REPAIR(${s})`});
     });
   }
-  // SPLIT(EntityType, N, TargetQueue) — creates N-1 clones of the context entity in TargetQueue
-  if(queues.length>0&&custs.length>0){
-    opts.push({label:'── SPLIT (clone entity into queue) ──',value:'',disabled:true});
-    queues.forEach(q=>{
-      const entityType = q.customerType ? normTypeName(q.customerType) : custs[0];
-      [2,3,5].forEach(n=>{
-        opts.push({label:`Split ${entityType} into ${n-1} clone(s) → ${queueDisplayName(q.name)}`,value:`SPLIT(${entityType}, ${n}, ${q.name})`});
-      });
-    });
-  }
-  const ctNames = (containerTypes||[]).map(ct=>ct.id).filter(Boolean);
-  if(ctNames.length>0){
-    opts.push({label:'── FILL container ──',value:'',disabled:true});
-    ctNames.forEach(c=>{
-      opts.push({label:`Fill ${c} by 10`,value:`FILL(${c}, 10)`});
-      opts.push({label:`Fill ${c} by 50`,value:`FILL(${c}, 50)`});
-      opts.push({label:`Fill ${c} by 100`,value:`FILL(${c}, 100)`});
-    });
-  }
+  // SPLIT and FILL are added via the EffectPicker's expression-macro row (a
+  // queue/container picker plus an editable, validated quantity/amount)
+  // rather than enumerated here at fixed sizes — same rationale as BATCH
+  // and DRAIN above (M-3).
   return opts;
 };
 
@@ -428,6 +421,8 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const attrs = expressionContext?.attrs || [];
   const eventNames = expressionContext?.eventNames || [];
   const matchQueues = expressionContext?.matchQueues || [];
+  const containerNames = (expressionContext?.containerTypes || []).map(ct => ct.id).filter(Boolean);
+  const serverTypes = expressionContext?.serverTypes || [];
   const CATEGORY_CONFIG = {
     queue:     {label:'Queue',     color:C.cEvent},
     service:   {label:'Service',   color:C.green},
@@ -445,6 +440,11 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const [matchQueueA, setMatchQueueA] = useState('');
   const [matchQueueB, setMatchQueueB] = useState('');
   const [matchTarget, setMatchTarget] = useState('');
+  const [opQueue, setOpQueue] = useState('');
+  const [opContainer, setOpContainer] = useState('');
+  const [coseizeServer1, setCoseizeServer1] = useState('');
+  const [coseizeServer2, setCoseizeServer2] = useState('');
+  const [search, setSearch] = useState('');
 
   const remove = (j) => onChange(effects.filter((_,i)=>i!==j));
   const add = (val) => {
@@ -470,6 +470,35 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
       setExprValue('');
       return;
     }
+    if (exprMacro === 'COSEIZE') {
+      if (!opQueue || !coseizeServer1 || !coseizeServer2 || coseizeServer1 === coseizeServer2) return;
+      add(`COSEIZE(${opQueue}, ${coseizeServer1}, ${coseizeServer2})`);
+      return;
+    }
+    if (exprMacro === 'BATCH') {
+      if (!opQueue || !exprValue.trim()) return;
+      const n = Math.max(2, Math.round(Number(exprValue)) || 2);
+      add(`BATCH(${opQueue}, ${n})`);
+      setExprValue('');
+      return;
+    }
+    if (exprMacro === 'SPLIT') {
+      if (!opQueue || !exprValue.trim()) return;
+      const q = matchQueues.find(q => q.name === opQueue);
+      if (!q) return;
+      const n = Math.max(2, Math.round(Number(exprValue)) || 2);
+      add(`SPLIT(${q.type}, ${n}, ${opQueue})`);
+      setExprValue('');
+      return;
+    }
+    if (exprMacro === 'DRAIN' || exprMacro === 'FILL') {
+      if (!opContainer || !exprValue.trim()) return;
+      const amt = Number(exprValue);
+      if (!Number.isFinite(amt) || amt <= 0) return;
+      add(`${exprMacro}(${opContainer}, ${amt})`);
+      setExprValue('');
+      return;
+    }
     if (!exprValue.trim()) return;
     let val;
     if (exprMacro === 'COST') val = `COST(${exprValue.trim()})`;
@@ -483,9 +512,34 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   };
 
   const nonHeader = options.filter(o=>o.value&&!o.disabled);
-  const filteredOpts = category==='all'
+  const categoryFiltered = category==='all'
     ? options
     : options.filter(o=>o.disabled || (o.value && categorizeEffect(o.value)===category));
+  // Type-ahead filter (M-2): on realistic models the category chips alone
+  // still leave hundreds of near-identical entries in one flat <select> —
+  // same pattern as LogViewer's search box. Options are grouped by their
+  // preceding disabled header row so a header only survives the filter if
+  // at least one option under it still matches (no empty headings).
+  const q = search.trim().toLowerCase();
+  const filteredOpts = (() => {
+    if (!q) return categoryFiltered;
+    const groups = [];
+    let current = { header: null, items: [] };
+    for (const o of categoryFiltered) {
+      if (o.disabled) {
+        if (current.header || current.items.length) groups.push(current);
+        current = { header: o, items: [] };
+      } else {
+        current.items.push(o);
+      }
+    }
+    groups.push(current);
+    return groups.flatMap(({ header, items }) => {
+      const matched = items.filter(o => !o.value || o.label.toLowerCase().includes(q));
+      if (!matched.length) return [];
+      return header ? [header, ...matched] : matched;
+    });
+  })();
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:6}}>
@@ -537,6 +591,13 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
               );
             })}
           </div>
+          <input
+            value={search}
+            onChange={e=>setSearch(e.target.value)}
+            placeholder="Search effects…"
+            style={{background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,
+              color:C.text,fontFamily:FONT,fontSize:11,padding:'5px 9px',width:'100%',boxSizing:'border-box'}}
+          />
           <select value="" onChange={e=>{if(e.target.value)add(e.target.value);}}
             style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
               color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',width:'100%'}}>
@@ -545,7 +606,12 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
               <option key={i} value={o.value} disabled={!!o.disabled}>{o.label}</option>
             ))}
           </select>
-          {/* Expression macros: SET / SET_ATTR / COST — the only ones needing free-form expressions */}
+          {/* Expression macros: structured operand pickers + a validated value/
+              quantity field, for every macro that needs more than a fixed
+              enumeration — free-form expressions (COST/SET/etc.) and
+              quantity-bearing macros (BATCH/DRAIN/FILL/SPLIT/COSEIZE) alike.
+              No free-text macro name or operand ever appears here (audit C1)
+              — only the numeric/expression value is typed. */}
           <div style={{display:'flex',flexDirection:'column',gap:6,borderTop:`1px solid ${C.border}`,paddingTop:8}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>EXPRESSION EFFECTS</span>
             <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
@@ -594,6 +660,46 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
                     color:exprMacro==='MATCH'?C.cEvent:C.muted,cursor:'pointer',fontWeight:700}}>MATCH (compatible pair)</button>
               )}
+              {matchQueues.length>0&&(
+                <button onClick={()=>{setExprMacro('BATCH');setExprValue('2');if(!opQueue)setOpQueue(matchQueues[0].name);}}
+                  style={{background:exprMacro==='BATCH'?C.cEvent+'22':'transparent',
+                    border:`1px solid ${exprMacro==='BATCH'?C.cEvent:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='BATCH'?C.cEvent:C.muted,cursor:'pointer',fontWeight:700}}>BATCH</button>
+              )}
+              {matchQueues.length>0&&(
+                <button onClick={()=>{setExprMacro('SPLIT');setExprValue('2');if(!opQueue)setOpQueue(matchQueues[0].name);}}
+                  style={{background:exprMacro==='SPLIT'?C.cEvent+'22':'transparent',
+                    border:`1px solid ${exprMacro==='SPLIT'?C.cEvent:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='SPLIT'?C.cEvent:C.muted,cursor:'pointer',fontWeight:700}}>SPLIT</button>
+              )}
+              {containerNames.length>0&&(
+                <button onClick={()=>{setExprMacro('DRAIN');setExprValue('');if(!opContainer)setOpContainer(containerNames[0]);}}
+                  style={{background:exprMacro==='DRAIN'?C.purple+'22':'transparent',
+                    border:`1px solid ${exprMacro==='DRAIN'?C.purple:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='DRAIN'?C.purple:C.muted,cursor:'pointer',fontWeight:700}}>DRAIN</button>
+              )}
+              {containerNames.length>0&&(
+                <button onClick={()=>{setExprMacro('FILL');setExprValue('');if(!opContainer)setOpContainer(containerNames[0]);}}
+                  style={{background:exprMacro==='FILL'?C.purple+'22':'transparent',
+                    border:`1px solid ${exprMacro==='FILL'?C.purple:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='FILL'?C.purple:C.muted,cursor:'pointer',fontWeight:700}}>FILL</button>
+              )}
+              {serverTypes.length>=2&&matchQueues.length>0&&(
+                <button onClick={()=>{
+                    setExprMacro('COSEIZE');
+                    if(!opQueue)setOpQueue(matchQueues[0].name);
+                    if(!coseizeServer1)setCoseizeServer1(serverTypes[0]);
+                    if(!coseizeServer2)setCoseizeServer2(serverTypes[1]);
+                  }}
+                  style={{background:exprMacro==='COSEIZE'?C.red+'22':'transparent',
+                    border:`1px solid ${exprMacro==='COSEIZE'?C.red:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='COSEIZE'?C.red:C.muted,cursor:'pointer',fontWeight:700}}>COSEIZE (2 server types)</button>
+              )}
             </div>
             {exprMacro==='MATCH'&&matchQueues.length>=2&&(
               <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
@@ -617,7 +723,43 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                 </select>
               </div>
             )}
+            {exprMacro==='COSEIZE'&&serverTypes.length>=2&&matchQueues.length>0&&(
+              <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>From:</span>
+                <select value={opQueue||matchQueues[0].name} onChange={e=>setOpQueue(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.red}55`,borderRadius:4,
+                    color:C.red,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
+                  {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name}</option>)}
+                </select>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Seize:</span>
+                <select value={coseizeServer1||serverTypes[0]} onChange={e=>setCoseizeServer1(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.red}55`,borderRadius:4,
+                    color:C.red,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
+                  {serverTypes.map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>+</span>
+                <select value={coseizeServer2||serverTypes[1]} onChange={e=>setCoseizeServer2(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.red}55`,borderRadius:4,
+                    color:C.red,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
+                  {serverTypes.map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
             <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              {(exprMacro==='BATCH'||exprMacro==='SPLIT')&&matchQueues.length>0&&(
+                <select value={opQueue||matchQueues[0].name} onChange={e=>setOpQueue(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+                    color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
+                  {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name}</option>)}
+                </select>
+              )}
+              {(exprMacro==='DRAIN'||exprMacro==='FILL')&&containerNames.length>0&&(
+                <select value={opContainer||containerNames[0]} onChange={e=>setOpContainer(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.purple}55`,borderRadius:4,
+                    color:C.purple,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
+                  {containerNames.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+              )}
               {(exprMacro==='SET'||exprMacro==='ROUND_ROBIN')&&stateVars.length>0&&(
                 <select value={exprName||stateVars[0]} onChange={e=>setExprName(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
@@ -639,18 +781,45 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   {eventNames.map(n=><option key={n} value={n}>{n}</option>)}
                 </select>
               )}
-              {exprMacro!=='CANCEL'&&(
-                <input
-                  value={exprValue}
-                  onChange={e=>setExprValue(e.target.value)}
-                  onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
-                  placeholder={exprMacro==='COST'?'e.g. Entity.priority * 2.5':exprMacro==='ROUND_ROBIN'?'e.g. 3 (number of destinations)':exprMacro==='MATCH'?'e.g. Entity.bloodType == Other.bloodType':`e.g. ${exprName||stateVars[0]||'x'} + 1`}
-                  style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
-                    color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
-                />
+              {exprMacro!=='CANCEL'&&exprMacro!=='COSEIZE'&&(
+                exprMacro==='BATCH'||exprMacro==='SPLIT'?(
+                  <input type="number" min={2} step={1}
+                    value={exprValue}
+                    onChange={e=>setExprValue(e.target.value)}
+                    onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
+                    placeholder="quantity (≥ 2)"
+                    style={{width:120,flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                      color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
+                  />
+                ):exprMacro==='DRAIN'||exprMacro==='FILL'?(
+                  <input type="number" min={0} step="any"
+                    value={exprValue}
+                    onChange={e=>setExprValue(e.target.value)}
+                    onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
+                    placeholder="amount (> 0)"
+                    style={{width:120,flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                      color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
+                  />
+                ):(
+                  <input
+                    value={exprValue}
+                    onChange={e=>setExprValue(e.target.value)}
+                    onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
+                    placeholder={exprMacro==='COST'?'e.g. Entity.priority * 2.5':exprMacro==='ROUND_ROBIN'?'e.g. 3 (number of destinations)':exprMacro==='MATCH'?'e.g. Entity.bloodType == Other.bloodType':`e.g. ${exprName||stateVars[0]||'x'} + 1`}
+                    style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                      color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
+                  />
+                )
               )}
               <Btn small variant="ghost" onClick={addExpr}
-                disabled={exprMacro==='CANCEL'?!exprName:exprMacro==='MATCH'?(!matchQueueA||!matchQueueB||!matchTarget||!exprValue.trim()):(!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0])))}>Add</Btn>
+                disabled={
+                  exprMacro==='CANCEL' ? !exprName
+                  : exprMacro==='MATCH' ? (!matchQueueA||!matchQueueB||!matchTarget||!exprValue.trim())
+                  : exprMacro==='COSEIZE' ? (!opQueue||!coseizeServer1||!coseizeServer2||coseizeServer1===coseizeServer2)
+                  : exprMacro==='BATCH'||exprMacro==='SPLIT' ? (!opQueue||!exprValue.trim())
+                  : exprMacro==='DRAIN'||exprMacro==='FILL' ? (!opContainer||!exprValue.trim())
+                  : (!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0])))
+                }>Add</Btn>
             </div>
           </div>
         </div>

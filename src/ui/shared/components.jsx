@@ -7,6 +7,7 @@ import { DIST_GROUPS, DIST_HELP, getDistGroup, validateDistParams } from "./Dist
 import { DistSparkline } from "./DistSparkline.jsx";
 import { parsePlanCsv } from "./planCsvParser.js";
 import { parseXlsx } from "./xlsxParser.js";
+import { useConfirm } from "./useConfirm.jsx";
 
 class ErrorBoundaryClass extends Component {
   constructor(props) {
@@ -605,6 +606,7 @@ const DistanceEditor=({value,onChange,queues=[],entityTypes=[]})=>{
 
 const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=false,attrDefs=[],queues=[],entityTypes=[],epoch,timeUnit})=>{
   const {C,FONT}=useTheme();
+  const {confirm,confirmDialog}=useConfirm();
   const fileRef=useRef(null);
   const [csvParse,setCsvParse]=useState(null);
   const [showHelp,setShowHelp]=useState(false);
@@ -639,13 +641,13 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
     setBlurErrors({});
   };
 
-  const handleFamilyChange=(fid)=>{
+  const handleFamilyChange=async (fid)=>{
     const group=DIST_GROUPS.find(g=>g.id===fid);
     if(!group)return;
     if(!group.dists.includes(v.dist)){
       const hasScheduleData=v.dist==="Schedule"&&Array.isArray(v.distParams?.rows)&&v.distParams.rows.length>0;
       const hasPiecewiseData=v.dist==="Piecewise"&&Array.isArray(v.distParams?.periods)&&v.distParams.periods.length>1;
-      if((hasScheduleData||hasPiecewiseData)&&!window.confirm("Changing the distribution family will clear the current schedule data. Continue?"))return;
+      if((hasScheduleData||hasPiecewiseData)&&!(await confirm("Changing the distribution family will clear the current schedule data. Continue?")))return;
       const first=group.dists.find(d=>(allowPiecewise||d!=="Piecewise")&&(allowDistance||d!=="Distance"))||group.dists[0];
       if(first) handleDistChange(first);
     }
@@ -679,7 +681,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
     reader.readAsText(file);
   };
 
-  const confirmImport=()=>{
+  const confirmImport=async ()=>{
     if(!csvParse)return;
     const {fileName,headers,rows,colIdx}=csvParse;
     const col=headers[colIdx];
@@ -693,10 +695,10 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
     const total=accepted.length+skipped.length;
     if(!total)return;
     const skipRate=skipped.length/total;
-    if(skipRate>0.1&&!window.confirm(
+    if(skipRate>0.1&&!(await confirm(
       `${Math.round(skipRate*100)}% of rows skipped (${skipped.length}/${total} non-numeric). Import anyway?`
-    ))return;
-    if(!accepted.length){window.alert("No numeric values found in this column.");return;}
+    )))return;
+    if(!accepted.length){await confirm("No numeric values found in this column.",{singleAction:true});return;}
     const min=Math.min(...accepted),max=Math.max(...accepted);
     const mean=accepted.reduce((s,x)=>s+x,0)/accepted.length;
     onChange({dist:"Empirical",distParams:{values:accepted},
@@ -854,6 +856,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
           )}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 };

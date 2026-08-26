@@ -1,3 +1,4 @@
+// @ts-check
 import { estimateRunComplexity } from "./complexity-estimator.js";
 import { validateModel } from "./validation.js";
 import { checkModel } from "../simulation/modelChecker.js";
@@ -32,6 +33,7 @@ export const RUN_ADMISSION_TIERS = Object.freeze({
   }),
 });
 
+/** @type {Record<string, number>} */
 const RISK_ORDER = {
   small: 0,
   medium: 1,
@@ -39,15 +41,29 @@ const RISK_ORDER = {
   too_large: 3,
 };
 
+/**
+ * @param {string} code
+ * @param {string} message
+ * @param {string} [source]
+ */
 function makeDecisionIssue(code, message, source = "admission") {
   return { code, message, source };
 }
 
+/**
+ * @param {string} tier
+ * @param {string} riskLevel
+ */
+// eslint-disable-next-line no-unused-vars -- kept for reference; not currently wired in, see RA13's own snapLite-cost gate below
 function shouldDisableTimeSeries(tier, riskLevel) {
-  const threshold = RUN_ADMISSION_TIERS[tier]?.disableTimeSeriesAt || "large";
+  const threshold = /** @type {Record<string, any>} */ (RUN_ADMISSION_TIERS)[tier]?.disableTimeSeriesAt || "large";
   return (RISK_ORDER[riskLevel] ?? 0) >= (RISK_ORDER[threshold] ?? 2);
 }
 
+/**
+ * @param {Record<string, any>} model
+ * @param {Record<string, any>} options
+ */
 function normalizeValidationInput(model, options) {
   const terminationMode = options.terminationMode === "condition" ? "condition" : "time";
   return {
@@ -60,16 +76,21 @@ function normalizeValidationInput(model, options) {
   };
 }
 
+/** @param {any} issue */
 function normalizeCheckerIssue(issue) {
   return makeDecisionIssue(issue.code, issue.message, "model-check");
 }
 
+/**
+ * @param {string} plan
+ * @param {{ isAdmin?: boolean, planTierMap?: Record<string, string>|null }} [options]
+ */
 export function resolveRunAdmissionTier(plan, options = {}) {
   if (options.isAdmin) return "pro";
   const key = String(plan || "").trim().toLowerCase();
   if (options.planTierMap) {
     const mapped = options.planTierMap[key];
-    if (mapped && RUN_ADMISSION_TIERS[mapped]) return mapped;
+    if (mapped && /** @type {Record<string, any>} */ (RUN_ADMISSION_TIERS)[mapped]) return mapped;
   }
   switch (key) {
     case "pro":       return "standard";
@@ -82,8 +103,13 @@ export function resolveRunAdmissionTier(plan, options = {}) {
   }
 }
 
+/**
+ * @param {Record<string, any>} model
+ * @param {Record<string, any>} [options]
+ */
 export function getRunAdmission(model, options = {}) {
   // Merge DB overrides over hardcoded defaults (field-level, per tier)
+  /** @type {Record<string, any>} */
   const activePolicies = options.tierPolicies
     ? Object.fromEntries(
         Object.entries(RUN_ADMISSION_TIERS).map(([k, v]) => [k, { ...v, ...(options.tierPolicies[k] || {}) }])
@@ -102,15 +128,16 @@ export function getRunAdmission(model, options = {}) {
   });
 
   const hardErrors = [
-    ...validation.errors.map(issue => makeDecisionIssue(issue.code, issue.message, "validation")),
-    ...modelCheckIssues.filter(issue => issue.severity === "error").map(normalizeCheckerIssue),
+    ...validation.errors.map((/** @type {any} */ issue) => makeDecisionIssue(issue.code, issue.message, "validation")),
+    ...modelCheckIssues.filter((/** @type {any} */ issue) => issue.severity === "error").map(normalizeCheckerIssue),
   ];
   const warnings = [
-    ...validation.warnings.map(issue => makeDecisionIssue(issue.code, issue.message, "validation")),
+    ...validation.warnings.map((/** @type {any} */ issue) => makeDecisionIssue(issue.code, issue.message, "validation")),
     ...modelCheckIssues
-      .filter(issue => issue.severity !== "error")
+      .filter((/** @type {any} */ issue) => issue.severity !== "error")
       .map(normalizeCheckerIssue),
   ];
+  /** @type {any[]} */
   const confirmations = [];
 
   const replications = Math.max(1, parseInt(options.replications ?? 1, 10) || 1);

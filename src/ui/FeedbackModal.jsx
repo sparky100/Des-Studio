@@ -1,7 +1,7 @@
 // ui/FeedbackModal.jsx — In-app feedback submission widget
 import { useState, useEffect, useRef, useCallback } from "react";
 import { submitFeedback } from "../db/supabase.js";
-import { SPACE, RADIUS, TYPO, Z, TRANS, alpha } from "./shared/tokens.js";
+import { SPACE, RADIUS, TYPO, Z, TRANS, alpha, SHADOW } from "./shared/tokens.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION;
@@ -163,7 +163,7 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
           display: "flex",
           flexDirection: "column",
           gap: SPACE.md,
-          boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
+          boxShadow: SHADOW.modal,
           overflow: "hidden",
         }}
       >

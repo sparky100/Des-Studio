@@ -1,5 +1,5 @@
 // ui/shared/useFitNodeRef.js
-import { useReactFlow } from "@xyflow/react";
+import { useReactFlow } from "./xyflow.js";
 
 // Wires `fitNodeRef`/`fitAllRef` (refs owned by a parent canvas component) to
 // pan/zoom the current React Flow viewport. Must be called from a component

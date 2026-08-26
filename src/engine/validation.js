@@ -1,3 +1,4 @@
+// @ts-check
 // engine/validation.js — Pre-run model validation
 //
 // validateModel(model) returns { errors, warnings }.
@@ -16,23 +17,47 @@ import { applyEntityInheritance } from "./entity-inheritance.js";
 
 export const DEFAULT_MAX_SIM_TIME = 500;
 
+/** @param {Record<string, any>} model */
 export function validateModel(model) {
+  /** @type {Array<{ code: string, message: string, tab?: string, affectedIds?: Record<string, any> }>} */
   const errors   = [];
+  /** @type {Array<{ code: string, message: string, tab?: string, affectedIds?: Record<string, any> }>} */
   const warnings = [];
+  /**
+   * @param {string} code
+   * @param {string} message
+   * @param {string} [tab]
+   * @param {Record<string, any>} [affectedIds]
+   */
   const err  = (code, message, tab, affectedIds) => errors.push({ code, message, tab, affectedIds });
+  /**
+   * @param {string} code
+   * @param {string} message
+   * @param {string} [tab]
+   * @param {Record<string, any>} [affectedIds]
+   */
   const warn = (code, message, tab, affectedIds) => warnings.push({ code, message, tab, affectedIds });
 
+  /** @type {Record<string, any>[]} */
   const entityTypes = model.entityTypes    || [];
   // Skill/attribute lookups (V-SKILL-*) must see a child entity type's inherited
   // attrDefs/skills/skillProfiles, not just its own — otherwise a valid model
   // using ASSIGN with a skill declared only on the parent type would be
   // incorrectly blocked. Structural checks on a type's own declarations (V1-V3)
   // deliberately keep using the raw `entityTypes` above.
-  const mergedEntityTypes = applyEntityInheritance(model).entityTypes || [];
+  /** @type {Record<string, any>[]} */
+  const mergedEntityTypes = applyEntityInheritance(/** @type {any} */ (model)).entityTypes || [];
+  /** @type {Record<string, any>[]} */
   const bEvents     = model.bEvents        || [];
+  /** @type {Record<string, any>[]} */
   const cEvents     = model.cEvents        || [];
+  /** @type {Record<string, any>[]} */
   const queues      = model.queues         || [];
-  const effectText = effect => {
+  /**
+   * @param {any} effect
+   * @returns {string}
+   */
+  const effectText = (effect) => {
     if (Array.isArray(effect)) return effect.map(effectText).filter(Boolean).join(';');
     if (effect && typeof effect === 'object') {
       if (typeof effect.effect === 'string') return effect.effect;
@@ -45,13 +70,13 @@ export function validateModel(model) {
     }
     return String(effect || '');
   };
-  const hasCompleteEffect = text => /COMPLETE\s*\(/i.test(text);
-  const hasAnyRenegeEffect = text => /\bRENEGE\(\s*([^)]+)\s*\)/i.test(text);
-  const hasExactRenegeCtxEffect = text => /\bRENEGE\(\s*ctx\s*\)/i.test(text);
-  const hasReleaseEffect = text => /RELEASE(?:_COSEIZED)?\s*\(/i.test(text);
-  const hasReleaseTargetQueue = text => /RELEASE\s*\([^,)]+,\s*[^)]+\)/i.test(text)
+  const hasCompleteEffect = (/** @type {string} */ text) => /COMPLETE\s*\(/i.test(text);
+  const hasAnyRenegeEffect = (/** @type {string} */ text) => /\bRENEGE\(\s*([^)]+)\s*\)/i.test(text);
+  const hasExactRenegeCtxEffect = (/** @type {string} */ text) => /\bRENEGE\(\s*ctx\s*\)/i.test(text);
+  const hasReleaseEffect = (/** @type {string} */ text) => /RELEASE(?:_COSEIZED)?\s*\(/i.test(text);
+  const hasReleaseTargetQueue = (/** @type {string} */ text) => /RELEASE\s*\([^,)]+,\s*[^)]+\)/i.test(text)
     || /RELEASE_COSEIZED\(\s*\[[^\]]+\]\s*,\s*[^)]+\)/i.test(text);
-  const countTerminalSinkEffects = text => {
+  const countTerminalSinkEffects = (/** @type {string} */ text) => {
     let sinks = 0;
     if (hasCompleteEffect(text)) sinks += 1;
     if (hasExactRenegeCtxEffect(text)) sinks += 1;
@@ -76,7 +101,7 @@ export function validateModel(model) {
   // ── V2: Attribute names unique within entity class ──────────────────────────
   entityTypes.forEach(et => {
     const seen2 = new Set();
-    (et.attrDefs || []).forEach(a => {
+    (et.attrDefs || []).forEach((/** @type {any} */ a) => {
       const name = (a.name || '').trim();
       if (!name) return;
       if (seen2.has(name)) {
@@ -89,7 +114,7 @@ export function validateModel(model) {
 
   // ── V3: Every defaultValue matches its declared valueType ───────────────────
   entityTypes.forEach(et => {
-    (et.attrDefs || []).forEach(a => {
+    (et.attrDefs || []).forEach((/** @type {any} */ a) => {
       if (a.defaultValue === undefined || a.defaultValue === '') return; // Default values can be empty
       const val = a.defaultValue;
       const type = a.valueType;
@@ -121,7 +146,7 @@ export function validateModel(model) {
         'queues',
         { queueIds: [q.id] });
     } else {
-      const priorityAttr = (ct.attrDefs || []).find(a => (a.name || '').trim().toLowerCase() === 'priority');
+      const priorityAttr = (ct.attrDefs || []).find((/** @type {any} */ a) => (a.name || '').trim().toLowerCase() === 'priority');
       if (!priorityAttr) {
         err('V4',
           `Queue '${q.name}' uses PRIORITY discipline but entity class '${ct.name}' has no 'priority' attribute.`,
@@ -137,7 +162,7 @@ export function validateModel(model) {
   });
 
   // ── V5: Distribution parameters in valid bounds (+ V11 warning) ────────────
-  function checkDist(dist, params, context, tab) {
+  function checkDist(/** @type {any} */ dist, /** @type {any} */ params, /** @type {any} */ context, /** @type {any} */ tab) {
     const distName = normalizeDistributionName(dist);
     if (!distName || distName === 'ServerAttr' || distName === 'EntityAttr' || distName === 'Distance') return;
     const p = params || {};
@@ -239,11 +264,11 @@ export function validateModel(model) {
           err('V5', `${context}: Categorical distribution requires at least one option.`, tab);
           break;
         }
-        const hasPositiveWeight = options.some(o => Math.max(0, Number(o.weight) || 0) > 0);
+        const hasPositiveWeight = options.some((/** @type {any} */ o) => Math.max(0, Number(o.weight) || 0) > 0);
         if (!hasPositiveWeight) {
           err('V5', `${context}: Categorical distribution must have at least one option with weight > 0.`, tab);
         }
-        const hasNegativeWeight = options.some(o => Number(o.weight) < 0);
+        const hasNegativeWeight = options.some((/** @type {any} */ o) => Number(o.weight) < 0);
         if (hasNegativeWeight) {
           err('V5', `${context}: Categorical distribution option weights must be non-negative.`, tab);
         }
@@ -264,7 +289,7 @@ export function validateModel(model) {
         'bevents',
         { eventIds: [b.id] });
     }
-    (b.schedules || []).forEach((s, j) => {
+    (b.schedules || []).forEach((/** @type {any} */ s, /** @type {any} */ j) => {
       if (s.rows || s.times) return; // rows/times entries have no distribution
       checkDist(s.dist, s.distParams,
         `B-Event '${b.name || b.id}' schedule ${j + 1}`, 'bevents');
@@ -272,7 +297,7 @@ export function validateModel(model) {
   });
 
   entityTypes.forEach(et => {
-    (et.attrDefs || []).forEach(a => {
+    (et.attrDefs || []).forEach((/** @type {any} */ a) => {
       if (a.name && a.dist)
         checkDist(a.dist, a.distParams,
           `Entity '${et.name}' attr '${a.name}'`, 'entities');
@@ -304,7 +329,7 @@ export function validateModel(model) {
   }
 
   const VALID_PREDICATE_OPERATORS = new Set(['==', '!=', '<', '>', '<=', '>=']);
-  const stateVarNamesForShift = new Set((model.stateVariables || []).map(sv => String(sv.name || '').trim()).filter(Boolean));
+  const stateVarNamesForShift = new Set((model.stateVariables || []).map((/** @type {any} */ sv) => String(sv.name || '').trim()).filter(Boolean));
   entityTypes.forEach(et => {
     if (et.role !== 'server' || !Array.isArray(et.shiftSchedule) || et.shiftSchedule.length === 0) return;
     let previous = -Infinity;
@@ -369,14 +394,14 @@ export function validateModel(model) {
   });
 
   cEvents.forEach(c => {
-    (c.cSchedules || []).forEach((s, j) => {
+    (c.cSchedules || []).forEach((/** @type {any} */ s, /** @type {any} */ j) => {
       checkDist(s.dist, s.distParams,
         `C-Event '${c.name || c.id}' schedule ${j + 1}`, 'cevents');
     });
   });
 
   // ── V36 / V37: Server failure model validation ────────────────────────────
-  const hasField = value => value !== undefined && value !== null;
+  const hasField = (/** @type {any} */ value) => value !== undefined && value !== null;
   entityTypes.forEach(et => {
     const mtbfDist = et.mtbfDist ?? et.failureDist;
     const mtbfParams = et.mtbfDistParams ?? et.failureDistParams;
@@ -432,7 +457,7 @@ export function validateModel(model) {
   const bEventIds = new Set(bEvents.map(b => b.id));
 
   cEvents.forEach(c => {
-    (c.cSchedules || []).forEach(s => {
+    (c.cSchedules || []).forEach((/** @type {any} */ s) => {
       if (s.eventId && !bEventIds.has(s.eventId)) {
         err('V6',
           `C-Event '${c.name || c.id}' schedules unknown B-Event ID '${s.eventId}'.`,
@@ -443,7 +468,7 @@ export function validateModel(model) {
   });
 
   bEvents.forEach(b => {
-    (b.schedules || []).forEach(s => {
+    (b.schedules || []).forEach((/** @type {any} */ s) => {
       if (s.eventId && !bEventIds.has(s.eventId)) {
         err('V6',
           `B-Event '${b.name || b.id}' schedule references unknown event ID '${s.eventId}'.`,
@@ -532,7 +557,7 @@ export function validateModel(model) {
       .map(s => s.replace(/\[[^\]]*\]/, '').trim())
       .filter(Boolean);
     if (types.length === 0) return;
-    (c.cSchedules || []).forEach(cs => {
+    (c.cSchedules || []).forEach((/** @type {any} */ cs) => {
       if (!cs.eventId) return;
       const existing = coseizeTypesByBEventId.get(cs.eventId) || new Set();
       types.forEach(t => existing.add(t.toLowerCase()));
@@ -550,9 +575,9 @@ export function validateModel(model) {
     // V38c: stacked separate RELEASE(Type) calls for co-seized types all resolve
     // against the same cached context server, so only the first actually releases
     // anything and the rest silently leave their resource stuck busy.
-    const releasedSingleTypes = parts
+    const releasedSingleTypes = /** @type {RegExpMatchArray[]} */ (parts
       .map(p => p.match(/^RELEASE\(([^,)]+)/i))
-      .filter(Boolean)
+      .filter(Boolean))
       .map(m => m[1].trim().toLowerCase())
       .filter(t => coseizeTypes.has(t));
     if (releasedSingleTypes.length >= 2) {
@@ -598,7 +623,7 @@ export function validateModel(model) {
   cEvents.forEach(c => {
     if (!c.condition) return;
     const queueRefs = extractQueueNamesFromCondition(c.condition);
-    queueRefs.forEach(ref => {
+    queueRefs.forEach((/** @type {any} */ ref) => {
       const lref = ref.trim().toLowerCase();
       if (!queueNamesLower.has(lref)) {
         err('V9',
@@ -611,7 +636,7 @@ export function validateModel(model) {
 
   // ── V10: Attribute names must not collide with built-in namespaces ──────────
   entityTypes.forEach(et => {
-    (et.attrDefs || []).forEach(a => {
+    (et.attrDefs || []).forEach((/** @type {any} */ a) => {
       const name = (a.name || '').trim();
       if (!name) return;
       if (/^(Resource|Queue)\b/i.test(name)) {
@@ -741,7 +766,7 @@ export function validateModel(model) {
     }
 
     // Probabilities must sum to 1.0 (± 0.001)
-    const sum = b.probabilisticRouting.reduce((s, branch) => s + (parseFloat(branch.probability) || 0), 0);
+    const sum = b.probabilisticRouting.reduce((/** @type {any} */ s, /** @type {any} */ branch) => s + (parseFloat(branch.probability) || 0), 0);
     if (Math.abs(sum - 1.0) > 0.001) {
       err('V18', `${bLabel} probabilisticRouting probabilities sum to ${sum.toFixed(4)}, must be 1.0 (±0.001).`, 'bevents',
         { eventIds: [b.id] });
@@ -749,7 +774,7 @@ export function validateModel(model) {
 
     // Each branch must reference a valid queue, or null/"" meaning "exit system"
     let hasNullRouting = false;
-    b.probabilisticRouting.forEach((branch, idx) => {
+    b.probabilisticRouting.forEach((/** @type {any} */ branch, /** @type {any} */ idx) => {
       const qName = branch.queueName == null ? null : String(branch.queueName).trim();
       if (qName === null || qName === '') {
         hasNullRouting = true; // null = exit system
@@ -888,7 +913,7 @@ export function validateModel(model) {
       }
     });
     if (delayHits.length > 0) {
-      (c.cSchedules || []).forEach(cs => {
+      (c.cSchedules || []).forEach((/** @type {any} */ cs) => {
         if (!cs.useEntityCtx) {
           warn('V47', `C-Event '${c.name || c.id}' uses DELAY but a cSchedule (targeting '${cs.eventId || '?'}') does not have "Pass entity context" (useEntityCtx) enabled — the completion B-event will not know which entity to route.`, 'cevents',
             { eventIds: [c.id] });
@@ -977,7 +1002,7 @@ export function validateModel(model) {
   // ── V26: Container types — valid id/capacity/initialLevel ──────────────────
   const containerTypes = model.containerTypes || [];
   const containerIds = new Set();
-  containerTypes.forEach((ct, i) => {
+  containerTypes.forEach((/** @type {any} */ ct, /** @type {any} */ i) => {
     const id = (ct.id || '').trim();
     if (!id) {
       err('V26', `Container at position ${i + 1} has an empty id.`, 'containers');
@@ -1003,9 +1028,9 @@ export function validateModel(model) {
 
   // ── V27: FILL/DRAIN must reference a declared container, with a sane amount ─
   const containerIdsLower = new Set([...containerIds]);
-  const stateVarNamesLower = new Set((model.stateVariables || []).map(sv => String(sv.name || '').trim().toLowerCase()).filter(Boolean));
-  const checkContainerRefs = (events, tab) => {
-    events.forEach(ev => {
+  const stateVarNamesLower = new Set((model.stateVariables || []).map((/** @type {any} */ sv) => String(sv.name || '').trim().toLowerCase()).filter(Boolean));
+  const checkContainerRefs = (/** @type {any} */ events, /** @type {any} */ tab) => {
+    events.forEach((/** @type {any} */ ev) => {
       const text = effectText(ev.effect);
       const hits = text.match(/\b(FILL|DRAIN)\([^)]+\)/gi) || [];
       hits.forEach(hit => {
@@ -1069,7 +1094,7 @@ export function validateModel(model) {
   // ── V29: cSchedule list with all `when` entries but no fallback ─────────────
   for (const ce of (model.cEvents || [])) {
     const css = ce.cSchedules || [];
-    if (css.length > 0 && css.every(cs => cs.when)) {
+    if (css.length > 0 && css.every((/** @type {any} */ cs) => cs.when)) {
       warn('V29', `C-event '${ce.name || ce.id}' has attribute-conditional cSchedules but no fallback entry (one without a 'when' condition). Entities that don't match any condition will receive no service.`, 'cevents',
         { eventIds: [ce.id] });
     }
@@ -1104,7 +1129,7 @@ export function validateModel(model) {
   // ── W-CAP-02: Very high arrival rate (suggests continuous flow) ────────────
   // Any B-Event has a schedule with mean interval < 0.001 time units.
   bEvents.forEach(b => {
-    (b.schedules || []).forEach((s, j) => {
+    (b.schedules || []).forEach((/** @type {any} */ s, /** @type {any} */ j) => {
       const distName = normalizeDistributionName(s.dist);
       if (!distName || distName === 'ServerAttr' || distName === 'EntityAttr' || distName === 'Distance') return;
       const p = s.distParams || {};
@@ -1131,8 +1156,8 @@ export function validateModel(model) {
     );
     const CTX_MACRO_RE = /(?:ARRIVE|ASSIGN|SEIZE|COSEIZE|BATCH|SPLIT)\s*\(/i;
 
-    const checkEffects = (events, tab) => {
-      events.forEach(ev => {
+    const checkEffects = (/** @type {any} */ events, /** @type {any} */ tab) => {
+      events.forEach((/** @type {any} */ ev) => {
         const text = effectText(ev.effect);
         if (!text) return;
         const parts = text.split(';').map(s => s.trim()).filter(Boolean);
@@ -1169,7 +1194,7 @@ export function validateModel(model) {
     );
     if (d === 'SPT') {
       if (ct) {
-        const hasAttr = (ct.attrDefs || []).some(a => {
+        const hasAttr = (ct.attrDefs || []).some((/** @type {any} */ a) => {
           const n = (a.name || '').trim().toLowerCase();
           return n === 'servicetime' || n === 'processingtime';
         });
@@ -1180,7 +1205,7 @@ export function validateModel(model) {
       }
     } else if (d === 'EDD') {
       if (ct) {
-        const hasDueDate = (ct.attrDefs || []).some(a => (a.name || '').trim().toLowerCase() === 'duedate');
+        const hasDueDate = (ct.attrDefs || []).some((/** @type {any} */ a) => (a.name || '').trim().toLowerCase() === 'duedate');
         if (!hasDueDate) {
           warn('V43', `Queue '${q.name}' uses EDD discipline but entity class '${ct.name}' has no 'dueDate' attribute.`, 'queues',
             { queueIds: [q.id] });
@@ -1208,7 +1233,7 @@ export function validateModel(model) {
     const MATCH_QUEUE_G = /MATCH\s*\([^,)]+,\s*[^,)]+,\s*[^,)]+,\s*[^,)]+,\s*([^)]+)\)/gi;
     const SPLIT_QUEUE_G = /SPLIT\s*\([^,)]+,\s*\d+\s*,\s*([^)]+)\)/gi;
 
-    const collectFromEffect = (text) => {
+    const collectFromEffect = (/** @type {any} */ text) => {
       for (const m of text.matchAll(ARRIVE_QUEUE_G))  reachableNames.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(RELEASE_QUEUE_G)) reachableNames.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(RELEASE_COSEIZED_QUEUE_G)) reachableNames.add(m[1].trim().toLowerCase());
@@ -1220,8 +1245,8 @@ export function validateModel(model) {
       collectFromEffect(effectText(b.effect));
       if (b.defaultQueueName)
         reachableNames.add(b.defaultQueueName.toLowerCase());
-      (b.routing || []).forEach(r => r.queueName && reachableNames.add(r.queueName.toLowerCase()));
-      (b.probabilisticRouting || []).forEach(r => r.queueName && reachableNames.add(r.queueName.toLowerCase()));
+      (b.routing || []).forEach((/** @type {any} */ r) => r.queueName && reachableNames.add(r.queueName.toLowerCase()));
+      (b.probabilisticRouting || []).forEach((/** @type {any} */ r) => r.queueName && reachableNames.add(r.queueName.toLowerCase()));
       if (b.loopConfig?.exitQueueName)
         reachableNames.add(b.loopConfig.exitQueueName.toLowerCase());
     });
@@ -1264,7 +1289,7 @@ export function validateModel(model) {
     const MATCH_QUEUE_G2 = /MATCH\s*\([^,)]+,\s*[^,)]+,\s*[^,)]+,\s*[^,)]+,\s*([^)]+)\)/gi;
     const SPLIT_QUEUE_G2 = /SPLIT\s*\([^,)]+,\s*\d+\s*,\s*([^)]+)\)/gi;
 
-    const extractSources = (ev) => {
+    const extractSources = (/** @type {any} */ ev) => {
       const names = new Set();
       const text = effectText(ev.effect);
       for (const m of text.matchAll(SOURCE_QUEUE_G)) names.add(m[1].trim().toLowerCase());
@@ -1273,7 +1298,7 @@ export function validateModel(model) {
       for (const m of condText.matchAll(QUEUE_TOKEN_G)) names.add(m[1].trim().toLowerCase());
       return names;
     };
-    const extractDestinations = (ev) => {
+    const extractDestinations = (/** @type {any} */ ev) => {
       const names = new Set();
       const text = effectText(ev.effect);
       for (const m of text.matchAll(ARRIVE_QUEUE_G2))  names.add(m[1].trim().toLowerCase());
@@ -1281,8 +1306,8 @@ export function validateModel(model) {
       for (const m of text.matchAll(RELEASE_COSEIZED_QUEUE_G2)) names.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(MATCH_QUEUE_G2))   names.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(SPLIT_QUEUE_G2))   names.add(m[1].trim().toLowerCase());
-      (ev.routing || []).forEach(r => r.queueName && names.add(r.queueName.toLowerCase()));
-      (ev.probabilisticRouting || []).forEach(r => r.queueName && names.add(r.queueName.toLowerCase()));
+      (ev.routing || []).forEach((/** @type {any} */ r) => r.queueName && names.add(r.queueName.toLowerCase()));
+      (ev.probabilisticRouting || []).forEach((/** @type {any} */ r) => r.queueName && names.add(r.queueName.toLowerCase()));
       if (ev.defaultQueueName) names.add(ev.defaultQueueName.toLowerCase());
       if (ev.loopConfig?.exitQueueName) names.add(ev.loopConfig.exitQueueName.toLowerCase());
       return names;
@@ -1290,8 +1315,9 @@ export function validateModel(model) {
 
     const bEventById = new Map(bEvents.map(b => [b.id, b]));
     const bEventIds = new Set(bEvents.map(b => b.id));
-    const edges = []; // { from, to, eventId, eventName }
-    const addEdges = (srcSet, destSet, ev) => {
+    /** @type {Array<{ from: any, to: any, eventId: any, eventName: any }>} */
+    const edges = [];
+    const addEdges = (/** @type {any} */ srcSet, /** @type {any} */ destSet, /** @type {any} */ ev) => {
       for (const src of srcSet) for (const dest of destSet) {
         if (src && dest && src !== dest) edges.push({ from: src, to: dest, eventId: ev.id, eventName: ev.name });
       }
@@ -1301,7 +1327,7 @@ export function validateModel(model) {
     cEvents.forEach(ce => {
       const src = extractSources(ce);
       if (src.size === 0) return;
-      (ce.cSchedules || []).forEach(cs => {
+      (ce.cSchedules || []).forEach((/** @type {any} */ cs) => {
         const be = bEventById.get(cs.eventId);
         if (be) addEdges(src, extractDestinations(be), be);
       });
@@ -1310,8 +1336,8 @@ export function validateModel(model) {
     entityTypes
       .filter(et => et.role === 'customer' && Array.isArray(et.requiredSequence) && et.requiredSequence.length > 0)
       .forEach(et => {
-        const sequence = et.requiredSequence.map(s => String(s || '').trim());
-        sequence.forEach((qName, idx) => {
+        const sequence = et.requiredSequence.map((/** @type {any} */ s) => String(s || '').trim());
+        sequence.forEach((/** @type {any} */ qName, /** @type {any} */ idx) => {
           if (!qName) return;
           const exists = queues.some(q => (q.name || '').trim().toLowerCase() === qName.toLowerCase());
           if (!exists) {
@@ -1319,7 +1345,7 @@ export function validateModel(model) {
               { entityTypeIds: [et.id] });
           }
         });
-        const indexOf = new Map(sequence.map((q, i) => [q.toLowerCase(), i]));
+        const indexOf = new Map(sequence.map((/** @type {any} */ q, /** @type {any} */ i) => [q.toLowerCase(), i]));
         const seenWarnings = new Set();
         edges.forEach(edge => {
           const i = indexOf.get(edge.from);
@@ -1338,7 +1364,7 @@ export function validateModel(model) {
 
   // ── V50–V56: Weekly Schedule Pattern validation ───────────────────────────
   {
-    const parseHHMM = (str) => {
+    const parseHHMM = (/** @type {any} */ str) => {
       if (str == null) return NaN;
       const parts = String(str).match(/^(\d{1,2}):(\d{2})$/);
       if (!parts) return NaN;
@@ -1365,8 +1391,9 @@ export function validateModel(model) {
           { entityTypeIds: [et.id] });
       }
       // Check each period
+      /** @type {Record<number, any[]>} */
       const periodsByDay = {};
-      pat.periods.forEach((period, pi) => {
+      pat.periods.forEach((/** @type {any} */ period, /** @type {any} */ pi) => {
         const day = parseInt(period.dayOfWeek, 10);
         // V53: dayOfWeek must be integer 1-7
         if (!Number.isInteger(day) || day < 1 || day > 7) {
@@ -1400,7 +1427,7 @@ export function validateModel(model) {
         }
         // V51: non-overlapping periods per day
         if (!periodsByDay[day]) periodsByDay[day] = [];
-        periodsByDay[day].forEach(other => {
+        periodsByDay[day].forEach((/** @type {any} */ other) => {
           const oStart = parseHHMM(other.start);
           const oEnd = parseHHMM(other.end);
           if (isNaN(oStart) || isNaN(oEnd)) return;
@@ -1413,13 +1440,13 @@ export function validateModel(model) {
       });
       // V54: exception dates must be valid ISO dates
       if (Array.isArray(pat.exceptions)) {
-        pat.exceptions.forEach((exc, ei) => {
+        pat.exceptions.forEach((/** @type {any} */ exc, /** @type {any} */ ei) => {
           if (!exc.date || isNaN(new Date(exc.date).getTime())) {
             err('V54', `Entity class '${et.name}' exception date '${exc.date}' is not a valid ISO date.`, 'entities',
               { entityTypeIds: [et.id] });
           }
           if (Array.isArray(exc.periods)) {
-            exc.periods.forEach((ep, epi) => {
+            exc.periods.forEach((/** @type {any} */ ep, /** @type {any} */ epi) => {
               const eStart = parseHHMM(ep.start);
               const eEnd = parseHHMM(ep.end);
               if (isNaN(eStart) || isNaN(eEnd)) {
@@ -1458,7 +1485,7 @@ export function validateModel(model) {
         return;
       }
       // V58: period capacities must be numbers 0.0–1.0
-      (pat.periods || []).forEach((period, pi) => {
+      (pat.periods || []).forEach((/** @type {any} */ period, /** @type {any} */ pi) => {
         const mult = Number(period.capacity);
         if (!Number.isFinite(mult) || mult < 0 || mult > 1) {
           err('V58', `Entity class '${et.name}' period ${pi + 1}: multiplier mode requires capacity between 0.0 and 1.0, got '${period.capacity}'.`, 'entities',
@@ -1472,8 +1499,8 @@ export function validateModel(model) {
           { entityTypeIds: [et.id] });
       }
       // V60: exception period capacities must be 0.0–1.0
-      (pat.exceptions || []).forEach((exc, ei) => {
-        (exc.periods || []).forEach((ep, epi) => {
+      (pat.exceptions || []).forEach((/** @type {any} */ exc, /** @type {any} */ ei) => {
+        (exc.periods || []).forEach((/** @type {any} */ ep, /** @type {any} */ epi) => {
           const mult = Number(ep.capacity);
           if (!Number.isFinite(mult) || mult < 0 || mult > 1) {
             err('V60', `Entity class '${et.name}' exception ${ei + 1} period ${epi + 1}: multiplier mode requires capacity between 0.0 and 1.0, got '${ep.capacity}'.`, 'entities',
@@ -1517,6 +1544,7 @@ export function validateModel(model) {
 
   // ── Skills validation ──────────────────────────────────────────────────────
   const modelSkills = model.skills || [];
+  /** @type {Record<string, any>} */
   const serverTypeMap = {};
   mergedEntityTypes.filter(et => et.role === 'server').forEach(et => {
     serverTypeMap[(et.name || '').trim().toLowerCase()] = et;
@@ -1584,12 +1612,14 @@ export function validateModel(model) {
 
   // V-SKILL-3: ASSIGN(QueueName, ServerType, Entity.attrName) — attrName must exist
   // on a customer entity type reachable via the queue
+  /** @type {Record<string, any>} */
   const customerTypeMap = {};
   mergedEntityTypes.filter(et => et.role === 'customer').forEach(et => {
     customerTypeMap[(et.name || '').trim().toLowerCase()] = et;
   });
 
   // Build queue-to-entity-type reverse map
+  /** @type {Record<string, Set<string>>} */
   const queueToCustomerTypes = {};
   queues.forEach(q => {
     const qName = (q.name || '').trim().toLowerCase();
@@ -1619,7 +1649,7 @@ export function validateModel(model) {
         for (const typeName of reachableTypes) {
           const et = customerTypeMap[typeName];
           if (!et) continue;
-          const attrDef = (et.attrDefs || []).find(a => (a.name || '').trim().toLowerCase() === attrName.toLowerCase());
+          const attrDef = (et.attrDefs || []).find((/** @type {any} */ a) => (a.name || '').trim().toLowerCase() === attrName.toLowerCase());
           if (attrDef) {
             attrFound = true;
             attrValueType = attrDef.valueType || 'number';
@@ -1644,8 +1674,8 @@ export function validateModel(model) {
 
   // V-SKILL-4: Profile skills must exist in model-level skills registry
   entityTypes.filter(et => et.role === 'server' && Array.isArray(et.skillProfiles)).forEach(et => {
-    et.skillProfiles.forEach((profile, pi) => {
-      (profile.skills || []).forEach(skill => {
+    et.skillProfiles.forEach((/** @type {any} */ profile, /** @type {any} */ pi) => {
+      (profile.skills || []).forEach((/** @type {any} */ skill) => {
         if (!modelSkills.includes(skill)) {
           err('V-SKILL-4',
             `Entity class '${et.name}' profile '${profile.name || `#${pi + 1}`}' references skill '${skill}' which is not in the model's skill registry. Add '${skill}' in Model Settings → Skills.`,
@@ -1659,8 +1689,8 @@ export function validateModel(model) {
   // V-SKILL-5: Count-based profiles must not exceed server count
   entityTypes.filter(et => et.role === 'server' && Array.isArray(et.skillProfiles)).forEach(et => {
     const count = Math.max(1, parseInt(et.count) || 1);
-    const countProfiles = et.skillProfiles.filter(p => p.count != null && p.count > 0);
-    const totalCount = countProfiles.reduce((sum, p) => sum + (parseInt(p.count) || 0), 0);
+    const countProfiles = et.skillProfiles.filter((/** @type {any} */ p) => p.count != null && p.count > 0);
+    const totalCount = countProfiles.reduce((/** @type {any} */ sum, /** @type {any} */ p) => sum + (parseInt(p.count) || 0), 0);
     if (totalCount > count) {
       err('V-SKILL-5',
         `Entity class '${et.name}' has ${count} servers but count-based profiles sum to ${totalCount}. Reduce profile counts to not exceed server count.`,
@@ -1676,8 +1706,8 @@ export function validateModel(model) {
 
   // V-SKILL-6: Weight-based profiles — warn if all weights are zero
   entityTypes.filter(et => et.role === 'server' && Array.isArray(et.skillProfiles)).forEach(et => {
-    const weightProfiles = et.skillProfiles.filter(p => (p.weight != null || p.weight === 0) && !(p.count != null && p.count > 0));
-    if (weightProfiles.length > 0 && weightProfiles.every(p => (Number(p.weight) || 0) <= 0)) {
+    const weightProfiles = et.skillProfiles.filter((/** @type {any} */ p) => (p.weight != null || p.weight === 0) && !(p.count != null && p.count > 0));
+    if (weightProfiles.length > 0 && weightProfiles.every((/** @type {any} */ p) => (Number(p.weight) || 0) <= 0)) {
       warn('V-SKILL-6',
         `Entity class '${et.name}' has weight-based profiles but all weights are 0 — no servers will receive instance skills from weight-based profiles.`,
         'entities',
@@ -1707,19 +1737,19 @@ export function validateModel(model) {
       for (const typeName of reachableTypes) {
         const et = customerTypeMap[typeName];
         if (!et) continue;
-        const found = (et.attrDefs || []).find(a => (a.name || '').trim().toLowerCase() === attrName.toLowerCase());
+        const found = (et.attrDefs || []).find((/** @type {any} */ a) => (a.name || '').trim().toLowerCase() === attrName.toLowerCase());
         if (found) { attrDef = found; break; }
       }
       if (!attrDef || attrDef.dist !== 'Categorical') return;
 
       const options = Array.isArray(attrDef.distParams?.options) ? attrDef.distParams.options : [];
       const requiredValues = [...new Set(
-        options.filter(o => (Number(o.weight) || 0) > 0 && typeof o.value === 'string').map(o => o.value)
+        options.filter((/** @type {any} */ o) => (Number(o.weight) || 0) > 0 && typeof o.value === 'string').map((/** @type {any} */ o) => o.value)
       )];
       if (!requiredValues.length) return;
 
       const coverage = new Set(Array.isArray(serverType.skills) ? serverType.skills : []);
-      (serverType.skillProfiles || []).forEach(p => (p.skills || []).forEach(s => coverage.add(s)));
+      (serverType.skillProfiles || []).forEach((/** @type {any} */ p) => (p.skills || []).forEach((/** @type {any} */ s) => coverage.add(s)));
 
       requiredValues.forEach(val => {
         if (!coverage.has(val)) {
@@ -1745,7 +1775,7 @@ export function validateModel(model) {
         const coveredByAnyType = mergedEntityTypes.some(et => {
           if (et.role !== 'server') return false;
           if (Array.isArray(et.skills) && et.skills.includes(skill)) return true;
-          return (et.skillProfiles || []).some(p => (p.skills || []).includes(skill));
+          return (et.skillProfiles || []).some((/** @type {any} */ p) => (p.skills || []).includes(skill));
         });
         if (!coveredByAnyType) {
           warn('V-SKILL-2',
@@ -1806,7 +1836,7 @@ export function validateModel(model) {
 
   // V65: SkillProfile.priority, if present, must be numeric
   entityTypes.filter(et => et.role === 'server' && Array.isArray(et.skillProfiles)).forEach(et => {
-    et.skillProfiles.forEach((profile, pi) => {
+    et.skillProfiles.forEach((/** @type {any} */ profile, /** @type {any} */ pi) => {
       if (profile.priority != null && !Number.isFinite(Number(profile.priority))) {
         err('V65',
           `Entity class '${et.name}' profile '${profile.name || `#${pi + 1}`}' has a non-numeric priority '${profile.priority}'.`,
@@ -1831,7 +1861,7 @@ export function validateModel(model) {
       const predicateText = parts[1].trim();
       try {
         evaluatePredicate(predicateText, { currentEntity: {}, otherEntity: {} });
-      } catch (e) {
+      } catch (/** @type {any} */ e) {
         err('V66',
           `Effect '${m.trim()}' — MATCH's compatibility predicate '${predicateText}' failed to evaluate: ${e.message}`,
           ev.effect ? 'cevents' : 'bevents',
@@ -1864,6 +1894,7 @@ export function validateModel(model) {
     }
     // Walk the chain looking for a cycle.
     const seen = new Set([et.id]);
+    /** @type {Record<string, any>|undefined} */
     let current = parent;
     while (current?.parentTypeId) {
       if (seen.has(current.id)) {
@@ -1880,7 +1911,7 @@ export function validateModel(model) {
   const distanceEntries = model.distances || [];
   const distanceIds = new Set();
   const distancePairs = new Set();
-  distanceEntries.forEach((d, i) => {
+  distanceEntries.forEach((/** @type {any} */ d, /** @type {any} */ i) => {
     const id = (d.id || '').trim();
     if (!id) {
       err('V69', `Distance at position ${i + 1} has an empty id.`, 'containers');
@@ -1918,17 +1949,17 @@ export function validateModel(model) {
   // Reuses the same undirected-pair matching the engine applies at runtime
   // (findDistancePair in phases.js) so validation and execution agree on what
   // counts as "declared."
-  const findDeclaredDistancePair = (from, to) => {
+  const findDeclaredDistancePair = (/** @type {any} */ from, /** @type {any} */ to) => {
     const a = String(from ?? '').trim().toLowerCase();
     const b = String(to ?? '').trim().toLowerCase();
-    return distanceEntries.some(d => {
+    return distanceEntries.some((/** @type {any} */ d) => {
       const df = String(d.fromQueue ?? '').trim().toLowerCase();
       const dt = String(d.toQueue ?? '').trim().toLowerCase();
       return (df === a && dt === b) || (df === b && dt === a);
     });
   };
-  const checkDistanceSchedules = (schedules, ev, tab) => {
-    (schedules || []).forEach(s => {
+  const checkDistanceSchedules = (/** @type {any} */ schedules, /** @type {any} */ ev, /** @type {any} */ tab) => {
+    (schedules || []).forEach((/** @type {any} */ s) => {
       if (s.dist !== 'Distance') return;
       const { from, to, speedAttr, speedSource } = s.distParams || {};
       const label = tab === 'bevents' ? 'B' : 'C';
@@ -1949,7 +1980,7 @@ export function validateModel(model) {
       }
       if (speedAttr && (speedSource === 'entity' || speedSource === 'server')) {
         const roleTypes = mergedEntityTypes.filter(et => et.role === speedSource);
-        const covered = roleTypes.some(et => (et.attrDefs || []).some(a => (a.name || '').trim().toLowerCase() === String(speedAttr).trim().toLowerCase()));
+        const covered = roleTypes.some(et => (et.attrDefs || []).some((/** @type {any} */ a) => (a.name || '').trim().toLowerCase() === String(speedAttr).trim().toLowerCase()));
         if (!covered) {
           warn('V70', `${label}-Event '${ev.name || ev.id}': Distance's speedAttr '${speedAttr}' is not declared on any ${speedSource} entity type — this will always fall back to a duration of 0.`, tab, { eventIds: [ev.id] });
         }
@@ -2000,6 +2031,11 @@ export function validateModel(model) {
 const STRUCTURAL_KEYS = ["entityTypes", "bEvents", "cEvents", "queues", "graph"];
 const PARAMETER_KEYS = ["experimentDefaults", "goals", "name", "description"];
 
+/**
+ * @param {any} a
+ * @param {any} b
+ * @returns {boolean}
+ */
 function deepEqual(a, b) {
   if (a === b) return true;
   if (a == null || b == null) return a === b;
@@ -2018,23 +2054,23 @@ function deepEqual(a, b) {
   return false;
 }
 
-function countItems(arr) { return Array.isArray(arr) ? arr.length : 0; }
+function countItems(/** @type {any} */ arr) { return Array.isArray(arr) ? arr.length : 0; }
 
-function diffArrays(oldArr, newArr, idKey = "id") {
-  const oldIds = new Set((oldArr || []).map(x => x[idKey]));
-  const newIds = new Set((newArr || []).map(x => x[idKey]));
+function diffArrays(/** @type {any} */ oldArr, /** @type {any} */ newArr, idKey = "id") {
+  const oldIds = new Set((oldArr || []).map((/** @type {any} */ x) => x[idKey]));
+  const newIds = new Set((newArr || []).map((/** @type {any} */ x) => x[idKey]));
   const added = [...newIds].filter(id => !oldIds.has(id));
   const removed = [...oldIds].filter(id => !newIds.has(id));
   const common = [...newIds].filter(id => oldIds.has(id));
   const modified = common.filter(id => {
-    const oldItem = (oldArr || []).find(x => x[idKey] === id);
-    const newItem = (newArr || []).find(x => x[idKey] === id);
+    const oldItem = (oldArr || []).find((/** @type {any} */ x) => x[idKey] === id);
+    const newItem = (newArr || []).find((/** @type {any} */ x) => x[idKey] === id);
     return !deepEqual(oldItem, newItem);
   });
   return { added, removed, modified };
 }
 
-export function detectStructuralChanges(oldModel, newModel) {
+export function detectStructuralChanges(/** @type {any} */ oldModel, /** @type {any} */ newModel) {
   const changes = [];
 
   // Entity types

@@ -6,6 +6,7 @@ import {
   generateEntityType,
   csvToEntityType,
 } from '../../src/engine/distribution-fitting.js';
+import { mulberry32 } from '../../src/engine/distributions.js';
 
 describe('parseCsv', () => {
   it('parses a simple CSV with headers', () => {
@@ -102,11 +103,17 @@ describe('fitDistribution', () => {
   });
 
   it('fits normal to normal samples', () => {
-    // Box-Muller for normal(10, 2)
+    // Box-Muller for normal(10, 2). Seeded (not Math.random()) — this was an
+    // unseeded flaky test: with only 200 samples, an unlucky draw could push
+    // fitDistribution()'s goodness-of-fit comparison to prefer lognormal by a
+    // small margin, seen intermittently in CI. Deterministic seed, same
+    // convention as the engine's own seeded-RNG tests (see mulberry32 usages
+    // elsewhere in tests/engine/).
+    const rng = mulberry32(42);
     const values = [];
     for (let i = 0; i < 200; i++) {
-      const u1 = Math.random();
-      const u2 = Math.random();
+      const u1 = rng();
+      const u2 = rng();
       const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
       values.push(10 + 2 * z);
     }
@@ -117,11 +124,13 @@ describe('fitDistribution', () => {
   });
 
   it('fits lognormal to lognormal samples', () => {
-    // lognormal with logMean=1, logStdDev=0.5
+    // lognormal with logMean=1, logStdDev=0.5. Seeded for the same reason as
+    // the normal-samples test above.
+    const rng = mulberry32(42);
     const values = [];
     for (let i = 0; i < 200; i++) {
-      const u1 = Math.random();
-      const u2 = Math.random();
+      const u1 = rng();
+      const u2 = rng();
       const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
       values.push(Math.exp(1 + 0.5 * z));
     }

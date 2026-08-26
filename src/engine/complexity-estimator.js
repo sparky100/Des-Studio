@@ -1,15 +1,19 @@
+// @ts-check
 import { getPiecewisePeriods, normalizeDistributionName } from "./distributions.js";
 
 const STAGE_MACROS = new Set(["ASSIGN", "COSEIZE", "MATCH", "BATCH", "UNBATCH"]);
 const SERVICE_MACROS = new Set(["ASSIGN", "COSEIZE"]);
 
+/** @param {any} effect */
 function effectText(effect) {
   if (Array.isArray(effect)) return effect.filter(Boolean).join(";");
   return String(effect || "");
 }
 
+/** @param {any} effect */
 function parseCalls(effect) {
   const text = effectText(effect);
+  /** @type {Array<{ macro: string, args: string[] }>} */
   const calls = [];
   for (const match of text.matchAll(/([A-Z_]+)\s*\(([^)]*)\)/g)) {
     const macro = String(match[1] || "").trim().toUpperCase();
@@ -22,11 +26,17 @@ function parseCalls(effect) {
   return calls;
 }
 
+/** @param {any} value */
 function parsePositiveNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * @param {any} dist
+ * @param {Record<string, any>} [params]
+ * @returns {number|null}
+ */
 function meanForDistribution(dist, params = {}) {
   const name = normalizeDistributionName(dist);
   switch (name) {
@@ -57,7 +67,7 @@ function meanForDistribution(dist, params = {}) {
     case "Piecewise": {
       const periods = getPiecewisePeriods(params);
       const nestedMeans = periods
-        .map(period => {
+        .map((/** @type {any} */ period) => {
           const raw = period.distribution || period;
           return meanForDistribution(raw.dist || raw.type || "Fixed", {
             ...(raw.distParams || raw.params || {}),
@@ -72,17 +82,22 @@ function meanForDistribution(dist, params = {}) {
         })
         .filter(Number.isFinite);
       if (!nestedMeans.length) return null;
-      return nestedMeans.reduce((sum, value) => sum + value, 0) / nestedMeans.length;
+      return /** @type {number[]} */ (nestedMeans).reduce((sum, value) => sum + value, 0) / nestedMeans.length;
     }
     default:
       return null;
   }
 }
 
+/** @param {number[]} values */
 function sumCounts(values) {
   return values.reduce((sum, value) => sum + value, 0);
 }
 
+/**
+ * @param {Record<string, any>} [schedule]
+ * @param {Record<string, any>} [schedulesMap]
+ */
 function countScheduleEntries(schedule = {}, schedulesMap = {}) {
   const distName = normalizeDistributionName(schedule.dist);
   const hasRows = Array.isArray(schedule.rows) && schedule.rows.length > 0;
@@ -104,6 +119,10 @@ function countScheduleEntries(schedule = {}, schedulesMap = {}) {
   return rows + times;
 }
 
+/**
+ * @param {Record<string, any>} model
+ * @param {Record<string, any>} [schedulesMap]
+ */
 export function countPlannedScheduleRows(model, schedulesMap = {}) {
   let total = 0;
   for (const bEvent of model?.bEvents || []) {
@@ -119,6 +138,10 @@ export function countPlannedScheduleRows(model, schedulesMap = {}) {
   return total;
 }
 
+/**
+ * @param {Record<string, any>} schedule
+ * @param {Record<string, any>} schedulesMap
+ */
 function resolveScheduleRows(schedule, schedulesMap) {
   // ADR-016 external
   if (schedule.scheduleRef) {
@@ -131,19 +154,26 @@ function resolveScheduleRows(schedule, schedulesMap) {
   }
   // Legacy distParams.rows or distParams.times
   if (Array.isArray(schedule.distParams?.rows)) return schedule.distParams.rows;
-  if (Array.isArray(schedule.distParams?.times)) return schedule.distParams.times.map(t => ({ time: t }));
+  if (Array.isArray(schedule.distParams?.times)) return schedule.distParams.times.map((/** @type {any} */ t) => ({ time: t }));
   return [];
 }
 
+/**
+ * @param {Record<string, any>} bEvent
+ * @param {number|null} maxSimTime
+ * @param {string[]} unknowns
+ * @param {Record<string, any>} [schedulesMap]
+ */
 function estimateRecurringArrivals(bEvent, maxSimTime, unknowns, schedulesMap = {}) {
   const calls = parseCalls(bEvent.effect).filter(call => call.macro === "ARRIVE");
   if (!calls.length) return { plannedArrivals: 0, expectedArrivals: 0, meanArrivalRateByQueue: {} };
 
   const scheduledTime = Number.isFinite(Number(bEvent.scheduledTime)) ? Number(bEvent.scheduledTime) : 0;
-  const selfSchedules = (bEvent.schedules || []).filter(schedule => schedule.eventId === bEvent.id);
+  const selfSchedules = (bEvent.schedules || []).filter((/** @type {any} */ schedule) => schedule.eventId === bEvent.id);
   const initialMultiplier = maxSimTime == null || scheduledTime <= maxSimTime ? calls.length : 0;
   let plannedArrivals = initialMultiplier;
   let expectedArrivals = initialMultiplier;
+  /** @type {Record<string, number>} */
   const meanArrivalRateByQueue = {};
 
   for (const schedule of selfSchedules) {
@@ -152,12 +182,12 @@ function estimateRecurringArrivals(bEvent, maxSimTime, unknowns, schedulesMap = 
     const hasRef = !!schedule.scheduleRef;
     if (distName === "Schedule" || hasInlineRows || hasRef) {
       const rows = resolveScheduleRows(schedule, schedulesMap);
-      const times = rows.map(row => Number(row.time ?? row)).filter(Number.isFinite);
+      const times = rows.map((/** @type {any} */ row) => Number(row.time ?? row)).filter(Number.isFinite);
       if (maxSimTime == null) {
         unknowns.push(`Arrival event '${bEvent.name || bEvent.id}' uses a planned schedule, but the stop rule is not time-bounded.`);
         continue;
       }
-      const withinHorizon = times.filter(time => time <= maxSimTime).length * calls.length;
+      const withinHorizon = times.filter((/** @type {number} */ time) => time <= maxSimTime).length * calls.length;
       plannedArrivals += withinHorizon;
       expectedArrivals += withinHorizon;
       // Derive an effective mean arrival rate so bottleneck detection works for timetable models
@@ -172,7 +202,7 @@ function estimateRecurringArrivals(bEvent, maxSimTime, unknowns, schedulesMap = 
     }
 
     const mean = meanForDistribution(schedule.dist, schedule.distParams || {});
-    if (!(maxSimTime != null) || !Number.isFinite(mean) || mean <= 0) {
+    if (!(maxSimTime != null) || mean == null || !Number.isFinite(mean) || mean <= 0) {
       unknowns.push(`Arrival event '${bEvent.name || bEvent.id}' uses ${distName} recurrence that cannot be bounded confidently before execution.`);
       continue;
     }
@@ -190,6 +220,10 @@ function estimateRecurringArrivals(bEvent, maxSimTime, unknowns, schedulesMap = 
   return { plannedArrivals, expectedArrivals, meanArrivalRateByQueue };
 }
 
+/**
+ * @param {Record<string, any>} cEvent
+ * @param {Record<string, any>[]} entityTypes
+ */
 function estimateServiceCapacity(cEvent, entityTypes) {
   const call = parseCalls(cEvent.effect).find(entry => SERVICE_MACROS.has(entry.macro));
   if (!call) return null;
@@ -198,11 +232,11 @@ function estimateServiceCapacity(cEvent, entityTypes) {
   const resourceNames = call.macro === "ASSIGN" ? [call.args[1]] : call.args.slice(1);
   const schedule = (cEvent.cSchedules || [])[0];
   const meanServiceTime = schedule ? meanForDistribution(schedule.dist, schedule.distParams || {}) : null;
-  if (!queueName || !resourceNames.length || !Number.isFinite(meanServiceTime) || meanServiceTime <= 0) return null;
+  if (!queueName || !resourceNames.length || meanServiceTime == null || !Number.isFinite(meanServiceTime) || meanServiceTime <= 0) return null;
 
   const capacities = resourceNames
-    .map(resourceName => {
-      const entity = (entityTypes || []).find(type => String(type.name || "").trim().toLowerCase() === String(resourceName || "").trim().toLowerCase());
+    .map((/** @type {any} */ resourceName) => {
+      const entity = (entityTypes || []).find((/** @type {any} */ type) => String(type.name || "").trim().toLowerCase() === String(resourceName || "").trim().toLowerCase());
       const count = parsePositiveNumber(entity?.count) || 1;
       return count / meanServiceTime;
     })
@@ -217,6 +251,12 @@ function estimateServiceCapacity(cEvent, entityTypes) {
   };
 }
 
+/**
+ * @param {Record<string, any>} model
+ * @param {Record<string, number>} arrivalRateByQueue
+ * @param {number} expectedEntities
+ * @param {number|null} maxSimTime
+ */
 function buildBottlenecks(model, arrivalRateByQueue, expectedEntities, maxSimTime) {
   const bottlenecks = [];
   const queues = model.queues || [];
@@ -255,6 +295,11 @@ function buildBottlenecks(model, arrivalRateByQueue, expectedEntities, maxSimTim
   return bottlenecks.slice(0, 4);
 }
 
+/**
+ * @param {number} totalScans
+ * @param {number} totalEntities
+ * @param {number} [plannedScheduleRows]
+ */
 function classifyRisk(totalScans, totalEntities, plannedScheduleRows = 0) {
   if (totalScans > 1000000 || totalEntities > 50000 || plannedScheduleRows > 100000) return "too_large";
   if (totalScans > 250000 || totalEntities > 10000 || plannedScheduleRows > 10000) return "large";
@@ -262,6 +307,10 @@ function classifyRisk(totalScans, totalEntities, plannedScheduleRows = 0) {
   return "small";
 }
 
+/**
+ * @param {Record<string, any>} model
+ * @param {Record<string, any>} [options]
+ */
 export function estimateRunComplexity(model, options = {}) {
   const experimentDefaults = model?.experimentDefaults || {};
   const terminationMode = options.terminationMode || experimentDefaults.terminationMode || "time";
@@ -270,17 +319,19 @@ export function estimateRunComplexity(model, options = {}) {
     : null;
   const replications = Math.max(1, parseInt(options.replications ?? experimentDefaults.replications ?? 1, 10) || 1);
   const schedulesMap = options.schedulesMap || {};
+  /** @type {string[]} */
   const unknowns = [];
   const plannedScheduleRows = countPlannedScheduleRows(model, schedulesMap);
 
   const initialCustomerEntities = sumCounts(
     (model?.entityTypes || [])
-      .filter(entityType => entityType.role !== "server")
-      .map(entityType => Math.max(0, Number(entityType.count) || 0))
+      .filter((/** @type {any} */ entityType) => entityType.role !== "server")
+      .map((/** @type {any} */ entityType) => Math.max(0, Number(entityType.count) || 0))
   );
 
   let plannedArrivals = initialCustomerEntities;
   let expectedEntities = initialCustomerEntities;
+  /** @type {Record<string, number>} */
   const arrivalRateByQueue = {};
 
   for (const bEvent of model?.bEvents || []) {
@@ -294,7 +345,7 @@ export function estimateRunComplexity(model, options = {}) {
 
   const stageCount = Math.max(
     1,
-    (model?.cEvents || []).filter(cEvent => parseCalls(cEvent.effect).some(call => STAGE_MACROS.has(call.macro))).length
+    (model?.cEvents || []).filter((/** @type {any} */ cEvent) => parseCalls(cEvent.effect).some(call => STAGE_MACROS.has(call.macro))).length
   );
   const estimatedStageTransitions = expectedEntities * stageCount;
   const estimatedBEventFirings = expectedEntities + estimatedStageTransitions;
@@ -344,6 +395,10 @@ export function estimateRunComplexity(model, options = {}) {
 // using a flat default — estimatedBEventFirings is a direct proxy for cycle
 // count (one cycle ≈ one distinct event time), so this scales the engine's
 // safety valve to the model instead of truncating large-but-legitimate runs.
+/**
+ * @param {Record<string, any>} complexityEstimate
+ * @param {{ floor?: number, safetyFactor?: number, ceiling?: number }} [options]
+ */
 export function estimateMaxCycles(complexityEstimate, options = {}) {
   const floor = options.floor ?? 5000;
   const safetyFactor = options.safetyFactor ?? 2;
@@ -355,6 +410,10 @@ export function estimateMaxCycles(complexityEstimate, options = {}) {
 // Compares the pre-run complexity estimate against a completed run's real
 // runtimeMetrics, so estimator accuracy can be tracked over time and used to
 // recalibrate estimateRunComplexity() instead of relying on static guesses.
+/**
+ * @param {Record<string, any>|null} complexityEstimate
+ * @param {Record<string, any>|null} runtimeMetrics
+ */
 export function computeEstimateAccuracy(complexityEstimate, runtimeMetrics) {
   if (!complexityEstimate || !runtimeMetrics) return null;
   const scansEstimated = Number(complexityEstimate.estimatedCEventScans) || 0;

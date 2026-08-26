@@ -2,7 +2,7 @@
 // Registered as nodeType "sinkNode" in ExecuteCanvas.
 // data.liveData shape: { served, reneged, throughputPerHour, meanSojourn }
 // throughputPerHour assumes simulation time unit is minutes: rate = served / clock * 60
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position } from "../shared/xyflow.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 const fmt = (value, digits = 0) =>

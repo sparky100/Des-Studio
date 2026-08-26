@@ -1163,6 +1163,8 @@ npm run build                        # Production build — must pass before spr
 npm run preview                      # Preview production build locally
 ```
 
+**Dev tooling, not wired into any script or CI job:** `fallow` (devDependency) is a clone-detection tool, invoked ad hoc via `npx fallow dupes` or `npx fallow health` when auditing for duplicated code (see `docs/reviews/sprint-81-deduplication-plan.md` for the last run's findings). It isn't part of `npm test`/`lint`/`build` — run it manually if you want a fresh duplication report.
+
 ---
 
 ## 14. Environment Variables

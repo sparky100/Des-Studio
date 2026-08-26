@@ -1,6 +1,6 @@
 // ui/shared/KeyboardShortcutsModal.jsx
 import { useEffect } from "react";
-import { Z, RADIUS, SPACE, alpha } from "./tokens.js";
+import { Z, RADIUS, SPACE, alpha, SHADOW } from "./tokens.js";
 import { Btn } from "./components.jsx";
 import { useTheme } from "./ThemeContext.jsx";
 
@@ -70,7 +70,7 @@ export function KeyboardShortcutsModal({ onClose }) {
           display: "flex",
           flexDirection: "column",
           gap: SPACE.md,
-          boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
+          boxShadow: SHADOW.modal,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

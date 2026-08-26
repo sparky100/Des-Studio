@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
-import { alpha, RADIUS } from "../shared/tokens.js";
+import { alpha, RADIUS, SHADOW } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { csvEscape, downloadTextFile, slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { batchMeansCI, buildHistogramFD, computePercentiles, computeSummaryStats, detectOutliers } from "../../engine/statistics.js";
@@ -1852,7 +1852,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                 <div style={{
                   position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 100,
                   background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 6,
-                  padding: 4, minWidth: 160, boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+                  padding: 4, minWidth: 160, boxShadow: SHADOW.dropdown,
                   display: "flex", flexDirection: "column", gap: 0,
                 }}>
                   <button type="button" onClick={() => { setShowChartDownloadPopover(false); handleDownloadAllChartData(); }}

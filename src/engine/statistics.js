@@ -1,10 +1,16 @@
+// @ts-check
+/**
+ * @param {any[]} [values]
+ * @returns {number[]}
+ */
 function finiteValues(values = []) {
-  return values.filter(value => Number.isFinite(value));
+  return values.filter((/** @type {any} */ value) => Number.isFinite(value));
 }
 
+/** @param {number[]} sorted */
 export function buildWaitDistEntry(sorted) {
   const n   = sorted.length;
-  const pct = (p) => sorted[Math.min(Math.floor(p * n), n - 1)];
+  const pct = (/** @type {number} */ p) => sorted[Math.min(Math.floor(p * n), n - 1)];
   return {
     n,
     mean:   +(sorted.reduce((s, v) => s + v, 0) / n).toFixed(4),
@@ -16,30 +22,38 @@ export function buildWaitDistEntry(sorted) {
   };
 }
 
+/** @param {Record<string, any>} o */
 export function finalizeWeightedStats(o) {
   o.avgWait    = o._waitN    > 0 ? +(o._waitSum    / o._waitN).toFixed(4)    : null;
   o.avgSojourn = o._sojournN > 0 ? +(o._sojournSum / o._sojournN).toFixed(4) : null;
   delete o._waitSum; delete o._waitN; delete o._sojournSum; delete o._sojournN;
 }
 
+/** @param {any[]} [values] */
 export function mean(values = []) {
   const finite = finiteValues(values);
   if (!finite.length) return null;
   return finite.reduce((sum, value) => sum + value, 0) / finite.length;
 }
 
+/** @param {any[]} [values] */
 export function sampleVariance(values = []) {
   const finite = finiteValues(values);
   if (finite.length < 2) return null;
   const avg = mean(finite);
+  // finite.length >= 2 here, so mean() always takes its non-null branch — this
+  // guard is for TS's flow analysis only, not a behavior change.
+  if (avg == null) return null;
   return finite.reduce((sum, value) => sum + (value - avg) ** 2, 0) / (finite.length - 1);
 }
 
+/** @param {any[]} [values] */
 export function sampleStdDev(values = []) {
   const variance = sampleVariance(values);
   return variance == null ? null : Math.sqrt(variance);
 }
 
+/** @type {Record<number, number>} */
 const T_CRITICAL_95 = {
   1: 12.706,
   2: 4.303,
@@ -73,11 +87,13 @@ const T_CRITICAL_95 = {
   30: 2.042,
 };
 
+/** @param {number} df */
 export function tCritical95(df) {
   const rounded = Math.floor(df);
   return T_CRITICAL_95[rounded] || 1.96;
 }
 
+/** @param {any[]} [values] */
 export function confidenceInterval95(values = []) {
   const finite = finiteValues(values);
   const n = finite.length;
@@ -90,7 +106,13 @@ export function confidenceInterval95(values = []) {
     return { n, mean: avg, lower: null, upper: null, halfWidth: null };
   }
 
-  const halfWidth = tCritical95(n - 1) * sampleStdDev(finite) / Math.sqrt(n);
+  // n >= 2 here, so mean()/sampleStdDev() always take their non-null branches —
+  // these guards are for TS's flow analysis only, not a behavior change.
+  const std = sampleStdDev(finite);
+  if (avg == null || std == null) {
+    return { n, mean: avg, lower: null, upper: null, halfWidth: null };
+  }
+  const halfWidth = tCritical95(n - 1) * std / Math.sqrt(n);
   return {
     n,
     mean: avg,
@@ -100,11 +122,20 @@ export function confidenceInterval95(values = []) {
   };
 }
 
+/**
+ * @param {any} object
+ * @param {string} path
+ */
 function getPathValue(object, path) {
   return path.split(".").reduce((current, key) => current?.[key], object);
 }
 
+/**
+ * @param {any[]} [results]
+ * @param {string[]} [metricPaths]
+ */
 export function summarizeReplicationResults(results = [], metricPaths = []) {
+  /** @type {Record<string, any>} */
   const summaries = {};
   for (const path of metricPaths) {
     summaries[path] = confidenceInterval95(
@@ -114,11 +145,16 @@ export function summarizeReplicationResults(results = [], metricPaths = []) {
   return summaries;
 }
 
+/**
+ * @param {any[]} [a]
+ * @param {any[]} [b]
+ */
 export function pairedTConfidenceInterval(a = [], b = []) {
   const droppedCount = Math.abs(a.length - b.length);
   const truncated = droppedCount > 0;
   const n = Math.min(a.length, b.length);
   if (n < 2) return { n, meanDiff: null, lower: null, upper: null, halfWidth: null, truncated, droppedCount };
+  /** @type {number[]} */
   const diffs = [];
   for (let i = 0; i < n; i++) {
     if (Number.isFinite(a[i]) && Number.isFinite(b[i])) {
@@ -146,6 +182,10 @@ export function pairedTConfidenceInterval(a = [], b = []) {
 // Welch's graphical warm-up detection
 // ---------------------------------------------------------------------------
 
+/**
+ * @param {Array<{ t: number, value: number }>} series
+ * @param {number} targetT
+ */
 function linearInterpolate(series, targetT) {
   // series: [{ t, value }], sorted by t ascending
   if (series.length === 0) return null;
@@ -166,6 +206,10 @@ function linearInterpolate(series, targetT) {
   return a.value + frac * (b.value - a.value);
 }
 
+/**
+ * @param {Array<{ t: number, value: number }>} points
+ * @param {number} windowSize
+ */
 function movingAverage(points, windowSize) {
   // points: [{ t, value }]
   const w = Math.max(1, Math.min(windowSize, points.length));
@@ -184,6 +228,7 @@ function movingAverage(points, windowSize) {
   return out;
 }
 
+/** @param {Array<{ t: number, value: number }>} points */
 function findKnee(points) {
   // points: [{ t, value }] smoothed ensemble average, sorted by t
   // Welch's method automation: midpoint-crossing heuristic.
@@ -237,12 +282,9 @@ function findKnee(points) {
 /**
  * Welch's graphical method for warm-up detection.
  *
- * @param {Array} replications - array of result objects, each with a `timeSeries` array
+ * @param {any[]} replications - array of result objects, each with a `timeSeries` array
  * @param {string} metricPath - dot-path to extract the metric (e.g. "byType.Customer.waiting")
- * @param {Object} options
- * @param {number} [options.windowSize] - moving-average window; defaults to sqrt(nTimePoints)
- * @param {number} [options.threshold=0.05] - stabilisation threshold as fraction of mean (0.05 = 5%)
- * @param {number} [options.minWarmup=0] - minimum truncation point to return
+ * @param {{ windowSize?: number|null, threshold?: number, minWarmup?: number }} [options] - windowSize defaults to sqrt(nTimePoints); threshold default 0.05; minWarmup default 0
  * @returns {Object} { truncationPoint, explanation, series: [{ t, value }] }
  */
 export function detectWarmupWelch(replications, metricPath, options = {}) {
@@ -257,11 +299,11 @@ export function detectWarmupWelch(replications, metricPath, options = {}) {
     .map(rep => {
       const ts = rep?.timeSeries || rep?.result?.timeSeries || [];
       return ts
-        .map(pt => ({
+        .map((/** @type {any} */ pt) => ({
           t: pt.t,
           value: getPathValue(pt, metricPath),
         }))
-        .filter(pt => Number.isFinite(pt.value));
+        .filter((/** @type {any} */ pt) => Number.isFinite(pt.value));
     })
     .filter(s => s.length > 0);
 
@@ -287,14 +329,14 @@ export function detectWarmupWelch(replications, metricPath, options = {}) {
       let count = 0;
       for (const series of seriesPerRep) {
         const val = linearInterpolate(series, t);
-        if (Number.isFinite(val)) {
+        if (val != null && Number.isFinite(val)) {
           sum += val;
           count++;
         }
       }
       return { t, value: count > 0 ? sum / count : null };
     })
-    .filter(pt => pt.value !== null);
+    .filter((/** @type {{ t: number, value: number|null }} */ pt) => pt.value !== null);
 
   if (ensembleAvg.length === 0) {
     return {
@@ -306,10 +348,14 @@ export function detectWarmupWelch(replications, metricPath, options = {}) {
 
   // 4. Apply moving average smoothing
   const w = windowSize || Math.max(1, Math.floor(Math.sqrt(ensembleAvg.length)));
-  const smoothed = movingAverage(ensembleAvg, w);
+  // ensembleAvg was just filtered to exclude value === null, but TS doesn't
+  // narrow across .filter() — cast to the non-null shape movingAverage/findKnee expect.
+  const smoothed = movingAverage(/** @type {Array<{ t: number, value: number }>} */ (ensembleAvg), w);
 
-  // 5. Find knee where smoothed series stabilises
-  const knee = findKnee(smoothed);
+  // 5. Find knee where smoothed series stabilises — movingAverage() can only
+  // return a null value when a window has zero points, which cannot happen
+  // here (every point in ensembleAvg already has a real numeric value).
+  const knee = findKnee(/** @type {Array<{ t: number, value: number }>} */ (smoothed));
   const truncationPoint = Math.max(minWarmup, knee.point);
 
   const explanation = knee.confidence === 'high'
@@ -342,9 +388,9 @@ export function detectWarmupWelch(replications, metricPath, options = {}) {
  * Adjusts the per-comparison significance level from alpha to alpha/m
  * where m is the number of comparisons, then recomputes critical values.
  *
- * @param {Array} comparisons - array of { meanDiff, halfWidth, n, ... }
- * @param {number} [alpha=0.05] - family-wise error rate (default 0.05 for 95% CI)
- * @returns {Array} comparisons augmented with { correctedAlpha, significant95, significant99, bonferroniHalfWidth }
+ * @param {Record<string, any>[]} [comparisons] - array of { meanDiff, halfWidth, n, ... }
+ * @param {number} [alpha] - family-wise error rate (default 0.05 for 95% CI)
+ * @returns {Record<string, any>[]} comparisons augmented with { correctedAlpha, significant95, significant99, bonferroniHalfWidth }
  */
 export function bonferroniCI(comparisons = [], alpha = 0.05) {
   const m = comparisons.length;
@@ -416,6 +462,11 @@ export function bonferroniCI(comparisons = [], alpha = 0.05) {
  * @param {number} [alpha=0.05] - uncorrected alpha
  * @returns {number} Bonferroni-corrected t-critical value
  */
+/**
+ * @param {number} df
+ * @param {number} m
+ * @param {number} [alpha]
+ */
 function tCriticalBonferroni(df, m, alpha = 0.05) {
   const baseT = tCritical95(df); // base for alpha=0.05
   if (m <= 1) return baseT;
@@ -437,12 +488,10 @@ function tCriticalBonferroni(df, m, alpha = 0.05) {
  * The i-th element of scenarioA and scenarioB must correspond to the same
  * replication (paired by design).
  *
- * @param {Array} scenarioA - replication results for baseline
- * @param {Array} scenarioB - replication results for variant
- * @param {Array<string>} metricPaths - dot-paths to metrics (e.g. ["summary.avgWait"])
- * @param {Object} [options]
- * @param {string} [options.labelA="Scenario A"] - display label
- * @param {string} [options.labelB="Scenario B"] - display label
+ * @param {any[]} [scenarioA] - replication results for baseline
+ * @param {any[]} [scenarioB] - replication results for variant
+ * @param {string[]} [metricPaths] - dot-paths to metrics (e.g. ["summary.avgWait"])
+ * @param {{ labelA?: string, labelB?: string }} [options] - labelA default "Scenario A"; labelB default "Scenario B"
  * @returns {Object} { comparisons, significant, labels }
  */
 export function compareScenarios(scenarioA = [], scenarioB = [], metricPaths = [], options = {}) {
@@ -485,6 +534,7 @@ export function compareScenarios(scenarioA = [], scenarioB = [], metricPaths = [
  * @param {number[]} values
  * @returns {Object} { n, mean, stdDev, skewness, kurtosis, isApproxNormal }
  */
+/** @param {any[]} [values] */
 export function computeSummaryStats(values = []) {
   const finite = finiteValues(values);
   const n = finite.length;
@@ -502,6 +552,16 @@ export function computeSummaryStats(values = []) {
     return {
       n, mean: avg, stdDev: 0,
       skewness: 0, kurtosis: -3 / 2, isApproxNormal: false,
+    };
+  }
+
+  // finite.length >= 3 here (n < 3 returned above), so mean()/sampleStdDev()
+  // always take their non-null branches — this guard is for TS's flow
+  // analysis only, not a behavior change.
+  if (avg == null || std == null) {
+    return {
+      n, mean: avg, stdDev: std,
+      skewness: null, kurtosis: null, isApproxNormal: false,
     };
   }
 
@@ -555,16 +615,22 @@ export function computeSummaryStats(values = []) {
  * @param {number[]} [percentiles=[5, 25, 50, 75, 95]] - list of percentile ranks (0-100)
  * @returns {Object} mapping from percentile key (e.g. "p5") to value
  */
+/**
+ * @param {any[]} [values]
+ * @param {number[]} [percentiles]
+ */
 export function computePercentiles(values = [], percentiles = [5, 25, 50, 75, 95]) {
   const finite = finiteValues(values);
   const n = finite.length;
   if (n === 0) {
+    /** @type {Record<string, any>} */
     const result = {};
     for (const p of percentiles) result[`p${p}`] = null;
     return { ...result, n: 0 };
   }
 
   const sorted = [...finite].sort((a, b) => a - b);
+  /** @type {Record<string, any>} */
   const result = { n };
 
   for (const p of percentiles) {
@@ -595,6 +661,7 @@ export function computePercentiles(values = [], percentiles = [5, 25, 50, 75, 95
  * Compute lag-1 autocorrelation of a series.
  * Returns a value between -1 and 1. Values near 0 imply near-independence.
  */
+/** @param {number[]} values */
 function lag1Autocorrelation(values) {
   const n = values.length;
   if (n < 3) return 0;
@@ -613,14 +680,9 @@ function lag1Autocorrelation(values) {
 }
 
 /**
- * Suggest a batch size for batch-means CI.
- * Heuristic: start with sqrt(n), then increase until lag-1 autocorrelation
- * of batch means drops below a threshold (default 0.1).
- *
- * @param {number[]} values — observations (e.g. entity completion times)
- * @param {Object} options
- * @param {number} [options.maxRho=0.1] — target lag-1 autocorrelation for batch means
- * @returns {number} recommended batch size
+ * @param {number[]} finite
+ * @param {number} k
+ * @param {number} m
  */
 function computeBatchMeans(finite, k, m) {
   const batchMeans = [];
@@ -631,6 +693,15 @@ function computeBatchMeans(finite, k, m) {
   return batchMeans;
 }
 
+/**
+ * Suggest a batch size for batch-means CI.
+ * Heuristic: start with sqrt(n), then increase until lag-1 autocorrelation
+ * of batch means drops below a threshold (default 0.1).
+ *
+ * @param {any[]} [values] - observations (e.g. entity completion times)
+ * @param {{ maxRho?: number }} [options] - maxRho: target lag-1 autocorrelation for batch means
+ * @returns {number} recommended batch size
+ */
 export function suggestBatchSize(values = [], options = {}) {
   const { maxRho = 0.1 } = options;
   const finite = finiteValues(values);
@@ -658,8 +729,8 @@ export function suggestBatchSize(values = [], options = {}) {
  * CI to the batch means. This corrects for autocorrelation because
  * batch means are approximately independent when m is large enough.
  *
- * @param {number[]} values — observations
- * @param {number} [batchSize] — batch size m; if omitted, uses suggestBatchSize()
+ * @param {any[]} [values] - observations
+ * @param {number|null} [batchSize] - batch size m; if omitted, uses suggestBatchSize()
  * @returns {Object} { n, batchSize, batchCount, mean, lower, upper, halfWidth, lag1Rho }
  */
 export function batchMeansCI(values = [], batchSize = null) {
@@ -681,9 +752,15 @@ export function batchMeansCI(values = [], batchSize = null) {
   // Compute batch means
   const batchMeans = computeBatchMeans(finite, k, m);
 
-  // Apply standard CI to batch means (treat them as approximately independent)
+  // Apply standard CI to batch means (treat them as approximately independent).
+  // k >= 2 here, so mean()/sampleStdDev() always take their non-null branches —
+  // this guard is for TS's flow analysis only, not a behavior change.
   const avg = mean(batchMeans);
-  const halfWidth = tCritical95(k - 1) * sampleStdDev(batchMeans) / Math.sqrt(k);
+  const batchStd = sampleStdDev(batchMeans);
+  if (avg == null || batchStd == null) {
+    return { n, batchSize: m, batchCount: k, mean: null, lower: null, upper: null, halfWidth: null, lag1Rho: null, nUsed: k * m, discarded: n - k * m };
+  }
+  const halfWidth = tCritical95(k - 1) * batchStd / Math.sqrt(k);
   const lag1Rho = lag1Autocorrelation(batchMeans);
   const nUsed = k * m; // observations beyond k*m don't fill a complete batch and are excluded below
   const discarded = n - nUsed;
@@ -704,6 +781,7 @@ export function batchMeansCI(values = [], batchSize = null) {
 
 // --- F28.3: CI precision helpers ---
 
+/** @param {Record<string, any>|null|undefined} ci */
 export function relativePrecision(ci) {
   if (!ci || ci.halfWidth == null || ci.mean == null) return null;
   if (!Number.isFinite(ci.halfWidth) || !Number.isFinite(ci.mean)) return null;
@@ -711,6 +789,10 @@ export function relativePrecision(ci) {
   return (ci.halfWidth / Math.abs(ci.mean)) * 100;
 }
 
+/**
+ * @param {Record<string, any>|null|undefined} ci
+ * @param {number} [targetPrecision]
+ */
 export function sampleSizeGuidance(ci, targetPrecision = 5) {
   if (!ci || ci.n == null || ci.mean == null || ci.halfWidth == null) return null;
   if (!Number.isFinite(ci.mean) || ci.mean === 0) return null;
@@ -729,7 +811,9 @@ export function sampleSizeGuidance(ci, targetPrecision = 5) {
 
 // --- F28.4: Transient analysis helpers ---
 
+/** @param {any[]} [values] */
 export function cumulativeMean(values = []) {
+  /** @type {number[]} */
   const finite = [];
   for (const v of values) {
     if (Number.isFinite(v)) finite.push(v);
@@ -750,9 +834,13 @@ export function cumulativeMean(values = []) {
 
 const ENTITY_SUMMARY_TYPE_LIMIT = 12;
 
+/** @param {any[]} [entitySummary] */
 export function summarizeEntitySummary(entitySummary = []) {
+  /** @type {Record<string, number>} */
   const byStatus = {};
+  /** @type {Record<string, number>} */
   const byType = {};
+  /** @type {Record<string, any>} */
   const byOutcome = {};
 
   for (const entity of entitySummary) {
@@ -789,6 +877,7 @@ export function summarizeEntitySummary(entitySummary = []) {
 
 // --- F28.5: Replication diagnostics ---
 
+/** @param {any[]} [values] */
 export function detectOutliers(values = []) {
   const empty = { q1: null, q3: null, iqr: null, lowerFence: null, upperFence: null, outlierIndices: [] };
   if (!Array.isArray(values) || values.length < 4) return empty;
@@ -818,11 +907,8 @@ export function detectOutliers(values = []) {
 /**
  * Build a histogram from a set of values using equal-width bins.
  *
- * @param {number[]} values — observations
- * @param {Object} options
- * @param {number} [options.numBins=10] — number of bins
- * @param {number} [options.min] — lower bound (auto-detected if omitted)
- * @param {number} [options.max] — upper bound (auto-detected if omitted)
+ * @param {any[]} [values] - observations
+ * @param {{ numBins?: number, min?: number, max?: number }} [options] - numBins default 10; min/max auto-detected if omitted
  * @returns {Object} { bins: [{ low, high, count, density }], numBins, min, max, total }
  */
 export function buildHistogram(values = [], options = {}) {
@@ -879,11 +965,8 @@ export function buildHistogram(values = [], options = {}) {
  * Bin width = 2 * IQR(x) / n^(1/3)
  * This adapts to the data spread and is robust to outliers.
  *
- * @param {number[]} values — observations
- * @param {Object} options
- * @param {number} [options.min] — lower bound (auto-detected if omitted)
- * @param {number} [options.max] — upper bound (auto-detected if omitted)
- * @param {number} [options.maxBins=50] — cap on number of bins
+ * @param {any[]} [values] - observations
+ * @param {{ min?: number, max?: number, maxBins?: number }} [options] - min/max auto-detected if omitted; maxBins default 50
  * @returns {Object} { bins, numBins, min, max, total, method: 'freedman-diaconis' }
  */
 export function buildHistogramFD(values = [], options = {}) {
@@ -918,9 +1001,8 @@ export function buildHistogramFD(values = [], options = {}) {
  *
  * Uses the F-statistic: F = MS_between / MS_within
  *
- * @param {number[][]} groups — array of k arrays, each containing observations for one group
- * @param {Object} options
- * @param {string[]} [options.labels] — display labels for each group
+ * @param {any[][]} [groups] - array of k arrays, each containing observations for one group
+ * @param {{ labels?: string[] }} [options] - labels: display labels for each group
  * @returns {Object} {
  *   k: number of groups,
  *   n: total observations,
@@ -1008,10 +1090,14 @@ export function oneWayANOVA(groups = [], options = {}) {
   }));
 
   // Explanation
+  // pValue is only ever non-null when fStatistic is (pValue is derived from
+  // it above), so checking both together is equivalent to the original
+  // fStatistic-only checks for every reachable state — this satisfies TS's
+  // flow analysis without changing which branch a given input takes.
   let explanation;
-  if (significant) {
+  if (significant && fStatistic != null && pValue != null) {
     explanation = `ANOVA indicates a statistically significant difference between group means (F(${dfBetween}, ${dfWithin}) = ${fStatistic.toFixed(3)}, p = ${pValue.toFixed(4)}). At least one group mean differs from the others.`;
-  } else if (fStatistic != null) {
+  } else if (fStatistic != null && pValue != null) {
     explanation = `ANOVA does not detect a significant difference between group means (F(${dfBetween}, ${dfWithin}) = ${fStatistic.toFixed(3)}, p = ${pValue.toFixed(4)}). The observed differences could be due to random variation.`;
   } else {
     explanation = 'ANOVA could not be computed (insufficient variance within groups).';
@@ -1037,6 +1123,11 @@ export function oneWayANOVA(groups = [], options = {}) {
  * @param {number} df1 — numerator degrees of freedom
  * @param {number} df2 — denominator degrees of freedom
  * @returns {number} approximate p-value (0 to 1)
+ */
+/**
+ * @param {number|null} f
+ * @param {number} df1
+ * @param {number} df2
  */
 function approximateFPValue(f, df1, df2) {
   if (f == null || f <= 0) return 1.0;
@@ -1064,6 +1155,11 @@ function approximateFPValue(f, df1, df2) {
  * @param {number} b — second shape parameter
  * @returns {number} I_x(a, b) approximation
  */
+/**
+ * @param {number} d
+ * @param {number} c
+ * @param {number} num
+ */
 function cfIterate(d, c, num) {
   d = 1.0 + num * d;
   if (Math.abs(d) < 1e-30) d = 1e-30;
@@ -1073,6 +1169,12 @@ function cfIterate(d, c, num) {
   return { d, c, factor: d * c };
 }
 
+/**
+ * @param {number} x
+ * @param {number} a
+ * @param {number} b
+ * @returns {number}
+ */
 function incompleteBeta(x, a, b) {
   if (x <= 0) return 0;
   if (x >= 1) return 1;
@@ -1123,6 +1225,10 @@ function incompleteBeta(x, a, b) {
  * @param {number} b
  * @returns {number} log(B(a, b))
  */
+/**
+ * @param {number} a
+ * @param {number} b
+ */
 function logBeta(a, b) {
   return logGamma(a) + logGamma(b) - logGamma(a + b);
 }
@@ -1168,10 +1274,8 @@ function logGamma(z) {
  * Perform Tukey's HSD (Honestly Significant Difference) post-hoc test
  * after a significant ANOVA to identify which specific group pairs differ.
  *
- * @param {number[][]} groups — array of k arrays of observations
- * @param {Object} options
- * @param {string[]} [options.labels] — display labels for each group
- * @param {number} [options.alpha=0.05] — significance level
+ * @param {any[][]} [groups] - array of k arrays of observations
+ * @param {{ labels?: string[], alpha?: number }} [options] - labels: display labels; alpha: significance level, default 0.05
  * @returns {Object} {
  *   comparisons: [{ groupA, groupB, meanDiff, criticalValue, significant, pValue }],
  *   anySignificant: boolean,
@@ -1246,6 +1350,11 @@ export function tukeyHSD(groups = [], options = {}) {
  * @param {number} df — degrees of freedom (within)
  * @returns {number} critical value
  */
+/**
+ * @param {number} alpha
+ * @param {number} k
+ * @param {number} df
+ */
 function studentizedRangeCritical(alpha, k, df) {
   // Approximation: q ≈ sqrt(2) * t(alpha/(k*(k-1)), df)
   // This is conservative (slightly overestimates the critical value)
@@ -1261,6 +1370,10 @@ function studentizedRangeCritical(alpha, k, df) {
  * @param {number} df — degrees of freedom
  * @param {number} alpha — significance level (e.g., 0.05 for 95% CI)
  * @returns {number} t-critical value
+ */
+/**
+ * @param {number} df
+ * @param {number} alpha
  */
 function tCriticalForAlpha(df, alpha) {
   // For alpha=0.05, use the existing table
@@ -1288,6 +1401,7 @@ function tCriticalForAlpha(df, alpha) {
  * @param {number} alpha — significance level
  * @returns {number} z-critical value
  */
+/** @param {number} alpha */
 function normalCriticalForAlpha(alpha) {
   // Approximation of the inverse normal CDF
   // For alpha=0.05, z=1.96; for alpha=0.01, z=2.576

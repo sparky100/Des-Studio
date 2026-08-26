@@ -48,7 +48,20 @@ describe("ModelDetail Access tab — shareable link", () => {
     mockListShareLinks.mockReset();
     mockFetchRunHistory.mockResolvedValue([]);
     mockListShareLinks.mockResolvedValue([]);
-    Object.assign(navigator, { clipboard: { writeText: vi.fn(() => Promise.resolve()) } });
+    // Object.defineProperty (not Object.assign) — @testing-library/user-event's
+    // clipboard stub (installed by any test elsewhere that calls
+    // userEvent.setup(), and never torn down — it has no auto-cleanup hook)
+    // replaces navigator.clipboard with a getter-only accessor. That's a
+    // shared-worker/shared-environment concern, not something scoped to this
+    // file, so Object.assign's plain [[Set]] can throw against it if this
+    // file's tests happen to run after one of those elsewhere. defineProperty
+    // always succeeds against a configurable property regardless of whether
+    // it previously held a plain value or a getter.
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn(() => Promise.resolve()) },
+      configurable: true,
+      writable: true,
+    });
   });
 
   test("copies a #model/<id> link to the clipboard", () => {
@@ -64,7 +77,7 @@ describe("ModelDetail Access tab — shareable link", () => {
   test("falls back to a manual copy when the Clipboard API is unavailable, so the click still gives feedback", () => {
     // Simulate a context (e.g. non-HTTPS) where navigator.clipboard doesn't exist —
     // previously this silently did nothing, with no success or error toast.
-    Object.assign(navigator, { clipboard: undefined });
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true, writable: true });
     const execCommandSpy = vi.fn(() => true);
     document.execCommand = execCommandSpy;
 

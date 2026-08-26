@@ -111,8 +111,7 @@ describe('model JSON export', () => {
     expect(slugifyModelName('   ')).toBe('untitled');
   });
 
-  it('warns before exporting a model with validation errors', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('warns before exporting a model with validation errors', async () => {
     renderDetail({
       ...baseModel,
       entityTypes: [{ id: 'et1', name: '', role: 'customer', attrDefs: [] }],
@@ -121,16 +120,20 @@ describe('model JSON export', () => {
     fireEvent.click(screen.getByRole('button', { name: /access/i }));
     fireEvent.click(screen.getByRole('button', { name: /export model/i }));
 
-    expect(confirmSpy).toHaveBeenCalledWith('This model has validation errors. Export anyway?');
+    expect(await screen.findByText('This model has validation errors. Export anyway?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
   it('downloads and revokes the export object URL', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderDetail();
 
     fireEvent.click(screen.getByRole('button', { name: /access/i }));
     fireEvent.click(screen.getByRole('button', { name: /export model/i }));
+
+    // The blank fixture model has blocking validation errors — accept the
+    // "Export anyway?" confirmation before the download proceeds.
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => {
       expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));

@@ -1,3 +1,4 @@
+// @ts-check
 // engine/conditions.js — Condition evaluator
 //
 // evaluatePredicate(predicate, state) — safe evaluator for JSON predicates (Addition 1 §4).
@@ -23,6 +24,10 @@ function createDependencySet() {
   };
 }
 
+/**
+ * @param {ReturnType<typeof createDependencySet>} target
+ * @param {ReturnType<typeof createDependencySet>} source
+ */
 function mergeDependencySets(target, source) {
   for (const value of source.queues) target.queues.add(value);
   for (const value of source.resources) target.resources.add(value);
@@ -35,18 +40,24 @@ function mergeDependencySets(target, source) {
   return target;
 }
 
+/** @param {any} value */
 function normalizeDependencyName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
 // ── Safe evaluator for Addition 1 §4 predicate JSON ──────────────────────────
 
+/**
+ * @param {string} queueName
+ * @param {string} property
+ * @param {any} state
+ */
 function resolveQueueValue(queueName, property, state) {
   const normalizedProperty = String(property || "length").toLowerCase();
   if (state.queues?.[queueName]?.[property] != null) return state.queues[queueName][property];
   if (state.queues?.[queueName]?.[normalizedProperty] != null) return state.queues[queueName][normalizedProperty];
 
-  const queueDef = state.model?.queues?.find(q =>
+  const queueDef = state.model?.queues?.find((/** @type {any} */ q) =>
     String(q.name || "").trim().toLowerCase() === String(queueName || "").trim().toLowerCase()
   );
   const discipline = queueDef?.discipline || "FIFO";
@@ -63,6 +74,11 @@ function resolveQueueValue(queueName, property, state) {
   return undefined;
 }
 
+/**
+ * @param {string} resourceName
+ * @param {string} property
+ * @param {any} state
+ */
 function resolveResourceValue(resourceName, property, state) {
   if (state.resources?.[resourceName]?.[property] != null) return state.resources[resourceName][property];
   const normalizedProperty = String(property || "").toLowerCase();
@@ -75,11 +91,21 @@ function resolveResourceValue(resourceName, property, state) {
   return state.resources?.[resourceName]?.[normalizedProperty];
 }
 
+/**
+ * @param {string} resourceName
+ * @param {string} attrName
+ * @param {any} state
+ */
 function resolveAttrValue(resourceName, attrName, state) {
   const entity = state.helpers?.idleOf?.(resourceName)?.[0];
   return entity?.attrs?.[attrName];
 }
 
+/**
+ * @param {string} containerName
+ * @param {string} property
+ * @param {any} state
+ */
 function resolveContainerValue(containerName, property, state) {
   // Container state lives on the engine's flat scalar-state object. In production,
   // the predicate context only exposes that object via `.scalars` (mirroring how
@@ -111,6 +137,7 @@ const CONTAINER_TOKEN_RE = /^container\(([^)]+)\)\.(level|capacity|min|max)$/i;
 // prefix as the function-call tokens above, so it's safe to resolve on the RHS too.
 const OTHER_ATTR_RE = /^Other\.\w+$/;
 
+/** @param {any} value */
 function isResolvableExpression(value) {
   if (typeof value !== "string") return false;
   const text = value.trim();
@@ -118,6 +145,10 @@ function isResolvableExpression(value) {
     || ATTR_TOKEN_RE.test(text) || CONTAINER_TOKEN_RE.test(text) || OTHER_ATTR_RE.test(text);
 }
 
+/**
+ * @param {any} ref
+ * @param {any} state
+ */
 function resolveVariable(ref, state) {
   if (typeof ref !== "string" || !ref.trim()) return undefined;
   const text = ref.trim();
@@ -132,7 +163,7 @@ function resolveVariable(ref, state) {
     const type = idleToken[1].trim();
     const skill = idleToken[2] ? idleToken[2].trim() : null;
     if (skill) {
-      return state.helpers?.idleOf(type)?.filter(s => state.helpers?.hasSkillType?.(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill)))?.length ?? 0;
+      return state.helpers?.idleOf(type)?.filter((/** @type {any} */ s) => state.helpers?.hasSkillType?.(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill)))?.length ?? 0;
     }
     return state.helpers?.idleOf?.(type)?.length ?? 0;
   }
@@ -142,7 +173,7 @@ function resolveVariable(ref, state) {
     const type = busyToken[1].trim();
     const skill = busyToken[2] ? busyToken[2].trim() : null;
     if (skill) {
-      return state.helpers?.busyOf(type)?.filter(s => state.helpers?.hasSkillType?.(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill)))?.length ?? 0;
+      return state.helpers?.busyOf(type)?.filter((/** @type {any} */ s) => state.helpers?.hasSkillType?.(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill)))?.length ?? 0;
     }
     return state.helpers?.busyOf?.(type)?.length ?? 0;
   }
@@ -169,11 +200,14 @@ function resolveVariable(ref, state) {
     const timeUnit = state.model?.timeUnit || "minutes";
     const wallDate = simToWall(clock, epoch, timeUnit);
     if (!wallDate) {
-      // No epoch set — return defaults
+      // No epoch set — return defaults. text is one of the 4 values checked
+      // above, so one of these always fires; the trailing return is just to
+      // prove that to the type checker (wallDate is used non-null below).
       if (text === "isWeekday") return true;
       if (text === "isWeekend") return false;
       if (text === "hourOfDay") return 0;
       if (text === "dayOfWeek") return 1; // Monday
+      return undefined;
     }
     const day = wallDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
     const hour = wallDate.getHours();
@@ -227,6 +261,11 @@ function resolveVariable(ref, state) {
   throw new Error(`Unknown variable namespace in predicate: '${ref}'`);
 }
 
+/**
+ * @param {any} left
+ * @param {string} operator
+ * @param {any} right
+ */
 function applyOperator(left, operator, right) {
   switch (operator) {
     case '==': return left === right;
@@ -243,8 +282,10 @@ function applyOperator(left, operator, right) {
  * Evaluate a predicate JSON object (Addition 1 §4) against simulation state.
  * Never calls eval, new Function, or any dynamic code execution.
  *
- * @param {object} predicate - Single: { variable, operator, value }
+ * @param {object|string} predicate - Single: { variable, operator, value }
  *                             Compound: { operator: 'AND'|'OR', clauses: [...] }
+ *                             A raw legacy-format condition string is also
+ *                             accepted — migrateLegacyCondition() below parses it.
  * @param {object} state     - { currentEntity, resources, queues, ...userVars }
  */
 export function evaluatePredicate(predicate, state) {
@@ -252,6 +293,10 @@ export function evaluatePredicate(predicate, state) {
   return compilePredicate(predicate)(state);
 }
 
+/**
+ * @param {ReturnType<typeof createDependencySet>} deps
+ * @param {any} rawVariable
+ */
 function addLeafDependency(deps, rawVariable) {
   const variable = String(rawVariable || "").trim();
   const queueToken = variable.match(QUEUE_TOKEN_RE);
@@ -259,10 +304,11 @@ function addLeafDependency(deps, rawVariable) {
   const busyToken = variable.match(BUSY_TOKEN_RE);
   const attrToken = variable.match(ATTR_TOKEN_RE);
   const containerToken = variable.match(CONTAINER_TOKEN_RE);
+  const idleOrBusyToken = idleToken || busyToken;
   if (queueToken) {
     deps.queues.add(normalizeDependencyName(queueToken[1]));
-  } else if (idleToken || busyToken) {
-    deps.resources.add(normalizeDependencyName((idleToken || busyToken)[1]));
+  } else if (idleOrBusyToken) {
+    deps.resources.add(normalizeDependencyName(idleOrBusyToken[1]));
   } else if (attrToken) {
     deps.resources.add(normalizeDependencyName(attrToken[1]));
     deps.entityAttrs.add(attrToken[2].trim());
@@ -293,6 +339,7 @@ function addLeafDependency(deps, rawVariable) {
   }
 }
 
+/** @param {any} predicate */
 export function getPredicateDependencies(predicate) {
   if (predicate && typeof predicate === "object" && predicate[PREDICATE_DEPS]) {
     return predicate[PREDICATE_DEPS];
@@ -334,6 +381,7 @@ export function getPredicateDependencies(predicate) {
   return deps;
 }
 
+/** @param {any} predicate */
 export function compilePredicate(predicate) {
   if (predicate && typeof predicate === "object" && predicate[COMPILED_PREDICATE]) {
     return predicate[COMPILED_PREDICATE];
@@ -343,13 +391,14 @@ export function compilePredicate(predicate) {
   if (!normalized) return () => false;
   const deps = getPredicateDependencies(normalized);
 
+  /** @type {(state: any) => boolean} */
   let compiled;
   if (normalized.operator === 'AND') {
     const clauses = (normalized.clauses || []).map(compilePredicate);
-    compiled = (state) => clauses.every(evaluate => evaluate(state));
+    compiled = (state) => clauses.every((/** @type {any} */ evaluate) => evaluate(state));
   } else if (normalized.operator === 'OR') {
     const clauses = (normalized.clauses || []).map(compilePredicate);
-    compiled = (state) => clauses.some(evaluate => evaluate(state));
+    compiled = (state) => clauses.some((/** @type {any} */ evaluate) => evaluate(state));
   } else {
     const variable = normalized.variable;
     const operator = normalized.operator;
