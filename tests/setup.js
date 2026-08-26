@@ -29,11 +29,16 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 // (`el.offsetParent !== null`, used to skip display:none elements), which
 // would otherwise treat every element as hidden and never autofocus or
 // trap focus in tests. Approximate "visible" as "attached under a parent"
-// instead, which is enough for jsdom-rendered dialog content.
-Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
-  configurable: true,
-  get() { return this.parentNode; },
-});
+// instead, which is enough for jsdom-rendered dialog content. This setup
+// file is shared by every test environment (including plain `node`, used
+// by most engine/db tests, which has no HTMLElement at all) — guard the
+// reference so those files don't crash on load.
+if (typeof HTMLElement !== 'undefined') {
+  Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
+    configurable: true,
+    get() { return this.parentNode; },
+  });
+}
 
 // Mock Supabase client — never hit real DB in tests
 const mockQuery = {
