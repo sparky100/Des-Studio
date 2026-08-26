@@ -122,6 +122,8 @@ Performance targets. Defined in `goals[]` array.
 
 All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
+**Entering effects in the UI (Effect picker):** Effects are added from a structured picker, never free text. The picker has a type-ahead search box to filter the option list. Quantity-bearing macros (BATCH, SPLIT, DRAIN, FILL) are entered via a composer — pick the operand from a dropdown and type the quantity into a validated number field (no preset quantity lists). COSEIZE has its own composer for picking two distinct server types plus optional skills. MATCH and COSEIZE stop enumerating ready-made combinations above 50 options and fall back to their composers.
+
 ### Flow Control Macros
 
 | Macro | Syntax | Purpose | Side Effects | Common Mistakes |
@@ -355,6 +357,21 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 **1D sweep:** One parameter varied across range. Full replication batch at each point.
 
 **2D sweep:** Two parameters varied across a grid (capped at 50 points). Heatmap rendering with feasibility colouring (green = all goals met, red = at least one goal violated).
+
+### Named Scenarios (Scenario Manager)
+
+**Purpose:** Compare a handful of discrete alternatives ("current staffing" vs. "double staffing" vs. "second counter") rather than sweeping a range.
+
+**Access:** Model **Overview** tab → **Named Scenarios** panel. Requires sign-in.
+
+**Creating:** Click **+ New Scenario**, give it a name, add one or more parameter changes (same parameter list as sweeps: server counts, distribution means, queue capacities, state-variable initial values), optionally set a seed and replication count. Scenarios store only the parameter changes, so they always run against the model's latest version.
+
+**Comparing:** Tick 2+ saved scenarios (the **Base model (current parameters)** row can be one of them) and click **Compare selected**. Each group runs fresh in the browser:
+
+- **Exactly 2 groups** → paired-t comparison table (mean difference with confidence interval per KPI).
+- **3+ groups** → one-way ANOVA significance test plus Tukey HSD pairwise comparisons, showing which specific pairs differ.
+
+**Limits:** Comparison runs are computed on demand and not saved to Run History. Models using named/shared schedules (ADR-016) may not reflect shared-schedule timing in scenario runs.
 
 ---
 
@@ -816,6 +833,8 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 **Access:** Design mode → **Visual** sub-tab. Also available from the New Model dialog via **Draw**.
 
 **Strengths:** Visual flow; node badges show advanced config (conditional, feed); bidirectional sync with Forms/Tabs. New blank models open with a starter flow pre-placed on the canvas — no unsaved changes until you make your first edit. Multi-select nodes (Shift/Ctrl-click or box-drag) to bulk-move or bulk-delete; copy/paste (Ctrl+C/Ctrl+V) or duplicate in place (Ctrl+D). Selecting an edge for a probabilistic-routing branch shows an inline `%` input on the edge label — edit the split without leaving the canvas or opening the B-Events editor.
+
+**Alignment guides:** While dragging a single node, dashed guide lines appear whenever the dragged node's edges or centre line up with another node's edges or centre. Release while a guide is showing and the node snaps exactly into alignment. Guides don't appear for multi-node drags — use the selection toolbar's align/distribute tools for those.
 
 ---
 

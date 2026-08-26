@@ -1,8 +1,8 @@
 # simmodlr — User Guide
 
-**Version:** 7.7.0  
-**Date:** 2026-06-20  
-**Sprint baseline:** Sprint 89  
+**Version:** 7.8.0  
+**Date:** 2026-08-26  
+**Sprint baseline:** Sprint 89, plus the 2026-08 expert-review remediation work (named scenarios, Business view, Visual Designer alignment guides)  
 **Audience:** Simulation practitioners, operations analysts, engineering students
 
 ---
@@ -23,6 +23,7 @@
    - 4.7 [Additional features](#47-additional-features)
    - 4.8 [Export results for external analysis](#48-export-results-for-external-analysis)
    - 4.9 [Share a model directly (Access tab)](#49-share-a-model-directly-access-tab)
+   - 4.10 [Share a model with non-modellers (Business view)](#410-share-a-model-with-non-modellers-business-view)
 5. [Troubleshooting](#5-troubleshooting)
 6. [Glossary](#6-glossary)
 
@@ -212,7 +213,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 - If you use a PRIORITY queue discipline, the entity type needs a `priority` attribute of type `number`.
 - B-Events set *when* things happen. C-Events set *what can happen given the current state*. If nothing is happening during a run, check your C-Event conditions.
 
-**Visual Designer.** Click **Draw** in the Design toolbar to open the canvas-based Visual Designer and build or rearrange the same model graphically. Use **Pan** mode to move around the diagram. Use **Select** mode, or Shift/Ctrl-click with a mouse, to select more than one node. Once nodes are selected, the toolbar above the canvas shows how many are selected and lets you clear the selection or delete the selected nodes together. Dragging a selected group moves the whole group and saves the updated layout with the model. Press **Ctrl+D** to duplicate the current selection in place, or **Ctrl+C**/**Ctrl+V** to copy and paste elsewhere on the canvas — duplicates land disconnected, ready to be wired up.
+**Visual Designer.** Click **Draw** in the Design toolbar to open the canvas-based Visual Designer and build or rearrange the same model graphically. Use **Pan** mode to move around the diagram. Use **Select** mode, or Shift/Ctrl-click with a mouse, to select more than one node. Once nodes are selected, the toolbar above the canvas shows how many are selected and lets you clear the selection or delete the selected nodes together. Dragging a selected group moves the whole group and saves the updated layout with the model. Press **Ctrl+D** to duplicate the current selection in place, or **Ctrl+C**/**Ctrl+V** to copy and paste elsewhere on the canvas — duplicates land disconnected, ready to be wired up. While dragging a single node, dashed **alignment guides** appear whenever the node's edges or centre line up with another node's — release while a guide is showing and the node snaps exactly into alignment. (For aligning several nodes at once, select them and use the toolbar's align/distribute tools instead.)
 
 **Multiple routes from one activity.** Drawing a second connection out of an activity to a different queue (or to a sink) automatically splits the traffic evenly between the routes — two connections split 50/50, three split evenly three ways, and so on — so the model stays runnable even before you fine-tune it. Click any one of an activity's outgoing connections to open its routing dialog: switch between **Probabilistic routing** (set a % split per branch) and **Conditional routing** (route based on entity attributes, using the same Condition Builder as elsewhere in the app), add or remove branches, and retarget a branch to a different queue or "Exit system." A running total at the bottom shows a green check when the percentages add up to 100%, or a red warning if they don't. The dialog also opens automatically right after you draw a new branch, so you can adjust the split immediately.
 
@@ -291,6 +292,14 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 4. Click **Run Sweep**. The engine runs the full replication set for each parameter combination.
 5. Results appear as a line chart (1D) or heat map (2D). Each point shows the mean KPI ± 95% CI.
 6. Use **Goal Feasibility** to draw the target threshold on the chart and find the minimum parameter value that meets the goal.
+
+**Named scenarios (Overview tab).** A sweep varies a parameter over a *range*; when you instead have a handful of *discrete alternatives* to compare — "current staffing" vs. "double clerk staffing" vs. "add a second counter" — use the **Named Scenarios** panel on the model's **Overview** tab:
+
+1. Click **+ New Scenario**. Give it a descriptive name, then add one or more parameter changes (each is a specific model setting plus its value for this scenario). Optionally set a seed and replication count.
+2. Saved scenarios appear as a list with checkboxes. Tick the scenarios to compare — you can include **Base model (current parameters)** as one of the groups.
+3. Click **Compare selected**. Each group is run fresh in your browser. With exactly 2 groups you get the paired-t comparison table (mean difference with confidence interval per KPI). With 3 or more groups you get a one-way ANOVA significance test plus Tukey HSD pairwise comparisons, so you can see not just *whether* the alternatives differ but *which pairs* differ.
+
+Scenarios store only the parameter changes, not a copy of the model, so they always run against the model's latest version. Comparison runs are computed on demand and are not saved to Run History.
 
 ### 4.6 Share results with stakeholders
 
@@ -568,12 +577,35 @@ Full API reference: `docs/architecture/results-api-design.md`.
 
 | Recipient's access | Result |
 |---------------------|--------|
-| Owner, or granted `editor`/`viewer` | Opens straight into the full model, same as clicking it in their own library. |
+| Owner | Opens the full model editor, including the owner-only **Access** and **Versions** tabs. |
+| Granted `editor` | Opens the full model editor, without the owner-only Access and Versions tabs. |
+| Granted `viewer` | Opens the simplified **Business view** — not the editor. See §4.10. |
 | No access yet, but model is public | Opens read-only with a prompt to fork their own editable copy. |
 | Not signed in | Taken to sign-in/sign-up first; the link resumes automatically once they're signed in. |
 | No access, model not public, or model deleted | Lands on their normal Model Library with no error — the link simply doesn't unlock anything new. |
 
 **This is not the same as the run-results Share link** (§4.6) — that creates a public, anonymous, read-only dashboard for one simulation run and needs no login at all. A model link (`#model/<id>`) only opens the door that your visibility/access settings already allow; it never bypasses login or grants new permissions on its own.
+
+### 4.10 Share a model with non-modellers (Business view)
+
+**When to use this.** You want a business stakeholder — someone who will never build a model — to *explore* your model of their domain: open it, adjust a few meaningful settings, run it, and see the results. The Business view gives them exactly that, without ever showing them the modelling environment.
+
+**Owner setup:**
+
+1. Open the model and go to the **Access** tab.
+2. Under **Collaborators**, add the stakeholder with **viewer** rights (they need a simmodlr account).
+3. In the **Business view** section below, pick which model settings they may adjust — the list offers the same parameters available to sweeps (server counts, distribution means, queue capacities, state-variable initial values, and so on).
+4. For each exposed setting you can add a plain-English **business label** (e.g. "Number of tellers" instead of the technical parameter name) and an optional **min**/**max** to keep adjustments within a sensible range.
+5. Click **Save**, then send them the model link (**🔗 Copy link**, §4.9).
+
+**What the viewer sees.** A single page with the model's name and description, the settings you exposed (as bounded number inputs showing the model's standard value, with per-setting reset), and a **Run** button. Running executes the full replication set in *their* browser using your saved experiment defaults (replication count capped by their account tier) and shows the same KPI summary cards as the Results workspace — averages with confidence indicators. Their changes apply to a temporary in-memory copy: nothing they do modifies or saves to your model, and each viewer run is thrown away when they leave the page.
+
+**Current limits:**
+
+- Viewer runs are not saved anywhere — there is no shared record of what a viewer tried. Re-running is cheap, but results can't be revisited later.
+- No animated "watch it run" canvas yet — viewers get KPI results only.
+- If a setting you exposed is later removed or renamed in the model, it is flagged to you in the Business view section (with a warning) and silently hidden from viewers until you fix or remove it.
+- If the model has validation errors, viewers see a friendly "this model can't be run right now" message rather than the run controls — only you (or an editor) can fix the model.
 
 ---
 
