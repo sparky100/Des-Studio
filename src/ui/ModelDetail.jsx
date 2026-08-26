@@ -42,6 +42,8 @@ import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
 import { renameEntityType, renameQueue, renameStateVariable, renameContainer } from "../engine/queue-refs.js";
 import { resolveRunAdmissionTier }          from "../engine/run-admission.js";
+import { resolveExposedParams }             from "../engine/exposed-params.js";
+import { enumerateSweepableParams }         from "../engine/sweep-params.js";
 import { AdaptiveBatchPanel }               from "./execute/AdaptiveBatchPanel.jsx";
 import { normalizeModelConditions }         from "../model/conditionFormat.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
@@ -463,6 +465,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [showOptimisePanel,setShowOptimisePanel]=useState(false);
   const [aiAction,setAiAction]=useState(null);
   const [collabQuery,setCollabQuery]=useState("");
+  const [exposedParamPick,setExposedParamPick]=useState("");
   const [pendingRoles,setPendingRoles]=useState({});
   const [aiSeq,setAiSeq]=useState(0);
   const [describePrompt,setDescribePrompt]=useState("");
@@ -1884,6 +1887,90 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         }}>Add</Btn>
                       </div>
                     ))}
+                  </div>
+                );
+              })()}
+            </section>
+            <section aria-label="Business view settings" style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS,borderBottom:`1px solid ${C.border}`,paddingBottom:4}}>Business view</div>
+              <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>
+                People you add above as viewers see a simplified page instead of the editor: the model description, the settings you choose here, a Run button, and results. Leave this list empty to let them run the model exactly as-is.
+              </div>
+              {(()=>{
+                const exposed=model.exposedParams||[];
+                const {resolved,orphans}=resolveExposedParams(model);
+                const resolvedByPath=new Map(resolved.map(r=>[r.path,r]));
+                const exposedPaths=new Set(exposed.map(e=>e.path));
+                const addable=enumerateSweepableParams(model).filter(p=>!exposedPaths.has(p.path));
+                const updateEntry=(path,patch)=>setField("exposedParams",exposed.map(e=>e.path===path?{...e,...patch}:e));
+                const removeEntry=(path)=>setField("exposedParams",exposed.filter(e=>e.path!==path));
+                const numOrUndef=(v)=>v===""?undefined:Number(v);
+                return (
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {exposed.map(entry=>{
+                      const live=resolvedByPath.get(entry.path);
+                      if(!live){
+                        return (
+                          <div key={entry.path} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:`${C.red}0f`,border:`1px solid ${C.red}44`,borderRadius:8,padding:"8px 12px"}}>
+                            <div style={{fontSize:12,color:C.red,fontFamily:FONT}}>
+                              {entry.businessLabel||entry.path} — this setting no longer exists in the model
+                            </div>
+                            <Btn small variant="danger" ariaLabel={`Remove missing setting ${entry.businessLabel||entry.path}`} onClick={()=>removeEntry(entry.path)}>✕</Btn>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={entry.path} style={{display:"flex",flexDirection:"column",gap:6,background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px"}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                            <div style={{fontSize:11,color:C.muted,fontFamily:FONT}}>
+                              {live.label}{live.subLabel?` (${live.subLabel})`:""} — currently {live.currentValue===Infinity?"unlimited":live.currentValue}
+                            </div>
+                            <Btn small variant="danger" ariaLabel={`Stop exposing ${live.label}`} onClick={()=>removeEntry(entry.path)}>✕</Btn>
+                          </div>
+                          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                            <input
+                              value={entry.businessLabel||""}
+                              onChange={e=>updateEntry(entry.path,{businessLabel:e.target.value||undefined})}
+                              placeholder={live.label}
+                              aria-label={`Business-friendly name for ${live.label}`}
+                              style={{flex:1,minWidth:160,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:SANS,fontSize:12,padding:"6px 8px"}}
+                            />
+                            <label style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Min</label>
+                            <input type="number" value={entry.min??""} onChange={e=>updateEntry(entry.path,{min:numOrUndef(e.target.value)})}
+                              aria-label={`Minimum for ${live.label}`}
+                              style={{width:70,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"6px 8px"}}/>
+                            <label style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Max</label>
+                            <input type="number" value={entry.max??""} onChange={e=>updateEntry(entry.path,{max:numOrUndef(e.target.value)})}
+                              aria-label={`Maximum for ${live.label}`}
+                              style={{width:70,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"6px 8px"}}/>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {orphans.length===0&&exposed.length===0&&(
+                      <div style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>No adjustable settings yet.</div>
+                    )}
+                    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                      <select value={exposedParamPick} onChange={e=>setExposedParamPick(e.target.value)}
+                        aria-label="Add an adjustable setting"
+                        style={{flex:1,minWidth:200,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:SANS,fontSize:12,padding:"6px 8px"}}>
+                        <option value="">— choose a setting viewers may adjust —</option>
+                        {addable.map(p=><option key={p.path} value={p.path}>{p.label}{p.subLabel?` (${p.subLabel})`:""}</option>)}
+                      </select>
+                      <Btn small variant="ghost" disabled={!exposedParamPick} onClick={()=>{
+                        if(!exposedParamPick)return;
+                        setField("exposedParams",[...exposed,{path:exposedParamPick}]);
+                        setExposedParamPick("");
+                      }}>Add</Btn>
+                    </div>
+                    {resolved.some(r=>r.type==="queueCapacity"&&r.min==null)&&(
+                      <div style={{fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>
+                        Tip: for queue-size settings, viewers' entries are kept at 1 or above (0 would mean an unlimited queue).
+                      </div>
+                    )}
+                    {dirty&&exposed.length>0&&(
+                      <div style={{fontSize:10,color:C.amber,fontFamily:FONT}}>Changes here are saved with the model — use Save when you're done.</div>
+                    )}
                   </div>
                 );
               })()}
