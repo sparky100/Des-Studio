@@ -173,6 +173,22 @@ Following the reviews, the product owner raised a fundamental-experience gap the
 
 **Update (2026-08-25): on hold.** Phase 1 was dogfooded and reviewed (one real bug found and fixed — a freeze-instead-of-updating display bug during the debounce window; one known limitation, the schedule/live-data fidelity gap, documented but deliberately left unfixed). After trying it on a real model, the product owner decided to remove Phase 1 (`LivePreviewPanel.jsx`, `useLivePreview.js`, and their tests) and put the whole Draw/Run integration direction on hold rather than proceed to Phase 2. See ADR-020's "On Hold" section for the full reasoning and what to reuse if this is revisited.
 
+## 8. Status — Sprint 94 implemented (2026-08-26, same branch): Phase 1 engineering foundations complete
+
+§3.1's five remaining items (C-3/ESLint was already done; C-11/UX S-6 god-component decomposition deliberately deferred to Phase 2):
+
+| Item | Status | Notes |
+|---|---|---|
+| C-6/C-7 Dependency housekeeping | ✅ Done | `docx` moved to `devDependencies`; `fallow` documented as ad hoc dev tooling |
+| C-12 Auth wrapper + stray colours | ✅ Done | `src/db/auth.js` added (signIn/signUp/signOut/resetPassword/updateUserPassword/getSession/setSession/onAuthStateChange/getAccessToken), all direct `supabase.auth.*` UI call sites migrated; stray hex/rgba centralised into `tokens.js` (`SHADOW.*`, `DOMAIN_COLORS`, `SECTION_COLORS`) |
+| C-18 SimPy export gaps | ✅ Done | Untranslatable routing conditions, missing service/delay distributions, and all 8 `TODO_MACRO_SET` macros (including the `RELEASE_COSEIZED` stub-dict bug) now surface as `NOT SUPPORTED` warnings instead of silently mistranslating; tests added for each gap class |
+| C-2 Typecheck coverage | ✅ Done | `// @ts-check` on all 30 files across `src/db/` + `src/engine/`, `tsc --noEmit` clean repo-wide |
+| C-16 Vitest upgrade | ✅ Done | 1.6.1 → 3.2.7 (4.x deferred — needs a vite 6/7/8 bump too; documented fast-follow). Surfaced and fixed four real pre-existing bugs the version bump exposed rather than caused: a hard, non-configurable ~60s vitest worker-RPC timeout that several long-but-previously-"passing" simulation tests now trip (fixed by yielding periodically instead of running fully synchronously); three cross-file test-pollution bugs from vitest 3's jsdom-environment reuse across files sharing a worker (`window.SpeechRecognition` mock never restored, a `navigator.clipboard` mock-descriptor conflict with `@testing-library/user-event`'s own clipboard stub, and a `localStorage`-persisted UI preference leaking between files); one flaky-by-construction test (unseeded RNG, now seeded); and an intermittent `vi.mock()` failure for the `@xyflow/react` dependency under CPU contention, fixed for 4 of 5 affected files via a local re-export wrapper module. **One known residual**: `tests/ui/execute/execute-canvas-f9c6.test.jsx` still hits that last failure mode in roughly 1 of 3 full-suite runs (never standalone) — root-caused to a likely gap in vitest's per-file module-isolation for a specific transitive-import pattern, not yet proven or fixed; documented in the landing commit as a bounded follow-up rather than chased further, per this item's own "acceptable to stop and log as fast-follow" contingency |
+
+Verified: full suite (`npx vitest run`) 3136 passed / 2 skipped, matching the pre-upgrade baseline, repeatable across many consecutive runs; `npm run typecheck`, `npm run lint -- --quiet`, and `npm run build` all clean. The two `supabase/functions/*/index.test.ts` failures seen throughout this work are confirmed pre-existing and version-independent (identical under vitest 1.6.1 with this sprint's changes stashed away) — a Deno-style `https://` import Node's ESM loader can't handle, unrelated to any of the above.
+
+**Phase 1 of the outstanding-backlog programme is now complete.** Phase 2 (god-component decomposition of `execute/index.jsx` and `ModelDetail.jsx`) is next, and needs its own plan given its size and risk.
+
 ---
 
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*
