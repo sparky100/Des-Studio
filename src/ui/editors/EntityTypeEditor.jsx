@@ -7,6 +7,7 @@ import { WeeklyPatternEditor } from "./WeeklyPatternEditor.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { useConfirm } from "../shared/useConfirm.jsx";
 
 // Operator display mapping for shift `when` rows — mirrors ConditionBuilder's
 // stored-operator convention (>=, >, ==, !=, <, <=) with friendlier glyphs.
@@ -57,6 +58,7 @@ const wouldCreateInheritanceCycle=(childId,candidateParentId,allTypes)=>{
 
 const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=null,timeUnit="minutes",errorFilter=null,onClearErrorFilter,skills=[],onChange})=>{
   const { C, FONT } = useTheme();
+  const { confirm, confirmDialog } = useConfirm();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
   const [activeSectionIds,setActiveSectionIds]=useState([]);
@@ -150,11 +152,11 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
     onChange(n);
   };
 
-  const setPatternEnabled=(i,enabled)=>{
+  const setPatternEnabled=async (i,enabled)=>{
     const n=[...types];
     if(enabled){
       if(!epoch){
-        alert("A weekly schedule pattern requires a Real-world start date (Epoch). Set one in Experiment Settings first.");
+        await confirm("A weekly schedule pattern requires a Real-world start date (Epoch). Set one in Experiment Settings first.",{singleAction:true});
         return;
       }
       n[i]={...n[i],schedulePattern:{type:"weekly",defaultCapacity:0,periods:[],exceptions:[]},shiftSchedule:undefined};
@@ -670,6 +672,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
           </div>
         );
       })}
+      {confirmDialog}
     </div>
   );
 };

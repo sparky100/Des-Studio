@@ -379,7 +379,6 @@ describe('ModelHistoryTab — Run History UI', () => {
   it('revoking share link calls revokeShareLink and removes from map', async () => {
     mockRevokeShareLink.mockResolvedValue({ ok: true });
     const setShareLinksMap = vi.fn();
-    window.confirm = vi.fn(() => true);
     renderTab({
       historyRows: [baseRow],
       shareLinksMap: { 'run-1': { id: 'link-1', token: 'abc123' } },
@@ -387,6 +386,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     });
     await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: /✕ Unshare/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(mockRevokeShareLink).toHaveBeenCalledWith('link-1', 'u1'));
   });
 
@@ -444,18 +444,18 @@ describe('ModelHistoryTab — Run History UI', () => {
   it('delete button calls deleteSimulationRun after confirmation', async () => {
     mockDeleteSimulationRun.mockResolvedValue({ ok: true });
     const setHistoryRows = vi.fn();
-    window.confirm = vi.fn(() => true);
     renderTab({ historyRows: [baseRow], setHistoryRows });
     await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(mockDeleteSimulationRun).toHaveBeenCalledWith('run-1', 'u1'));
   });
 
   it('delete is cancelled when user declines confirmation', async () => {
-    window.confirm = vi.fn(() => false);
     renderTab({ historyRows: [baseRow] });
     await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
     expect(mockDeleteSimulationRun).not.toHaveBeenCalled();
   });
 

@@ -15,8 +15,10 @@ import { fetchModels, fetchProfiles,
          getPlatformConfig,
          updateModelTags }              from "./db/models.js";
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
-import { GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
+import { GOOGLE_FONT_URL } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
+import { ModalShell }                      from "./ui/shared/ModalShell.jsx";
+import { useConfirm }                      from "./ui/shared/useConfirm.jsx";
 import { useTheme }                         from "./ui/shared/ThemeContext.jsx";
 import { HelpAssistant }                    from "./ui/HelpAssistant.jsx";
 import { AuthShell }                        from "./ui/AuthShell.jsx";
@@ -99,6 +101,7 @@ export { createSampleMm1Model, extractImportedModelPayload };
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App({ onThemeChange }){
   const { C, FONT } = useTheme();
+  const { confirm, confirmDialog } = useConfirm();
   const lastActiveTouched=useRef(false)
   const [session,setSession]=useState(null)
   const [profile,setProfile]=useState(null)
@@ -444,7 +447,7 @@ export default function App({ onThemeChange }){
 
   const handleDeleteModel = useCallback(async (model) => {
     if(!model||!uid)return;
-    if(!window.confirm(`Delete '${model.name}'? This cannot be undone.`))return;
+    if(!(await confirm(`Delete '${model.name}'? This cannot be undone.`)))return;
     setActionError('');
     const result=await deleteModel(model.id,uid);
     if(!result.ok){
@@ -452,7 +455,7 @@ export default function App({ onThemeChange }){
       return;
     }
     setModels(current=>current.filter(m=>m.id!==model.id));
-  },[uid]);
+  },[uid,confirm]);
 
   const handleUpdateModelTags = useCallback(async (model, nextTags) => {
     if(!model||!uid)return{ok:false,error:"Not signed in."};
@@ -758,18 +761,19 @@ export default function App({ onThemeChange }){
         tab={libraryTab}
         onTabChange={setLibraryTab}
       />
-      {showForkConfirm && modelToFork && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:C.overlay,display:'flex',alignItems:'center',justifyContent:'center',zIndex:Z.modal}}>
-          <div role="dialog" aria-modal="true" aria-labelledby="fork-public-model-title" style={{background:C.panel,padding:24,borderRadius:10,width:400,maxWidth:'90vw',display:'flex',flexDirection:'column',gap:20}}>
-            <h2 id="fork-public-model-title" style={{fontSize:18,fontWeight:700,color:C.text}}>Run Public Model</h2>
-            <p style={{fontSize:13,color:C.muted}}>To run "{modelToFork.name}", a private copy will be created in your library. You will own this copy and its run history.</p>
-            <div style={{display:'flex',justifyContent:'flex-end',gap:10}}>
-              <Btn variant="ghost" onClick={cancelFork}>Cancel</Btn>
-              <Btn variant="primary" onClick={confirmFork}>Fork & Run</Btn>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalShell
+        isOpen={showForkConfirm && !!modelToFork}
+        onClose={cancelFork}
+        title="Run Public Model"
+        width="min(400px, 90vw)"
+        footer={<>
+          <Btn variant="ghost" onClick={cancelFork}>Cancel</Btn>
+          <Btn variant="primary" onClick={confirmFork}>Fork &amp; Run</Btn>
+        </>}
+      >
+        <p style={{fontSize:13,color:C.muted}}>To run "{modelToFork?.name}", a private copy will be created in your library. You will own this copy and its run history.</p>
+      </ModalShell>
+      {confirmDialog}
       {helpOpen && (
         <HelpAssistant
           isOpen={helpOpen}

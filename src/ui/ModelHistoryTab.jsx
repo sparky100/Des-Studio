@@ -15,6 +15,7 @@ import { CI_METRICS, METRIC_LABELS, fmt } from "./execute/executeHelpers.js";
 import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
 import { buildLLMBundle } from "../llm/bundleExport.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { useConfirm } from "./shared/useConfirm.jsx";
 import { ExportPopover } from "./shared/ExportPopover.jsx";
 import { CiBadge } from "./shared/CiBadge.jsx";
 
@@ -53,6 +54,7 @@ export function ModelHistoryTab({
   onExplainRun, onViewResults, onCreateReport,
 }) {
   const { C, FONT } = useTheme();
+  const { confirm, confirmDialog } = useConfirm();
   const toast = useToast();
   const [historySearch, setHistorySearch] = useState("");
   const [historySelected, setHistorySelected] = useState(new Set());
@@ -243,7 +245,7 @@ export function ModelHistoryTab({
 
   const deleteSelected = async () => {
     if (!userId) return;
-    if (!confirm(`Delete ${historySelected.size} selected run${historySelected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+    if (!(await confirm(`Delete ${historySelected.size} selected run${historySelected.size !== 1 ? "s" : ""}? This cannot be undone.`))) return;
     const ids = [...historySelected];
     await Promise.all(ids.map(id => deleteSimulationRun(id, userId).catch(() => {})));
     setHistoryRows(prev => prev.filter(r => !historySelected.has(r.id)));
@@ -632,7 +634,7 @@ export function ModelHistoryTab({
                                       </button>
                                       <button
                                         onClick={async () => {
-                                          if (!confirm("Remove the share link? Anyone with the link will lose access.")) return;
+                                          if (!(await confirm("Remove the share link? Anyone with the link will lose access."))) return;
                                           const link = shareLinksMap[row.id];
                                           await revokeShareLink(link.id, userId).catch(() => {});
                                           setShareLinksMap?.(prev => { const next = { ...prev }; delete next[row.id]; return next; });
@@ -669,7 +671,7 @@ export function ModelHistoryTab({
                                   {userId && (
                                     <button
                                       onClick={async () => {
-                                        if (!confirm("Delete this run? This cannot be undone.")) return;
+                                        if (!(await confirm("Delete this run? This cannot be undone."))) return;
                                         await deleteSimulationRun(row.id, userId).catch(() => {});
                                         setHistoryRows(prev => prev.filter(r => r.id !== row.id));
                                       }}
@@ -719,6 +721,7 @@ export function ModelHistoryTab({
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

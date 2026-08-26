@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DistPicker } from '../../../src/ui/shared/components.jsx';
 
@@ -64,7 +64,7 @@ describe('DistPicker — CSV import (F2.9)', () => {
   });
 
   it('calls onChange with Empirical format and values array after column confirmed', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true); // 1 bad row / 5 = 20% → triggers warning
+    // 1 bad row / 5 = 20% → triggers the skip-rate warning dialog; confirm it.
     const handleChange = vi.fn();
     render(<DistPicker value={{ dist: 'Exponential', distParams: { mean: '3' } }} onChange={handleChange} />);
 
@@ -78,7 +78,9 @@ describe('DistPicker — CSV import (F2.9)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Import$/ }));
 
-    expect(handleChange).toHaveBeenCalledOnce();
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => expect(handleChange).toHaveBeenCalledOnce());
     const result = handleChange.mock.calls[0][0];
     expect(result.dist).toBe('Empirical');
     expect(result.sourceFile).toBe('data.csv');
@@ -91,7 +93,6 @@ describe('DistPicker — CSV import (F2.9)', () => {
   });
 
   it('shows skip-rate warning when >10% of rows are non-numeric', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const handleChange = vi.fn();
     render(<DistPicker value={{ dist: 'Exponential', distParams: { mean: '3' } }} onChange={handleChange} />);
 
@@ -100,12 +101,12 @@ describe('DistPicker — CSV import (F2.9)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Import$/ }));
 
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('skipped'));
-    expect(handleChange).not.toHaveBeenCalled(); // user cancelled
+    expect(await screen.findByText(/skipped/i)).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' })); // user cancels the import
+    expect(handleChange).not.toHaveBeenCalled();
   });
 
   it('proceeds without warning when skip rate is ≤10%', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm');
     const handleChange = vi.fn();
     // 1 bad row out of 10 = 10% — exactly at threshold (≤10% no warning)
     const CSV_10_PCT = `val\n1\n2\n3\n4\n5\n6\n7\n8\n9\nbad`;
@@ -115,8 +116,8 @@ describe('DistPicker — CSV import (F2.9)', () => {
     await waitFor(() => expect(screen.getByText(/select numeric column/i)).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /^Import$/ }));
 
-    expect(confirmSpy).not.toHaveBeenCalled();
-    expect(handleChange).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(handleChange).toHaveBeenCalledOnce());
     expect(handleChange.mock.calls[0][0].distParams.values).toHaveLength(9);
   });
 

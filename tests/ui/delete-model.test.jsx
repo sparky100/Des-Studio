@@ -77,21 +77,21 @@ describe('model delete UI', () => {
 
   it('requires confirmation before deleting', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     await renderLibrary();
 
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
-    expect(window.confirm).toHaveBeenCalledWith("Delete 'Own Model'? This cannot be undone.");
+    expect(await screen.findByText("Delete 'Own Model'? This cannot be undone.")).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(mockDeleteModel).not.toHaveBeenCalled();
   });
 
   it('deletes after confirmation and removes the card locally', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     await renderLibrary();
 
     await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => expect(mockDeleteModel).toHaveBeenCalledWith('own-1', 'user-1'));
     expect(screen.queryByRole('button', { name: /open model own model/i })).not.toBeInTheDocument();
