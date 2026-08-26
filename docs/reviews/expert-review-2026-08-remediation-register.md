@@ -173,6 +173,8 @@ Following the reviews, the product owner raised a fundamental-experience gap the
 
 **Update (2026-08-25): on hold.** Phase 1 was dogfooded and reviewed (one real bug found and fixed — a freeze-instead-of-updating display bug during the debounce window; one known limitation, the schedule/live-data fidelity gap, documented but deliberately left unfixed). After trying it on a real model, the product owner decided to remove Phase 1 (`LivePreviewPanel.jsx`, `useLivePreview.js`, and their tests) and put the whole Draw/Run integration direction on hold rather than proceed to Phase 2. See ADR-020's "On Hold" section for the full reasoning and what to reuse if this is revisited.
 
+**Update (2026-08-26): decided against.** The product owner has confirmed the final call — the Draw and Run canvases will not be integrated and remain separate surfaces. Phase 2+ is cancelled, not paused; ADR-020's status and closing section record the decision and the rationale (the authoring/execution separation proved to be a feature, not a gap).
+
 ## 8. Status — Sprint 94 implemented (2026-08-26, same branch): Phase 1 engineering foundations complete
 
 §3.1's five remaining items (C-3/ESLint was already done; C-11/UX S-6 god-component decomposition deliberately deferred to Phase 2):
