@@ -3,7 +3,7 @@
 **Purpose:** System context for Help Assistant LLM responses  
 **Audience:** LLM consuming as prompt context (machine-readable)  
 **Maintenance:** Updated at end of each sprint alongside core documents  
-**Last updated:** 2026-06-20
+**Last updated:** 2026-08-26
 
 ---
 
@@ -745,17 +745,43 @@ Each model has an **Access** tab (visible to owners) with a **Sharing** section 
 
 **Visibility:** A model is **🔒 Private** (default — only the owner, plus anyone explicitly granted access, can open it) or **🌐 Public** (read-only for everyone; any signed-in user can fork it into their own editable copy).
 
-**Per-user access grants:** Owners can grant individual users `viewer` or `editor` on a private model via the `access` map, without making the whole model public.
+**Per-user access grants:** Owners can grant individual users `viewer` or `editor` on a private model via the `access` map, without making the whole model public. The roles open different experiences:
+
+| Role | What opening the model shows |
+|------|------------------------------|
+| owner | Full editor, including the owner-only Access and Versions tabs |
+| editor | Full editor, without the Access/Versions tabs |
+| viewer | The **Business view** — a simplified run-and-results page, never the editor (see next section) |
 
 **Copy link (`#model/<id>` deep link):** The Access tab has a **🔗 Copy link** button next to the Private/Public toggle. It copies a URL containing the model's ID as a hash fragment (`#model/<modelId>`). Opening that link:
 
-- If the recipient already has access (owner, granted viewer/editor, or the model is public) and is signed in, it opens the model directly — full editor if they can edit, read-only with a fork prompt if it's a public model they don't own.
+- If the recipient already has access and is signed in, it opens the model directly — per the role table above (editors get the editor, viewers get the Business view), or read-only with a fork prompt if it's a public model they don't own.
 - If the recipient is signed out, the target model ID is held (via `sessionStorage`) through sign-in/sign-up and resolved immediately afterwards.
 - If the model does not exist, was deleted, or the recipient has no access, the link silently falls through to the recipient's normal Model Library — no error is shown.
 
 This is purely a client-side routing shortcut into the same `fetchModels()` query and Supabase RLS policies that already gate the Model Library — it does not create a new token, table, or anonymous-access mode. It is unrelated to the separate run-level share-link feature (Run History → **Share**), which creates a `share_links` row for anonymous, read-only viewing of one simulation run's results dashboard — that feature requires no login and works even for users with no model access at all.
 
 If a private model has no collaborators and isn't public yet, the Access tab shows a hint that the link won't open it for anyone else until the model is made public or a collaborator is added.
+
+### Business View (sharing with non-modellers)
+
+The Business view is what a **viewer-role** collaborator gets when they open a shared model: a single simplified page for exploring the model without ever seeing the modelling environment (no Design canvas, no B/C-event editors, no tabs).
+
+**Owner setup (Access tab → "Business view" section, owner-only):**
+
+1. Add the person as a collaborator with the **viewer** role.
+2. In the Business view section, pick which settings they may adjust. The list is the model's sweepable parameters — server counts, shift capacities, queue capacities, arrival/service distribution parameters, state-variable starting values (the same list the parameter-sweep feature uses).
+3. Per setting, optionally give it a plain-English name (e.g. "How many tellers on shift") and min/max bounds. Leave the list empty to let viewers run the model exactly as-is.
+4. **Save** — the curation is stored on the model (`exposedParams` in `model_json`). If a curated setting's target is later deleted or renamed, the section flags it as no longer existing so the owner can remove it; viewers never see broken entries.
+
+**Viewer experience:**
+
+- One page: model name and description, the exposed settings as bounded number inputs (each showing its standard value, with a per-setting Reset), a **Run the simulation** button, progress bar with Cancel, and results.
+- Running executes N replications in the viewer's browser (N from the owner's experiment defaults, capped by the viewer's own plan tier) and shows averaged business KPIs — arrivals, served, average wait, completion rate, utilisation, cost — with confidence-interval badges.
+- The viewer's changes apply to a temporary in-memory copy; the shared model itself is never modified, and viewer runs are **not** saved anywhere (results exist only for that visit).
+- If the model has a blocking validation problem, the viewer sees a friendly "only its owner can fix this" message — never raw validation codes.
+
+**Current limits:** no animated run view on this page (the Execute tab's animation is editor-only for now); no saved or owner-visible history of what a viewer ran; queue-capacity settings floor viewer input at 1 (0 would mean an unlimited queue).
 
 ---
 
