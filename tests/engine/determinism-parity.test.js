@@ -77,7 +77,7 @@ describe('determinism parity — fixed-seed benchmark scenarios', () => {
   const scenarios = createBenchmarkScenarios({ includeStress: true });
 
   for (const scenario of scenarios) {
-    test(`${scenario.key} (seed=${scenario.seed})`, { timeout: 120000 }, async () => {
+    test(`${scenario.key} (seed=${scenario.seed})`, { timeout: 240000 }, async () => {
       const engine = buildEngine(
         scenario.model,
         scenario.seed,

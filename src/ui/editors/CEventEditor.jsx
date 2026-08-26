@@ -350,6 +350,8 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                                 name: q.name,
                                 type: q.customerType ? normTypeName(q.customerType) : (normTypeName((entityTypes||[]).find(e=>e.role==='customer')?.name)||'Entity'),
                               })),
+                              containerTypes,
+                              serverTypes: (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name)),
                             }}
                             onChange={arr=>upd(i,'effect',arr)}
                           />

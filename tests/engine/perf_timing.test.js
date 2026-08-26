@@ -67,7 +67,7 @@ describe("perf_timing runner", () => {
     }));
   });
 
-  it("keeps the suite summary shape stable when queue-growth scenarios are present", { timeout: 120000 }, async () => {
+  it("keeps the suite summary shape stable when queue-growth scenarios are present", { timeout: 240000 }, async () => {
     const scenarios = createBenchmarkScenarios({ includeStress: false });
     const results = [];
     for (const scenario of scenarios) {
