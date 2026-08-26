@@ -117,6 +117,7 @@ function modelJsonFromModel(model = {}) {
   if (model.epoch)                     json.epoch       = model.epoch;
   if (model.dataSources?.length)       json.dataSources = model.dataSources;
   if (model.sections?.length)          json.sections    = model.sections;
+  if (model.exposedParams?.length)     json.exposedParams = model.exposedParams;
   return json;
 }
 
@@ -596,6 +597,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       ? nextModel.experimentDefaults
       : (current.experimentDefaults || {}),
     sections: current.sections || [],
+    // Owner curation for the stakeholder view — never AI-generated, always
+    // preserved from the current model (same rationale as sections above).
+    exposedParams: current.exposedParams || [],
   });
   const applyGeneratedModel=(nextModel)=>{
     const merged=mergeGeneratedModel(model,nextModel);
