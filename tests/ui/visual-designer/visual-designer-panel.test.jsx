@@ -228,9 +228,6 @@ describe('Visual Designer shell', () => {
   it('auto-links a newly added queue from the currently selected source when the connection is valid', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue({});
-    // The freshly added queue leaves the model with blocking validation errors,
-    // and save() now confirms via window.confirm before saving anyway.
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     render(
       <ModelDetail
@@ -248,12 +245,16 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /add queue/i }));
     await user.click(screen.getAllByRole('button', { name: /^save$/i })[0]);
 
+    // The freshly added queue leaves the model with blocking validation
+    // errors, so save() now confirms via the shared ConfirmDialog before
+    // saving anyway.
+    await user.click(await screen.findByRole('button', { name: 'Confirm' }));
+
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       bEvents: expect.arrayContaining([
         expect.objectContaining({ id: 'arrive', effect: 'ARRIVE(Patient, Queue 3)' }),
       ]),
     }));
-    confirmSpy.mockRestore();
   }, 15000);
 
   it('persists layout changes through the normal save path', async () => {

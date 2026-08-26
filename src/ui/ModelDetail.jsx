@@ -45,6 +45,7 @@ import { resolveRunAdmissionTier }          from "../engine/run-admission.js";
 import { AdaptiveBatchPanel }               from "./execute/AdaptiveBatchPanel.jsx";
 import { normalizeModelConditions }         from "../model/conditionFormat.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { useConfirm } from "./shared/useConfirm.jsx";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "distances", "goals", "graph", "experimentDefaults"];
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
@@ -410,6 +411,7 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
 
 const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,overrides={},initialTab})=>{
   const { C, FONT } = useTheme();
+  const { confirm, confirmDialog } = useConfirm();
   const [model,setModel]=useState(()=>{
     if(!modelData) return null;
     return normalizeModelConditions({
@@ -659,11 +661,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     return()=>document.removeEventListener('keydown',onKey);
   },[]);
 
-  const save=()=>{
+  const save=async ()=>{
     const v = validateModel(model);
     if (v.errors.length) {
       const plural = v.errors.length > 1 ? 's' : '';
-      const proceed = window.confirm(`This model has ${v.errors.length} validation error${plural} that will stop it running.\n\nSave anyway? Check Model Health to see what needs fixing.`);
+      const proceed = await confirm(`This model has ${v.errors.length} validation error${plural} that will stop it running.\n\nSave anyway? Check Model Health to see what needs fixing.`);
       if (!proceed) return;
     }
     setSaving(true);
@@ -711,8 +713,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     setDiscardKey(k=>k+1);
   };
 
-  const handleBack=()=>{
-    if((dirty||visualPending)&&!window.confirm('You have unsaved changes. Leave without saving?'))return;
+  const handleBack=async ()=>{
+    if((dirty||visualPending)&&!(await confirm('You have unsaved changes. Leave without saving?')))return;
     onBack();
   };
 
@@ -817,7 +819,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
 
   const exportJson = async () => {
     const currentValidation = validateModel(model);
-    if (currentValidation.errors.length > 0 && !window.confirm("This model has validation errors. Export anyway?")) {
+    if (currentValidation.errors.length > 0 && !(await confirm("This model has validation errors. Export anyway?"))) {
       return;
     }
     // ADR-016: re-inline schedule rows so the export is self-contained
@@ -1291,16 +1293,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               </div>
             )}
 
-            {/* Scenarios */}
-            {(model.parentModelId || (overrides.childScenarios||[]).length > 0) && (
-              <ScenariosSection
-                model={model}
-                parentModel={overrides.parentModel||null}
-                childScenarios={overrides.childScenarios||[]}
-                onOpenScenario={overrides.onOpenScenario}
-                onOpenParent={overrides.onOpenParent}
-              />
-            )}
+            {/* Scenarios — always rendered: the named-scenario manager (F-9)
+                inside ScenariosSection doesn't depend on fork relationships,
+                only on being signed in (userId). The fork-relationship UI
+                within it still self-gates on parentModelId/childScenarios. */}
+            <ScenariosSection
+              model={model}
+              parentModel={overrides.parentModel||null}
+              childScenarios={overrides.childScenarios||[]}
+              onOpenScenario={overrides.onOpenScenario}
+              onOpenParent={overrides.onOpenParent}
+              userId={overrides.userId}
+            />
           </div>)
         )}
         {tab==="entities"&&(
@@ -2011,6 +2015,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           onClose={()=>setShowOptimisePanel(false)}
         />
       )}
+      {confirmDialog}
       </div>
     </div>
   );

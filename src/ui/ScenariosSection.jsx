@@ -4,6 +4,7 @@ import { fetchRunHistory, getRunResultsJson } from "../db/models.js";
 import { compareScenarios } from "../engine/statistics.js";
 import { ScenarioComparisonTable } from "./shared/ScenarioComparisonTable.jsx";
 import { ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
+import { ScenarioManagerPanel } from "./ScenarioManagerPanel.jsx";
 import { Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
@@ -33,7 +34,7 @@ function meanOf(reps, metricPath) {
   return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
 }
 
-export function ScenariosSection({ model, parentModel, childScenarios = [], onOpenScenario, onOpenParent }) {
+export function ScenariosSection({ model, parentModel, childScenarios = [], onOpenScenario, onOpenParent, userId }) {
   const { C } = useTheme();
   const [diffScenario, setDiffScenario] = useState(null);
   const [compareState, setCompareState] = useState({}); // keyed by scenario.id
@@ -41,7 +42,14 @@ export function ScenariosSection({ model, parentModel, childScenarios = [], onOp
   const isChild = !!model.parentModelId;
   const hasChildren = childScenarios.length > 0;
 
-  if (!isChild && !hasChildren) return null;
+  // The named-scenario manager (F-9, below) is a separate, lighter concept
+  // from the model-fork relationships this section otherwise shows — it
+  // doesn't depend on isChild/hasChildren, so it renders unconditionally
+  // (subject only to its own `userId` requirement) rather than joining the
+  // fork-relationship early return.
+  if (!isChild && !hasChildren) {
+    return <ScenarioManagerPanel model={model} userId={userId} />;
+  }
 
   const handleCompareRuns = async (scenario) => {
     setCompareState(prev => ({ ...prev, [scenario.id]: { loading: true } }));
@@ -177,6 +185,10 @@ export function ScenariosSection({ model, parentModel, childScenarios = [], onOp
           </div>
         </div>
       )}
+
+      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, marginTop: 4 }}>
+        <ScenarioManagerPanel model={model} userId={userId} />
+      </div>
     </div>
   );
 }

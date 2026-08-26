@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ModelDetail } from '../../../src/ui/ModelDetail.jsx';
 
@@ -47,8 +47,7 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
     expect(onBack).toHaveBeenCalledOnce();
   });
 
-  it('Back button shows confirm dialog when model has unsaved changes', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('Back button shows confirm dialog when model has unsaved changes', async () => {
     const onBack = vi.fn();
     render(
       <ModelDetail
@@ -66,9 +65,8 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Back/i }));
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      expect.stringContaining('unsaved changes')
-    );
+    expect(within(await screen.findByRole('dialog')).getByText(/unsaved changes/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onBack).not.toHaveBeenCalled();
   });
 
@@ -90,8 +88,7 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
     expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
   });
 
-  it('Back button navigates when user confirms leaving with unsaved changes', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('Back button navigates when user confirms leaving with unsaved changes', async () => {
     const onBack = vi.fn();
     render(
       <ModelDetail
@@ -108,14 +105,15 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Back/i }));
 
-    expect(onBack).toHaveBeenCalledOnce();
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => expect(onBack).toHaveBeenCalledOnce());
   });
 
   it('Back button does NOT show confirm dialog after saving', async () => {
     // The blank fixture model has blocking validation errors, so save() asks
-    // "Save anyway?" — accept that prompt; the assertion below is only about
-    // the Back button's unsaved-changes confirm.
-    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(msg => /save anyway/i.test(msg));
+    // "Save anyway?" via the shared ConfirmDialog — accept that prompt; the
+    // assertion below is only about the Back button's unsaved-changes confirm.
     const onBack = vi.fn();
     const onRefresh = vi.fn();
     const overrides = makeOverrides();
@@ -138,6 +136,9 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
     // Save — finds the Save button (only visible when dirty)
     fireEvent.click(screen.getByRole('button', { name: /^Save$/ }));
 
+    // Accept the "Save anyway?" validation prompt
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+
     // Wait for setDirty(false) to flush — Save button disappears when dirty=false
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: /^Save$/ })).not.toBeInTheDocument()
@@ -145,14 +146,13 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
 
     // Back should now navigate without an unsaved-changes confirm
     fireEvent.click(screen.getByRole('button', { name: /Back/i }));
-    expect(confirmSpy).not.toHaveBeenCalledWith(expect.stringContaining('unsaved changes'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(onBack).toHaveBeenCalledOnce();
   });
 
   it('Back button still shows confirm dialog while a save is in flight (fire-and-forget save must not clear dirty early)', async () => {
     // Accept the "Save anyway?" validation prompt but decline the Back
     // button's unsaved-changes confirm.
-    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(msg => /save anyway/i.test(msg));
     const onBack = vi.fn();
     const overrides = makeOverrides();
     let resolveSave;
@@ -171,12 +171,14 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
     const inputs = screen.getAllByRole('textbox');
     fireEvent.change(inputs[0], { target: { value: 'New Name' } });
     fireEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' })); // accept "Save anyway?"
 
     // Save is in flight (promise not yet resolved) — the model must still be
     // treated as dirty, so navigating away still warns the user.
     fireEvent.click(screen.getByRole('button', { name: /Back/i }));
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('unsaved changes'));
+    expect(within(await screen.findByRole('dialog')).getByText(/unsaved changes/i)).toBeInTheDocument();
     expect(onBack).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
     resolveSave();
     await waitFor(() =>
@@ -187,7 +189,6 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
   it('keeps changes dirty and shows an error when saving fails', async () => {
     // Accept the "Save anyway?" validation prompt but decline the Back
     // button's unsaved-changes confirm.
-    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(msg => /save anyway/i.test(msg));
     const onBack = vi.fn();
     const overrides = makeOverrides();
     overrides.onSave = vi.fn().mockRejectedValue(new Error('Database is unavailable'));
@@ -205,12 +206,13 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
     const inputs = screen.getAllByRole('textbox');
     fireEvent.change(inputs[0], { target: { value: 'New Name' } });
     fireEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' })); // accept "Save anyway?"
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Database is unavailable');
     expect(screen.getByRole('button', { name: /^Save$/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Back/i }));
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('unsaved changes'));
+    expect(within(await screen.findByRole('dialog')).getByText(/unsaved changes/i)).toBeInTheDocument();
     expect(onBack).not.toHaveBeenCalled();
   });
 });
