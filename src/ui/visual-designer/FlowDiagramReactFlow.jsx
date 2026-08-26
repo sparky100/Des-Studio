@@ -16,6 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
 import { isActivityRouteEdge } from "./graph.js";
+import { computeAlignmentGuides } from "./alignmentGuides.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useFitNodeRef } from "../shared/useFitNodeRef.js";
 import { SectionPanelNode } from "./SectionPanelNode.jsx";
@@ -294,6 +295,34 @@ function toFlowEdge(edge, C, FONT) {
   };
 }
 
+// Dashed "smart guide" lines shown while dragging a single node, wherever it
+// aligns with another node's edge/center (see alignmentGuides.js). Rendered
+// as a sibling of <ReactFlow>, not a child — flowToScreenPosition's output is
+// document-relative, so it's converted to wrapper-relative pixels via the
+// wrapper div's own bounding rect.
+function AlignmentGuidesOverlay({ guides, reactFlowInstance, wrapperRef, C }) {
+  if (!guides.length || !reactFlowInstance || !wrapperRef.current) return null;
+  const rect = wrapperRef.current.getBoundingClientRect();
+  return (
+    <svg style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
+      {guides.map((g, i) => {
+        const from = g.orientation === "vertical"
+          ? reactFlowInstance.flowToScreenPosition({ x: g.position, y: g.from })
+          : reactFlowInstance.flowToScreenPosition({ x: g.from, y: g.position });
+        const to = g.orientation === "vertical"
+          ? reactFlowInstance.flowToScreenPosition({ x: g.position, y: g.to })
+          : reactFlowInstance.flowToScreenPosition({ x: g.to, y: g.position });
+        return (
+          <line key={i}
+            x1={from.x - rect.left} y1={from.y - rect.top}
+            x2={to.x - rect.left} y2={to.y - rect.top}
+            stroke={C.pink} strokeWidth={1} strokeDasharray="4,4" />
+        );
+      })}
+    </svg>
+  );
+}
+
 function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId }) {
   const { C, FONT } = useTheme();
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -406,6 +435,9 @@ export function FlowDiagramReactFlow({
   const [dragOver, setDragOver] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [focusedSectionId, setFocusedSectionId] = useState(null);
+  const [alignmentGuides, setAlignmentGuides] = useState([]);
+  const [reactFlowInstance, setReactFlowInstance] = useState(null);
+  const wrapperRef = useRef(null);
   const suppressViewportSyncRef = useRef(true);
   const nodeClickHandledRef = useRef(false);
   const boxSelectingRef = useRef(false);
@@ -469,6 +501,12 @@ export function FlowDiagramReactFlow({
     return flowNodes;
   }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet, matchedNodeIds]);
 
+  // Ref-synced copy of `nodes` so onNodeDrag/onNodeDragStop's alignment-guide
+  // computation always reads current node positions, not a stale closure
+  // captured whenever those handlers were last created.
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+
   const edges = useMemo(() => {
     return (graph.edges || []).map(e => {
       // An activity's outgoing route (single-destination or one branch of a
@@ -509,6 +547,7 @@ export function FlowDiagramReactFlow({
 
   return (
     <div
+      ref={wrapperRef}
       aria-label="Visual Designer canvas"
       onDragOver={event => {
         if (!canEdit) return;
@@ -532,6 +571,7 @@ export function FlowDiagramReactFlow({
         });
       }}
       style={{
+        position: "relative",
         height: "clamp(400px, calc(100vh - 260px), 900px)",
         minHeight: 380,
         width: "100%",
@@ -548,6 +588,7 @@ export function FlowDiagramReactFlow({
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        onInit={setReactFlowInstance}
         defaultViewport={graph.viewport || { x: 0, y: 0, zoom: 1 }}
         minZoom={0.1}
         maxZoom={2}
@@ -616,11 +657,27 @@ export function FlowDiagramReactFlow({
             }
           }
         }}
+        onNodeDrag={(_event, node, draggingNodes) => {
+          if ((draggingNodes?.length || 1) > 1 || node.type === "sectionPanel") {
+            if (alignmentGuides.length) setAlignmentGuides([]);
+            return;
+          }
+          const others = nodesRef.current.filter(n => n.id !== node.id && n.type !== "sectionPanel");
+          const zoom = reactFlowInstance?.getViewport().zoom ?? 1;
+          setAlignmentGuides(computeAlignmentGuides(node, others, zoom).guides);
+        }}
         onNodeDragStop={(_, node, movedNodes = []) => {
+          setAlignmentGuides([]);
           const moved = movedNodes.length ? movedNodes : [node];
-          const movedPositions = moved.map(item => ({ id: item.id, x: item.position.x, y: item.position.y }));
+          let movedPositions = moved.map(item => ({ id: item.id, x: item.position.x, y: item.position.y }));
+          if (moved.length === 1 && node.type !== "sectionPanel") {
+            const others = nodesRef.current.filter(n => n.id !== node.id && n.type !== "sectionPanel");
+            const zoom = reactFlowInstance?.getViewport().zoom ?? 1;
+            const { snappedPosition } = computeAlignmentGuides(node, others, zoom);
+            movedPositions = [{ id: node.id, x: snappedPosition.x, y: snappedPosition.y }];
+          }
           if (onNodesMove) onNodesMove(movedPositions);
-          else if (!movedNodes.length) onNodeMove?.(node.id, node.position);
+          else if (!movedNodes.length) onNodeMove?.(node.id, movedPositions[0]);
         }}
         onMoveEnd={(_, viewport) => {
           if (suppressViewportSyncRef.current) {
@@ -652,6 +709,7 @@ export function FlowDiagramReactFlow({
           setFocusedSectionId={setFocusedSectionId}
         />
       </ReactFlow>
+      <AlignmentGuidesOverlay guides={alignmentGuides} reactFlowInstance={reactFlowInstance} wrapperRef={wrapperRef} C={C} />
     </div>
   );
 }
