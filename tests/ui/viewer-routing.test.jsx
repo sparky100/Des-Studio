@@ -76,6 +76,21 @@ describe('access-role routing', () => {
     sessionStorage.clear();
   });
 
+  it('routes a viewer-role user to the stakeholder surface instead of the modelling environment', async () => {
+    mockFetchModels.mockResolvedValue([sharedModel({ 'user-1': 'viewer' })]);
+    window.history.pushState(null, '', '/#model/shared-1');
+
+    render(<App />);
+
+    // The stakeholder surface is up: model identity + the shared-with-you line…
+    expect(await screen.findByRole('heading', { name: 'Branch Staffing' }, { timeout: 10000 })).toBeInTheDocument();
+    expect(screen.getByText(/shared with you/i)).toBeInTheDocument();
+    // …and none of the modelling environment's chrome.
+    expect(screen.queryByRole('button', { name: /^design$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^access$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^overview$/i })).not.toBeInTheDocument();
+  }, 15000);
+
   it('gives an editor-role user ModelDetail without the owner-only Access tab', async () => {
     mockFetchModels.mockResolvedValue([sharedModel({ 'user-1': 'editor' })]);
     window.history.pushState(null, '', '/#model/shared-1');

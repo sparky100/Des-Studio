@@ -26,6 +26,7 @@ import { AppNavBar }                        from "./ui/AppNavBar.jsx";
 import { ModelLibrary }                     from "./ui/ModelLibrary.jsx";
 import { extractImportedModelPayload }      from "./ui/shared/utils.js";
 import { ModelDetail }                      from "./ui/ModelDetail.jsx";
+import { StakeholderView }                  from "./ui/StakeholderView.jsx";
 import { validateModel }                    from "./engine/validation.js";
 import { decodeModelFromUrl, validateLinkModel } from "./utils/importLink.js";
 import { ImportPreview }                    from "./ui/ImportPreview.jsx";
@@ -587,6 +588,9 @@ export default function App({ onThemeChange }){
     const accessRole = model?.access?.[uid];
     const isOwner = isLocal || model?.owner_id === uid;
     const canEdit = isOwner || accessRole === 'editor';
+    // Viewer-role users get the simplified stakeholder surface (run + curated
+    // settings + results) instead of the modelling environment.
+    const isViewer = !isOwner && accessRole === 'viewer';
     const parentModel = model?.parentModelId ? models.find(m => m.id === model.parentModelId) : null;
     const childScenarios = models.filter(m => m.parentModelId === openId);
     return(
@@ -609,6 +613,20 @@ export default function App({ onThemeChange }){
             setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
           }}
         >
+          {isViewer ? (
+            <StakeholderView
+              model={model}
+              plan={profile?.plan || 'free'}
+              isAdmin={isAdmin}
+              tierPolicies={tierPolicies || undefined}
+              onBack={()=>{
+                setOpenId(null);
+                setLocalModel(null);
+                welcomeShownRef.current = true;
+                setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
+              }}
+            />
+          ) : (
           <ModelDetail modelId={openId}
             modelData={model}
             initialTab={openModelOptions.initialTab}
@@ -658,6 +676,7 @@ export default function App({ onThemeChange }){
               },
             }}
           />
+          )}
         </ErrorBoundary>
         {helpOpen && (
           <HelpAssistant
