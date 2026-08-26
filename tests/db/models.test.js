@@ -1444,6 +1444,67 @@ describe('Sprint 71 — persistence layer', () => {
       expect(normalized.entityTypes[0].skillProfiles[1].priority).toBe(1);
     });
 
+    // The stakeholder run surface adds an owner-curated `exposedParams` array
+    // to model_json (which parameters a viewer-role user may vary, plus
+    // per-knob businessLabel/min/max). Round-trip assertion required per this
+    // repo's schema contract.
+    it('round-trips exposedParams through saveModel and norm', async () => {
+      const model = {
+        name: 'Exposed params test',
+        entityTypes: [{ id: 'et-teller', name: 'Teller', role: 'server', count: 2 }],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+        exposedParams: [
+          { path: 'entityTypes.et-teller.count', businessLabel: 'Number of tellers', min: 1, max: 10 },
+          { path: 'queues.q-main.capacity' },
+        ],
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'exposed-params-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json.exposedParams).toEqual([
+        { path: 'entityTypes.et-teller.count', businessLabel: 'Number of tellers', min: 1, max: 10 },
+        { path: 'queues.q-main.capacity' },
+      ]);
+
+      const dbRow = {
+        id: 'exposed-params-id',
+        name: model.name,
+        owner_id: 'u1',
+        entity_types: insertArg.entity_types,
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: insertArg.model_json,
+      };
+      const normalized = norm(dbRow);
+      expect(normalized.exposedParams).toEqual(model.exposedParams);
+    });
+
+    it('defaults exposedParams to an empty array and omits it from model_json when absent', async () => {
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'no-exposed-id', name: 'Plain', owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel({ name: 'Plain', entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [] }, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json).not.toHaveProperty('exposedParams');
+      expect(norm({ id: 'x', name: 'Plain', owner_id: 'u1', model_json: {} }).exposedParams).toEqual([]);
+    });
+
     // Entity family/inheritance (Phase 2, 2b) adds an optional `parentTypeId`
     // field to entityTypes[] entries. Same as skillProfiles.priority above,
     // it rides along inside the whitelisted `entityTypes` array but needs its

@@ -209,4 +209,26 @@ Landed as 5 commits on this branch: picker scaling; the one-modal-system foundat
 
 ---
 
+## 10. Status — Stakeholder View implemented (2026-08-26, same branch): a run-only surface for viewer-role business users
+
+A new capability, prompted by a real need ("I want to share a model with a business user… let them explore a model of their business domain") rather than an existing register item — none of §3.3's items covered it, and a research pass confirmed every existing sharing door was wrong for the purpose: share links are frozen results snapshots of one past run (no Run, no parameters); public+fork lands the recipient in the full editor on a private copy; and granting `viewer` access dropped them into the **complete modelling environment**, because `isOwner`/`canEdit` were hardcoded `true` where `ModelDetail` is rendered (`App.jsx`) — the read-only gating machinery throughout `ModelDetail` was fully built but never wired, so viewers saw even the owner-only Access/Versions tabs and their edits failed only as opaque RLS errors at save time.
+
+What shipped, as 5 commits:
+
+| Piece | Notes |
+|---|---|
+| `exposedParams` model field + `src/engine/exposed-params.js` | Owner-curated list of parameters a viewer may vary, chosen from `enumerateSweepableParams()`' output, stored in model_json as identity + curation fields only (`{path, businessLabel?, min?, max?}`) — never `currentValue` (can be `Infinity`). `resolveExposedParams()` reconciles stored entries against a fresh enumeration each render (mandatory, since `applySweepValues()` silently no-ops on missing targets); `clampExposedValue()` applies bounds, flooring queue-capacity knobs at 1 (0 means unlimited). Round-trip test added per the schema contract |
+| Allowlist carry-through | Export (`buildModelExportPayload`), import (`extractImportedModelPayload`), and AI-apply (`mergeGeneratedModel`) all preserve `exposedParams` — each was a whitelist rebuild that would otherwise silently drop it |
+| Real `isOwner`/`canEdit` + `'none'`-role fixes | `App.jsx` now passes the computed values into `ModelDetail` (editors correctly lose the owner-only tabs; their RLS-level inability to write `des_models` remains a pre-existing known issue). The Remove-collaborator button deletes the access key instead of writing the truthy `"none"`, and the My Models filter checks roles strictly — a removed collaborator's model no longer lingers in their library |
+| "Business view" curation section (Access tab, owner-only) | Pick a parameter from the sweepable list, give it a business-friendly name, optionally bound it; orphaned entries (deleted/renamed/reordered targets) are flagged with a warning and removable. Persists via the normal dirty→Save route |
+| `src/ui/StakeholderView.jsx` + viewer routing | Viewer-role users now branch to a single clean page: model name/description, the exposed knobs (clamped, resettable), Run, progress + cancel, and KPI results via the exported `SummaryCardGrid`. Runs are N in-browser replications (`runReplications`, the ScenarioManagerPanel/AdaptiveBatchPanel headless pattern), N from the owner's `experimentDefaults` clamped to the viewer's admission tier, ADR-016 schedules resolved before any run (default schedule preferred, all rows when none is default, Run disabled while loading). Nothing persisted in v1. All strings follow the plain-English rule |
+
+Deliberately deferred, noted for follow-up: the animated "watch it run" canvas (confirmed cleanly extractable from `ExecuteCanvas`); charts on the results page (needs `collectTimeSeries`); a shared results space (a viewer's saved runs would be invisible to the owner under the current `run_by`-scoped RLS); owner-plan-based admission (currently the *viewer's* tier gates run size); rewriting `exposedParams` paths inside `renameStateVariable` (state-variable knobs orphan on rename today, visibly flagged in the curation UI).
+
+Also this session, unrelated housekeeping: the `scenarios` table migration from item F-9 (§9 above) had never been applied to the live Supabase project — applied now, fixing "Could not find the table 'public.scenarios' in the schema cache".
+
+Verified: lint/typecheck clean per commit, build clean, targeted suites green per commit, and a final full-suite run at 217/220 files — the 2 pre-existing `supabase/functions/*` failures plus one occurrence of the known `@xyflow/react` mock-isolation flake (`sprint-9b-roundtrip.test.jsx`, the exact "zustand provider" signature documented in Sprint 94's entry; passes standalone 5/5).
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*

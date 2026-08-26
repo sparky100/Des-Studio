@@ -270,6 +270,12 @@ export interface DesModelJson {
   graph?: ModelGraphMetadata;
   /** Global skill registry for server-type skills. */
   skills?: string[];
+  /**
+   * Owner-curated parameters a viewer-role user may vary on the stakeholder
+   * run surface. `path` matches an entry from enumerateSweepableParams();
+   * everything else about the parameter is re-derived at render time.
+   */
+  exposedParams?: Array<{ path: string; businessLabel?: string; min?: number; max?: number }>;
 }
 
 export interface ExperimentDefaults {
