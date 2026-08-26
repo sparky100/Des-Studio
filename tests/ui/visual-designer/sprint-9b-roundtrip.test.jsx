@@ -34,7 +34,7 @@ const mockFetchRunHistory   = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 const mockRunReplications   = vi.hoisted(() => vi.fn());
 const mockStreamNarrative   = vi.hoisted(() => vi.fn());
 
-vi.mock('@xyflow/react', () => ({
+vi.mock('../../../src/ui/shared/xyflow.js', () => ({
   Background:   () => null,
   Controls:     () => null,
   Handle:       () => <span />,

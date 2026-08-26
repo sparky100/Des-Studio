@@ -43,8 +43,19 @@ export function makeMM1Model(lambda = 0.9, mu = 1.0) {
  * Step-based runner: drives the engine until targetServed entities are done,
  * then returns the mean wait of the steady-state slice (skipping the first
  * `warmup` completions by arrival order).
+ *
+ * async + a periodic yield: vitest's worker RPC layer enforces a hard,
+ * non-configurable ~60s heartbeat timeout (see the identical note in
+ * tests/engine/determinism-parity.test.js) that a long enough fully-
+ * synchronous run can trip, crashing the whole `vitest run`. This helper's
+ * heaviest callers (the M/M/c scenarios in golden.test.js/benchmarks.test.js)
+ * are comfortably under that on their own, but full-suite runs share this
+ * environment's small (4-core) CPU budget across many parallel workers,
+ * and contention alone has been enough to push them close to it — so this
+ * yields unconditionally rather than relying on a margin that shrinks under
+ * load. Every caller already awaits (or now does, per this change).
  */
-export function runUntilServed(model, targetServed, seed, warmup) {
+export async function runUntilServed(model, targetServed, seed, warmup) {
   const engine = buildEngine(model, seed, 999999);
   let steps = 0;
   while (steps < 500000) {
@@ -52,6 +63,9 @@ export function runUntilServed(model, targetServed, seed, warmup) {
     steps++;
     if (done) break;
     if (steps % 50 === 0 && engine.getSnap().served >= targetServed) break;
+    if (steps % 500 === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
   }
   const snap = engine.getSnap();
   const allDone = snap.entities

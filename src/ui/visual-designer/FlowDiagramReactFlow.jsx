@@ -12,7 +12,7 @@ import {
   Position,
   ReactFlow,
   SelectionMode as ReactFlowSelectionMode,
-} from "@xyflow/react";
+} from "../shared/xyflow.js";
 import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
 import { isActivityRouteEdge } from "./graph.js";

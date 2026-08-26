@@ -5,6 +5,14 @@ import { cleanup } from '@testing-library/react';
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // jsdom's localStorage/sessionStorage are tied to the environment, not to
+  // any one test file — under vitest 3 the same jsdom environment can be
+  // reused across files that land on the same worker, so a value one file's
+  // component writes (e.g. BottomPanel.jsx's "des.bottomPanel.tab" preference)
+  // can leak into a later, unrelated file's fresh render and change what it
+  // defaults to. Clear both after every test, same rationale as clearAllMocks.
+  try { globalThis.localStorage?.clear(); } catch { /* storage unavailable outside jsdom */ }
+  try { globalThis.sessionStorage?.clear(); } catch { /* storage unavailable outside jsdom */ }
 });
 
 if (typeof globalThis.ResizeObserver === 'undefined') {

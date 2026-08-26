@@ -11,7 +11,7 @@ import {
   Panel,
   Position,
   ReactFlow,
-} from "@xyflow/react";
+} from "../shared/xyflow.js";
 import "@xyflow/react/dist/style.css";
 import { TOKEN_COLORS } from "../shared/tokens.js";
 import { useFitNodeRef } from "../shared/useFitNodeRef.js";

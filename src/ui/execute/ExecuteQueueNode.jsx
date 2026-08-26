@@ -2,7 +2,7 @@
 // Registered as nodeType "queueNode" in ExecuteCanvas.
 // data.liveData shape: { depth, entities, discipline, clock }
 import { useEffect, useRef, useState } from "react";
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position } from "../shared/xyflow.js";
 import { TOKEN_COLORS } from "../shared/tokens.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { Sparkline } from "./Sparkline.jsx";

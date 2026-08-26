@@ -2,7 +2,7 @@
 // along the bezier path when routing events fire (F9C.6).
 // Registered as edgeType "animatedEdge" in ExecuteCanvas.
 // data.tokens shape: [{ id, color }] — max 5 per edge, managed by ExecuteCanvas.
-import { BaseEdge, getBezierPath } from "@xyflow/react";
+import { BaseEdge, getBezierPath } from "../shared/xyflow.js";
 
 const ANIM_DUR = "0.3s";
 

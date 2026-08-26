@@ -142,7 +142,7 @@ describe('periodic entity pruning — engine-level correctness', () => {
     expect(Math.abs(recomputedAvgWait - result.summary.avgWait)).toBeLessThan(0.5);
   });
 
-  test('live entities array stays bounded over a long high-churn run, unlike cumulative throughput', () => {
+  test('live entities array stays bounded over a long high-churn run, unlike cumulative throughput', { timeout: 30000 }, async () => {
     const model = makeFastChurnModel();
     const engine = buildEngine(model, 11, 0, 2500, null, 150000);
 
@@ -154,6 +154,13 @@ describe('periodic entity pruning — engine-level correctness', () => {
       if (cycles % 200 === 0) {
         const liveCount = engine.getSnap().entities.length;
         if (liveCount > maxLiveEntities) maxLiveEntities = liveCount;
+      }
+      // See tests/engine/determinism-parity.test.js for why: yields
+      // periodically so full-suite CPU contention on this environment's
+      // small core count can't push this past vitest's hard ~60s worker
+      // RPC heartbeat timeout.
+      if (cycles % 500 === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
       }
       if (done) break;
     }

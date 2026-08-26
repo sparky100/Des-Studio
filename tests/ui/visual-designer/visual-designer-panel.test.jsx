@@ -15,7 +15,7 @@ const disconnectedSourceModel = {
   cEvents: [],
 };
 
-vi.mock('@xyflow/react', () => ({
+vi.mock('../../../src/ui/shared/xyflow.js', () => ({
   Background: () => <div data-testid="flow-background" />,
   Controls: () => <div data-testid="flow-controls" />,
   Handle: () => <span data-testid="flow-handle" />,

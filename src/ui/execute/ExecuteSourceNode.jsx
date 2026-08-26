@@ -4,7 +4,7 @@
 // arrivalKey is the max entity-id of this source's customer type — strictly
 // increases on each arrival, used to trigger the pulse without needing FEL access.
 import { useEffect, useRef, useState } from "react";
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position } from "../shared/xyflow.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 const PULSE_DURATION_MS = 500;

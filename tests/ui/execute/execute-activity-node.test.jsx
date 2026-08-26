@@ -2,8 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { ExecuteActivityNode } from "../../../src/ui/execute/ExecuteActivityNode.jsx";
 
-vi.mock("@xyflow/react", async () => {
-  const actual = await vi.importActual("@xyflow/react");
+vi.mock("../../../src/ui/shared/xyflow.js", async () => {
+  const actual = await vi.importActual("../../../src/ui/shared/xyflow.js");
   return {
     ...actual,
     Handle: () => null,

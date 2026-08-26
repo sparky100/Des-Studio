@@ -36,6 +36,16 @@ export default defineConfig({
     ],
     globals: true,
     setupFiles: ['tests/setup.js'],
+    // Vitest reuses one jsdom `window`/environment across test files that
+    // land on the same worker (this became visible under vitest 3 in a way
+    // it wasn't under 1.x — a handful of tests were relying on a fresh
+    // `window` per file). `vi.stubGlobal(...)`-based mocks were already
+    // fine either way; these two flags auto-restore them (and any stubbed
+    // process.env vars) after every test regardless, closing off the
+    // easiest way for a test to leak global state into an unrelated file
+    // that happens to share its worker.
+    unstubGlobals: true,
+    unstubEnvs: true,
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
