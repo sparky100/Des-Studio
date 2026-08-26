@@ -23,6 +23,18 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   };
 }
 
+// jsdom never runs layout, so offsetParent is hardcoded to always return
+// null (https://github.com/jsdom/jsdom/issues/1590) — that breaks
+// useFocusTrap.js's/FeedbackModal.jsx's getFocusable() filter
+// (`el.offsetParent !== null`, used to skip display:none elements), which
+// would otherwise treat every element as hidden and never autofocus or
+// trap focus in tests. Approximate "visible" as "attached under a parent"
+// instead, which is enough for jsdom-rendered dialog content.
+Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
+  configurable: true,
+  get() { return this.parentNode; },
+});
+
 // Mock Supabase client — never hit real DB in tests
 const mockQuery = {
   select: vi.fn().mockReturnThis(),
