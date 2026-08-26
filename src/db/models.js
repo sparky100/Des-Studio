@@ -131,6 +131,7 @@ export function norm(r) {
     epoch:          modelJson.epoch ?? null,
     dataSources:    modelJson.dataSources ?? [],
     sections:       modelJson.sections ?? [],
+    exposedParams:  modelJson.exposedParams ?? [],
     owner_id:       r.owner_id,
     owner:          r.owner_id,
     createdAt:      r.created_at,
@@ -161,6 +162,7 @@ function modelJsonFromModel(model = {}) {
   };
   if (model.dataSources?.length) json.dataSources = model.dataSources;
   if (model.sections?.length) json.sections = model.sections;
+  if (model.exposedParams?.length) json.exposedParams = model.exposedParams;
   if (model.notes) json.notes = model.notes;
   return json;
 }
