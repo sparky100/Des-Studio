@@ -779,6 +779,8 @@ import { buildEngine } from '../../engine/index.js'; // in execute/index.jsx onl
 
 Testing is split into layers. Each layer has a defined scope, tooling, and a completion gate that must pass before the relevant sprint is declared done. The codebase now has strong coverage across all layers, and the full suite is enforced in CI (`.github/workflows/ci.yml`).
 
+Default to `npm run test:quick` (`vitest run --changed`) while iterating — see §13 for when the full suite is actually needed.
+
 ### 12.1 Current Test Coverage State
 
 Approximate counts as of 2026-08-24 (Sprint 89) — the `tests/` tree and `npm test` output are authoritative, not this table:
@@ -1136,6 +1138,11 @@ npm run dev                          # Vite dev server (localhost:5173)
 npm test                             # Full suite, single pass (vitest run) — this is what CI runs, sharded
 npm run test:watch                   # Watch mode (vitest)
 npm run test:quick                   # vitest run --changed — only tests related to uncommitted changes
+# Default to test:quick while iterating — npm test's full suite runs
+# determinism-parity.test.js, perf_timing.test.js, and
+# tests/engine/benchmarks/** regardless of what changed, and those alone
+# account for several minutes of CPU-bound simulation. Reserve npm test
+# (the full suite) for the final check before a commit/push.
 npm test -- three-phase              # Run three-phase tests only
 npm test -- distributions            # Run distribution tests only
 npm test -- conditions               # Run condition evaluator tests only
