@@ -340,7 +340,7 @@ describe('accessibility pass', () => {
       render(<ExecutePanel model={runnableModel} modelId="model-1" userId="user-1" />);
       fireEvent.click(screen.getByRole('button', { name: /edit/i }));
 
-      const animateToggle = await screen.findByRole('checkbox', { name: /show movement during auto-run/i });
+      const animateToggle = await screen.findByRole('checkbox', { name: /show entity movement/i });
       expect(animateToggle).not.toBeChecked();
     } finally {
       vi.unstubAllGlobals();
@@ -361,7 +361,7 @@ describe('accessibility pass', () => {
       render(<ExecutePanel model={runnableModel} modelId="model-1" userId="user-1" />);
       fireEvent.click(screen.getByRole('button', { name: /edit/i }));
 
-      const animateToggle = await screen.findByRole('checkbox', { name: /show movement during auto-run/i });
+      const animateToggle = await screen.findByRole('checkbox', { name: /show entity movement/i });
       await waitFor(() => expect(animateToggle).toBeChecked());
     } finally {
       vi.unstubAllGlobals();

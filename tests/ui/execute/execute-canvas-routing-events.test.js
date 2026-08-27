@@ -206,3 +206,60 @@ describe("detectRoutingEvents — completion is scoped to the entity's own activ
     expect(detectRoutingEvents(prevSnap, currSnap, graph)).toEqual([]);
   });
 });
+
+describe("detectRoutingEvents — same-cycle re-seize (the states a real run actually shows)", () => {
+  // The engine snapshots once per A→B→C cycle, AFTER Phase C — so on a
+  // non-saturated model a routed entity is re-claimed before any snapshot and
+  // consecutive snaps show serving→serving with a changed lastQueue.
+  test("serving→serving with a new lastQueue animates the routing hop AND the seize", () => {
+    const graph = deriveGraphFromModel(twoStageClinicModel);
+    const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue", serviceStart: 2 }] };
+    const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Consultant Queue", serviceStart: 7 }] };
+
+    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+
+    const routingEdge = findEdge(graph, e =>
+      e.source === "routing" && e.from === "activity:start-triage" && e.to === "queue:consult-q");
+    const seizeEdge = findEdge(graph, e =>
+      e.source === "condition" && e.from === "queue:consult-q" && e.to === "activity:start-consult");
+    expect(events).toEqual([
+      { edgeId: routingEdge.id, entityType: "Patient" },
+      { edgeId: seizeEdge.id, entityType: "Patient" },
+    ]);
+  });
+
+  test("a changed serviceStart with an unchanged lastQueue (same-queue loop-back) still animates", () => {
+    const graph = deriveGraphFromModel(twoStageClinicModel);
+    const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue", serviceStart: 2 }] };
+    const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue", serviceStart: 9 }] };
+
+    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+
+    // No loop edge exists in this fixture, but the re-seize into the same
+    // queue's activity must still animate the condition edge.
+    const seizeEdge = findEdge(graph, e =>
+      e.source === "condition" && e.from === "queue:triage-q");
+    expect(events).toEqual([{ edgeId: seizeEdge.id, entityType: "Patient" }]);
+  });
+
+  test("an unchanged active entity (still mid-service) animates nothing", () => {
+    const graph = deriveGraphFromModel(twoStageClinicModel);
+    const entity = { id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue", serviceStart: 2 };
+    expect(detectRoutingEvents({ entities: [entity] }, { entities: [{ ...entity }] }, graph)).toEqual([]);
+  });
+
+  test("a new entity seized in its arrival cycle animates the arrival AND the seize", () => {
+    const graph = deriveGraphFromModel(twoStageClinicModel);
+    const prevSnap = { entities: [] };
+    const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue", serviceStart: 0 }] };
+
+    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+
+    const arrivalEdge = findEdge(graph, e => e.source === "arrival" && e.to === "queue:triage-q");
+    const seizeEdge = findEdge(graph, e => e.source === "condition" && e.from === "queue:triage-q");
+    expect(events).toEqual([
+      { edgeId: arrivalEdge.id, entityType: "Patient" },
+      { edgeId: seizeEdge.id, entityType: "Patient" },
+    ]);
+  });
+});

@@ -167,23 +167,23 @@ export function HeaderAccountMenu({
         aria-label="More options"
         title="More options"
         onClick={() => setOpen((o) => !o)}
+        // Sized to match its header siblings (the settings gear's navBtnStyle
+        // recipe and the 28px avatar) — it previously stood out at 40x40.
         style={{
-          width: 40,
-          height: 40,
-          minWidth: 40,
-          minHeight: 40,
+          height: 28,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: open ? C.surfaceHover : "transparent",
+          background: C.surfaceHover,
           border: `1px solid ${open ? C.accent : C.border}`,
-          borderRadius: 8,
+          borderRadius: 5,
           color: open ? C.accent : C.muted,
           cursor: "pointer",
-          fontSize: 18,
+          fontSize: 12,
           fontWeight: 700,
           letterSpacing: 1,
           lineHeight: 1,
+          padding: "5px 10px",
           fontFamily: FONT,
         }}
       >

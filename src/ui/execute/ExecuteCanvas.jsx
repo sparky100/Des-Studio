@@ -172,24 +172,54 @@ export function detectRoutingEvents(prevSnap, currSnap, graph) {
       .map(e => e.to);
   };
 
+  const pushArrivalEdge = (queueName, entityType) => {
+    const edge = findEdge(e =>
+      e.source === "arrival" && nodeById.get(e.to)?.label === queueName);
+    if (edge) events.push({ edgeId: edge.id, entityType });
+  };
+  const pushSeizeEdge = (queueName, entityType) => {
+    const edge = findEdge(e =>
+      e.source === "condition" && nodeById.get(e.from)?.label === queueName);
+    if (edge) events.push({ edgeId: edge.id, entityType });
+  };
+
   for (const curr of currSnap.entities || []) {
     if (curr.role === "server") continue;
     const prev = prevById.get(curr.id);
     const wasActive = prev && prev.status !== "waiting" && prev.status !== "done" && prev.status !== "reneged";
+    const currActive = curr.status !== "waiting" && curr.status !== "done" && curr.status !== "reneged";
 
     if (!prev) {
-      // New entity arrived → Source → Queue edge
+      // New entity arrived → Source → Queue edge. When the entity was seized
+      // in its very arrival cycle (Phase B arrives, Phase C claims — the
+      // common case on a non-saturated model), `queue` is already deleted and
+      // `lastQueue` holds the arrival queue: animate the arrival hop AND the
+      // seize hop, since both happened between these two snapshots.
       if (curr.queue) {
-        const edge = findEdge(e =>
-          e.source === "arrival" && nodeById.get(e.to)?.label === curr.queue);
-        if (edge) events.push({ edgeId: edge.id, entityType: curr.type });
+        pushArrivalEdge(curr.queue, curr.type);
+      } else if (currActive && curr.lastQueue) {
+        pushArrivalEdge(curr.lastQueue, curr.type);
+        pushSeizeEdge(curr.lastQueue, curr.type);
       }
     } else if (prev.status === "waiting" && curr.status !== "waiting"
                && curr.status !== "done" && curr.status !== "reneged") {
       // Entity seized from queue → Queue → Activity edge
-      const edge = findEdge(e =>
-        e.source === "condition" && nodeById.get(e.from)?.label === prev.queue);
-      if (edge) events.push({ edgeId: edge.id, entityType: curr.type });
+      pushSeizeEdge(prev.queue, curr.type);
+    } else if (wasActive && currActive
+               && (prev.lastQueue !== curr.lastQueue || prev.serviceStart !== curr.serviceStart)) {
+      // Routed AND re-seized within one engine cycle: the snapshot is taken
+      // after Phase C, so the intermediate "waiting" state is never observable
+      // — the entity goes serving(lastQueue=Q1) → serving(lastQueue=Q2)
+      // directly. This is the dominant case on any non-saturated model.
+      // A changed serviceStart with an unchanged lastQueue is a loop-back to
+      // the same queue (re-claim resets serviceStart — engine/entities.js).
+      const activityIds = activityIdsFedByQueue(prev.lastQueue ?? prev.queue);
+      const destQueue = curr.lastQueue;
+      const routingEdge = findEdge(e => e.source === "routing" && activityIds.includes(e.from)
+                              && nodeById.get(e.to)?.label === destQueue)
+        || findEdge(e => e.source === "routing" && nodeById.get(e.to)?.label === destQueue);
+      if (routingEdge) events.push({ edgeId: routingEdge.id, entityType: curr.type });
+      pushSeizeEdge(destQueue, curr.type);
     } else if (wasActive && curr.status === "waiting" && curr.queue) {
       // Entity routed onward to another queue (plain RELEASE, conditional
       // routing[], or probabilisticRouting[]) → Activity → Queue "routing" edge

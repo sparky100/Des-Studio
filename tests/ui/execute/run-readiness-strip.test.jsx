@@ -99,3 +99,23 @@ describe("ExecutePanel — run readiness strip", () => {
     expect(screen.queryByText("Details ▸")).not.toBeInTheDocument();
   });
 });
+
+describe("ExecutePanel — animation toggle persistence", () => {
+  it("persists the checkbox choice via user settings (previously the persisting handler was dead code)", async () => {
+    const saveUserSettings = (await import("../../../src/db/models.js")).saveUserSettings;
+    mockFetchUserSettings.mockResolvedValue({ schemaVersion: 1, settings: {} });
+
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" plan="pro" />);
+    await waitFor(() => expect(mockFetchModelSchedules).toHaveBeenCalled());
+    openSetup();
+
+    const checkbox = screen.getByRole("checkbox", { name: /show entity movement/i });
+    expect(checkbox).toBeChecked();
+    fireEvent.click(checkbox);
+
+    await waitFor(() => expect(saveUserSettings).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ execute: expect.objectContaining({ animateTokens: false }) })
+    ));
+  });
+});
