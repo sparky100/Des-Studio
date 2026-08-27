@@ -678,8 +678,8 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch entity, sends each member to `QueueName`. `QueueName` must reference a defined queue (V23). Every UNBATCH should be paired with a corresponding BATCH that created the batch entity being unbatched. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id`. `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
 | `PREEMPT` | `PREEMPT(ServerType)` | Interrupts in-progress service; displaced entity re-queues with remaining service time. |
-| `FAIL` | `FAIL(ServerType)` | Marks servers of this type as failed; interrupts in-progress service. Pair with a scheduled `REPAIR` B-event. |
-| `REPAIR` | `REPAIR(ServerType)` | Restores failed servers to idle; triggers a C-scan for waiting entities. |
+| `FAIL` | `FAIL(ServerType[, N])` | Marks up to N servers of this type as failed; interrupts in-progress service on any that must be preempted. Prefers idle servers first — busy ones are only touched once idle capacity runs out. Omitted or non-positive N means "all" servers of the type. Pair with a scheduled `REPAIR` B-event. |
+| `REPAIR` | `REPAIR(ServerType[, N])` | Restores up to N failed servers of this type to idle, oldest-failure-first; triggers a C-scan for waiting entities. Omitted or non-positive N means "all". |
 | `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2; `QueueName` must reference a defined queue. |
 | `SET` | `SET(varName, expression)` | Sets a state variable to an arithmetic expression. Supports `Entity.attrName`, state variables, `clock`, +−×÷, `min`/`max`/`abs`/`round`/`floor`/`ceil`. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to the result of an arithmetic expression. |

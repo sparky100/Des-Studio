@@ -522,8 +522,8 @@ When you open a template, simmodlr saves a **private copy** to your account. The
 | `BATCH(QueueName, Count)` | C-Event | Accumulates N entities into one batch |
 | `UNBATCH(BatchEntity)` | B-Event | Restores children from parent batch entity |
 | `PREEMPT(ServerType)` | C-Event | Interrupts busy servers; re-queues entity with remaining service |
-| `FAIL(ServerType)` | B-Event | Sets matching servers to failed status; re-queues busy entities |
-| `REPAIR(ServerType)` | B-Event | Restores failed servers to idle status |
+| `FAIL(ServerType[, N])` | B-Event | Sets up to N matching servers to failed status, idle-preferred (default: all); re-queues busy entities that must be preempted |
+| `REPAIR(ServerType[, N])` | B-Event | Restores up to N failed servers to idle status, oldest-failure-first (default: all) |
 | `SPLIT(EntityType, N, TargetQueue)` | B/C-Event | Creates N-1 clones of context entity |
 | `COSEIZE(Queue, ServerType1, ...)` | C-Event | Atomically seizes multiple server types simultaneously |
 | `MATCH(TypeA, QueueA, TypeB, QueueB, Output)` | C-Event | Pairs entities from two queues into one batch |

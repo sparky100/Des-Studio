@@ -64,8 +64,8 @@ is replaced with commented `# TODO` stubs you must complete manually.
 | `BATCH` | Accumulate N entities from a store before processing |
 | `RENEGE_OLDEST` | Remove the oldest entity from `store.items` |
 | `MATCH` | Pair entities from two stores |
-| `FAIL` | Set `resource._capacity = 0` to simulate breakdown |
-| `REPAIR` | Restore capacity after a FAIL |
+| `FAIL` | Reduce `resource._capacity` by N (or set to 0 for "all" — no N given) to simulate breakdown |
+| `REPAIR` | Restore capacity by N (or to original for "all" — no N given) after a FAIL |
 | `PREEMPT` | Switch resource to `simpy.PreemptiveResource` |
 | `RELEASE_COSEIZED` | Release each co-seized resource's `simpy.Request` individually |
 

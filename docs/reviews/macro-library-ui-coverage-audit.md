@@ -83,8 +83,11 @@ supports the feature but no picker can write it. Group B is genuine engine limit
 
 - **FINISH / PREEMPT take the first busy server** of the type — no victim-selection criterion
   (e.g. "preempt the lowest-priority in-service entity").
-- **FAIL / REPAIR are all-or-nothing per server type** — no partial `FAIL(Type, N)` for modelling a
-  single machine of a bank breaking down.
+- ~~**FAIL / REPAIR are all-or-nothing per server type** — no partial `FAIL(Type, N)` for modelling a
+  single machine of a bank breaking down.~~ **Closed by Sprint 96** — see
+  `docs/reviews/sprint-96-fail-repair-quantities-plan.md`. `FAIL(Type, N)` fails up to N servers
+  (idle-preferred, busy only once idle runs out); `REPAIR(Type, N)` repairs up to N failed servers
+  (oldest-failure-first). Omitted N keeps today's "all" behavior.
 - ~~**COSEIZE seizes exactly one server per type** — quantities like "2 Nurses + 1 Doctor" require
   duplicate server types, which the macro explicitly rejects.~~ **Closed by Sprint 95** — see
   `docs/reviews/sprint-95-coseize-quantities-plan.md`. `COSEIZE(Q, Nurse:2, Doctor)` now seizes N

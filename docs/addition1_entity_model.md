@@ -898,8 +898,8 @@ The complete macro set implemented in the engine. This is the authoritative list
 | BATCH | C-Event | 12 | Accumulates N entities per queue discipline into a parent batch entity |
 | UNBATCH | B-Event | 12 | Restores children from a parent batch to a target queue |
 | PREEMPT | B-Event | 32 | Interrupts busy server; re-queues displaced entity with remaining service time |
-| FAIL | B-Event | 32 | Sets matching servers to failed status |
-| REPAIR | B-Event | 32 | Restores failed servers to idle |
+| FAIL | B-Event | 32 | `FAIL(ServerType[, N])` — sets up to N matching servers to failed status, idle-preferred (default: all) |
+| REPAIR | B-Event | 32 | `REPAIR(ServerType[, N])` — restores up to N failed servers to idle, oldest-failure-first (default: all) |
 | SPLIT | C/B-Event | 33 | `SPLIT(EntityType, N, Queue)` — exactly 3 args. Creates N-1 clones of the context entity and routes them to Queue; records `_splitParent`/`_splitChildren`. Trigger from a one-shot context only (e.g. a cSchedule-fired B-event) — a recurring C-event condition on the same entity/queue will refire unboundedly since SPLIT doesn't change the context entity's status. |
 | COSEIZE | C-Event | 33 | Atomically seizes multiple server types simultaneously |
 | RELEASE_COSEIZED | B-Event | post-33 | `RELEASE_COSEIZED([Type1, Type2, ...], Queue?)` — atomically releases all servers claimed by a COSEIZE for the context entity and routes/re-queues it. The correct multi-resource counterpart to RELEASE; never stack separate RELEASE(Type) calls for co-seized types, since each resolves against the same cached primary-server context and only the first actually releases anything. Use COMPLETE() instead if the entity's lifecycle should end here (it also releases all co-seized servers). PREEMPT/FAIL on a co-seized resource likewise release the other co-seized resources automatically. |
