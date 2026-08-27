@@ -34,6 +34,17 @@ describe("extractServerTypes", () => {
     const effect = "COSEIZE(MDT Queue, Haematologist[Haematology], Radiologist[CTReporting], Pathologist[Haematopathology])";
     expect(extractServerTypes(effect)).toEqual(["Haematologist", "Radiologist", "Pathologist"]);
   });
+
+  // Sprint 95 — COSEIZE Type:N quantity syntax
+  test("strips a :N quantity suffix so the plain type name is returned", () => {
+    const effect = "COSEIZE(Queue, Nurse:2, Doctor)";
+    expect(extractServerTypes(effect)).toEqual(["Nurse", "Doctor"]);
+  });
+
+  test("strips both [Skill] and :N together", () => {
+    const effect = "COSEIZE(Queue, Doctor[Surgery]:2, Nurse)";
+    expect(extractServerTypes(effect)).toEqual(["Doctor", "Nurse"]);
+  });
 });
 
 describe("buildServerTypeIndex", () => {
