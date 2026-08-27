@@ -4,23 +4,16 @@ import { Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
 import { Z } from "./shared/tokens.js";
 
-export function SaveBanner({ canEdit, dirty, visualPending, saving, discardConfirm, setDiscardConfirm, onSave, onDiscard }) {
+// Layout-only changes (a moved node, nothing structural) get a single, compact
+// indicator in ModelDetailHeader's top bar — always visible without a scroll,
+// no layout reflow. This banner is reserved for `dirty` (an actual model
+// edit), which also warrants the heavier Save/Discard treatment below.
+// Previously this component ALSO rendered a lighter one-line banner for
+// layout-only changes, duplicating the header's indicator on screen at the
+// same time — reported as "very distracting" after moving a canvas object.
+export function SaveBanner({ canEdit, dirty, saving, discardConfirm, setDiscardConfirm, onSave, onDiscard }) {
   const { C, FONT } = useTheme();
-  if (!canEdit || (!dirty && !visualPending)) return null;
-  if (visualPending && !dirty) {
-    return (
-      <div role="status" style={{
-        position: "sticky", top: 0, zIndex: Z.dropdown,
-        display: "flex", alignItems: "center", gap: 10,
-        background: C.surface, color: C.amber, fontFamily: FONT, fontSize: 11,
-        padding: "6px 0", marginBottom: 8,
-      }}>
-        <span style={{ opacity: 0.8 }}>● Unsaved layout changes</span>
-        <Btn small variant="primary" onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Btn>
-      </div>
-    );
-  }
-  if (!dirty) return null;
+  if (!canEdit || !dirty) return null;
   return (
     <div role="status" style={{
       position: "sticky", top: 0, zIndex: Z.dropdown,
