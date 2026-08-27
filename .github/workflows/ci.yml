@@ -27,8 +27,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Fast tier only (unit + ui projects) — real cross-file parallelism via
+      # the default forks pool, sharded 2-way across runners on top of that.
+      # The full-simulation/benchmark/replication files run separately below
+      # in "Simulation soak", which is deliberately single-forked and NOT
+      # part of this shard split (mixing them in is what caused the 4 GB
+      # heap OOM this job used to hit on every push).
       - name: Run test suite
-        run: npx vitest run --shard=${{ matrix.shard }}/2
+        run: npx vitest run --project unit --project ui --shard=${{ matrix.shard }}/2
 
   lint:
     name: Lint
@@ -68,10 +74,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-  benchmarks:
-    name: Analytical correctness benchmarks
+  soak:
+    name: Simulation soak
     runs-on: ubuntu-latest
-    needs: test
 
     steps:
       - uses: actions/checkout@v4
@@ -85,16 +90,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: M/M/1 correctness benchmark (λ=0.9 μ=1.0 Wq=9.0, ±5%)
-        run: node tests/engine/mm1_benchmark.js
-
-      - name: M/M/c correctness benchmark (λ=1.6 μ=1.0 c=2 Wq≈1.78, ±5%)
-        run: node tests/engine/mmc_benchmark.js
+      # Full-simulation, replication, and analytical-benchmark tests
+      # (golden M/M/1 ±2%, M/M/c ±5%, determinism parity, replication CI
+      # gates, etc). Runs on every push, in parallel with the "test" job
+      # above — this is the project's correctness gate for the engine, not
+      # an optional/manual check, so it blocks merge like everything else.
+      - name: Run simulation soak suite
+        run: npm run test:soak
 
   build:
     name: Production build
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, soak]
 
     steps:
       - uses: actions/checkout@v4

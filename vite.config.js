@@ -29,13 +29,7 @@ export default defineConfig({
     'import.meta.env.VITE_BUILD_TIME': JSON.stringify(new Date().toISOString()),
   },
   test: {
-    environment: 'node',
-    environmentMatchGlobs: [
-      ['tests/ui/**',               'jsdom'],
-      ['src/ui/**/__tests__/**',    'jsdom'],
-    ],
     globals: true,
-    setupFiles: ['tests/setup.js'],
     // Vitest reuses one jsdom `window`/environment across test files that
     // land on the same worker (this became visible under vitest 3 in a way
     // it wasn't under 1.x — a handful of tests were relying on a fresh
@@ -50,17 +44,87 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/.claude/**',
+      // Deno-style `https://` imports; can't run under Node/Vitest.
+      'supabase/functions/**',
     ],
-    // Run heavy benchmark tests in their own single fork so they don't
-    // starve the parallel UI test workers of CPU time.
-    poolMatchGlobs: [
-      ['tests/benchmarks/**',        'forks'],
-      ['tests/engine/benchmarks/**', 'forks'],
-    ],
-    poolOptions: {
-      forks: {
-        singleFork: true,
+    // Three tiers, run as separate `vitest run --project <name>` invocations
+    // (see package.json's `test`/`test:soak`/`test:all` scripts) so the fast
+    // majority of the suite gets real cross-file parallelism instead of being
+    // serialised behind the handful of files that run full simulations.
+    // `poolOptions.forks.singleFork` used to be set globally with the
+    // (non-functional — poolOptions isn't scoped by poolMatchGlobs) intent of
+    // applying only to tests/benchmarks/**; that serialised every file in the
+    // repo into one child process, which both made the suite slow and let its
+    // heap grow unbounded until CI's forks OOM'd.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit',
+          environment: 'node',
+          setupFiles: ['tests/setup-node.js'],
+          testTimeout: 15000,
+          include: [
+            'tests/**/*.test.{js,ts}',
+            'src/db/**/__tests__/**/*.test.js',
+            'src/engine/**/__tests__/**/*.test.js',
+            'src/llm/**/__tests__/**/*.test.js',
+            'src/reports/**/__tests__/**/*.test.js',
+          ],
+          exclude: [
+            'tests/ui/**',
+            // Soak-tier files (see the `soak` project below).
+            'tests/benchmarks/**',
+            'tests/engine/benchmarks/**',
+            'tests/engine/determinism-parity.test.js',
+            'tests/engine/perf_timing.test.js',
+            'tests/engine/adaptive-batch.test.js',
+            'tests/engine/replication-ci.test.js',
+            'tests/engine/pruning.test.js',
+          ],
+        },
       },
-    },
+      {
+        extends: true,
+        test: {
+          name: 'ui',
+          environment: 'jsdom',
+          setupFiles: ['tests/setup-jsdom.js'],
+          testTimeout: 15000,
+          include: [
+            'tests/ui/**/*.test.{js,jsx}',
+            'src/ui/**/__tests__/**/*.test.{js,jsx}',
+          ],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'soak',
+          environment: 'node',
+          setupFiles: ['tests/setup-node.js'],
+          // Full-simulation / replication / benchmark runs genuinely take
+          // minutes of CPU-bound work; keep them serialised in one fork so
+          // they don't compete with each other for CPU, but out of the fast
+          // tiers above so everyday `npm test` stays quick. Run on every push
+          // via CI's separate "Simulation soak" job (`npm run test:soak`).
+          testTimeout: 240000,
+          poolOptions: {
+            forks: {
+              singleFork: true,
+            },
+          },
+          include: [
+            'tests/benchmarks/**/*.test.js',
+            'tests/engine/benchmarks/**/*.test.js',
+            'tests/engine/determinism-parity.test.js',
+            'tests/engine/perf_timing.test.js',
+            'tests/engine/adaptive-batch.test.js',
+            'tests/engine/replication-ci.test.js',
+            'tests/engine/pruning.test.js',
+          ],
+        },
+      },
+    ],
   },
 })

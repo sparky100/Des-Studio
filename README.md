@@ -48,7 +48,7 @@ The project has completed **89 sprints** covering the full DES modelling lifecyc
 | Database/auth | Supabase JS client 2.45.0 |
 | Canvas / DAG | @xyflow/react |
 | Tests | Vitest, jsdom, React Testing Library |
-| CI | GitHub Actions — sharded Vitest suite + typecheck + analytical benchmarks + production build (`ci.yml`), plus benchmark gate with no-`Math.random` guard (`benchmark-gate.yml`) |
+| CI | GitHub Actions — sharded Vitest fast tier + simulation soak tier + typecheck + production build (`ci.yml`), plus benchmark gate with no-`Math.random` guard (`benchmark-gate.yml`) |
 
 ## Getting Started
 
@@ -84,15 +84,13 @@ npm run build
 npm run dev
 
 # Testing
-npm test                              # Full suite, single pass (slow — CI runs this, sharded)
+npm test                              # Fast tier: unit + ui projects (~1-2 min) — run this while iterating
+npm run test:soak                     # Soak tier: full simulations, replications, analytical benchmarks (several min)
+npm run test:all                      # Everything (fast + soak) — CI's overall bar; use before a final push
 npm run test:quick                    # Only tests related to uncommitted changes — fast pre-commit check
 npm run test:watch                    # Watch mode — re-runs tests affected by the file you save
-npm test -- engine                    # Engine tests only
+npm test -- engine                    # Engine tests only (fast tier)
 npm test -- ui                        # UI tests only
-
-# Correctness gates
-node tests/engine/mm1_benchmark.js    # M/M/1 analytical validation
-node tests/engine/mmc_benchmark.js    # M/M/c analytical validation
 
 # Build
 npm run build                         # Production build

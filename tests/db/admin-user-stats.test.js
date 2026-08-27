@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// The supabase mock is set up globally in tests/setup.js.
+// The supabase mock is set up globally in tests/setup-node.js.
 // We import the functions under test AFTER the mock is registered.
 let fetchAdminUserStats, fetchPlatformStats, fetchSignupCounts, updateUserPlan;
 
