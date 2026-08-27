@@ -72,7 +72,7 @@ Customers pass through Order → Payment → Pickup. 1 cashier handles order and
 
 **Entity types:** Customer (arriving), Cashier (1), Kitchen (2)
 
-**Stages:** Order → Payment → Pickup (3 queues, 3 C-Events)
+**Stages:** Order → Payment → Pickup (3 queues, 3 Conditional Events)
 
 **Distributions:** Uniform for all service times
 
@@ -160,7 +160,7 @@ Patients arrive every 5 minutes. Stage 1: check-in with 2 receptionists (uniform
 
 Orders arrive every 3 minutes. When 5 orders accumulate, `BATCH(Order, 5)` consolidates them. 3 pickers process each batch in a fixed 8 minutes. State variable `batchesPicked` counts completed batches.
 
-**What to watch:** Orders queue until 5 accumulate. The `BATCH` C-Event fires as soon as `queue(Order).length >= 5`, consolidating them instantly. Pickers then process batch by batch.
+**What to watch:** Orders queue until 5 accumulate. The `BATCH` Conditional Event fires as soon as `queue(Order).length >= 5`, consolidating them instantly. Pickers then process batch by batch.
 
 **Entity types:** Order (arriving), Picker (3)
 
@@ -242,7 +242,7 @@ Vessels arrive every 8 hours and queue for one of 3 berths. Unloading takes 4–
 
 **Concept:** Equipment failures, repair cycles, and server downtime analysis using `FAIL` and `REPAIR` macros with MTBF/MTTR parameters.
 
-A machine shop processes machining jobs on 4 CNC machines. Jobs arrive exponentially (mean 3 min). Machining time is triangular (4–8–14 min). Machines do not run indefinitely — each machine has a mean time between failures (MTBF) of 120 min and a mean time to repair (MTTR) of 20 min. When a machine fails, the `FAIL` macro fires as a B-Event: it sets the machine's status to `failed` and re-queues any job that was mid-service (with its remaining service time preserved). A repair technician (1 Technician resource) then begins the repair cycle. When repair completes, the `REPAIR` macro restores the machine to `idle` status and it re-enters the pool.
+A machine shop processes machining jobs on 4 CNC machines. Jobs arrive exponentially (mean 3 min). Machining time is triangular (4–8–14 min). Machines do not run indefinitely — each machine has a mean time between failures (MTBF) of 120 min and a mean time to repair (MTTR) of 20 min. When a machine fails, the `FAIL` macro fires as a Bound Event: it sets the machine's status to `failed` and re-queues any job that was mid-service (with its remaining service time preserved). A repair technician (1 Technician resource) then begins the repair cycle. When repair completes, the `REPAIR` macro restores the machine to `idle` status and it re-enters the pool.
 
 The model also uses `PREEMPT` to allow urgent jobs (flagged with `urgent = 1`) to interrupt a running machine and push the displaced job back to the front of the Machining queue with remaining service time intact.
 
@@ -253,9 +253,9 @@ The model also uses `PREEMPT` to allow urgent jobs (flagged with `urgent = 1`) t
 **Macros used:**
 - `ARRIVE(Job)` — exponential inter-arrival, mean 3 min
 - `ASSIGN(Machining, Machine)` — seizes a machine, schedules completion
-- `FAIL(Machine)` — B-Event fires at MTBF interval; sets machine status to `failed`, re-queues interrupted job
-- `REPAIR(Machine)` — B-Event fires after MTTR; restores machine to `idle`
-- `PREEMPT(Machine)` — C-Event for urgent jobs; interrupts current job, records remaining service time
+- `FAIL(Machine)` — Bound Event fires at MTBF interval; sets machine status to `failed`, re-queues interrupted job
+- `REPAIR(Machine)` — Bound Event fires after MTTR; restores machine to `idle`
+- `PREEMPT(Machine)` — Conditional Event for urgent jobs; interrupts current job, records remaining service time
 - `COMPLETE()` — job departs, machine freed
 
 **Entity type fields:** `mtbf = 120`, `mttr = 20` on the Machine entity type (Sprint 42 fields)
@@ -357,7 +357,7 @@ A GP morning clinic runs 15 pre-scheduled patient appointments at 15-minute inte
 
 **Real-world clock:** The model sets `epoch: "2026-05-19T08:00:00"` and `timeUnit: "minutes"`. Simulation time 0 = 08:00, time 15 = 08:15, etc. All times in the event log and Entity Details tab display as wall-clock timestamps.
 
-**Schedule with rows[]:** The arrival B-Event uses a `Schedule` distribution with `rows[]` instead of `times[]`. Each row carries both a `time` and an `attrs` object — the `severity` and `type` values are automatically applied to the arriving patient entity, overriding the default sampled values. You can replace the built-in rows by importing `sample-appointment-schedule.csv` via the **↑ Load plan** button on the Schedule distribution.
+**Schedule with rows[]:** The arrival Bound Event uses a `Schedule` distribution with `rows[]` instead of `times[]`. Each row carries both a `time` and an `attrs` object — the `severity` and `type` values are automatically applied to the arriving patient entity, overriding the default sampled values. You can replace the built-in rows by importing `sample-appointment-schedule.csv` via the **↑ Load plan** button on the Schedule distribution.
 
 **What to watch:** Observe the event log — arrival times display as wall-clock times (08:00, 08:15, …). In the Entity Details tab, each patient shows their severity and type attributes. Check the queue flow: severity-1 and severity-2 patients route to Urgent Care, severity-3 to Standard Care. Severity-1 patients complete in ~8 min, severity-2 in ~15 min, severity-3 patients vary (Exponential).
 
@@ -397,7 +397,7 @@ Patients arrive every 10 minutes on average. Surgery takes Triangular(10, 20, 40
 
 **Macro:** `COSEIZE(SurgeryQueue, Surgeon, Anesthetist)` — atomically seizes both resource types
 
-**Completion pattern:** the surgery-complete B-event uses `COMPLETE()`, which releases both the surgeon and anesthetist automatically and ends the patient's journey. To keep the patient in the system afterward (e.g. routing to a recovery queue) use `RELEASE_COSEIZED([Surgeon, Anesthetist], RecoveryQueue)` instead — it releases both resources atomically in one call. Never write separate `RELEASE(Surgeon)` + `RELEASE(Anesthetist)` calls on the same B-event: each resolves against the same cached server context, so only the first actually releases anything and the other resource is left stuck busy.
+**Completion pattern:** the surgery-complete Bound event uses `COMPLETE()`, which releases both the surgeon and anesthetist automatically and ends the patient's journey. To keep the patient in the system afterward (e.g. routing to a recovery queue) use `RELEASE_COSEIZED([Surgeon, Anesthetist], RecoveryQueue)` instead — it releases both resources atomically in one call. Never write separate `RELEASE(Surgeon)` + `RELEASE(Anesthetist)` calls on the same Bound event: each resolves against the same cached server context, so only the first actually releases anything and the other resource is left stuck busy.
 
 **Discipline:** PRIORITY(urgency) on SurgeryQueue
 
@@ -501,7 +501,7 @@ When you open a template, simmodlr saves a **private copy** to your account. The
 
 4. **Add state variables.** Open the State Variables panel and define new counters or accumulators. Reference them in effect strings using standard JavaScript-style expressions: `myCounter++` or `totalCost += serviceCost`.
 
-5. **Add new queues and stages.** Drag a new Queue node onto the canvas, connect it to an entity type and resource, and write the C-Event condition and B-Event effect. Use `RELEASE(OldResource, NewQueue)` in the effect to chain stages.
+5. **Add new queues and stages.** Drag a new Queue node onto the canvas, connect it to an entity type and resource, and write the Conditional Event condition and Bound Event effect. Use `RELEASE(OldResource, NewQueue)` in the effect to chain stages.
 
 6. **Rename and save.** Give your modified model a descriptive name. It is stored in **My Models** and can be shared or exported.
 
@@ -513,24 +513,24 @@ When you open a template, simmodlr saves a **private copy** to your account. The
 
 | Macro | Phase | Purpose |
 |---|---|---|
-| `ARRIVE(EntityType)` | B-Event | Creates a new entity and places it in the matching queue |
-| `COMPLETE()` | B-Event | Frees the resource, records statistics, entity departs |
-| `RELEASE(Resource, TargetQueue)` | B-Event | Frees the resource and routes the entity to another queue |
-| `ASSIGN(QueueName, ResourceType)` | C-Event | Seizes a resource for an entity, schedules completion |
-| `RENEGE(EntityType)` | B-Event | Removes the oldest waiting entity from queue (abandonment) |
-| `RENEGE_OLDEST(EntityType)` | B-Event | Removes the oldest waiting entity of a given type from queue |
-| `BATCH(QueueName, Count)` | C-Event | Accumulates N entities into one batch |
-| `UNBATCH(BatchEntity)` | B-Event | Restores children from parent batch entity |
-| `PREEMPT(ServerType)` | C-Event | Interrupts busy servers; re-queues entity with remaining service |
-| `FAIL(ServerType)` | B-Event | Sets matching servers to failed status; re-queues busy entities |
-| `REPAIR(ServerType)` | B-Event | Restores failed servers to idle status |
-| `SPLIT(EntityType, N, TargetQueue)` | B/C-Event | Creates N-1 clones of context entity |
-| `COSEIZE(Queue, ServerType1, ...)` | C-Event | Atomically seizes multiple server types simultaneously |
-| `MATCH(TypeA, QueueA, TypeB, QueueB, Output)` | C-Event | Pairs entities from two queues into one batch |
-| `FILL(ContainerName, Quantity)` | B-Event | Adds a quantity to a named container (tank/stock) |
-| `DRAIN(ContainerName, Quantity)` | C-Event | Removes a quantity from a named container; blocks if insufficient |
-| `SET_ATTR(AttrName, Value)` | B/C-Event | Updates an attribute on the current entity mid-simulation |
-| `COST(Expression)` | B/C-Event | Records a cost amount against the current entity; accumulates into totalCost |
+| `ARRIVE(EntityType)` | Bound Event | Creates a new entity and places it in the matching queue |
+| `COMPLETE()` | Bound Event | Frees the resource, records statistics, entity departs |
+| `RELEASE(Resource, TargetQueue)` | Bound Event | Frees the resource and routes the entity to another queue |
+| `ASSIGN(QueueName, ResourceType)` | Conditional Event | Seizes a resource for an entity, schedules completion |
+| `RENEGE(EntityType)` | Bound Event | Removes the oldest waiting entity from queue (abandonment) |
+| `RENEGE_OLDEST(EntityType)` | Bound Event | Removes the oldest waiting entity of a given type from queue |
+| `BATCH(QueueName, Count)` | Conditional Event | Accumulates N entities into one batch |
+| `UNBATCH(BatchEntity)` | Bound Event | Restores children from parent batch entity |
+| `PREEMPT(ServerType)` | Conditional Event | Interrupts busy servers; re-queues entity with remaining service |
+| `FAIL(ServerType)` | Bound Event | Sets matching servers to failed status; re-queues busy entities |
+| `REPAIR(ServerType)` | Bound Event | Restores failed servers to idle status |
+| `SPLIT(EntityType, N, TargetQueue)` | B/Conditional Event | Creates N-1 clones of context entity |
+| `COSEIZE(Queue, ServerType1, ...)` | Conditional Event | Atomically seizes multiple server types simultaneously |
+| `MATCH(TypeA, QueueA, TypeB, QueueB, Output)` | Conditional Event | Pairs entities from two queues into one batch |
+| `FILL(ContainerName, Quantity)` | Bound Event | Adds a quantity to a named container (tank/stock) |
+| `DRAIN(ContainerName, Quantity)` | Conditional Event | Removes a quantity from a named container; blocks if insufficient |
+| `SET_ATTR(AttrName, Value)` | B/Conditional Event | Updates an attribute on the current entity mid-simulation |
+| `COST(Expression)` | B/Conditional Event | Records a cost amount against the current entity; accumulates into totalCost |
 | `SET(VarName, Value)` | Any | Sets a state variable to a given value |
 | `;` chaining | Any | Separate multiple actions, e.g. `RELEASE(Loader, Weigh); trucksLoaded++` |
 

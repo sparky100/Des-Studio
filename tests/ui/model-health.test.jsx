@@ -99,8 +99,8 @@ describe("ModelDetail Model Health panel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
     fireEvent.click(screen.getByRole("button", { name: /^define$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /b-events/i }));
-    expect(screen.getByRole("button", { name: /b-events/i })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /bound events/i }));
+    expect(screen.getByRole("button", { name: /bound events/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("button", { name: /model health/i })).not.toBeInTheDocument();
   });
 
@@ -116,7 +116,7 @@ describe("ModelDetail Model Health panel", () => {
     expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
     expect(screen.queryByRole("complementary", { name: /design context panel/i })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /b-events/i }));
+    fireEvent.click(screen.getByRole("button", { name: /bound events/i }));
     expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
   });
 

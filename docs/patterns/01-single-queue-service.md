@@ -21,12 +21,12 @@ Arrivals → [Queue] → (Server 1)
 ## Minimal template
 
 ```
-B-events:
+Bound events:
   Arrival  t=0   ARRIVE(Customer, Queue)
              ↳ reschedule self: Exponential(mean)
   Done     t=∞   COMPLETE()
 
-C-events:
+Conditional events:
   Serve    condition: queue(Queue).length > 0 AND idle(Server).count > 0
            effect:    ASSIGN(Queue, Server)
              ↳ schedule Done: Exponential(serviceTime)
@@ -43,7 +43,7 @@ Servers:  Server count=c
 ## Variants
 - **Finite capacity**: set `capacity` on the queue → arriving customers balk when full (see Pattern 5).
 - **Priority queue**: set `discipline=PRIORITY` and add a `priority` attr on the customer entity type (see Pattern 6).
-- **Abandonment**: add a reneging B-event scheduled at patience time (see Pattern 4).
+- **Abandonment**: add a reneging Bound event scheduled at patience time (see Pattern 4).
 
 ## Example templates
 - M/M/1 Queue (`mm1`)

@@ -16,10 +16,10 @@ simmodlr implements Pidd's Three-Phase discrete-event simulation algorithm.
 | Phase | Trigger | Behaviour |
 |-------|---------|-----------|
 | A | FEL not empty | Clock advances to next event time |
-| B | Events at T_now | All B-events scheduled for current time fire in FEL order |
-| C | After Phase B | C-events tested repeatedly until none can fire; restart from top when any C-event fires |
+| B | Events at T_now | All Bound events scheduled for current time fire in FEL order |
+| C | After Phase B | Conditional events tested repeatedly until none can fire; restart from top when any Conditional event fires |
 
-**Key rule:** Phase C restarts from the beginning whenever a C-event fires. This ensures priority ordering is respected.
+**Key rule:** Phase C restarts from the beginning whenever a Conditional event fires. This ensures priority ordering is respected.
 
 ### Entity Types
 
@@ -51,9 +51,9 @@ Buffers where customer entities wait for service. Defined in `queues[]` array.
 | overflowDestination | Queue for blocked/balked entities; recursively re-checked at the destination, so overflow chains (A→B→C) are followed at runtime |
 | balkProbability | Probability (0-1) an entity declines to join, checked on every join attempt — ARRIVE, RELEASE, routing, batch/split, preemption (V21) |
 | balkCondition | Predicate object `{variable, operator, value}` checked on every join attempt, same scope as balkProbability |
-| renegeDist / renegeDistParams | Distribution sampled to auto-schedule a patience timer the moment an entity joins — no RENEGE(ctx) B-event needs to be authored |
+| renegeDist / renegeDistParams | Distribution sampled to auto-schedule a patience timer the moment an entity joins — no RENEGE(ctx) Bound event needs to be authored |
 
-### B-Events (Bound Events)
+### Bound Events (B-Events)
 
 Time-scheduled events. Fire at specific simulation clock times. Defined in `bEvents[]` array.
 
@@ -64,7 +64,7 @@ Time-scheduled events. Fire at specific simulation clock times. Defined in `bEve
 - `effect[]`: Array of macro call strings
 - `schedules[]`: Re-scheduling rules with distribution
 
-### C-Events (Conditional Events)
+### Conditional Events (C-Events)
 
 State-triggered events. Fire when condition becomes true. Defined in `cEvents[]` array.
 
@@ -76,11 +76,11 @@ State-triggered events. Fire when condition becomes true. Defined in `cEvents[]`
 - `priority`: Integer; lower fires first
 - `cSchedules[]`: Service duration distributions
 
-**Condition syntax limitation — variable-vs-literal only:** Each clause (`queue(...).length > 0`, `idle(...).count == 0`, `stateVarName == 1`, etc.) compares one dynamic token against a literal constant. The right-hand side is captured as a fixed literal when the model loads — it is never re-resolved as another queue length, server count, or state variable. A clause like `queue(TraumaQueue).length > traumaInService` parses the right side as a non-numeric literal and silently evaluates to `false` forever (no error, no warning — the C-event just never fires). To gate on a dynamic threshold, compare each side against its own literal in a separate `AND` clause instead of comparing two dynamic tokens to each other, e.g. `queue(TraumaQueue).length > 0 AND traumaInService == 0`.
+**Condition syntax limitation — variable-vs-literal only:** Each clause (`queue(...).length > 0`, `idle(...).count == 0`, `stateVarName == 1`, etc.) compares one dynamic token against a literal constant. The right-hand side is captured as a fixed literal when the model loads — it is never re-resolved as another queue length, server count, or state variable. A clause like `queue(TraumaQueue).length > traumaInService` parses the right side as a non-numeric literal and silently evaluates to `false` forever (no error, no warning — the Conditional event just never fires). To gate on a dynamic threshold, compare each side against its own literal in a separate `AND` clause instead of comparing two dynamic tokens to each other, e.g. `queue(TraumaQueue).length > 0 AND traumaInService == 0`.
 
-**Starvation anti-pattern:** When two C-events share a resource and one has a lower priority number (higher urgency), the other may never fire if the first queue is always populated. Symptom: entities accumulate in mid-journey queues; `served=0` or very low for some replications. Diagnosis: check whether any terminal C-event (discharge, exit) has a higher priority number than an entry C-event on the same resource. Fix: set the terminal C-event priority to 0 (highest) so completions are not deferred indefinitely.
+**Starvation anti-pattern:** When two Conditional events share a resource and one has a lower priority number (higher urgency), the other may never fire if the first queue is always populated. Symptom: entities accumulate in mid-journey queues; `served=0` or very low for some replications. Diagnosis: check whether any terminal Conditional event (discharge, exit) has a higher priority number than an entry Conditional event on the same resource. Fix: set the terminal Conditional event priority to 0 (highest) so completions are not deferred indefinitely.
 
-**Cross-referencing C-Events and B-Events:** Each `cSchedules[]` entry in the C-Events editor shows a plain-language summary of what its linked B-event actually does (e.g. "Releases Nurse · routes 80% → Discharge Queue, 20% → Transfer Queue", "Entity exits simulation", or — for macros without a friendly phrase yet — the raw macro call as a fallback, so nothing is ever hidden). Clicking the B-event's name jumps straight to it in the B-Events tab. Conversely, if a B-event is referenced by any C-event's `cSchedules`, the B-Events editor shows a "Scheduled by" link back to that C-event. This is presentation only — it does not change the underlying `bEvents[]`/`cEvents[]` data.
+**Cross-referencing Conditional Events and Bound Events:** Each `cSchedules[]` entry in the Conditional Events editor shows a plain-language summary of what its linked Bound event actually does (e.g. "Releases Nurse · routes 80% → Discharge Queue, 20% → Transfer Queue", "Entity exits simulation", or — for macros without a friendly phrase yet — the raw macro call as a fallback, so nothing is ever hidden). Clicking the Bound event's name jumps straight to it in the Bound Events tab. Conversely, if a Bound event is referenced by any Conditional event's `cSchedules`, the Bound Events editor shows a "Scheduled by" link back to that Conditional event. This is presentation only — it does not change the underlying `bEvents[]`/`cEvents[]` data.
 
 ### State Variables
 
@@ -104,7 +104,7 @@ Edited in the UI via the **Model Data** tab, which also holds Skills, the **Dist
 
 Named, undirected distances between queue pairs. Defined in the `distances[]` array (`{id, fromQueue, toQueue, distance}`), edited in the same **Model Data** tab as Containers.
 
-**Purpose:** Consumed by the `Distance` distribution type to compute a C-event schedule's duration as distance ÷ a speed attribute, instead of a flat sampled number — for courier/dispatch/transport-style models.
+**Purpose:** Consumed by the `Distance` distribution type to compute a Conditional event schedule's duration as distance ÷ a speed attribute, instead of a flat sampled number — for courier/dispatch/transport-style models.
 
 **Validation:** V69 (registry structure), V70 (usage cross-reference — see Distributions above).
 
@@ -130,11 +130,11 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 |-------|--------|---------|--------------|-----------------|
 | ARRIVE | `ARRIVE(EntityType)` or `ARRIVE(EntityType, QueueName)` | Creates entity instance, places in queue | Increments queue depth; schedules reneging if configured | Omitting QueueName when entity type name ≠ queue name |
 | COMPLETE | `COMPLETE()` | Marks context entity as served, releases server | Increments served count; records sojourn time | Using without preceding RELEASE |
-| RELEASE | `RELEASE(ServerType)` or `RELEASE(ServerType, QueueName)` | Frees server unit, routes entity onward | Sets server to idle; updates service stats | Combining with routing table (mutually exclusive); using on a COSEIZE-scheduled B-event instead of RELEASE_COSEIZED (see below) |
+| RELEASE | `RELEASE(ServerType)` or `RELEASE(ServerType, QueueName)` | Frees server unit, routes entity onward | Sets server to idle; updates service stats | Combining with routing table (mutually exclusive); using on a COSEIZE-scheduled Bound event instead of RELEASE_COSEIZED (see below) |
 | RELEASE_COSEIZED | `RELEASE_COSEIZED([Type1, Type2, ...])` or `RELEASE_COSEIZED([Type1, Type2, ...], QueueName)` | Frees all listed co-seized server units atomically, routes entity onward | Sets all listed servers to idle; updates service stats for each | Stacking separate `RELEASE(Type)` calls instead — each resolves against the same cached server, so only the first release actually happens (V38c); listing a type not part of the scheduling COSEIZE(...) (V38d); misspelling it `RELEASE_COSEIZE` without the trailing "D" — not a real macro, silently no-ops at runtime (V38e) |
-| ASSIGN | `ASSIGN(QueueName, ServerType)` | Seizes server, starts serving front entity from queue | Sets server to busy; sets entity to inService | Using in B-event (C-event only) |
+| ASSIGN | `ASSIGN(QueueName, ServerType)` | Seizes server, starts serving front entity from queue | Sets server to busy; sets entity to inService | Using in Bound event (Conditional event only) |
 | ASSIGN (skilled) | `ASSIGN(QueueName, ServerType, "Skill")` | Seizes server, only considers idle servers whose type has the named skill | Sets server to busy with skill tracking | Skill not in model registry (V-SKILL-2) |
-| ASSIGN (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Reads skill from entity attribute at runtime; null = any server | Supports per-entity skill variation from one C-event | Attribute undefined on customer type (V-SKILL-3) |
+| ASSIGN (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Reads skill from entity attribute at runtime; null = any server | Supports per-entity skill variation from one Conditional event | Attribute undefined on customer type (V-SKILL-3) |
 | ASSIGN (any type) | `ASSIGN(QueueName, ANY, "Skill")` | Seizes an idle server of **any** server type that has the named skill, instead of one fixed type | Pools candidates across every server type; still prefers higher `skillProfiles[].priority` when multiple match | Omitting the skill argument (ANY has no meaning without a skill filter); naming a real server type `ANY` (reserved word, V62) |
 | ASSIGN (consumable-gated) | `ASSIGN(QueueName, ServerType, ContainerId:amount)` | Gates the assignment on a declared container having level ≥ `amount`; server claim and container deduction commit atomically together | Deducts `amount` from the container level (same clamping/logging as DRAIN); no-op (both server and container untouched) if either check fails | Referencing an undeclared container (V27); combine with a skill by putting the container clause last: `ASSIGN(Queue, Server, "Skill", ContainerId:amount)` |
 | RENEGE | `RENEGE(ctx)` | Removes context entity from queue (abandonment) | Increments reneged count | Using entity type name instead of ctx |
@@ -154,7 +154,7 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 | Macro | Syntax | Purpose | Side Effects | Common Mistakes |
 |-------|--------|---------|--------------|-----------------|
-| DELAY | `DELAY(QueueName)` or `DELAY(QueueName, N)` | Removes up to N entities from a queue (or all if N omitted) and marks them serving — without claiming any server. Use for scheduling delays, recovery periods, or any hold that doesn't tie up a server. | Duration is set by the firing C-event's `cSchedules` entry, not by a server; pairs with a completion B-event for routing. When N is provided, drains at most N entities per firing (slot capacity pattern). | Completion B-event has only an `ARRIVE` effect — `ARRIVE` always creates a new entity and never resolves the delayed one, leaving it stuck in "serving" forever (V47). Add `COMPLETE()`, `RELEASE()`, or routing to the completion B-event. Capacity N must be a positive integer (V-SLOT-1). |
+| DELAY | `DELAY(QueueName)` or `DELAY(QueueName, N)` | Removes up to N entities from a queue (or all if N omitted) and marks them serving — without claiming any server. Use for scheduling delays, recovery periods, or any hold that doesn't tie up a server. | Duration is set by the firing Conditional event's `cSchedules` entry, not by a server; pairs with a completion Bound event for routing. When N is provided, drains at most N entities per firing (slot capacity pattern). | Completion Bound event has only an `ARRIVE` effect — `ARRIVE` always creates a new entity and never resolves the delayed one, leaving it stuck in "serving" forever (V47). Add `COMPLETE()`, `RELEASE()`, or routing to the completion Bound event. Capacity N must be a positive integer (V-SLOT-1). |
 
 ### Entity Transformation Macros
 
@@ -165,7 +165,7 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | UNBATCH | `UNBATCH(QueueName)` | Splits batch entity back into constituents | Batch marked done; original entities restored | Using on non-batch entity |
 | MATCH | `MATCH(TypeA, QueueA, TypeB, QueueB, QueueName)` | Pairs one entity from each queue into combined batch | Originals marked with _matchedInto; merged attrs = `{...A.attrs, ...B.attrs}` — QueueB overwrites QueueA on name collision | Queues must both have eligible entities; relying on attribute overwrite order without naming attrs distinctly |
 | MATCH (compatible pair) | `MATCH(TypeA, QueueA, TypeB, QueueB, QueueName, "Entity.bloodType == Other.bloodType")` | Optional 6th argument: scans both queues for the first pair satisfying the predicate instead of always taking the front of each | Same as plain MATCH once a pair is found; `Entity.<attr>` is the QueueA candidate, `Other.<attr>` is the QueueB candidate | No compatible pair found → no-op, same as an empty queue; a malformed predicate is caught gracefully at runtime but flagged at design time (V66) |
-| COSEIZE | `COSEIZE(QueueName, ServerType1, ServerType2, ...)` | Atomically seizes entity and multiple server types | All servers set to busy; fails cleanly if any unavailable | Partial seizure never occurs; the completion B-event must release all seized types together — use `COMPLETE()` (terminal) or `RELEASE_COSEIZED([...])` (continues), never separate `RELEASE()` calls per type |
+| COSEIZE | `COSEIZE(QueueName, ServerType1, ServerType2, ...)` | Atomically seizes entity and multiple server types | All servers set to busy; fails cleanly if any unavailable | Partial seizure never occurs; the completion Bound event must release all seized types together — use `COMPLETE()` (terminal) or `RELEASE_COSEIZED([...])` (continues), never separate `RELEASE()` calls per type |
 
 ### State Manipulation Macros
 
@@ -237,7 +237,7 @@ All 12 distribution types. Parameter values must be strings (e.g., "5" not 5).
 | Empirical | `{ values: [N, N, ...] }` | Non-empty array | Sample-driven; draws uniformly from provided values |
 | EntityAttr | `{ attr: "attrName" }` | Attribute must exist on entity | Duration from entity attribute (e.g., imported plan) |
 | ServerAttr | `{ attr: "attrName" }` | Attribute must exist on server | Duration from assigned server attribute |
-| Distance | `{ from, to, speedAttr, speedSource: "entity"\|"server" }` | `from`/`to` must be declared queues; `speedSource` must be "entity" or "server" | Travel time = declared distance (Model Data tab) ÷ speed attribute. Only meaningful on a C-event's `cSchedules`, after an `ASSIGN`. |
+| Distance | `{ from, to, speedAttr, speedSource: "entity"\|"server" }` | `from`/`to` must be declared queues; `speedSource` must be "entity" or "server" | Travel time = declared distance (Model Data tab) ÷ speed attribute. Only meaningful on a Conditional event's `cSchedules`, after an `ASSIGN`. |
 
 ---
 
@@ -303,7 +303,7 @@ All 6 queue disciplines.
 
 **Purpose:** Ensure adding or removing a process does not disturb the random streams of other processes.
 
-**Behaviour:** Each generator process (arrival B-event, service C-event, shift schedule) gets an independent PRNG stream derived from `baseSeed + replicationIndex` via `deriveSubSeed(seed, processIndex)`. Modifying one process (e.g., adding a new arrival source) leaves all other streams unchanged — results remain reproducible and statistically comparable across model edits.
+**Behaviour:** Each generator process (arrival Bound event, service Conditional event, shift schedule) gets an independent PRNG stream derived from `baseSeed + replicationIndex` via `deriveSubSeed(seed, processIndex)`. Modifying one process (e.g., adding a new arrival source) leaves all other streams unchanged — results remain reproducible and statistically comparable across model edits.
 
 ### Weekly Schedule Pattern (Sprint 86)
 
@@ -352,7 +352,7 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 
 **Purpose:** Remove entities that have exceeded a maximum dwell age in a queue.
 
-**Behaviour:** Configured as a B-event with a fixed or periodic interval. At each purge event, entities older than the configured threshold are removed from the target queue. Unlike reneging (entity-driven, patience-timer per entity), purge is a global sweep fired on a timer — useful for batch/job queues with SLA deadlines where wholesale queue clearing is required.
+**Behaviour:** Configured as a Bound event with a fixed or periodic interval. At each purge event, entities older than the configured threshold are removed from the target queue. Unlike reneging (entity-driven, patience-timer per entity), purge is a global sweep fired on a timer — useful for batch/job queues with SLA deadlines where wholesale queue clearing is required.
 
 ### Shift-change Behavior (Sprint 84)
 
@@ -451,9 +451,9 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | V3 | defaultValue must match declared valueType | Correct type mismatch |
 | V4 | PRIORITY discipline requires numeric priority attribute | Add priority attribute to entity type |
 | V5 | Distribution parameters out of bounds | Check parameter constraints (§4) |
-| V6 | schedules[].eventId or cSchedules[].eventId references non-existent B-event | Create missing B-event or correct ID |
+| V6 | schedules[].eventId or cSchedules[].eventId references non-existent Bound event | Create missing Bound event or correct ID |
 | V8 | No ARRIVE source AND no COMPLETE/RENEGE sink | Add at least one arrival and one departure |
-| V9 | C-event condition references undefined queue | Create queue or correct name |
+| V9 | Conditional event condition references undefined queue | Create queue or correct name |
 | V10 | Attribute name starts with Resource or Queue | Rename attribute (reserved namespace) |
 | V12 | Piecewise distribution has no periods, a non-numeric/non-zero start time, or a nested piecewise period | Add at least one period starting at time 0; don't nest piecewise inside piecewise |
 | V13 | Piecewise periods are not sorted by start time | Sort periods ascending by startTime |
@@ -470,7 +470,7 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | V26 | Container has an empty/duplicate id, capacity ≤ 0, or initialLevel < 0 or > capacity | Set a valid unique id, positive capacity, and initialLevel within [0, capacity] |
 | V27 | FILL/DRAIN, or ASSIGN's optional ContainerId:amount clause, references an undeclared container | Create container or correct id |
 | V28 | Model epoch is not a valid ISO 8601 datetime | Correct the epoch format |
-| V30 | B-event/C-event routes to exit (null queue) with no COMPLETE(), RENEGE(ctx), or RELEASE() effect | Add a terminal lifecycle effect so entities are counted as served |
+| V30 | Bound event/Conditional event routes to exit (null queue) with no COMPLETE(), RENEGE(ctx), or RELEASE() effect | Add a terminal lifecycle effect so entities are counted as served |
 | V31 | Event routes to exit but doesn't explicitly end the lifecycle | Add COMPLETE(), RENEGE(ctx), or RELEASE() |
 | V32 | Event has multiple terminal lifecycle sinks | Choose one terminal action: COMPLETE() or RENEGE(ctx) |
 | V34 | Replication count is not a whole number ≥ 1 | Set replication count to an integer ≥ 1 |
@@ -481,7 +481,7 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | V41 | SET_ATTR targets an immutable attribute | Target a mutable attribute instead |
 | V45 | Queue is never used as a routing destination (disconnected fragment) | Wire the queue into routing, or remove it |
 | V46 | Queue overflow chain cycles back on itself | Break the cycle — overflow chains must terminate at a queue without a cycle |
-| V47 | DELAY references an unknown queue, or its completion B-event has only an ARRIVE effect (entity left stuck "serving" forever) | Correct the queue name; add COMPLETE(), RELEASE(), or routing to the completion B-event |
+| V47 | DELAY references an unknown queue, or its completion Bound event has only an ARRIVE effect (entity left stuck "serving" forever) | Correct the queue name; add COMPLETE(), RELEASE(), or routing to the completion Bound event |
 | V50 | Weekly schedule pattern requires a startOfWeek epoch | Set a `startOfWeek` epoch in Time & Schedules (only the day-of-week matters) |
 | V51 | Weekly schedule pattern has unscheduled hours with no active shift | Fill every 1-hour cell with a capacity ≥ 0, or add a shift schedule row covering the gap |
 | V52 | Set/Capacity schedule reference targets a non-schedule resource | Ensure the referenced entity type is a server with a schedule pattern |
@@ -494,7 +494,7 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | V59 | Multiplier mode defaultCapacity out of range | In multiplier mode, defaultCapacity must be between 0.0 and 1.0 |
 | V60 | Multiplier mode exception capacity out of range | In multiplier mode, exception period capacity must be between 0.0 and 1.0 |
 | V61 | `defaultQueueName` set with no `routing[]`/`probabilisticRouting[]` and nothing else resolves the entity | Add a routing table, or use `probabilisticRouting: [{probability: 1.0, queueName: '...'}]` for a single fixed destination |
-| V63 | `CANCEL(EventName)` references an event name that doesn't match any B-Event or C-Event | Correct the event name, or add the missing event |
+| V63 | `CANCEL(EventName)` references an event name that doesn't match any Bound Event or Conditional Event | Correct the event name, or add the missing event |
 | V64 | `ROUND_ROBIN(StateVar, N)`'s N is not a positive integer | Set N to a positive integer ≥ 1 |
 | V65 | `skillProfiles[].priority`, if present, must be numeric | Set priority to a number, or remove it |
 | V66 | `MATCH`'s compatibility predicate (6th argument) fails to parse or evaluate | Fix the predicate syntax — check for unknown variable namespaces or malformed operators |
@@ -527,8 +527,8 @@ Gaps in the numbering (e.g. no V7) are intentional — codes were retired or ren
 | V47 | DELAY's cSchedule doesn't have "Pass entity context" enabled, or samples the delay from "Server attribute" | Falls back to a fixed delay of 1 |
 | V62 | A server entity type is named `ANY` | Collides with the reserved `ASSIGN(..., ANY, ...)` cross-type-pooling sentinel — rename the server type |
 | V-SKILL-2 (ANY variant) | `ASSIGN(Q, ANY, "Skill")` references a skill no registered server type actually has | The cross-type pool is guaranteed empty — add the skill to a server type, or correct the skill name |
-| W-CAP-01 | Two or more C-events SEIZE/ASSIGN the same server type | Results may be sensitive to C-event priority ordering |
-| W-CAP-02 | B-event schedule has an Exponential mean interval < 0.001 | simmodlr models discrete entities — consider SD Studio for continuous flow |
+| W-CAP-01 | Two or more Conditional events SEIZE/ASSIGN the same server type | Results may be sensitive to Conditional event priority ordering |
+| W-CAP-02 | Bound event schedule has an Exponential mean interval < 0.001 | simmodlr models discrete entities — consider SD Studio for continuous flow |
 
 ---
 
@@ -552,7 +552,7 @@ are listed worst-first.
 | H8 | Little's Law check shows >5% discrepancy between measured and theoretical wait | warning | Increase run duration — the run may be too short to reach steady state |
 | H9 | A resource was continuously starved for longer than 2× the mean service time | warning | Check upstream delivery to this resource — work isn't reaching it, suggesting a routing or blocking issue |
 | H10 | A resource sustained ≥90% utilisation for 15+ consecutive time units | warning | Add capacity or throttle arrivals — sustained high utilisation means the queue will not recover naturally |
-| H11 | A resource was idle for an extended period (zombie asset) while arrivals were active | warning | Check entity routing and B-event destinations — the resource may be unreachable or blocked by an upstream queue |
+| H11 | A resource was idle for an extended period (zombie asset) while arrivals were active | warning | Check entity routing and Bound event destinations — the resource may be unreachable or blocked by an upstream queue |
 
 ### Live Flags (computed per-step, during execution)
 
@@ -577,7 +577,7 @@ context (no suggestion text is shown live).
 
 1. **Register skills** in the Model Data tab's Skills section. Type a skill name and press Enter.
 2. **Assign to server types** in Entity Types tab. Expand a server type, tick skills in the Skills panel.
-3. **Use in C-Events** via ASSIGN with quoted skill: `ASSIGN(Queue, Doctor, "Surgery")` — only doctors with Surgery skill are considered.
+3. **Use in Conditional Events** via ASSIGN with quoted skill: `ASSIGN(Queue, Doctor, "Surgery")` — only doctors with Surgery skill are considered.
 4. **Pool across server types** — use `ASSIGN(Queue, ANY, "Surgery")` instead of a fixed server type to seize any idle server, of any type, that has the skill. Requires a skill argument.
 
 ### Per-instance server skills
@@ -596,12 +596,12 @@ For server pools where individual servers have different skill sets (e.g., 4 doc
 
 ### Setting skill requirements on arrival (entity-side)
 
-Instead of one C-Event per skill, use a single C-Event that reads the skill from the entity:
+Instead of one Conditional Event per skill, use a single Conditional Event that reads the skill from the entity:
 
 1. **Add a string attribute** to the customer entity type (e.g. `requiredSkill`), set valueType to String.
 2. **Choose Weighted mode** in the attribute editor. Add weighted options: value + relative weight. Options can include **no requirement** (null), which means any idle server matches.
 3. **The visual bar** always fills 100% width. Segments show proportions. Remainder = no requirement.
-4. **Use in a C-event**: pick `ASSIGN(Queue, Server, Entity.requiredSkill)` from the effect dropdown. The engine reads each entity's attribute at runtime and filters servers accordingly.
+4. **Use in a Conditional event**: pick `ASSIGN(Queue, Server, Entity.requiredSkill)` from the effect dropdown. The engine reads each entity's attribute at runtime and filters servers accordingly.
 
 ### Schedule-based attribute overrides
 
@@ -609,11 +609,11 @@ In the Schedule Manager, view a schedule's detail. After CSV import, attribute c
 
 ### Categorical distribution for entity attributes
 
-The **Categorical** distribution type does weighted random selection from a list of values. It is the only distribution that returns non-numeric values (strings, booleans, null). It is used exclusively for entity attributes — never for B-event delays or service times. Configure it in the Attribute Editor by switching from Static to Weighted mode.
+The **Categorical** distribution type does weighted random selection from a list of values. It is the only distribution that returns non-numeric values (strings, booleans, null). It is used exclusively for entity attributes — never for Bound event delays or service times. Configure it in the Attribute Editor by switching from Static to Weighted mode.
 
 ### Calendar-aware conditions
 
-Use calendar variables in C-event conditions to restrict activities to specific times:
+Use calendar variables in Conditional event conditions to restrict activities to specific times:
 
 - `isWeekday` — boolean, true Monday-Friday
 - `isWeekend` — boolean, true Saturday-Sunday
@@ -631,11 +631,11 @@ Condition: queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND 
 
 ### Slot booking pattern
 
-Model periodic batch scheduling with DELAY capacity + a recurring timer B-event + calendar conditions. **Conditions have no arithmetic evaluator** — `(clock - state.lastSlotTime) >= N` is not valid syntax (it throws `Unknown variable namespace in predicate` at runtime); use a timer + flag instead:
+Model periodic batch scheduling with DELAY capacity + a recurring timer Bound event + calendar conditions. **Conditions have no arithmetic evaluator** — `(clock - state.lastSlotTime) >= N` is not valid syntax (it throws `Unknown variable namespace in predicate` at runtime); use a timer + flag instead:
 
 1. Create a state variable `slotReady` (initial 0)
-2. Create a self-rescheduling B-event that fires every `slotInterval` minutes with effect `SET(slotReady, 1)` (schedule it to re-fire itself, the same way an arrival B-event self-reschedules)
-3. Create a C-event with condition: `queue(Queue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND slotReady == 1`
+2. Create a self-rescheduling Bound event that fires every `slotInterval` minutes with effect `SET(slotReady, 1)` (schedule it to re-fire itself, the same way an arrival Bound event self-reschedules)
+3. Create a Conditional event with condition: `queue(Queue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND slotReady == 1`
 4. Effect: `DELAY(Queue, N)` + `SET(slotReady, 0)`
 
 This drains up to N entities per firing, consumes the ready flag until the next timer tick, and only fires during business hours. Remaining entities wait for the next slot.
@@ -664,7 +664,7 @@ First-match semantics: engine evaluates `when` in order, uses first match. Last 
 
 **Goal:** Route an entity to whichever of two queues currently has fewer entities waiting, instead of a fixed destination.
 
-**How:** In the Condition Builder, a number-type clause has a small "Number / Dynamic" toggle next to its value field. Switch it to **Dynamic** to compare against another `queue(...).length`, `idle(...).count`, `busy(...).count`, `container(...).level`, or `attr(...)` value instead of typing a fixed number. This works in C-event conditions, `routing[]` tables, `balkCondition`, and `cSchedules[].when`.
+**How:** In the Condition Builder, a number-type clause has a small "Number / Dynamic" toggle next to its value field. Switch it to **Dynamic** to compare against another `queue(...).length`, `idle(...).count`, `busy(...).count`, `container(...).level`, or `attr(...)` value instead of typing a fixed number. This works in Conditional event conditions, `routing[]` tables, `balkCondition`, and `cSchedules[].when`.
 
 **Gotcha:** Only those five function-style values resolve dynamically on the right-hand side. A plain state-variable name or `Entity.<attr>` typed into the value field is still always treated as a literal — see the Validation Rules and Common Mistakes sections above.
 
@@ -675,9 +675,9 @@ First-match semantics: engine evaluates `when` in order, uses first match. Last 
 **Causes:**
 - Arrival rate > service capacity (check λ vs μ)
 - Insufficient server count
-- C-event condition never true (check condition syntax)
+- Conditional event condition never true (check condition syntax)
 
-**Fix:** Increase servers, reduce arrivals, or fix C-event condition.
+**Fix:** Increase servers, reduce arrivals, or fix Conditional event condition.
 
 ### Wide Confidence Intervals
 
@@ -698,7 +698,7 @@ First-match semantics: engine evaluates `when` in order, uses first match. Last 
 - Using RENEGE(TypeName) instead of RENEGE(ctx) [V25]
 - Manual schedules-based reneging missing isRenege: true flag
 - Entity already served before reneging timeout
-- Simpler fix: set `renegeDist`/`renegeDistParams` directly on the queue instead of hand-wiring a RENEGE(ctx) B-event — the engine auto-schedules the patience timer on every join, with no eventId wiring required
+- Simpler fix: set `renegeDist`/`renegeDistParams` directly on the queue instead of hand-wiring a RENEGE(ctx) Bound event — the engine auto-schedules the patience timer on every join, with no eventId wiring required
 
 **Fix:** Use RENEGE(ctx); set isRenege: true on schedule entry.
 
@@ -708,10 +708,10 @@ First-match semantics: engine evaluates `when` in order, uses first match. Last 
 
 **Causes:**
 - Phase C pass cap (500) hit in engine cycle
-- C-event firing repeatedly without state change
-- Circular C-event dependencies
+- Conditional event firing repeatedly without state change
+- Circular Conditional event dependencies
 
-**Fix:** Review C-event priorities; ensure state changes break cycles.
+**Fix:** Review Conditional event priorities; ensure state changes break cycles.
 
 ### Warmup Too Short
 
@@ -729,10 +729,10 @@ First-match semantics: engine evaluates `when` in order, uses first match. Last 
 
 **Causes:**
 - FEL empty (no re-scheduling rules)
-- C-event condition never satisfied
+- Conditional event condition never satisfied
 - All servers failed with no REPAIR scheduled (check failureScope — "pool" takes everything offline; "unit" affects one at a time)
 
-**Fix:** Check schedules[] on B-events; verify C-event conditions; schedule repairs.
+**Fix:** Check schedules[] on Bound events; verify Conditional event conditions; schedule repairs.
 
 ---
 
@@ -794,7 +794,7 @@ If a private model has no collaborators and isn't public yet, the Access tab sho
 
 ### Business View (sharing with non-modellers)
 
-The Business view is what a **viewer-role** collaborator gets when they open a shared model: a single simplified page for exploring the model without ever seeing the modelling environment (no Design canvas, no B/C-event editors, no tabs).
+The Business view is what a **viewer-role** collaborator gets when they open a shared model: a single simplified page for exploring the model without ever seeing the modelling environment (no Design canvas, no B/Conditional event editors, no tabs).
 
 **Owner setup (Access tab → "Business view" section, owner-only):**
 
@@ -844,9 +844,9 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 
 **Access:** Design mode → **Visual** sub-tab. Also available from the New Model dialog via **Draw**.
 
-**Strengths:** Visual flow; node badges show advanced config (`feed` for a live data source on an arrival, `when` for attribute-conditional completion schedules); bidirectional sync with Forms/Tabs. New blank models open with a starter flow pre-placed on the canvas — no unsaved changes until you make your first edit. Multi-select nodes (Shift/Ctrl-click or box-drag) to bulk-move or bulk-delete; copy/paste (Ctrl+C/Ctrl+V) or duplicate in place (Ctrl+D). Selecting an edge for a probabilistic-routing branch shows an inline `%` input on the edge label — edit the split without leaving the canvas or opening the B-Events editor.
+**Strengths:** Visual flow; node badges show advanced config (`feed` for a live data source on an arrival, `when` for attribute-conditional completion schedules); bidirectional sync with Forms/Tabs. New blank models open with a starter flow pre-placed on the canvas — no unsaved changes until you make your first edit. Multi-select nodes (Shift/Ctrl-click or box-drag) to bulk-move or bulk-delete; copy/paste (Ctrl+C/Ctrl+V) or duplicate in place (Ctrl+D). Selecting an edge for a probabilistic-routing branch shows an inline `%` input on the edge label — edit the split without leaving the canvas or opening the Bound Events editor.
 
-**Advanced effects and the canvas:** Layout edits (dragging, aligning, panning) never change model logic — they only save positions. Structural canvas edits that would overwrite an advanced effect (COSEIZE, skill-gated ASSIGN, BATCH, MATCH, multi-macro effects, attribute-conditional `when` schedules) are refused with a message pointing at the Define editors — the C-Events/B-Events editors remain the home of the advanced macro vocabulary. Simpler edits near advanced constructs are surgical: switching a sink between COMPLETE and RENEGE, changing a source's queue, or deleting a queue preserves any co-located macros (COST, SET, …) instead of rewriting the whole effect.
+**Advanced effects and the canvas:** Layout edits (dragging, aligning, panning) never change model logic — they only save positions. Structural canvas edits that would overwrite an advanced effect (COSEIZE, skill-gated ASSIGN, BATCH, MATCH, multi-macro effects, attribute-conditional `when` schedules) are refused with a message pointing at the Define editors — the Conditional Events/Bound Events editors remain the home of the advanced macro vocabulary. Simpler edits near advanced constructs are surgical: switching a sink between COMPLETE and RENEGE, changing a source's queue, or deleting a queue preserves any co-located macros (COST, SET, …) instead of rewriting the whole effect.
 
 **Alignment guides:** While dragging a single node, dashed guide lines appear whenever the dragged node's edges or centre line up with another node's edges or centre. Release while a guide is showing and the node snaps exactly into alignment. Guides don't appear for multi-node drags — use the selection toolbar's align/distribute tools for those. Placement is otherwise free: nodes don't snap to a background grid, so the alignment snap is the only snap.
 
@@ -899,7 +899,7 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 
 ## Schedule Manager (Timetables)
 
-Timetable data for arrival B-events is stored separately from the core model in the **Time & Schedules** tab of the model editor. This keeps the model lightweight and lets you maintain multiple named timetables for the same model.
+Timetable data for arrival Bound events is stored separately from the core model in the **Time & Schedules** tab of the model editor. This keeps the model lightweight and lets you maintain multiple named timetables for the same model.
 
 ### Accessing schedules
 
@@ -907,7 +907,7 @@ Open your model and click the **Time & Schedules** tab (between Sections and Goa
 
 ### Schedule list
 
-Shows all schedules for the model: name, total row count, which B-events use each schedule. A ★ marks the default schedule.
+Shows all schedules for the model: name, total row count, which Bound events use each schedule. A ★ marks the default schedule.
 
 ### Selecting a schedule for a run
 
@@ -929,25 +929,25 @@ Open a schedule and click **Export CSV** to download all rows for editing extern
 
 When you export a model as JSON (toolbar → Export Model), schedule rows are automatically embedded in the exported file. The export is self-contained and can be imported to another simmodlr instance.
 
-### B-event schedule link
+### Bound event schedule link
 
-Each arrival B-event stores a `scheduleRef` UUID pointing to a schedule record. If the referenced schedule is deleted or unavailable, the B-event produces zero arrivals (a validation warning is shown).
+Each arrival Bound event stores a `scheduleRef` UUID pointing to a schedule record. If the referenced schedule is deleted or unavailable, the Bound event produces zero arrivals (a validation warning is shown).
 
 ### Bidirectional navigation
 
-In the **B-Events** editor, a green badge appears next to each event that is linked to a named schedule (showing the schedule name). Clicking the badge switches to the Time & Schedules tab with that schedule selected.
+In the **Bound Events** editor, a green badge appears next to each event that is linked to a named schedule (showing the schedule name). Clicking the badge switches to the Time & Schedules tab with that schedule selected.
 
-In the **Time & Schedules** editor, the Event Links panel lists every B-event that uses the current schedule. Clicking a B-event name switches to the B-Events tab and scrolls to that event.
+In the **Time & Schedules** editor, the Event Links panel lists every Bound event that uses the current schedule. Clicking a Bound event name switches to the Bound Events tab and scrolls to that event.
 
 ### Migrating inline rows to a named schedule
 
-If a B-event still has rows embedded directly in the model JSON (legacy format), a **Move to named schedule →** button appears in the B-Events editor above the schedule picker. Clicking it creates a new named schedule from the inline rows and links the B-event to it, removing the embedded data from model JSON.
+If a Bound event still has rows embedded directly in the model JSON (legacy format), a **Move to named schedule →** button appears in the Bound Events editor above the schedule picker. Clicking it creates a new named schedule from the inline rows and links the Bound event to it, removing the embedded data from model JSON.
 
 ### CSV import — single-event and multi-event formats
 
 **Single-event:** First column is `time`; subsequent columns are entity attribute names. Import a single schedule's rows.
 
-**Multi-event:** First column is `event` or `eventId` containing B-event IDs or names; second column is `time`; subsequent columns are attributes. Imports rows for multiple B-events at once. The importer shows a per-event match status; unmatched events are flagged. The **Import + create stubs** option auto-creates fire-at-start B-events for any B-event IDs in the CSV that don't yet exist in the model.
+**Multi-event:** First column is `event` or `eventId` containing Bound event IDs or names; second column is `time`; subsequent columns are attributes. Imports rows for multiple Bound events at once. The importer shows a per-event match status; unmatched events are flagged. The **Import + create stubs** option auto-creates fire-at-start Bound events for any Bound event IDs in the CSV that don't yet exist in the model.
 
 ---
 
@@ -963,7 +963,7 @@ Click the **⚡ Optimise** button inside the Simulation Assistant sidebar. The b
 
 Before any simulation starts, a confirmation dialog shows:
 - **Replications limit** — your plan's maximum (Free: 10, Standard: 30, Pro: 100)
-- **Model complexity** — Low / Medium / High / Very high based on C-event scan estimate
+- **Model complexity** — Low / Medium / High / Very high based on Conditional event scan estimate
 - **Run duration and warmup** — taken from the model's experiment defaults
 - **Target CI** — ±5% of the mean (95% confidence)
 - **Hard errors** — if any admission errors are present (e.g. run duration exceeds tier limit), the Proceed button is hidden; fix the issue first
@@ -1024,7 +1024,7 @@ The Simulation Assistant is the AI panel available from any model editing, run, 
 
 | Context | What it shows |
 |---------|--------------|
-| **Design tabs** (entities, queues, B-events, C-events, etc.) | Suggested questions about the current tab's content. A free-text **ASK ABOUT THIS MODEL** input for any question about the model's structure. The assistant receives the full model definition (entity attributes, queue configurations, C-event logic, sections, goals) and can reason about whether conditions and effects are correctly wired. |
+| **Design tabs** (entities, queues, Bound events, Conditional events, etc.) | Suggested questions about the current tab's content. A free-text **ASK ABOUT THIS MODEL** input for any question about the model's structure. The assistant receives the full model definition (entity attributes, queue configurations, Conditional event logic, sections, goals) and can reason about whether conditions and effects are correctly wired. |
 | **Run tab** (Execute) | A **Diagnostics** panel showing entity inspection and event log overlays on the Execute canvas. The same **ASK ABOUT THIS MODEL** input is available so you can ask questions about the model while watching it run. After a run completes, a second **ASK A QUESTION** input appears for results-specific queries. |
 | **Results tab** | Three focused tabs: **Analyse** (plain-language narrative of results), **Compare** (side-by-side comparison with a saved run), and **Refine Plan** (schedule adjustment suggestions — only when the model has a timetable). A **FOLLOW-UP QUESTION** input lets you ask specific questions about the results. No action fires automatically — click the button to trigger analysis. |
 
@@ -1034,7 +1034,7 @@ Click the **✦ AI** button in the mode bar to toggle the Simulation Assistant. 
 
 ### Design and Run tabs — Model Q&A
 
-The **ASK ABOUT THIS MODEL** textarea is always available in design and run tabs. Type any question about the model — the assistant has full knowledge of your entity types, attributes, queue configurations, C-event conditions, sections, and goals. Examples: "Review my entity types", "Are my C-event conditions correctly wired?", "What can this model simulate?"
+The **ASK ABOUT THIS MODEL** textarea is always available in design and run tabs. Type any question about the model — the assistant has full knowledge of your entity types, attributes, queue configurations, Conditional event conditions, sections, and goals. Examples: "Review my entity types", "Are my Conditional event conditions correctly wired?", "What can this model simulate?"
 
 Quick-start chips suggest context-specific questions based on the tab you're viewing.
 
@@ -1083,7 +1083,7 @@ The full JSON export now includes an **entity journeys** section with every cust
 | Section | Contents |
 |---------|---------|
 | Preamble | Three-Phase DES method explanation, how to interpret the results |
-| Model definition | Entity types and attributes (including weekly schedule patterns), queues (discipline, capacity), B-Events and C-Events, performance goals |
+| Model definition | Entity types and attributes (including weekly schedule patterns), queues (discipline, capacity), Bound Events and Conditional Events, performance goals |
 | Experiment config | Replications, warm-up period, max sim time, seed, schedule name |
 | Headline KPIs | avgWait, avgSvc, avgSojourn, served, reneged, utilisation |
 | Per-queue wait table | mean, p50, p90, p95, p99 for every queue (GitHub-Flavored Markdown pipe table) |

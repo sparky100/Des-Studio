@@ -939,8 +939,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     {id:"entities",label:"Entity Types"},
     {id:"queues",label:"Queues"},
     {id:"containers",label:"Model Data"},
-    {id:"bevents",label:"B-Events"},
-    {id:"cevents",label:"C-Events"},
+    {id:"bevents",label:"Bound Events"},
+    {id:"cevents",label:"Conditional Events"},
     {id:"sections",label:"Sections"},
     {id:"schedules",label:"Time & Schedules"},
     {id:"goals",label:"Goals"},
@@ -1503,8 +1503,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 {label:"Blockers",value:validation.errors.length,color:validation.errors.length?C.red:C.green},
                 {label:"Warnings",value:validation.warnings.length,color:validation.warnings.length?C.amber:C.green},
                 {label:"Queues",value:(tabIssueCounts["queues"]?.errors||0)+(tabIssueCounts["queues"]?.warnings||0),color:(tabIssueCounts["queues"]?.errors||0)>0?C.red:(tabIssueCounts["queues"]?.warnings||0)>0?C.amber:C.green},
-                {label:"B-Events",value:(tabIssueCounts["bevents"]?.errors||0)+(tabIssueCounts["bevents"]?.warnings||0),color:(tabIssueCounts["bevents"]?.errors||0)>0?C.red:(tabIssueCounts["bevents"]?.warnings||0)>0?C.amber:C.green},
-                {label:"C-Events",value:(tabIssueCounts["cevents"]?.errors||0)+(tabIssueCounts["cevents"]?.warnings||0),color:(tabIssueCounts["cevents"]?.errors||0)>0?C.red:(tabIssueCounts["cevents"]?.warnings||0)>0?C.amber:C.green},
+                {label:"Bound Events",value:(tabIssueCounts["bevents"]?.errors||0)+(tabIssueCounts["bevents"]?.warnings||0),color:(tabIssueCounts["bevents"]?.errors||0)>0?C.red:(tabIssueCounts["bevents"]?.warnings||0)>0?C.amber:C.green},
+                {label:"Conditional Events",value:(tabIssueCounts["cevents"]?.errors||0)+(tabIssueCounts["cevents"]?.warnings||0),color:(tabIssueCounts["cevents"]?.errors||0)>0?C.red:(tabIssueCounts["cevents"]?.warnings||0)>0?C.amber:C.green},
               ].map(item=>(
                 <div key={item.label} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.1,fontWeight:700,marginBottom:4}}>{item.label.toUpperCase()}</div>

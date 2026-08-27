@@ -22,13 +22,13 @@ Arrivals → [Queue A] → (Server A) → [Queue B] → (Server B) → Depart
 ## Minimal template (2-stage)
 
 ```
-B-events:
+Bound events:
   Arrival      t=0   ARRIVE(Customer, Stage1)
                  ↳ reschedule self
   Stage1Done   t=∞   RELEASE(Server1, Stage2)
   Stage2Done   t=∞   COMPLETE()
 
-C-events:
+Conditional events:
   StartStage1  condition: queue(Stage1).length > 0 AND idle(Server1).count > 0
                effect:    ASSIGN(Stage1, Server1)
                  ↳ schedule Stage1Done
@@ -42,8 +42,8 @@ Servers: Server1 count=m, Server2 count=n
 ```
 
 ## Notes
-- `RELEASE(ServerType, TargetQueue)` frees the server AND sets the customer's queue field to `TargetQueue`. The next C-event condition must reference `TargetQueue` by name.
-- The second C-event has priority > first so it fires before new arrivals seize stage-2 resources.
+- `RELEASE(ServerType, TargetQueue)` frees the server AND sets the customer's queue field to `TargetQueue`. The next Conditional event condition must reference `TargetQueue` by name.
+- The second Conditional event has priority > first so it fires before new arrivals seize stage-2 resources.
 - State variables (counters) can be incremented inside the `RELEASE` effect: `RELEASE(Server1, Stage2); stageCount++`
 
 ## Example templates

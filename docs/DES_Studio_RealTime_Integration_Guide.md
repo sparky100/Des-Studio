@@ -108,9 +108,9 @@ Click **Test connection**. simmodlr will make one request to the endpoint and sh
 
 Once a data source is configured, you can bind any distribution parameter to a live field.
 
-### In the B-Event editor (arrival rates)
+### In the Bound Event editor (arrival rates)
 
-1. Open the B-Event whose schedule you want to live-update (e.g. "Patient Arrives")
+1. Open the Bound Event whose schedule you want to live-update (e.g. "Patient Arrives")
 2. In the **Schedule** section, find the distribution parameter you want to bind (e.g. `mean` for an Exponential distribution)
 3. Toggle the field from **Static** to **Live**
 4. Select the data source from the dropdown
@@ -118,7 +118,7 @@ Once a data source is configured, you can bind any distribution parameter to a l
 6. Enter a fallback value — used if the source is unavailable when the run starts
 7. The preview chip shows the current live value fetched from the source
 
-### In the C-Event editor (service times)
+### In the Conditional Event editor (service times)
 
 Same steps as above, applied to the **cSchedule** service time distribution parameter.
 
@@ -338,7 +338,7 @@ Response:
 
 ### Parameter bindings
 
-| B/C-Event | distParams key | paramSource field | Live value example |
+| B/Conditional Event | distParams key | paramSource field | Live value example |
 |---|---|---|---|
 | Patient Arrives → schedule.mean | `mean` | `mean_interarrival_mins` | 3.2 |
 | Start Triage → cSchedule.mean | `mean` | `mean_triage_mins` | 7.4 |
