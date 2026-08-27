@@ -44,6 +44,17 @@ describe('BATCH macro', () => {
     expect(m2[2]).toBe('10');
   });
 
+  // Moved from tests/engine/sprint-33-features.test.js (G09: dynamic batch
+  // size by attribute) — the same pattern check, exercised against an
+  // attribute-reference operand instead of a literal integer.
+  test('BATCH pattern matches attribute reference', () => {
+    const batch = MACROS.find(m => m.name === 'BATCH');
+    const m = 'BATCH(Queue, Entity.batchSize)'.match(batch.pattern);
+    expect(m).toBeTruthy();
+    expect(m[1].trim()).toBe('Queue');
+    expect(m[2].trim()).toBe('Entity.batchSize');
+  });
+
   test('BATCH creates parent entity when queue has enough entities', () => {
     const model = {
       ...baseModel,

@@ -2,30 +2,13 @@ import { describe, expect, it } from "vitest";
 import { buildEngine } from "../../src/engine/index.js";
 import { createBenchmarkScenarios } from "./benchmark-scenarios.js";
 import { runScenario } from "./perf_timing.js";
+import { runToCompletionYielding } from "./__helpers__/runToCompletionYielding.js";
 
-// Same rationale as tests/engine/determinism-parity.test.js's
-// runToCompletionYielding: vitest's worker RPC layer enforces a hard,
-// non-configurable ~60s heartbeat timeout that a fully-synchronous run can
-// trip, crashing the whole `vitest run` even though the test itself would
-// pass. The full (non-stress) scenario set here includes
-// refugee-displacement-corridor, which alone runs ~70-75s — so running the
-// suite via runTimingSuite()'s normal buildEngine(...).runAll() path isn't
-// safe inside a vitest test. Step manually with periodic yields instead,
-// then hand the finished result to runScenario() via its `overrides.result`
+// The suite below now only runs the queue-growth scenario family, which is
+// well under vitest's ~60s worker-heartbeat timeout — but still yields
+// periodically via runToCompletionYielding (see that file for why), then
+// hands the finished result to runScenario() via its `overrides.result`
 // escape hatch so the computed summary shape is identical either way.
-async function runToCompletionYielding(engine, yieldEveryCycles = 500) {
-  let cycles = 0;
-  while (true) {
-    const r = engine.step({ captureSnap: false });
-    if (r.done) break;
-    cycles++;
-    if (cycles % yieldEveryCycles === 0) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
-  }
-  return engine.buildResult();
-}
-
 async function runScenarioYielding(scenario) {
   const engine = buildEngine(scenario.model, scenario.seed, 0, scenario.maxSimTime, null, scenario.maxCycles);
   const result = await runToCompletionYielding(engine);
@@ -67,8 +50,18 @@ describe("perf_timing runner", () => {
     }));
   });
 
-  it("keeps the suite summary shape stable when queue-growth scenarios are present", { timeout: 240000 }, async () => {
-    const scenarios = createBenchmarkScenarios({ includeStress: false });
+  // Only the queue-growth family (light/medium/heavy) — this test's job is
+  // to prove that family's presence doesn't break the aggregated summary
+  // shape (per its name), including the heavy scenario's cycle-cap-saturated
+  // output. It previously looped over all 12 non-stress scenarios (~80s,
+  // dominated by refugee-displacement-corridor's ~70-75s run) just to
+  // re-derive the same shape guarantee; the other scenarios' correctness is
+  // already covered, per-scenario, by determinism-parity.test.js's snapshot
+  // assertions — this test only needs the shape to survive, not every
+  // scenario re-run a second time.
+  it("keeps the suite summary shape stable when queue-growth scenarios are present", { timeout: 60000 }, async () => {
+    const scenarios = createBenchmarkScenarios({ includeStress: false })
+      .filter(entry => entry.category === "queue-growth");
     const results = [];
     for (const scenario of scenarios) {
       results.push(await runScenarioYielding(scenario));

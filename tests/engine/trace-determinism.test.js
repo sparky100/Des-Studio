@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, beforeAll } from 'vitest';
 import { buildEngine } from '../../src/engine/index.js';
 
 function buildSimpleModel() {
@@ -80,11 +80,15 @@ describe('Trace determinism — same seed produces identical trace', () => {
 });
 
 describe('Trace completeness — required trace categories are emitted', () => {
-  test('Phase A clock advance entries include clock.from, clock.to, clock.dueEvents', () => {
-    const model = buildSimpleModel();
-    const engine = buildEngine(model, 42, 0, 50);
-    const result = engine.runAll();
+  // All six tests below inspect the same trace log from the same
+  // model/seed/run — one shared run instead of six identical ones.
+  let result;
+  beforeAll(() => {
+    const engine = buildEngine(buildSimpleModel(), 42, 0, 50);
+    result = engine.runAll();
+  });
 
+  test('Phase A clock advance entries include clock.from, clock.to, clock.dueEvents', () => {
     const phaseAEntries = result.log.filter(e => e.phase === "A");
     expect(phaseAEntries.length).toBeGreaterThan(0);
     for (const entry of phaseAEntries) {
@@ -96,10 +100,6 @@ describe('Trace completeness — required trace categories are emitted', () => {
   });
 
   test('B-event fire entries include event.type, event.fired, event.entityIds, event.newEvents', () => {
-    const model = buildSimpleModel();
-    const engine = buildEngine(model, 42, 0, 50);
-    const result = engine.runAll();
-
     const phaseBEntries = result.log.filter(e => e.phase === "B");
     expect(phaseBEntries.length).toBeGreaterThan(0);
     for (const entry of phaseBEntries) {
@@ -112,10 +112,6 @@ describe('Trace completeness — required trace categories are emitted', () => {
   });
 
   test('C-event evaluation entries include cEval with conditionTrue, pass, priority', () => {
-    const model = buildSimpleModel();
-    const engine = buildEngine(model, 42, 0, 50);
-    const result = engine.runAll();
-
     const phaseCEntries = result.log.filter(e => e.phase === "C" && e.cEval);
     expect(phaseCEntries.length).toBeGreaterThan(0);
     for (const entry of phaseCEntries) {
@@ -129,10 +125,6 @@ describe('Trace completeness — required trace categories are emitted', () => {
   });
 
   test('C-event false entries include failureReason', () => {
-    const model = buildSimpleModel();
-    const engine = buildEngine(model, 42, 0, 50);
-    const result = engine.runAll();
-
     const falseEntries = result.log.filter(e => e.phase === "C" && e.cEval && !e.cEval.conditionTrue);
     expect(falseEntries.length).toBeGreaterThan(0);
     for (const entry of falseEntries) {
@@ -143,10 +135,6 @@ describe('Trace completeness — required trace categories are emitted', () => {
   });
 
   test('C-event skipped entries include skippedBecause', () => {
-    const model = buildSimpleModel();
-    const engine = buildEngine(model, 42, 0, 50);
-    const result = engine.runAll();
-
     const skippedEntries = result.log.filter(e => e.phase === "C" && e.cEval && e.cEval.skippedBecause);
     if (skippedEntries.length > 0) {
       for (const entry of skippedEntries) {
@@ -156,10 +144,6 @@ describe('Trace completeness — required trace categories are emitted', () => {
   });
 
   test('INIT and END trace entries are present', () => {
-    const model = buildSimpleModel();
-    const engine = buildEngine(model, 42, 0, 50);
-    const result = engine.runAll();
-
     const initEntries = result.log.filter(e => e.phase === "INIT");
     const endEntries = result.log.filter(e => e.phase === "END");
     expect(initEntries.length).toBeGreaterThanOrEqual(1);

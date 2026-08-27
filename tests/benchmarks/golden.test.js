@@ -9,53 +9,21 @@
 // Seed: 42 (fixed — changing the seed changes the expected window).
 
 import { describe, expect, test, beforeAll } from 'vitest';
-import { makeMM1Model, runUntilServed } from '../engine/__helpers__/benchmarkFixtures.js';
+import { makeMM1Model, makeMMcModel, runUntilServed } from '../engine/__helpers__/benchmarkFixtures.js';
 import { buildEngine } from '../../src/engine/index.js';
 import { makeAEModel } from '../engine/benchmark-scenarios.js';
-
-// ── Shared model builders ────────────────────────────────────────────────────
-
-function mm1Model() { return makeMM1Model(0.9, 1.0); }
-
-function mmcModel() {
-  return {
-    entityTypes: [
-      { id: 'et_cust', name: 'Customer', role: 'customer', count: 0, attrDefs: [] },
-      { id: 'et_srv',  name: 'Server',   role: 'server',   count: 2, attrDefs: [] },
-    ],
-    stateVariables: [],
-    bEvents: [
-      {
-        id: 'b_arrive', name: 'Arrival', scheduledTime: '0',
-        effect: 'ARRIVE(Customer)',
-        schedules: [{ eventId: 'b_arrive', dist: 'Exponential', distParams: { mean: String(1 / 1.6) } }],
-      },
-      {
-        id: 'b_complete', name: 'Complete', scheduledTime: '9999',
-        effect: 'COMPLETE()',
-        schedules: [],
-      },
-    ],
-    cEvents: [
-      {
-        id: 'c_seize', name: 'Seize',
-        condition: 'queue(Customer).length > 0 AND idle(Server).count > 0',
-        effect: 'ASSIGN(Customer, Server)',
-        cSchedules: [
-          { eventId: 'b_complete', dist: 'Exponential', distParams: { mean: '1.0' }, useEntityCtx: true },
-        ],
-      },
-    ],
-    queues: [],
-  };
-}
-
 
 // ── M/M/1 golden fixture ─────────────────────────────────────────────────────
 // λ=0.9, μ=1.0, ρ=0.9  Analytical Wq = 9.0
 // Seed 42, N_SERVED=500, N_WARMUP=200
 // Locked window: 8.0 ≤ mean wait ≤ 10.0  (±~11% of analytical — wide enough for
 //   the sample size of 300 but narrow enough to catch engine regressions)
+//
+// This is also the project's sole M/M/1 correctness gate — it supersedes the
+// former standalone tests/engine/mm1_benchmark.js script (same model, seed,
+// N_SERVED/N_WARMUP; this fixture's 2% tolerance is strictly tighter than
+// that script's 5%) and the identical assertion formerly duplicated in
+// tests/engine/benchmarks/benchmarks.test.js (Benchmark 1).
 
 describe('M/M/1 golden fixture (seed=42, λ=0.9, μ=1.0)', () => {
   const ANALYTICAL = 9.0;
@@ -63,14 +31,17 @@ describe('M/M/1 golden fixture (seed=42, λ=0.9, μ=1.0)', () => {
   const N_SERVED = 500;
   const N_WARMUP = 200;
 
-  test('mean queue wait is within 2% of analytical value (9.0)', async () => {
-    const meanWait = await runUntilServed(mm1Model(), N_SERVED, SEED, N_WARMUP);
+  let meanWait;
+  beforeAll(async () => {
+    meanWait = await runUntilServed(makeMM1Model(0.9, 1.0), N_SERVED, SEED, N_WARMUP);
+  });
+
+  test('mean queue wait is within 2% of analytical value (9.0)', () => {
     const pctError = Math.abs(meanWait - ANALYTICAL) / ANALYTICAL;
     expect(pctError).toBeLessThanOrEqual(0.02);
   });
 
-  test('mean queue wait is pinned to window 8.0–10.0 (regression lock)', async () => {
-    const meanWait = await runUntilServed(mm1Model(), N_SERVED, SEED, N_WARMUP);
+  test('mean queue wait is pinned to window 8.0–10.0 (regression lock)', () => {
     expect(meanWait).toBeGreaterThanOrEqual(8.0);
     expect(meanWait).toBeLessThanOrEqual(10.0);
   });
@@ -81,6 +52,11 @@ describe('M/M/1 golden fixture (seed=42, λ=0.9, μ=1.0)', () => {
 // Seed 42, N_SERVED=2000, N_WARMUP=500
 // Locked window: 1.5 ≤ mean wait ≤ 2.1  (±~18% of analytical — appropriate for
 //   a shorter Erlang-C queue; tighter than 5% tolerance on small samples)
+//
+// This is also the project's sole M/M/c correctness gate — it supersedes the
+// former standalone tests/engine/mmc_benchmark.js script (same model, seed,
+// N_SERVED/N_WARMUP, 5% tolerance) and the identical assertion formerly
+// duplicated in tests/engine/benchmarks/benchmarks.test.js (Benchmark 2).
 
 describe('M/M/c golden fixture (seed=42, λ=1.6, μ=1.0, c=2)', () => {
   const ANALYTICAL = 1.7778;
@@ -88,14 +64,17 @@ describe('M/M/c golden fixture (seed=42, λ=1.6, μ=1.0, c=2)', () => {
   const N_SERVED = 2000;
   const N_WARMUP = 500;
 
-  test('mean queue wait is within 5% of Erlang-C analytical value (1.7778)', { timeout: 30000 }, async () => {
-    const meanWait = await runUntilServed(mmcModel(), N_SERVED, SEED, N_WARMUP);
+  let meanWait;
+  beforeAll(async () => {
+    meanWait = await runUntilServed(makeMMcModel(1.6, 1.0, 2), N_SERVED, SEED, N_WARMUP);
+  }, 30000);
+
+  test('mean queue wait is within 5% of Erlang-C analytical value (1.7778)', () => {
     const pctError = Math.abs(meanWait - ANALYTICAL) / ANALYTICAL;
     expect(pctError).toBeLessThanOrEqual(0.05);
   });
 
-  test('mean queue wait is pinned to window 1.5–2.1 (regression lock)', { timeout: 30000 }, async () => {
-    const meanWait = await runUntilServed(mmcModel(), N_SERVED, SEED, N_WARMUP);
+  test('mean queue wait is pinned to window 1.5–2.1 (regression lock)', () => {
     expect(meanWait).toBeGreaterThanOrEqual(1.5);
     expect(meanWait).toBeLessThanOrEqual(2.1);
   });

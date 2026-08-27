@@ -100,8 +100,7 @@ project root
 │   │   ├── distributions.test.js    ← Samplers, seeded RNG reproducibility
 │   │   ├── macros.test.js           ← ARRIVE, SEIZE, COMPLETE, ASSIGN, RENEGE
 │   │   ├── conditions.test.js       ← Safe evaluator, all operator types
-│   │   ├── entities.test.js         ← Queue disciplines: FIFO, LIFO, PRIORITY
-│   │   └── mm1_benchmark.js         ← M/M/1 correctness gate (run manually)
+│   │   └── entities.test.js         ← Queue disciplines: FIFO, LIFO, PRIORITY
 │   ├── ui/                          ← UI tests (jsdom env — Sprint 2 onwards)
 │   │   ├── editors/                 ← One file per editor component
 │   │   ├── execute/                 ← Execute panel tests
@@ -688,9 +687,9 @@ The following invariants are non-negotiable and must be maintained across all en
 
 3. **No `Math.random()` in engine layer**: All random sampling in `src/engine/` must go through the `rng` function passed to `buildEngine()`. Violations are caught by `grep -r "Math.random" src/engine/`.
 
-4. **Analytical validation gates** — the following benchmarks must exit 0 after any engine change:
-   - `node tests/engine/mm1_benchmark.js` — M/M/1, λ=0.9, μ=1.0, Wq analytical = 9.0, tolerance 5%
-   - `node tests/engine/mmc_benchmark.js` — M/M/c (c=2), λ=1.6, μ=1.0, Erlang-C Wq ≈ 1.7778, tolerance 5%
+4. **Analytical validation gates** — `tests/benchmarks/golden.test.js` must pass after any engine change (part of `npm run test:soak`):
+   - M/M/1, λ=0.9, μ=1.0, Wq analytical = 9.0, tolerance 2%
+   - M/M/c (c=2), λ=1.6, μ=1.0, Erlang-C Wq ≈ 1.7778, tolerance 5%
 
 5. **95% CI coverage** (Vitest): `tests/engine/replication-ci.test.js` asserts that 20+ replications produce a 95% confidence interval that contains the analytical mean wait for both M/M/1 and M/M/c models.
 
@@ -795,7 +794,7 @@ Approximate counts as of 2026-08-24 (Sprint 89) — the `tests/` tree and `npm t
 
 In total: ~175 test files, ~2,350 test cases, all green on this branch.
 
-**The test runner (`vite.config.js`) uses `environment: 'node'` by default, with `environmentMatchGlobs` routing `tests/ui/**` to `jsdom`** (see §12.3). No further environment setup is needed to add tests in either layer.
+**The test runner (`vite.config.js`) is split into `unit`/`ui`/`soak` Vitest projects** — `unit` and most engine/db/llm tests run under `environment: 'node'`, `tests/ui/**` runs under `jsdom`, and full-simulation tests are isolated in `soak` (see §12.3). No further environment setup is needed to add a test to `unit` or `ui`; a new full-simulation test should be added to `soak`'s include list.
 
 ### 12.2 Test File Structure
 
@@ -808,8 +807,7 @@ tests/
 │   ├── distributions.test.js     ← Sampler correctness, seeded RNG reproducibility
 │   ├── macros.test.js            ← ARRIVE, SEIZE, COMPLETE, ASSIGN, RENEGE
 │   ├── conditions.test.js        ← Safe evaluator, all operator types
-│   ├── entities.test.js          ← Queue disciplines: FIFO, LIFO, PRIORITY
-│   └── mm1_benchmark.js          ← M/M/1 correctness gate (not a unit test — run manually)
+│   └── entities.test.js          ← Queue disciplines: FIFO, LIFO, PRIORITY
 ├── ui/
 │   ├── editors/                 ← EntityTypeEditor, BEventEditor, CEventEditor, QueueEditor
 │   │   ├── index.jsx
@@ -839,50 +837,38 @@ tests/
 
 ### 12.3 Test Environment Configuration
 
-Two environments are needed. Configure in `vite.config.js`:
+The suite is split into three Vitest **projects** (`vite.config.js`, `test.projects`) so the everyday fast loop never pays for full-simulation work:
+
+| Project | Environment | Contents | `testTimeout` |
+|---|---|---|---|
+| `unit` | `node` | `tests/{engine,db,llm,model,contracts}/**`, co-located `src/**/__tests__/**` outside `src/ui` | 15s |
+| `ui` | `jsdom` | `tests/ui/**`, `src/ui/**/__tests__/**` | 15s |
+| `soak` | `node`, single-forked | full-simulation / replication / analytical-benchmark files (see below) | 240s |
+
+`npm test` runs `unit` + `ui` only (the fast tier, real cross-file parallelism via Vitest's default `forks` pool — this is *not* the same as the `soak` project's deliberate `singleFork`). `npm run test:soak` runs the heavy tier. `npm run test:all` runs everything and is what CI's overall bar amounts to (`test` and `soak` are separate, parallel CI jobs, both blocking).
+
+**What belongs in `soak`:** anything that runs a full simulation to completion for its own sake at a scale of tens of seconds or more — determinism-parity snapshots over the whole benchmark-scenario set, `perf_timing`'s scenario-timing suite, replication-CI gates (20-30 reps), the analytical-benchmark register, and `tests/benchmarks/golden.test.js` (the project's sole M/M/1/M/M/c correctness gate — do not re-add a standalone `mm1_benchmark.js`-style script or a duplicate check elsewhere; extend `golden.test.js` instead). Everything else — including tests that build+run an engine for a `maxSimTime` in the tens or low hundreds — belongs in `unit`, which is why `unit`'s default 15s timeout is intentionally tight: a new test that needs longer almost always means it's soak-tier work, not a slow unit test that needs a bigger number.
+
+**Never re-run an identical model+seed+params for each assertion in a `describe` block** — build+run once in `beforeAll`, assert against the shared result in each `test()`. `tests/engine/trace-determinism.test.js`'s "Trace completeness" block and `tests/engine/wait-time-accuracy.test.js` are worked examples. The one exception: a test whose entire point *is* the repeated-interaction sequence (e.g. `tests/ui/execute/execute-panel.test.jsx`'s "10 sequential runs → 10 distinct saves" test) — there the repetition is the behavior under test, not redundant setup.
+
+**Never re-declare an M/M/1 or M/M/c model inline.** Use `makeMM1Model`/`makeMMcModel`/`runUntilServed` from `tests/engine/__helpers__/benchmarkFixtures.js`.
 
 ```javascript
-// vite.config.js
+// vite.config.js (abridged — see the file for the full three-project definition)
 export default defineConfig({
   test: {
-    // Engine tests: node environment (fast, no DOM needed)
-    // UI tests: jsdom environment (React rendering, DOM APIs)
-    environment: 'node',         // default
-    environmentMatchGlobs: [
-      ['tests/ui/**', 'jsdom'],  // UI tests get jsdom
-    ],
     globals: true,
-    setupFiles: ['tests/setup.js'],
-  }
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**', 'supabase/functions/**'],
+    projects: [
+      { extends: true, test: { name: 'unit', environment: 'node', setupFiles: ['tests/setup-node.js'], testTimeout: 15000, include: [...] } },
+      { extends: true, test: { name: 'ui', environment: 'jsdom', setupFiles: ['tests/setup-jsdom.js'], testTimeout: 15000, include: [...] } },
+      { extends: true, test: { name: 'soak', environment: 'node', setupFiles: ['tests/setup-node.js'], testTimeout: 240000, poolOptions: { forks: { singleFork: true } }, include: [...] } },
+    ],
+  },
 });
 ```
 
-```javascript
-// tests/setup.js
-import { cleanup } from '@testing-library/react';
-import { afterEach, vi } from 'vitest';
-
-// Clean up React renders after each test
-afterEach(cleanup);
-
-// Mock Supabase client — never hit real DB in tests
-vi.mock('../src/db/supabase.js', () => ({
-  supabase: {
-    from: vi.fn(() => ({
-      select: vi.fn().mockReturnThis(),
-      insert: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: null, error: null }),
-    })),
-    auth: {
-      getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
-      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
-    },
-  }
-}));
-```
+`tests/setup-node.js` mocks Supabase (`vi.mock('../src/db/supabase.js', ...)`) and is loaded by both `unit` and `soak`. `tests/setup-jsdom.js` additionally imports it, then adds `@testing-library/jest-dom`, React Testing Library's `cleanup()`, a `ResizeObserver` polyfill, and a jsdom `offsetParent` shim (needed for focus-trap tests — jsdom hardcodes `offsetParent` to `null`). The `offsetParent` shim is guarded (`typeof HTMLElement !== 'undefined'`) because a handful of `tests/ui/**` files opt back into the `node` environment per-file (`// @vitest-environment node`) while still loading the `ui` project's setup file.
 
 **Required packages — add to `devDependencies`:**
 
@@ -1076,22 +1062,24 @@ describe('saveModel', () => {
 
 ### 12.7 Analytical Correctness Benchmarks
 
-These benchmarks are not unit tests. They are correctness gates run manually (and in CI) after any engine change. They live in `tests/engine/` and must exit 0.
+These are Vitest tests, not unit-scoped — they run full simulations and belong to the `soak` project (§12.3). They live in `tests/benchmarks/golden.test.js` and are a correctness gate on every push (`npm run test:soak`, part of CI's `soak` job).
 
-**M/M/1 benchmark** (`tests/engine/mm1_benchmark.js`):
+**M/M/1 golden fixture:**
 - λ=0.9, μ=1.0, ρ=0.9
 - Analytical Wq = ρ / (μ·(1−ρ)) = 9.0 time units
-- N=10 000 arrivals, warmup 1000, tolerance 5%
-- `node tests/engine/mm1_benchmark.js`
+- N_SERVED=500, N_WARMUP=200, fixed seed 42, tolerance 2% (plus a regression-lock window 8.0–10.0)
 
-**M/M/c benchmark** (`tests/engine/mmc_benchmark.js`) — added Sprint 29:
+**M/M/c golden fixture** — added Sprint 29:
 - λ=1.6, μ=1.0, c=2, ρ=0.8
 - Erlang-C Wq ≈ 1.7778 time units
-- N_SERVED=2000, N_WARMUP=500, fixed seed 42, tolerance 5%
-- `node tests/engine/mmc_benchmark.js`
+- N_SERVED=2000, N_WARMUP=500, fixed seed 42, tolerance 5% (plus a regression-lock window 1.5–2.1)
 
-**Sprint 1 is not complete until the M/M/1 benchmark exits 0.**
-**Sprint 29 adds the M/M/c benchmark as a permanent gate.**
+Run both in isolation with `npx vitest run --project soak tests/benchmarks/golden.test.js`.
+
+**Sprint 1 is not complete until the M/M/1 gate passes.**
+**Sprint 29 adds the M/M/c gate as a permanent one.**
+
+(These were originally two standalone `node`-runnable scripts, `tests/engine/mm1_benchmark.js`/`mmc_benchmark.js`, run by a separate CI job; both were removed when the test suite was retiered — `golden.test.js`'s tolerances were already equal or stricter, and CI's "Analytical correctness benchmarks" job was a pure duplicate of it.)
 
 ### 12.8 Completion Gates by Sprint
 
@@ -1116,7 +1104,7 @@ These are the minimum test requirements before a sprint can be declared done. Co
 | All sprints | Full test suite passes with zero failures | `npm test` |
 | All sprints | Production build succeeds | `npm run build` |
 
-**The "full suite passes" gate is now enforced in CI, not aspirational** (commit `a4595c8`+): `.github/workflows/ci.yml` runs the Vitest suite sharded 2-ways plus a `typecheck` job, an analytical-benchmark job, and a production-build job on every push and PR; `.github/workflows/benchmark-gate.yml` additionally enforces the no-`Math.random`-in-engine rule.
+**The "full suite passes" gate is now enforced in CI, not aspirational** (commit `a4595c8`+): `.github/workflows/ci.yml` runs the fast Vitest tier (`unit`+`ui` projects) sharded 2-ways, a `soak` job (the full-simulation/analytical-benchmark tier — see §12.3), a `typecheck` job, and a production-build job on every push and PR; `.github/workflows/benchmark-gate.yml` additionally enforces the no-`Math.random`-in-engine rule.
 
 ### 12.9 What Must Never Be Tested
 
@@ -1135,14 +1123,16 @@ These are the minimum test requirements before a sprint can be declared done. Co
 npm run dev                          # Vite dev server (localhost:5173)
 
 # Testing — engine layer (node environment)
-npm test                             # Full suite, single pass (vitest run) — this is what CI runs, sharded
+npm test                             # Fast tier only: unit+ui projects (~1-2 min) — what CI's sharded "test" job runs
+npm run test:soak                    # Heavy tier: full simulations, replications, analytical benchmarks (several min)
+npm run test:all                     # Everything (fast + soak) — CI's overall bar; use before a final push
 npm run test:watch                   # Watch mode (vitest)
 npm run test:quick                   # vitest run --changed — only tests related to uncommitted changes
-# Default to test:quick while iterating — npm test's full suite runs
-# determinism-parity.test.js, perf_timing.test.js, and
-# tests/engine/benchmarks/** regardless of what changed, and those alone
-# account for several minutes of CPU-bound simulation. Reserve npm test
-# (the full suite) for the final check before a commit/push.
+# Default to test:quick while iterating, npm test before pushing, and
+# npm run test:all (or push and let CI's parallel test+soak jobs run) as the
+# final check — the soak tier alone is several minutes of CPU-bound
+# simulation, which is why it's a separate opt-in command and a separate CI
+# job rather than folded into npm test.
 npm test -- three-phase              # Run three-phase tests only
 npm test -- distributions            # Run distribution tests only
 npm test -- conditions               # Run condition evaluator tests only
@@ -1160,10 +1150,12 @@ npm test -- accessibility delete-model onboarding
 # Testing — DB layer (mocked Supabase — Sprint 3 onwards)
 npm test -- db                       # All DB wrapper tests
 
-# Correctness gate — run manually after any engine change
-node tests/engine/mm1_benchmark.js
-# Pass: exits 0, prints simulated vs analytical mean wait within 5%
-# Fail: exits 1, prints actual % error
+# Correctness gate — the M/M/1 and M/M/c analytical checks, always run as
+# part of npm run test:soak / test:all (tests/benchmarks/golden.test.js).
+# The former standalone mm1_benchmark.js/mmc_benchmark.js scripts and their
+# separate CI job were removed — golden.test.js's ±2%/±5% tolerance checks
+# are a strict superset of what those scripts asserted.
+npx vitest run --project soak tests/benchmarks/golden.test.js   # this gate in isolation
 
 # Build
 npm run build                        # Production build — must pass before sprint complete
@@ -1812,6 +1804,18 @@ Failure to complete this checklist means the sprint is not closed.
 **Status:** Resolved 2026-05-04. The root cause was not Vitest configuration: two open-ended seeded engine tests ran `buildEngine(...).runAll()` without a simulation time bound. Because the engine records full snapshots in the log and arrivals keep growing the entity pool, those tests exhausted worker memory during collection/execution. The fix bounded those test runs with `maxSimTime = 50` and moved stale top-level `runAll()` calls into `beforeAll()`.
 
 **Impact:** Full test suite execution is reliable again. Latest verification after Sprint 5: `npm test` passes 31 test files / 334 tests with zero unhandled worker errors.
+
+---
+
+### 22.1b Vitest "JS Heap Out of Memory" — Recurrence, 2026-08-24 to 2026-08-27 (Different Root Cause)
+
+**Issue:** After CI's "Vitest test suite" job was changed from `npm ci`-only to actually running the suite (commit `32dce81`, #467, R-01 remediation), every CI run — on every branch — died with a 4 GB heap OOM (`FATAL ERROR: Ineffective mark-compacts near heap limit`) partway through, in both shards. The suite was green locally the whole time.
+
+**Root cause:** Unlike §22.1, this was pure Vitest configuration, not an unbounded test. `vite.config.js` set `poolOptions.forks.singleFork: true` globally, intending — per its own comment — to apply only to `tests/benchmarks/**` via `poolMatchGlobs`. But `poolOptions` is not scoped by `poolMatchGlobs` (that only routes which pool a file uses; `poolOptions` configures the pool itself, globally), and Vitest's default pool was already `forks` — so every one of the suite's ~226 files ran serialised in a single child process, with heap accumulating across the whole run until the default 4 GB limit was hit. Locally this was merely slow (single-fork, no parallelism); in CI, sharding masked it into "OOM sometimes, depending on shard contents" until the gate was actually enabled.
+
+**Fix:** Replaced the global `singleFork` + `poolMatchGlobs`/`environmentMatchGlobs` combination with Vitest 3.2's `test.projects` — three named projects (`unit`, `ui`, `soak`), only the last of which sets `singleFork: true`. See §12.3 for the current structure. This also fixed the underlying slowness this section's readers are usually chasing: the fast tier now gets real cross-file parallelism instead of none.
+
+**Status:** Resolved 2026-08-27.
 
 ---
 

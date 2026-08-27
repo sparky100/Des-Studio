@@ -2,12 +2,6 @@ import { describe, test, expect, beforeEach } from 'vitest';
 import { buildEngine } from '../../src/engine/index.js';
 import { resetSeq } from '../../src/engine/entities.js';
 import { MACROS } from '../../src/engine/macros.js';
-import {
-  buildHistogram,
-  buildHistogramFD,
-  oneWayANOVA,
-  tukeyHSD,
-} from '../../src/engine/statistics.js';
 
 beforeEach(() => {
   resetSeq();
@@ -16,23 +10,11 @@ beforeEach(() => {
 // ============================================================================
 // G09: Dynamic batch size by attribute
 // ============================================================================
+// The BATCH macro's pattern-matching tests (registration, literal-integer
+// and attribute-reference operands) live in tests/engine/batch-unbatch.test.js
+// alongside the rest of BATCH's macro-pattern coverage.
 
 describe('G09: Dynamic batch size by attribute', () => {
-  test('BATCH macro pattern matches attribute reference', () => {
-    const batch = MACROS.find(m => m.name === 'BATCH');
-    const m = 'BATCH(Queue, Entity.batchSize)'.match(batch.pattern);
-    expect(m).toBeTruthy();
-    expect(m[1].trim()).toBe('Queue');
-    expect(m[2].trim()).toBe('Entity.batchSize');
-  });
-
-  test('BATCH with literal integer still works', () => {
-    const batch = MACROS.find(m => m.name === 'BATCH');
-    const m = 'BATCH(Queue, 5)'.match(batch.pattern);
-    expect(m).toBeTruthy();
-    expect(m[2].trim()).toBe('5');
-  });
-
   test('BATCH reads batch size from entity attribute', () => {
     const model = {
       entityTypes: [
@@ -138,200 +120,6 @@ describe('G09: Dynamic batch size by attribute', () => {
       entry.message && entry.message.includes('invalid batch size')
     );
     expect(invalidWarnings.length).toBeGreaterThan(0);
-  });
-});
-
-// ============================================================================
-// G12: Histogram collector
-// ============================================================================
-
-describe('G12: Histogram collector', () => {
-  test('buildHistogram creates equal-width bins', () => {
-    const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    const hist = buildHistogram(values, { numBins: 5 });
-
-    expect(hist.total).toBe(10);
-    expect(hist.numBins).toBe(5);
-    expect(hist.min).toBe(1);
-    expect(hist.max).toBe(10);
-    expect(hist.bins.length).toBe(5);
-    // Each bin should have 2 values
-    hist.bins.forEach(bin => {
-      expect(bin.count).toBe(2);
-    });
-  });
-
-  test('buildHistogram handles empty input', () => {
-    const hist = buildHistogram([], { numBins: 5 });
-    expect(hist.total).toBe(0);
-    expect(hist.bins.length).toBe(0);
-  });
-
-  test('buildHistogram handles single value', () => {
-    const hist = buildHistogram([5], { numBins: 5 });
-    expect(hist.total).toBe(1);
-    expect(hist.bins.length).toBe(1);
-    expect(hist.bins[0].count).toBe(1);
-  });
-
-  test('buildHistogram density sums to approximately 1/binWidth', () => {
-    const values = Array.from({ length: 100 }, (_, i) => i);
-    const hist = buildHistogram(values, { numBins: 10 });
-
-    // Density should be count / (total * binWidth)
-    const binWidth = (hist.max - hist.min) / hist.numBins;
-    let totalDensity = 0;
-    for (const bin of hist.bins) {
-      totalDensity += bin.density * binWidth;
-    }
-    // Should be approximately 1 (allowing for floating point error)
-    expect(totalDensity).toBeCloseTo(1, 4);
-  });
-
-  test('buildHistogramFD uses Freedman-Diaconis rule', () => {
-    const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-    const hist = buildHistogramFD(values);
-
-    expect(hist.method).toBe('freedman-diaconis');
-    expect(hist.total).toBe(15);
-    expect(hist.numBins).toBeGreaterThan(0);
-    expect(hist.numBins).toBeLessThanOrEqual(50);
-  });
-
-  test('buildHistogramFD handles empty input', () => {
-    const hist = buildHistogramFD([]);
-    expect(hist.total).toBe(0);
-    expect(hist.bins.length).toBe(0);
-  });
-
-  test('buildHistogram respects min/max bounds', () => {
-    const values = [2, 3, 4, 5, 6, 7, 8];
-    const hist = buildHistogram(values, { numBins: 3, min: 0, max: 10 });
-
-    expect(hist.min).toBe(0);
-    expect(hist.max).toBe(10);
-    expect(hist.bins.length).toBe(3);
-    // Bin width should be (10-0)/3 = 3.33...
-    expect(hist.bins[0].low).toBe(0);
-    expect(hist.bins[2].high).toBe(10);
-  });
-});
-
-// ============================================================================
-// G13: ANOVA analysis
-// ============================================================================
-
-describe('G13: One-way ANOVA', () => {
-  test('oneWayANOVA requires at least 2 groups', () => {
-    const result = oneWayANOVA([[1, 2, 3]]);
-    expect(result.k).toBe(1);
-    expect(result.fStatistic).toBeNull();
-    expect(result.explanation).toContain('At least 2 groups');
-  });
-
-  test('oneWayANOVA detects identical groups (no difference)', () => {
-    const groupA = [5, 5, 5, 5, 5];
-    const groupB = [5, 5, 5, 5, 5];
-    const result = oneWayANOVA([groupA, groupB]);
-
-    expect(result.k).toBe(2);
-    expect(result.n).toBe(10);
-    // When all values are identical, msWithin=0 so fStatistic is null
-    expect(result.fStatistic).toBeNull();
-    expect(result.significant).toBe(false);
-  });
-
-  test('oneWayANOVA detects significantly different groups', () => {
-    const groupA = [1, 2, 3, 4, 5];
-    const groupB = [10, 11, 12, 13, 14];
-    const result = oneWayANOVA([groupA, groupB], { labels: ['Low', 'High'] });
-
-    expect(result.k).toBe(2);
-    expect(result.n).toBe(10);
-    expect(result.fStatistic).toBeGreaterThan(0);
-    expect(result.significant).toBe(true);
-    expect(result.groupStats.length).toBe(2);
-    expect(result.groupStats[0].label).toBe('Low');
-    expect(result.groupStats[1].label).toBe('High');
-  });
-
-  test('oneWayANOVA computes correct grand mean', () => {
-    const groupA = [1, 2, 3];
-    const groupB = [4, 5, 6];
-    const result = oneWayANOVA([groupA, groupB]);
-
-    // Grand mean = (1+2+3+4+5+6)/6 = 3.5
-    expect(result.grandMean).toBeCloseTo(3.5, 4);
-  });
-
-  test('oneWayANOVA handles three groups', () => {
-    const groupA = [1, 2, 3, 4, 5];
-    const groupB = [6, 7, 8, 9, 10];
-    const groupC = [11, 12, 13, 14, 15];
-    const result = oneWayANOVA([groupA, groupB, groupC]);
-
-    expect(result.k).toBe(3);
-    expect(result.n).toBe(15);
-    expect(result.dfBetween).toBe(2);
-    expect(result.dfWithin).toBe(12);
-    expect(result.fStatistic).toBeGreaterThan(0);
-  });
-
-  test('oneWayANOVA handles insufficient data', () => {
-    const result = oneWayANOVA([[], []]);
-    expect(result.n).toBe(0);
-    expect(result.fStatistic).toBeNull();
-  });
-
-  test('oneWayANOVA explanation is human-readable', () => {
-    const groupA = [1, 2, 3, 4, 5];
-    const groupB = [10, 11, 12, 13, 14];
-    const result = oneWayANOVA([groupA, groupB]);
-
-    expect(result.explanation).toContain('ANOVA');
-    expect(result.explanation).toContain('F(');
-    expect(result.explanation).toContain('p =');
-  });
-});
-
-describe('G13: Tukey HSD post-hoc test', () => {
-  test('tukeyHSD requires at least 2 groups', () => {
-    const result = tukeyHSD([[1, 2, 3]]);
-    expect(result.comparisons.length).toBe(0);
-    expect(result.explanation).toContain('At least 2 groups');
-  });
-
-  test('tukeyHSD identifies significant pair differences', () => {
-    const groupA = [1, 2, 3, 4, 5];
-    const groupB = [10, 11, 12, 13, 14];
-    const result = tukeyHSD([groupA, groupB], { labels: ['Low', 'High'] });
-
-    expect(result.comparisons.length).toBe(1);
-    expect(result.comparisons[0].groupA).toBe('Low');
-    expect(result.comparisons[0].groupB).toBe('High');
-    expect(result.comparisons[0].significant).toBe(true);
-    expect(result.anySignificant).toBe(true);
-  });
-
-  test('tukeyHSD handles three groups with multiple comparisons', () => {
-    const groupA = [1, 2, 3, 4, 5];
-    const groupB = [6, 7, 8, 9, 10];
-    const groupC = [11, 12, 13, 14, 15];
-    const result = tukeyHSD([groupA, groupB, groupC]);
-
-    // 3 groups = 3 pairwise comparisons: A-B, A-C, B-C
-    expect(result.comparisons.length).toBe(3);
-    expect(result.anySignificant).toBe(true);
-  });
-
-  test('tukeyHSD returns no significant differences for identical groups', () => {
-    const groupA = [5, 5, 5, 5, 5];
-    const groupB = [5, 5, 5, 5, 5];
-    const result = tukeyHSD([groupA, groupB]);
-
-    // When msWithin=0, Tukey HSD returns empty comparisons
-    expect(result.comparisons.length).toBe(0);
-    expect(result.anySignificant).toBe(false);
   });
 });
 
