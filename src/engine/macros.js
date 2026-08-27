@@ -1126,19 +1126,33 @@ export const MACROS = [
     },
   },
 
-  // ── FAIL(ServerType) ───────────────────────────────────────────────────────
-  // Sets matching servers to failed state; busy servers' customers re-queued
+  // ── FAIL(ServerType[, N]) ───────────────────────────────────────────────────
+  // Sets matching servers to failed state; busy servers' customers re-queued.
+  // Optional N (default: all): fail at most N servers of the type. Selection
+  // prefers idle servers first, then busy/serving ones only once idle
+  // capacity is exhausted — least disruptive by default (a modeller writing
+  // "take 1 Scanner down for maintenance" expects an idle unit, not an
+  // interrupted scan, whenever one is available). An omitted or non-positive
+  // N means "all", identical to today's behavior.
   {
     name:    "FAIL",
-    pattern: /^FAIL\(([^,)]+)\)$/i,
+    pattern: /^FAIL\(([^,)]+)(?:\s*,\s*(\d+))?\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
+      const requestedN = match[2] ? parseInt(match[2], 10) : null;
       const { entities, clock, helpers, msgs } = ctx;
       const key = normName(sType);
 
-      const servers = entities.filter((/** @type {any} */ e) =>
-        e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving" || e.status === "idle")
+      const idleServers = entities.filter((/** @type {any} */ e) =>
+        e.role === "server" && normName(e.type) === key && e.status === "idle"
       );
+      const busyServers = entities.filter((/** @type {any} */ e) =>
+        e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving")
+      );
+
+      const servers = (requestedN != null && requestedN > 0)
+        ? [...idleServers, ...busyServers].slice(0, requestedN)
+        : [...idleServers, ...busyServers];
 
       let failedCount = 0;
       for (const srv of servers) {
@@ -1162,31 +1176,42 @@ export const MACROS = [
       if (failedCount === 0) {
         msgs.push(`FAIL(${sType}): no matching servers found`);
       } else {
-        msgs.push(`FAIL: ${failedCount} ${sType} server(s) set to failed`);
+        const shortfall = requestedN != null && requestedN > 0 && failedCount < requestedN
+          ? ` (requested ${requestedN}, only ${failedCount} available)` : '';
+        msgs.push(`FAIL: ${failedCount} ${sType} server(s) set to failed${shortfall}`);
       }
     },
   },
 
-  // ── REPAIR(ServerType) ─────────────────────────────────────────────────────
-  // Sets failed servers back to idle
+  // ── REPAIR(ServerType[, N]) ─────────────────────────────────────────────────
+  // Sets failed servers back to idle. Optional N (default: all): repair at
+  // most N failed servers of the type, oldest failure first (by _failedAt) —
+  // like a maintenance queue clearing its longest-outstanding tickets first.
+  // An omitted or non-positive N means "all", identical to today's behavior.
   {
     name:    "REPAIR",
-    pattern: /^REPAIR\(([^,)]+)\)$/i,
+    pattern: /^REPAIR\(([^,)]+)(?:\s*,\s*(\d+))?\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
+      const requestedN = match[2] ? parseInt(match[2], 10) : null;
       const { entities, clock, msgs } = ctx;
       const key = normName(sType);
 
-      const failedServers = entities.filter((/** @type {any} */ e) =>
+      const allFailed = entities.filter((/** @type {any} */ e) =>
         e.role === "server" && normName(e.type) === key && e.status === "failed"
       );
+      const failedServers = (requestedN != null && requestedN > 0)
+        ? [...allFailed].sort((/** @type {any} */ a, /** @type {any} */ b) => (a._failedAt ?? 0) - (b._failedAt ?? 0)).slice(0, requestedN)
+        : allFailed;
 
       const repairedCount = repairServers(failedServers, clock);
 
       if (repairedCount === 0) {
         msgs.push(`REPAIR(${sType}): no failed servers found`);
       } else {
-        msgs.push(`REPAIR: ${repairedCount} ${sType} server(s) restored to idle`);
+        const shortfall = requestedN != null && requestedN > 0 && repairedCount < requestedN
+          ? ` (requested ${requestedN}, only ${repairedCount} failed)` : '';
+        msgs.push(`REPAIR: ${repairedCount} ${sType} server(s) restored to idle${shortfall}`);
       }
     },
   },
