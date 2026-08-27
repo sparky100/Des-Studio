@@ -260,6 +260,73 @@ describe("exportToSimPy", () => {
     });
   });
 
+  // Sprint 97 — PREEMPT/FINISH victim selection. FINISH was previously silently
+  // dropped by SimPy export (absent from TODO_MACRO_SET, and not handled by any
+  // other code path) -- a model using it exported as "fully supported" while the
+  // script contained no FINISH logic at all.
+  describe("FINISH TODO stub (Sprint 97)", () => {
+    const finishModel = {
+      name: "WithFinish",
+      bEvents: [
+        { id: "b1", name: "Arrive", effect: "ARRIVE(Customer, Queue1)",
+          schedules: [{ dist: "Exponential", distParams: { mean: 3 } }] },
+      ],
+      cEvents: [
+        { id: "c1", name: "Serve", effect: "ASSIGN(Queue1, Server1)",
+          cSchedules: [{ dist: "Exponential", distParams: { mean: 2 } }] },
+        { id: "c2", name: "FinishServer", effect: "FINISH(Server1)" },
+      ],
+      entityTypes: [
+        { id: "e1", name: "Customer", role: "customer" },
+        { id: "e2", name: "Server1", role: "server", count: 1 },
+      ],
+      queues: [{ id: "q1", name: "Queue1" }],
+      containerTypes: [],
+      stateVariables: [],
+      experimentDefaults: {},
+    };
+
+    it("assigns category 2 and lists FINISH as a todoMacro instead of silently dropping it", () => {
+      const result = exportToSimPy(finishModel);
+      expect(result.category).toBe(2);
+      expect(result.todoMacros).toContain("FINISH");
+    });
+
+    it("generates a NOT SUPPORTED (FINISH) stub comment", () => {
+      const result = exportToSimPy(finishModel);
+      expect(result.script).toContain("# NOT SUPPORTED (FINISH):");
+    });
+  });
+
+  describe("PREEMPT stub mentions the criterion argument (Sprint 97)", () => {
+    const preemptModel = {
+      name: "WithPreempt",
+      bEvents: [
+        { id: "b1", name: "Arrive", effect: "ARRIVE(Customer, Queue1)",
+          schedules: [{ dist: "Exponential", distParams: { mean: 3 } }] },
+        { id: "b2", name: "PreemptServer", effect: "PREEMPT(Server1)" },
+      ],
+      cEvents: [
+        { id: "c1", name: "Serve", effect: "ASSIGN(Queue1, Server1)",
+          cSchedules: [{ dist: "Exponential", distParams: { mean: 2 } }] },
+      ],
+      entityTypes: [
+        { id: "e1", name: "Customer", role: "customer" },
+        { id: "e2", name: "Server1", role: "server", count: 1 },
+      ],
+      queues: [{ id: "q1", name: "Queue1" }],
+      containerTypes: [],
+      stateVariables: [],
+      experimentDefaults: {},
+    };
+
+    it("PREEMPT's stub comment mentions Criterion", () => {
+      const result = exportToSimPy(preemptModel);
+      const stubSection = result.script.split("# NOT SUPPORTED (PREEMPT):")[1] || "";
+      expect(stubSection).toMatch(/Criterion/);
+    });
+  });
+
   describe("script header", () => {
     it("includes the model name in the docstring", () => {
       const result = exportToSimPy(minimalModel);

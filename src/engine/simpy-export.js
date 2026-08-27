@@ -11,7 +11,7 @@
 
 // Macros whose SimPy translation requires manual completion
 const TODO_MACRO_SET = new Set([
-  'RENEGE', 'BATCH', 'RENEGE_OLDEST', 'MATCH', 'FAIL', 'REPAIR', 'PREEMPT', 'RELEASE_COSEIZED',
+  'RENEGE', 'BATCH', 'RENEGE_OLDEST', 'MATCH', 'FAIL', 'REPAIR', 'PREEMPT', 'FINISH', 'RELEASE_COSEIZED',
 ]);
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -892,7 +892,8 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       MATCH: `# NOT SUPPORTED (MATCH): Pair entities from two stores.\n# Pattern:\n#   entity_a = yield store_a.get()\n#   entity_b = yield store_b.get()\n#   combined = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(combined)`,
       FAIL: `# NOT SUPPORTED (FAIL): Simulate server failure. If a quantity N was given\n# (FAIL(Type, N)), only N units should be taken offline -- otherwise all.\n# Pattern:\n#   resource._capacity -= N  # or set to 0 for "all" (no N given)\n#   # In-flight requests are not automatically interrupted.\n#   # To interrupt: use simpy.PreemptiveResource and resource.request(preempt=True).`,
       REPAIR: `# NOT SUPPORTED (REPAIR): Restore server after failure (pair with FAIL). If a\n# quantity N was given (REPAIR(Type, N)), only N units should be restored.\n# Pattern:\n#   resource._capacity += N  # or set to ORIGINAL_CAPACITY for "all" (no N given)`,
-      PREEMPT: `# NOT SUPPORTED (PREEMPT): Use simpy.PreemptiveResource for the target server.\n# Replace simpy.Resource with simpy.PreemptiveResource at declaration.\n# Use: resource.request(priority=0, preempt=True)`,
+      PREEMPT: `# NOT SUPPORTED (PREEMPT): Use simpy.PreemptiveResource for the target server. If\n# a Criterion was given (PREEMPT(Type, Criterion) -- PRIORITY(attr), LONGEST, or\n# SHORTEST), rank the in-progress requests by that criterion and preempt the one\n# it selects rather than an arbitrary one -- otherwise preempt any in-progress request.\n# Replace simpy.Resource with simpy.PreemptiveResource at declaration.\n# Use: resource.request(priority=0, preempt=True)`,
+      FINISH: `# NOT SUPPORTED (FINISH): End the in-progress service of a busy server right now\n# (on a condition, not a scheduled delay) -- e.g. an "activity of unknown duration".\n# If a Criterion was given (FINISH(Type, Criterion) -- PRIORITY(attr), LONGEST, or\n# SHORTEST), rank the in-progress requests by that criterion and finish the one it\n# selects rather than an arbitrary one.\n# Pattern:\n#   # trigger the process holding the target request's timeout early, e.g. via an\n#   # env.event() the service process also yields on:\n#   finish_event.succeed()`,
       RELEASE_COSEIZED: `# NOT SUPPORTED (RELEASE_COSEIZED): Atomically release multiple previously co-seized resources for the current entity, mirroring COSEIZE's own AllOf() seize.\n# Pattern:\n#   for _req in entity.coseized_requests:  # however you tracked the requests from the matching COSEIZE\n#       try: _req.resource.release(_req)\n#       except: pass\n#   entity.coseized_requests = []`,
     };
     for (const m of todoList) {
