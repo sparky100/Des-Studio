@@ -17,6 +17,7 @@ import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
 import { isActivityRouteEdge } from "./graph.js";
 import { computeAlignmentGuides } from "./alignmentGuides.js";
+import { computeRunOverlaps, nodeRunRect, runFootprintSize } from "./runFootprint.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useFitNodeRef } from "../shared/useFitNodeRef.js";
 import { SectionPanelNode } from "./SectionPanelNode.jsx";
@@ -32,6 +33,7 @@ function DesNode({ data, selected }) {
   const hasTarget = data.type !== "source" && data.type !== "container";
   const hasSource = data.type !== "sink" && data.type !== "container";
   const hasError = !!data.hasError;
+  const runOverlap = !!data.runOverlap;
   return (
     <div
       onMouseEnter={() => setHovered(true)}
@@ -62,6 +64,50 @@ function DesNode({ data, selected }) {
       fontFamily: FONT,
       fontSize: 10,
     }}>
+      {data.runFootprint && (
+        // The card's Run-canvas footprint. Both canvases anchor cards at the
+        // same top-left flow coordinate, so the ghost sits at the card's outer
+        // corner (offset by the card's own borders: 4px left, 1.5px top) and
+        // extends to the size the Run canvas will render this object at.
+        <div
+          aria-hidden="true"
+          className="run-footprint-ghost"
+          style={{
+            position: "absolute",
+            top: -1.5,
+            left: -4,
+            width: data.runFootprint.width,
+            height: data.runFootprint.height,
+            boxSizing: "border-box",
+            border: `1.5px dashed ${runOverlap ? C.amber : `${color}55`}`,
+            borderRadius: 6,
+            pointerEvents: "none",
+          }}
+        />
+      )}
+      {runOverlap && (
+        <div
+          aria-hidden="true"
+          title="Overlaps another object on the Run canvas — Run cards are larger than Draw cards, so space these objects further apart."
+          style={{
+            position: "absolute",
+            top: -5,
+            left: -5,
+            width: 14,
+            height: 14,
+            borderRadius: "50%",
+            background: C.amber,
+            border: `2px solid ${C.bg}`,
+            color: C.bg,
+            fontSize: 8,
+            fontWeight: 900,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "help",
+          }}
+        >!</div>
+      )}
       {hasError && (
         <div
           aria-hidden="true"
@@ -323,6 +369,30 @@ function AlignmentGuidesOverlay({ guides, reactFlowInstance, wrapperRef, C }) {
   );
 }
 
+// Amber dashed rects marking the Run-canvas footprints that collide while a
+// drag is in flight. Same sibling-overlay pattern as AlignmentGuidesOverlay:
+// updating the controlled `nodes` prop mid-drag would snap the dragged node
+// back to its committed position, so live feedback must bypass it.
+function RunOverlapOverlay({ rects, reactFlowInstance, wrapperRef, C }) {
+  if (!rects.length || !reactFlowInstance || !wrapperRef.current) return null;
+  const box = wrapperRef.current.getBoundingClientRect();
+  return (
+    <svg style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
+      {rects.map((r, i) => {
+        const tl = reactFlowInstance.flowToScreenPosition({ x: r.left, y: r.top });
+        const br = reactFlowInstance.flowToScreenPosition({ x: r.right, y: r.bottom });
+        return (
+          <rect key={i}
+            x={tl.x - box.left} y={tl.y - box.top}
+            width={br.x - tl.x} height={br.y - tl.y}
+            fill={`${C.amber}18`} stroke={C.amber} strokeWidth={1.5}
+            strokeDasharray="6,4" rx={6} />
+        );
+      })}
+    </svg>
+  );
+}
+
 function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId }) {
   const { C, FONT } = useTheme();
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -419,6 +489,8 @@ export function FlowDiagramReactFlow({
   focusSectionRef,
   matchedNodeIds,
   showSections = true,
+  showRunFootprint = false,
+  overlapNodeIds = null,
   onNodeSelect,
   onNodeSelectionChange,
   onEdgeSelect,
@@ -436,6 +508,7 @@ export function FlowDiagramReactFlow({
   const [connecting, setConnecting] = useState(false);
   const [focusedSectionId, setFocusedSectionId] = useState(null);
   const [alignmentGuides, setAlignmentGuides] = useState([]);
+  const [dragOverlapRects, setDragOverlapRects] = useState([]);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const wrapperRef = useRef(null);
   const suppressViewportSyncRef = useRef(true);
@@ -473,6 +546,8 @@ export function FlowDiagramReactFlow({
           errorMessage,
           sectionColor: showSections ? base.data.sectionColor : undefined,
           sectionId: showSections ? base.data.sectionId : undefined,
+          runFootprint: showRunFootprint ? runFootprintSize(node.type) : null,
+          runOverlap: overlapNodeIds ? overlapNodeIds.has(node.id) : false,
         },
         style: { opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms" },
       };
@@ -499,7 +574,7 @@ export function FlowDiagramReactFlow({
     }
 
     return flowNodes;
-  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet, matchedNodeIds]);
+  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet, matchedNodeIds, showRunFootprint, overlapNodeIds]);
 
   // Ref-synced copy of `nodes` so onNodeDrag/onNodeDragStop's alignment-guide
   // computation always reads current node positions, not a stale closure
@@ -658,6 +733,21 @@ export function FlowDiagramReactFlow({
           }
         }}
         onNodeDrag={(_event, node, draggingNodes) => {
+          // Live Run-overlap feedback for any drag (single or multi): swap the
+          // in-flight positions into the node list, recompute which Run
+          // footprints collide, and mark them via the overlay. State is only
+          // touched when the set is non-empty or needs clearing, so quiet
+          // drag frames don't re-render.
+          const dragged = draggingNodes?.length ? draggingNodes : [node];
+          const draggedById = new Map(dragged.map(d => [d.id, d]));
+          const liveNodes = nodesRef.current
+            .filter(n => n.type !== "sectionPanel")
+            .map(n => draggedById.get(n.id) ?? n);
+          const { nodeIds: overlapIds } = computeRunOverlaps(liveNodes);
+          setDragOverlapRects(prev => {
+            if (!overlapIds.size) return prev.length ? [] : prev;
+            return liveNodes.filter(n => overlapIds.has(n.id)).map(nodeRunRect);
+          });
           if ((draggingNodes?.length || 1) > 1 || node.type === "sectionPanel") {
             if (alignmentGuides.length) setAlignmentGuides([]);
             return;
@@ -668,6 +758,7 @@ export function FlowDiagramReactFlow({
         }}
         onNodeDragStop={(_, node, movedNodes = []) => {
           setAlignmentGuides([]);
+          setDragOverlapRects(prev => prev.length ? [] : prev);
           const moved = movedNodes.length ? movedNodes : [node];
           let movedPositions = moved.map(item => ({ id: item.id, x: item.position.x, y: item.position.y }));
           if (moved.length === 1 && node.type !== "sectionPanel") {
@@ -710,6 +801,7 @@ export function FlowDiagramReactFlow({
         />
       </ReactFlow>
       <AlignmentGuidesOverlay guides={alignmentGuides} reactFlowInstance={reactFlowInstance} wrapperRef={wrapperRef} C={C} />
+      <RunOverlapOverlay rects={dragOverlapRects} reactFlowInstance={reactFlowInstance} wrapperRef={wrapperRef} C={C} />
     </div>
   );
 }

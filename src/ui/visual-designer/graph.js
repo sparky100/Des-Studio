@@ -6,6 +6,9 @@
 import dagre from "@dagrejs/dagre";
 import { clean, effectText, macroCalls } from "../../model/macroParser.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
+// Pure constants module (imports only dagre) — safe to share with Draw per
+// ADR-020: no Execute *components* cross into the designer.
+import { EXEC_CARD_WIDTH, EXEC_NODE_HEIGHT, EXEC_DEFAULT_HEIGHT } from "../execute/executeLayout.js";
 
 export const NODE_WIDTH = 142;
 export const NODE_HEIGHT = 68;
@@ -49,6 +52,18 @@ function layoutById(graph = {}) {
   return new Map((graph.nodes || []).map(node => [node.id, node]));
 }
 
+// Dagre reserves a box per node sized to whichever canvas renders it larger —
+// Draw's uniform NODE_WIDTH x NODE_HEIGHT or the Run canvas's bigger cards
+// (EXEC_CARD_WIDTH wide, per-type heights). Both canvases anchor cards at the
+// same top-left x/y, so auto-laid nodes (imported/AI-generated models,
+// "Layout" reset) can never overlap on either canvas.
+function layoutBoxSize(type) {
+  return {
+    width: Math.max(NODE_WIDTH, EXEC_CARD_WIDTH),
+    height: Math.max(NODE_HEIGHT, EXEC_NODE_HEIGHT[type] ?? EXEC_DEFAULT_HEIGHT),
+  };
+}
+
 function withLayout(nodes, edges, graph = {}) {
   const stored = layoutById(graph);
 
@@ -64,7 +79,7 @@ function withLayout(nodes, edges, graph = {}) {
   });
   g.setDefaultEdgeLabel(() => ({}));
 
-  nodes.forEach(node => g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
+  nodes.forEach(node => g.setNode(node.id, layoutBoxSize(node.type)));
 
   // Exclude loop (back) edges — dagre handles them poorly and they're
   // already styled separately in the renderer.
@@ -82,10 +97,11 @@ function withLayout(nodes, edges, graph = {}) {
       return { ...node, x: saved.x, y: saved.y };
     }
     const pos = g.node(node.id);
+    const box = layoutBoxSize(node.type);
     return {
       ...node,
-      x: pos ? Math.round(pos.x - NODE_WIDTH / 2) : DAGRE_MARGIN_X,
-      y: pos ? Math.round(pos.y - NODE_HEIGHT / 2) : DAGRE_MARGIN_Y,
+      x: pos ? Math.round(pos.x - box.width / 2) : DAGRE_MARGIN_X,
+      y: pos ? Math.round(pos.y - box.height / 2) : DAGRE_MARGIN_Y,
     };
   });
 }
@@ -534,6 +550,7 @@ export async function exportCanvasToPng(fitViewFn) {
         !node.classList?.contains('react-flow__controls') &&
         !node.classList?.contains('react-flow__minimap') &&
         !node.classList?.contains('react-flow__background') &&
+        !node.classList?.contains('run-footprint-ghost') &&
         !node.getAttribute?.('data-id')?.startsWith('section-'),
     });
   } catch (err) {

@@ -4,6 +4,7 @@
 import dagre from "@dagrejs/dagre";
 
 export const EXEC_NODE_WIDTH = 180;   // 160 px card + 20 px breathing room
+export const EXEC_CARD_WIDTH = 160;   // width the Execute*Node cards actually render
 const EXEC_RANK_SEP   = 80;    // horizontal gap between columns
 const EXEC_NODE_SEP   = 50;    // vertical gap between nodes in the same column
 const EXEC_MARGIN_X   = 60;
@@ -19,7 +20,8 @@ export const EXEC_NODE_HEIGHT = {
   activity: 145,
   sink:    155,
 };
-const DEFAULT_HEIGHT = 120;
+export const EXEC_DEFAULT_HEIGHT = 120;
+const DEFAULT_HEIGHT = EXEC_DEFAULT_HEIGHT;
 
 function execHeight(type) {
   return EXEC_NODE_HEIGHT[type] ?? DEFAULT_HEIGHT;
