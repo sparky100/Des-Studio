@@ -123,60 +123,66 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPa
         <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>No parameters available for this model.</span>
       )}
 
-      {/* Filtered flat list */}
-      {filtered !== null && (
-        filtered.length === 0
-          ? <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>No parameters match "{query}".</span>
-          : filtered.map(p => (
-              <ParamRow
-                key={p.path} p={p} color={paramColor(p.type, C)}
-                added={alreadyAdded.has(p.path)}
-                selected={p.path === selectedPath}
-                onSelect={handleSelect}
-              />
-            ))
-      )}
+      {/* Results — bounded and internally scrollable so a model with many
+          parameters (or several expanded groups at once) scrolls inside this
+          box instead of growing the popover, and the page under it, without
+          limit. Header and search input above stay pinned/visible. */}
+      <div data-testid="param-browser-results" style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: SPACE.sm }}>
+        {/* Filtered flat list */}
+        {filtered !== null && (
+          filtered.length === 0
+            ? <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>No parameters match "{query}".</span>
+            : filtered.map(p => (
+                <ParamRow
+                  key={p.path} p={p} color={paramColor(p.type, C)}
+                  added={alreadyAdded.has(p.path)}
+                  selected={p.path === selectedPath}
+                  onSelect={handleSelect}
+                />
+              ))
+        )}
 
-      {/* Grouped sections (shown when search is empty) */}
-      {filtered === null && (
-        <>
-          {servers.length > 0 && (
-            <SectionPanel label="Servers & Capacity" color={C.server} status={String(servers.length)} defaultOpen={true}>
-              {servers.map(p => (
-                <ParamRow key={p.path} p={p} color={C.server} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
-              ))}
-            </SectionPanel>
-          )}
-          {cEvents.length > 0 && (
-            <SectionPanel label="Service Distributions" color={C.cEvent} status={String(cEvents.length)}>
-              {cEvents.map(p => (
-                <ParamRow key={p.path} p={p} color={C.cEvent} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
-              ))}
-            </SectionPanel>
-          )}
-          {bEvents.length > 0 && (
-            <SectionPanel label="Arrival Distributions" color={C.bEvent} status={String(bEvents.length)} defaultOpen={servers.length === 0 && cEvents.length === 0}>
-              {bEvents.map(p => (
-                <ParamRow key={p.path} p={p} color={C.bEvent} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
-              ))}
-            </SectionPanel>
-          )}
-          {stateVars.length > 0 && (
-            <SectionPanel label="State Variables" color={C.muted} status={String(stateVars.length)}>
-              {stateVars.map(p => (
-                <ParamRow key={p.path} p={p} color={C.muted} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
-              ))}
-            </SectionPanel>
-          )}
-          {queues.length > 0 && (
-            <SectionPanel label="Queue Capacity" color={C.green} status={String(queues.length)}>
-              {queues.map(p => (
-                <ParamRow key={p.path} p={p} color={C.green} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
-              ))}
-            </SectionPanel>
-          )}
-        </>
-      )}
+        {/* Grouped sections (shown when search is empty) */}
+        {filtered === null && (
+          <>
+            {servers.length > 0 && (
+              <SectionPanel label="Servers & Capacity" color={C.server} status={String(servers.length)} defaultOpen={true}>
+                {servers.map(p => (
+                  <ParamRow key={p.path} p={p} color={C.server} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
+                ))}
+              </SectionPanel>
+            )}
+            {cEvents.length > 0 && (
+              <SectionPanel label="Service Distributions" color={C.cEvent} status={String(cEvents.length)}>
+                {cEvents.map(p => (
+                  <ParamRow key={p.path} p={p} color={C.cEvent} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
+                ))}
+              </SectionPanel>
+            )}
+            {bEvents.length > 0 && (
+              <SectionPanel label="Arrival Distributions" color={C.bEvent} status={String(bEvents.length)} defaultOpen={servers.length === 0 && cEvents.length === 0}>
+                {bEvents.map(p => (
+                  <ParamRow key={p.path} p={p} color={C.bEvent} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
+                ))}
+              </SectionPanel>
+            )}
+            {stateVars.length > 0 && (
+              <SectionPanel label="State Variables" color={C.muted} status={String(stateVars.length)}>
+                {stateVars.map(p => (
+                  <ParamRow key={p.path} p={p} color={C.muted} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
+                ))}
+              </SectionPanel>
+            )}
+            {queues.length > 0 && (
+              <SectionPanel label="Queue Capacity" color={C.green} status={String(queues.length)}>
+                {queues.map(p => (
+                  <ParamRow key={p.path} p={p} color={C.green} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
+                ))}
+              </SectionPanel>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
