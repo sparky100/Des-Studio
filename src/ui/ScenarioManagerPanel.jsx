@@ -27,6 +27,7 @@ import { ScenarioComparisonTable } from "./shared/ScenarioComparisonTable.jsx";
 import { AnovaTukeyTable } from "./shared/AnovaTukeyTable.jsx";
 import { CI_METRICS, METRIC_LABELS } from "./execute/executeHelpers.js";
 import { Btn } from "./shared/components.jsx";
+import { ParamBrowserPanel, paramColor } from "./shared/ParamBrowserPanel.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
@@ -59,6 +60,7 @@ export function ScenarioManagerPanel({ model, userId }) {
   const [formReplications, setFormReplications] = useState("10");
   const [formDeltas, setFormDeltas] = useState([]); // [{paramConfig, value}]
   const [paramPick, setParamPick] = useState("");
+  const [paramPickerOpen, setParamPickerOpen] = useState(false);
   const [paramValue, setParamValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -92,6 +94,7 @@ export function ScenarioManagerPanel({ model, userId }) {
     const value = Number(paramValue);
     if (!paramConfig || !Number.isFinite(value)) return;
     setFormDeltas(prev => [...prev.filter(d => d.paramConfig.path !== paramConfig.path), { paramConfig, value }]);
+    setParamPick("");
     setParamValue("");
   };
 
@@ -99,7 +102,7 @@ export function ScenarioManagerPanel({ model, userId }) {
 
   const resetForm = () => {
     setFormName(""); setFormSeed(""); setFormReplications("10");
-    setFormDeltas([]); setParamPick(""); setParamValue(""); setFormError(null);
+    setFormDeltas([]); setParamPick(""); setParamPickerOpen(false); setParamValue(""); setFormError(null);
     setShowForm(false);
   };
 
@@ -207,15 +210,43 @@ export function ScenarioManagerPanel({ model, userId }) {
             ))}
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-            <select value={paramPick} onChange={e => setParamPick(e.target.value)}
-              style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: SANS, fontSize: 12, padding: "6px 8px", flex: 1, minWidth: 160 }}>
-              <option value="">— select a parameter to change —</option>
-              {sweepableParams.map(p => <option key={p.path} value={p.path}>{p.label}{p.subLabel ? ` (${p.subLabel})` : ""} — currently {p.currentValue}</option>)}
-            </select>
+            {(() => {
+              const picked = sweepableParams.find(p => p.path === paramPick);
+              if (!picked) {
+                return (
+                  <Btn small variant="ghost" ariaLabel="Choose a parameter to change" onClick={() => setParamPickerOpen(o => !o)}>
+                    + Choose parameter
+                  </Btn>
+                );
+              }
+              const color = paramColor(picked.type, C);
+              return (
+                <button onClick={() => setParamPickerOpen(o => !o)} aria-label="Change the chosen parameter"
+                  style={{ flex: 1, minWidth: 160, textAlign: "left", background: `${color}18`, border: `1px solid ${color}44`,
+                    borderRadius: 5, padding: "5px 8px", fontFamily: SANS, fontSize: 12, color, cursor: "pointer" }}>
+                  {picked.label}{picked.subLabel ? ` (${picked.subLabel})` : ""} ▾
+                </button>
+              );
+            })()}
             <input type="number" value={paramValue} onChange={e => setParamValue(e.target.value)}
-              placeholder="new value" style={{ width: 100, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: SANS, fontSize: 12, padding: "6px 8px" }} />
+              placeholder="new value" aria-label="New value for the chosen parameter"
+              style={{ width: 100, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: SANS, fontSize: 12, padding: "6px 8px" }} />
             <Btn small variant="ghost" onClick={addDelta} disabled={!paramPick || paramValue === ""}>Add</Btn>
           </div>
+          {paramPickerOpen && (
+            <ParamBrowserPanel
+              params={sweepableParams}
+              singleSelect
+              selectedPath={paramPick || null}
+              alreadyAdded={new Set(formDeltas.map(d => d.paramConfig.path))}
+              onSelect={path => {
+                setParamPick(path);
+                const picked = sweepableParams.find(p => p.path === path);
+                if (picked && Number.isFinite(picked.currentValue)) setParamValue(String(picked.currentValue));
+              }}
+              onClose={() => setParamPickerOpen(false)}
+            />
+          )}
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <label style={{ fontSize: 10, color: C.muted, fontFamily: SANS }}>Seed</label>
             <input type="number" value={formSeed} onChange={e => setFormSeed(e.target.value)} placeholder="random"

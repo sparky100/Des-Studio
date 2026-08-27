@@ -84,8 +84,11 @@ describe("ScenarioManagerPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
     fireEvent.change(screen.getByPlaceholderText(/scenario name/i), { target: { value: "More clerks" } });
 
-    const paramSelect = screen.getByRole("combobox");
-    fireEvent.change(paramSelect, { target: { value: "entityTypes.et_srv.count" } });
+    // The delta picker is the shared searchable, grouped parameter browser.
+    fireEvent.click(screen.getByRole("button", { name: /choose a parameter to change/i }));
+    fireEvent.change(await screen.findByPlaceholderText(/filter parameters/i), { target: { value: "clerk" } });
+    fireEvent.click(screen.getByRole("button", { name: /^number of clerk/i }));
+    // Picking pre-seeds the value input with the current value; override it.
     fireEvent.change(screen.getByPlaceholderText("new value"), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 

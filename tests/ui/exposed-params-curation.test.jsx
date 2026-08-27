@@ -57,9 +57,11 @@ describe('Business view curation (exposedParams)', () => {
     renderDetail(baseModel, onSave);
     await openAccessTab();
 
-    const picker = screen.getByRole('combobox', { name: /add an adjustable setting/i });
-    fireEvent.change(picker, { target: { value: 'entityTypes.et-teller.count' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    // The picker is the shared searchable, grouped parameter browser: open it,
+    // narrow by search, then click the matching row.
+    fireEvent.click(screen.getByRole('button', { name: /add an adjustable setting/i }));
+    fireEvent.change(await screen.findByPlaceholderText(/filter parameters/i), { target: { value: 'teller' } });
+    fireEvent.click(screen.getByRole('button', { name: /^number of teller/i }));
 
     // Row appears with the technical label and a business-name input
     expect(screen.getByText(/Number of Teller — currently 2/)).toBeInTheDocument();
@@ -100,13 +102,18 @@ describe('Business view curation (exposedParams)', () => {
     expect(screen.queryByText(/Old knob/)).not.toBeInTheDocument();
   });
 
-  it('excludes already-exposed parameters from the picker options', async () => {
+  it('disables already-exposed parameters in the picker instead of offering them again', async () => {
     renderDetail({ ...baseModel, exposedParams: [{ path: 'entityTypes.et-teller.count' }] });
     await openAccessTab();
 
-    const picker = screen.getByRole('combobox', { name: /add an adjustable setting/i });
-    const options = Array.from(picker.querySelectorAll('option')).map(o => o.value);
-    expect(options).not.toContain('entityTypes.et-teller.count');
-    expect(options).toContain('queues.q-main.capacity');
+    fireEvent.click(screen.getByRole('button', { name: /add an adjustable setting/i }));
+    // Search flattens the grouped sections into one filtered list.
+    fireEvent.change(await screen.findByPlaceholderText(/filter parameters/i), { target: { value: 'e' } });
+
+    // Already-exposed teller count renders but is disabled; the queue capacity is
+    // selectable. Anchored regexes keep the curated row's "Stop exposing …"
+    // remove button out of the match.
+    expect(screen.getByRole('button', { name: /^number of teller/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^main queue — maximum capacity/i })).not.toBeDisabled();
   });
 });

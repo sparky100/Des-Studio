@@ -35,7 +35,7 @@ import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogr
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
-import { ParamBrowserPanel, paramColor } from "./ParamBrowserPanel.jsx";
+import { ParamBrowserPanel, paramColor } from "../shared/ParamBrowserPanel.jsx";
 import { alpha, RADIUS, SHADOW } from "../shared/tokens.js";
 import { prefersReducedMotion } from "../shared/hooks.js";
 import { generateReport, sanitizeFilename } from '../../reports/index.js';
@@ -1772,7 +1772,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               </div>
               {expFormOverrides.map((ov, idx) => {
                 const param = sweepParams.find(p => p.path === ov.path);
-                const chipColor = (() => { const t = param?.type; if (t === "entityTypeCount" || t === "shiftCapacity") return C.server; if (t === "queueCapacity") return C.green; if (t === "bEventDistParam" || t === "bEventPiecewisePeriodParam") return C.bEvent; if (t === "cEventDistParam" || t === "cEventPiecewisePeriodParam") return C.cEvent; return C.muted; })();
+                const chipColor = paramColor(param?.type, C);
                 return (
                   <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 1, background: alpha(chipColor, 0.09), border: `1px solid ${alpha(chipColor, 0.27)}`, borderRadius: RADIUS.sm, padding: "3px 8px", minWidth: 0 }}>
@@ -1931,7 +1931,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                             </div>
                             {expFormOverrides.map((ov, i2) => {
                               const param = sweepParams.find(p => p.path === ov.path);
-                              const chipColor = (() => { const t = param?.type; if (t === "entityTypeCount" || t === "shiftCapacity") return C.server; if (t === "queueCapacity") return C.green; if (t === "bEventDistParam" || t === "bEventPiecewisePeriodParam") return C.bEvent; if (t === "cEventDistParam" || t === "cEventPiecewisePeriodParam") return C.cEvent; return C.muted; })();
+                              const chipColor = paramColor(param?.type, C);
                               return (
                                 <div key={i2} style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                   <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 1, background: alpha(chipColor, 0.09), border: `1px solid ${alpha(chipColor, 0.27)}`, borderRadius: RADIUS.sm, padding: "3px 8px", minWidth: 0 }}>
@@ -1973,7 +1973,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER OVERRIDES</span>
                               {cfg.overrides.map((ov, i2) => {
                                 const param = sweepParams.find(p => p.path === ov.path);
-                                const chipColor = (() => { const t = param?.type; if (t === "entityTypeCount" || t === "shiftCapacity") return C.server; if (t === "queueCapacity") return C.green; if (t === "bEventDistParam" || t === "bEventPiecewisePeriodParam") return C.bEvent; if (t === "cEventDistParam" || t === "cEventPiecewisePeriodParam") return C.cEvent; return C.muted; })();
+                                const chipColor = paramColor(param?.type, C);
                                 return (
                                   <div key={i2} style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                     <div style={{ flex: 1, background: alpha(chipColor, 0.09), border: `1px solid ${alpha(chipColor, 0.27)}`, borderRadius: RADIUS.sm, padding: "3px 8px" }}>
