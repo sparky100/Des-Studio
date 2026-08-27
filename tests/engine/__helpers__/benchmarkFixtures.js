@@ -40,6 +40,45 @@ export function makeMM1Model(lambda = 0.9, mu = 1.0) {
 }
 
 /**
+ * Returns a minimal M/M/c model with configurable arrival/service rates and
+ * server count.
+ * Default: λ=1.6, μ=1.0, c=2 (ρ=0.8, Erlang-C E[Wq]≈1.7778)
+ */
+export function makeMMcModel(lambda = 1.6, mu = 1.0, c = 2) {
+  return {
+    entityTypes: [
+      { id: 'et_cust', name: 'Customer', role: 'customer', count: 0, attrDefs: [] },
+      { id: 'et_srv',  name: 'Server',   role: 'server',   count: c, attrDefs: [] },
+    ],
+    stateVariables: [],
+    bEvents: [
+      {
+        id: 'b_arrive', name: 'Arrival', scheduledTime: '0',
+        effect: 'ARRIVE(Customer)',
+        schedules: [{ eventId: 'b_arrive', dist: 'Exponential', distParams: { mean: String(1 / lambda) } }],
+      },
+      {
+        id: 'b_complete', name: 'Complete', scheduledTime: '9999',
+        effect: 'COMPLETE()',
+        schedules: [],
+      },
+    ],
+    cEvents: [
+      {
+        id: 'c_seize', name: 'Seize',
+        condition: 'queue(Customer).length > 0 AND idle(Server).count > 0',
+        effect: 'ASSIGN(Customer, Server)',
+        cSchedules: [{
+          eventId: 'b_complete', dist: 'Exponential',
+          distParams: { mean: String(1 / mu) }, useEntityCtx: true,
+        }],
+      },
+    ],
+    queues: [],
+  };
+}
+
+/**
  * Step-based runner: drives the engine until targetServed entities are done,
  * then returns the mean wait of the steady-state slice (skipping the first
  * `warmup` completions by arrival order).

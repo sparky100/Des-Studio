@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// tests/setup.js globally mocks db/supabase.js (without exporting submitFeedback);
+// tests/setup-node.js globally mocks db/supabase.js (without exporting submitFeedback);
 // unmock here to exercise the real implementation via an injected client instead.
 // A dynamic import (after stubbing the env vars createClient needs at module
 // load time) is required since vi.stubEnv isn't hoisted above static imports.

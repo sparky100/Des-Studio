@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import { runReplications } from '../../src/engine/replication-runner.js';
 import { summarizeReplicationResults } from '../../src/engine/statistics.js';
-import { makeMM1Model } from './__helpers__/benchmarkFixtures.js';
+import { makeMM1Model, makeMMcModel } from './__helpers__/benchmarkFixtures.js';
+
+// This file exercises the replication-runner/CI-summarisation machinery
+// (runReplications + summarizeReplicationResults) — distinct coverage from
+// tests/benchmarks/golden.test.js's single-run point-estimate checks against
+// the same analytical models, so both are kept; only the duplicated model
+// definitions were de-duplicated (moved to the shared benchmarkFixtures.js
+// used by golden.test.js and benchmarks.test.js too).
 
 const LAMBDA = 0.9;
 const MU = 1.0;
@@ -27,53 +34,7 @@ const MMC_ANALYTICAL_WQ = (() => {
 })();
 
 const mm1Model = makeMM1Model(LAMBDA, MU);
-
-const mmcModel = {
-  entityTypes: [
-    { id: 'et_cust', name: 'Customer', role: 'customer', count: 0, attrDefs: [] },
-    { id: 'et_srv', name: 'Server', role: 'server', count: MMC_C, attrDefs: [] },
-  ],
-  stateVariables: [],
-  bEvents: [
-    {
-      id: 'b_arrive',
-      name: 'Arrival',
-      scheduledTime: '0',
-      effect: 'ARRIVE(Customer)',
-      schedules: [
-        {
-          eventId: 'b_arrive',
-          dist: 'Exponential',
-          distParams: { mean: String(1 / MMC_LAMBDA) },
-        },
-      ],
-    },
-    {
-      id: 'b_complete',
-      name: 'Complete',
-      scheduledTime: '9999',
-      effect: 'COMPLETE()',
-      schedules: [],
-    },
-  ],
-  cEvents: [
-    {
-      id: 'c_seize',
-      name: 'Seize',
-      condition: 'queue(Customer).length > 0 AND idle(Server).count > 0',
-      effect: 'ASSIGN(Customer, Server)',
-      cSchedules: [
-        {
-          eventId: 'b_complete',
-          dist: 'Exponential',
-          distParams: { mean: String(1 / MMC_MU) },
-          useEntityCtx: true,
-        },
-      ],
-    },
-  ],
-  queues: [],
-};
+const mmcModel = makeMMcModel(MMC_LAMBDA, MMC_MU, MMC_C);
 
 describe('replication CI gate', () => {
   test('30 M/M/1 replications produce a 95% CI containing analytical mean wait', async () => {

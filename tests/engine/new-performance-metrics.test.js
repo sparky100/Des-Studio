@@ -1,7 +1,7 @@
 // Sprint 85 — New performance goal metrics tests.
 // Covers: avgTimeInSystem (weighted avg across all entities), servedRatio (served/total).
 
-import { describe, test, expect, beforeEach } from 'vitest';
+import { describe, test, expect, beforeEach, beforeAll } from 'vitest';
 import { buildEngine } from '../../src/engine/index.js';
 import { resetSeq } from '../../src/engine/entities.js';
 
@@ -30,54 +30,56 @@ function stableModel() {
   };
 }
 
-// ── Test 1: servedRatio is computed and between 0 and 1 ──────────────────────
+// ── Tests 1, 3, 4: three assertions against the same 100-time-unit run ───────
+// (servedRatio range, avgTimeInSystem positivity, avgTimeInSystem vs avgSojourn)
 
-test('servedRatio is between 0 and 1 when entities exist', () => {
-  const engine = buildEngine(stableModel(), 42, 0, 100);
-  const result = engine.runAll();
-  expect(result.summary.total).toBeGreaterThan(0);
-  expect(result.summary.servedRatio).toBeGreaterThanOrEqual(0);
-  expect(result.summary.servedRatio).toBeLessThanOrEqual(1);
+describe('stable system, maxSimTime=100', () => {
+  let result;
+  beforeAll(() => {
+    const engine = buildEngine(stableModel(), 42, 0, 100);
+    result = engine.runAll();
+  });
+
+  test('servedRatio is between 0 and 1 when entities exist', () => {
+    expect(result.summary.total).toBeGreaterThan(0);
+    expect(result.summary.servedRatio).toBeGreaterThanOrEqual(0);
+    expect(result.summary.servedRatio).toBeLessThanOrEqual(1);
+  });
+
+  test('avgTimeInSystem is computed and positive when entities arrive', () => {
+    expect(result.summary.avgTimeInSystem).not.toBeNull();
+    expect(result.summary.avgTimeInSystem).toBeGreaterThan(0);
+  });
+
+  test('both avgTimeInSystem and avgSojourn are positive', () => {
+    expect(result.summary.avgSojourn).toBeGreaterThan(0);
+    expect(result.summary.avgTimeInSystem).toBeGreaterThan(0);
+  });
 });
 
-// ── Test 2: servedRatio approaches 1.0 with long enough run in stable system ─
+// ── Tests 2, 5: two assertions against the same 200-time-unit run ────────────
+// (servedRatio approaching 1.0, avgTimeInSystem/avgSojourn convergence)
 
-test('servedRatio approaches 1.0 in stable system with long run', () => {
-  const engine = buildEngine(stableModel(), 42, 0, 200);
-  const result = engine.runAll();
-  // In a stable system (arrival every 10, service 3), most entities should complete
-  expect(result.summary.servedRatio).toBeGreaterThan(0.8);
-});
+describe('stable system, maxSimTime=200', () => {
+  let result;
+  beforeAll(() => {
+    const engine = buildEngine(stableModel(), 42, 0, 200);
+    result = engine.runAll();
+  });
 
-// ── Test 3: avgTimeInSystem exists and is positive when entities exist ───────
+  test('servedRatio approaches 1.0 in stable system with long run', () => {
+    // In a stable system (arrival every 10, service 3), most entities should complete
+    expect(result.summary.servedRatio).toBeGreaterThan(0.8);
+  });
 
-test('avgTimeInSystem is computed and positive when entities arrive', () => {
-  const engine = buildEngine(stableModel(), 42, 0, 100);
-  const result = engine.runAll();
-  expect(result.summary.avgTimeInSystem).not.toBeNull();
-  expect(result.summary.avgTimeInSystem).toBeGreaterThan(0);
-});
-
-// ── Test 4: avgTimeInSystem and avgSojourn are both positive ─────────────────
-
-test('both avgTimeInSystem and avgSojourn are positive', () => {
-  const engine = buildEngine(stableModel(), 42, 0, 100);
-  const result = engine.runAll();
-  expect(result.summary.avgSojourn).toBeGreaterThan(0);
-  expect(result.summary.avgTimeInSystem).toBeGreaterThan(0);
-});
-
-// ── Test 5: avgTimeInSystem and avgSojourn are similar when most complete ────
-
-test('avgTimeInSystem and avgSojourn are similar when most entities complete', () => {
-  const engine = buildEngine(stableModel(), 42, 0, 200);
-  const result = engine.runAll();
-  if (result.summary.avgSojourn != null && result.summary.avgTimeInSystem != null) {
-    // They should be within 20% of each other when most entities complete
-    const ratio = result.summary.avgTimeInSystem / result.summary.avgSojourn;
-    expect(ratio).toBeGreaterThan(0.8);
-    expect(ratio).toBeLessThan(1.2);
-  }
+  test('avgTimeInSystem and avgSojourn are similar when most entities complete', () => {
+    if (result.summary.avgSojourn != null && result.summary.avgTimeInSystem != null) {
+      // They should be within 20% of each other when most entities complete
+      const ratio = result.summary.avgTimeInSystem / result.summary.avgSojourn;
+      expect(ratio).toBeGreaterThan(0.8);
+      expect(ratio).toBeLessThan(1.2);
+    }
+  });
 });
 
 // ── Test 6: servedRatio is 0 when no entities served ─────────────────────────

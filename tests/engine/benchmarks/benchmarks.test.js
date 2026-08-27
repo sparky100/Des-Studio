@@ -61,66 +61,12 @@ function makePriorityQueueModel(arrivalMean) {
   };
 }
 
-function mmcModel() {
-  return {
-    entityTypes: [
-      { id: 'et_cust', name: 'Customer', role: 'customer', count: 0, attrDefs: [] },
-      { id: 'et_srv',  name: 'Server',   role: 'server',   count: 2, attrDefs: [] },
-    ],
-    stateVariables: [],
-    bEvents: [
-      {
-        id: 'b_arrive', name: 'Arrival', scheduledTime: '0',
-        effect: 'ARRIVE(Customer)',
-        schedules: [{ eventId: 'b_arrive', dist: 'Exponential', distParams: { mean: String(1 / 1.6) } }],
-      },
-      {
-        id: 'b_complete', name: 'Complete', scheduledTime: '9999',
-        effect: 'COMPLETE()',
-        schedules: [],
-      },
-    ],
-    cEvents: [
-      {
-        id: 'c_seize', name: 'Seize',
-        condition: 'queue(Customer).length > 0 AND idle(Server).count > 0',
-        effect: 'ASSIGN(Customer, Server)',
-        cSchedules: [
-          { eventId: 'b_complete', dist: 'Exponential', distParams: { mean: '1.0' }, useEntityCtx: true },
-        ],
-      },
-    ],
-    queues: [],
-  };
-}
-
-// ── Benchmark 1 — M/M/1 mean queue wait ─────────────────────────────────────
-// λ=0.9, μ=1.0, ρ=0.9   Analytical Wq = ρ/(μ(1−ρ)) = 0.9/0.1 = 9.0
-// Tolerance tightened to ±2% (measured error is 1.48%).
-
-describe('Benchmark 1 — M/M/1 mean queue wait (λ=0.9, μ=1.0)', () => {
-  const ANALYTICAL = 9.0;
-
-  test('mean queue wait within ±2% of analytical 9.0 (seed=42, N=500, warmup=200)', async () => {
-    const meanWait = await runUntilServed(mm1Model(), 500, 42, 200);
-    const pctError = Math.abs(meanWait - ANALYTICAL) / ANALYTICAL;
-    expect(pctError).toBeLessThanOrEqual(0.02);
-  });
-});
-
-// ── Benchmark 2 — M/M/c mean queue wait (Erlang-C) ──────────────────────────
-// λ=1.6, μ=1.0, c=2, ρ=0.8   Erlang-C Wq ≈ 1.7778
-// Tolerance ±5% (wide enough for sample size of 1500).
-
-describe('Benchmark 2 — M/M/c mean queue wait (λ=1.6, μ=1.0, c=2)', () => {
-  const ANALYTICAL = 1.7778;
-
-  test('mean queue wait within ±5% of Erlang-C analytical 1.7778 (seed=42, N=2000, warmup=500)', { timeout: 30000 }, async () => {
-    const meanWait = await runUntilServed(mmcModel(), 2000, 42, 500);
-    const pctError = Math.abs(meanWait - ANALYTICAL) / ANALYTICAL;
-    expect(pctError).toBeLessThanOrEqual(0.05);
-  });
-});
+// Benchmarks 1 (M/M/1, seed=42, N=500, warmup=200, ±2%) and 2 (M/M/c c=2,
+// seed=42, N=2000, warmup=500, ±5%) moved to tests/benchmarks/golden.test.js
+// — they were identical assertions against identical models/seeds, just
+// duplicated here; golden.test.js is now the project's sole M/M/1/M/M/c
+// correctness gate (also supersedes the former standalone
+// tests/engine/mm1_benchmark.js and mmc_benchmark.js scripts).
 
 // ── Benchmark 3 — M/G/1 mean wait (Pollaczek-Khinchine) ─────────────────────
 // λ=0.9, service Uniform[0,2]: E[S]=1.0, E[S²]=Var+E[S]²=1/3+1=4/3

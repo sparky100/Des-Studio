@@ -1,7 +1,7 @@
 // tests/db/model-schedules.test.js
 //
 // ADR-016: model_schedules DB layer tests.
-// All Supabase calls are mocked via tests/setup.js — no real DB is touched.
+// All Supabase calls are mocked via tests/setup-node.js — no real DB is touched.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {

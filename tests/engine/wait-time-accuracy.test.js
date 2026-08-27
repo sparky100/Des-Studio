@@ -2,7 +2,7 @@
 // Covers: RENEGE wait sampling, in-progress partial waits,
 //         waitSamplesBreakdown, Little's Law gate.
 
-import { describe, test, expect, beforeEach } from 'vitest';
+import { describe, test, expect, beforeEach, beforeAll } from 'vitest';
 import { buildEngine } from '../../src/engine/index.js';
 import { resetSeq } from '../../src/engine/entities.js';
 
@@ -69,17 +69,21 @@ describe('RENEGE wait tracking', () => {
     return m;
   }
 
-  test('reneged entities appear in waitSamplesBreakdown', () => {
+  // All three tests below inspect the same run's result — one shared run
+  // instead of three identical ones (same model, seed, and horizon).
+  let result;
+  beforeAll(() => {
     const engine = buildEngine(renegeWaitModel(), 42, 0, 20);
-    const result = engine.runAll();
+    result = engine.runAll();
+  });
+
+  test('reneged entities appear in waitSamplesBreakdown', () => {
     expect(result.summary.reneged).toBeGreaterThan(0);
     expect(result.summary.waitSamplesBreakdown).toBeDefined();
     expect(result.summary.waitSamplesBreakdown.reneged).toBeGreaterThan(0);
   });
 
   test('reneged entities have stages with queue wait time', () => {
-    const engine = buildEngine(renegeWaitModel(), 42, 0, 20);
-    const result = engine.runAll();
     const renegedEnts = result.entitySummary.filter(e => e.status === 'reneged');
     expect(renegedEnts.length).toBeGreaterThan(0);
     for (const e of renegedEnts) {
@@ -90,8 +94,6 @@ describe('RENEGE wait tracking', () => {
   });
 
   test('avgWait includes reneged entities when they are the only terminated entities', () => {
-    const engine = buildEngine(renegeWaitModel(), 42, 0, 20);
-    const result = engine.runAll();
     // All entities renege (no server), so avgWait should reflect their waits
     expect(result.summary.avgWait).not.toBeNull();
     expect(result.summary.avgWait).toBeGreaterThan(0);
@@ -103,17 +105,21 @@ describe('RENEGE wait tracking', () => {
 // ── Test 2: In-progress waits at termination ────────────────────────────────
 
 describe('In-progress wait at termination', () => {
-  test('summary includes inProgress samples when entities are waiting at end', () => {
+  // Both tests below inspect the same run's result — one shared run instead
+  // of two identical ones.
+  let result;
+  beforeAll(() => {
     const engine = buildEngine(truncatedModel(6), 42, 0, 6);
-    const result = engine.runAll();
+    result = engine.runAll();
+  });
+
+  test('summary includes inProgress samples when entities are waiting at end', () => {
     expect(result.summary.waitSamplesBreakdown).toBeDefined();
     // At t=6, arrivals at 0, 3, 6 (no more), service=10 → at least 1 waiting at end
     expect(result.summary.waitSamplesBreakdown.inProgress).toBeGreaterThan(0);
   });
 
   test('waitSamplesBreakdown fields are all non-negative integers', () => {
-    const engine = buildEngine(truncatedModel(6), 42, 0, 6);
-    const result = engine.runAll();
     const b = result.summary.waitSamplesBreakdown;
     expect(b.served).toBeGreaterThanOrEqual(0);
     expect(b.reneged).toBeGreaterThanOrEqual(0);
