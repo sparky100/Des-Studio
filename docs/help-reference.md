@@ -266,6 +266,8 @@ All 6 queue disciplines.
 
 **Maximised canvas:** the Execute canvas fills the available window height by default and recalculates on resize/rotation; drag its bottom edge to set a manual height instead, which is then remembered. The Bottom Panel (Log/Entities/Charts/Live Metrics/Future Events) stays collapsed by default so the canvas gets the space; expanding it is remembered for next time.
 
+**Watching entities move:** entity animation (coloured dots travelling the edges — arrivals, seizes, routing hops including probabilistic branches, and completions) runs during **Step** and **Auto Run** only. **⚡ Batch Run** computes replications at full speed without animation. The "Show entity movement (Step and Auto Run)" checkbox in Run Setup controls it and the choice is remembered; it defaults off when the operating system requests reduced motion.
+
 ### Warmup Period
 
 **Purpose:** Exclude initial transient phase from statistics.

@@ -268,14 +268,14 @@ export function ExperimentControls({
             <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>EXTRA OPTIONS</span>
             <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: animationEnabled ? C.accent : C.label, fontFamily: FONT }}
-                title="Show entity tokens moving between nodes during auto-run">
+                title="Show entity tokens moving between nodes during Step and Auto Run">
                 <input
                   type="checkbox"
                   checked={!!animationEnabled}
                   onChange={e => setAnimationEnabled?.(e.target.checked)}
                   style={{ accentColor: C.accent }}
                 />
-                Show movement during auto-run
+                Show entity movement (Step and Auto Run)
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: collectTimeSeries ? C.accent : C.label, fontFamily: FONT }}
                 title="Disable to reduce memory on long runs (charts won't have queue depth / utilisation)">
