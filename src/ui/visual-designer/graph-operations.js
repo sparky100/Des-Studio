@@ -1,7 +1,7 @@
 import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from "./graph.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 import { renameQueue } from "../../engine/queue-refs.js";
-import { classifyActivityEffect, extractReleaseTarget, replaceMacroCall, stripReleaseTarget } from "../../model/macroParser.js";
+import { classifyActivityEffect, effectText, extractReleaseTarget, macroCalls, replaceMacroCall, stripReleaseTarget, withReleaseTarget } from "../../model/macroParser.js";
 
 function clean(value = "") {
   return String(value || "").trim();
@@ -1471,6 +1471,20 @@ export function setBEventRoutingMode(bEvent, mode) {
   if (mode === "probabilistic") {
     return { ...rest, probabilisticRouting: [{ probability: 1, queueName: "" }], effect: cleanEffect };
   }
+  // "none": the routing arrays are dropped, so without a queue argument on the
+  // RELEASE the B-event would have no destination at all. Restore one from the
+  // routing being removed (default first, then the first named branch) unless
+  // the effect still carries its own target.
+  if (!extractReleaseTarget(bEvent.effect)) {
+    const restoredTarget = [
+      _defaultQueueName,
+      ...(_routing || []).map(branch => branch?.queueName),
+      ...(_probabilisticRouting || []).map(branch => branch?.queueName),
+    ].map(clean).find(Boolean);
+    if (restoredTarget) {
+      return { ...rest, effect: withReleaseTarget(bEvent.effect, restoredTarget) };
+    }
+  }
   return { ...rest };
 }
 
@@ -1595,8 +1609,6 @@ export function deleteVisualNode(model, node) {
       const esc = escRe(queue.name);
       const condPat = new RegExp(`queue\\(${esc}\\)`, "i");
       const effPat = new RegExp(`(?:ASSIGN|DELAY)\\(${esc}`, "i");
-      const arrivePat = new RegExp(`ARRIVE\\([^,]+,\\s*${esc}\\)`, "i");
-      const releasePat = new RegExp(`RELEASE\\([^,]+,\\s*${esc}\\)`, "i");
 
       const affectedCIds = new Set(
         cEvents
@@ -1629,17 +1641,26 @@ export function deleteVisualNode(model, node) {
           ? { ...q, overflowDestination: undefined }
           : q);
       next.cEvents = cEvents.filter(ce => !affectedCIds.has(ce.id));
+      // Strip only the deleted queue's argument out of ARRIVE/RELEASE calls —
+      // the macro itself and any sibling macros survive (a RELEASE without a
+      // queue still frees the server; emptying the whole effect used to leave
+      // the server claimed forever). Works on array effects too.
+      const stripDeletedQueueArg = (effect) => {
+        for (const macro of ["ARRIVE", "RELEASE", "RELEASE_COSEIZED"]) {
+          const result = replaceMacroCall(effect, macro, call =>
+            call.args.length >= 2 && clean(call.args[1]).toLowerCase() === deletedName
+              ? `${macro}(${call.args[0]})`
+              : call.raw
+          );
+          if (result.replaced && effectText(result.effect) !== effectText(effect)) return result.effect;
+        }
+        return effect;
+      };
       next.bEvents = bEvents
         .filter(be => !ownedBIds.has(be.id))
         .map(be => {
-          const eff = typeof be.effect === "string" ? be.effect : "";
-          if (arrivePat.test(eff)) {
-            return { ...be, effect: eff.replace(new RegExp(`,\\s*${esc}\\s*\\)`, "gi"), ")") };
-          }
-          if (releasePat.test(eff)) {
-            return { ...be, effect: "" };
-          }
-          return be;
+          const stripped = stripDeletedQueueArg(be.effect);
+          return stripped === be.effect ? be : { ...be, effect: stripped };
         });
     }
   }
@@ -1696,13 +1717,19 @@ export function updateVisualNode(model, node, patch = {}) {
   let next = { ...model };
   if (node.type === VISUAL_NODE_TYPES.SOURCE) {
     next.bEvents = updateByRef(next.bEvents, node.refId, event => {
-      const queue = patch.queueName || (String(event.effect || "").match(/ARRIVE\([^,]+,\s*([^)]+)\)/i)?.[1]?.trim()) || "";
-      const customer = patch.customerType || (String(event.effect || "").match(/ARRIVE\(([^,)]+)/i)?.[1]?.trim()) || firstCustomerType(model);
+      // Rewrite only the ARRIVE call — sibling macros and array shape survive.
+      const arriveCall = macroCalls(event.effect).find(call => call.macro === "ARRIVE");
+      const queue = patch.queueName || arriveCall?.args[1] || "";
+      const customer = patch.customerType || arriveCall?.args[0] || firstCustomerType(model);
       const nextEvent = {
         ...event,
         ...(patch.name !== undefined ? { name: patch.name } : {}),
-        ...(patch.customerType !== undefined || patch.queueName !== undefined ? { effect: queue ? `ARRIVE(${customer}, ${queue})` : `ARRIVE(${customer})` } : {}),
       };
+      if (patch.customerType !== undefined || patch.queueName !== undefined) {
+        const rewritten = queue ? `ARRIVE(${customer}, ${queue})` : `ARRIVE(${customer})`;
+        const result = replaceMacroCall(event.effect, "ARRIVE", () => rewritten);
+        nextEvent.effect = result.replaced ? result.effect : rewritten;
+      }
       if (patch.interarrival) {
         const schedules = Array.isArray(nextEvent.schedules) ? [...nextEvent.schedules] : [];
         const first = schedules[0] || { eventId: event.id, useEntityCtx: false };
@@ -1770,11 +1797,21 @@ export function updateVisualNode(model, node, patch = {}) {
   }
   if (node.type === VISUAL_NODE_TYPES.SINK) {
     const sinkRefId = node.refId?.startsWith("route-exit:") ? node.refId.slice("route-exit:".length) : node.refId;
-    next.bEvents = updateByRef(next.bEvents, sinkRefId, event => ({
-      ...event,
-      ...(patch.name !== undefined ? { name: patch.name } : {}),
-      ...(patch.terminalMacro !== undefined ? { effect: `${patch.terminalMacro}()` } : {}),
-    }));
+    next.bEvents = updateByRef(next.bEvents, sinkRefId, event => {
+      const nextEvent = {
+        ...event,
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+      };
+      if (patch.terminalMacro !== undefined) {
+        // Swap only the terminal call — co-located COST/SET/RELEASE macros survive.
+        const current = macroCalls(event.effect).find(call => call.macro === "COMPLETE" || call.macro === "RENEGE");
+        const result = current
+          ? replaceMacroCall(event.effect, current.macro, () => `${patch.terminalMacro}()`)
+          : { replaced: false };
+        nextEvent.effect = result.replaced ? result.effect : `${patch.terminalMacro}()`;
+      }
+      return nextEvent;
+    });
   }
   if (node.type === VISUAL_NODE_TYPES.CONTAINER) {
     const currentContainer = (model.containerTypes || []).find(ct => ct.id === node.refId);

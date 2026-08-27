@@ -4,6 +4,7 @@ import {
   connectVisualNodes, addVisualNode, deleteVisualNode, duplicateVisualNodes, deleteVisualEdge,
   updateProbabilisticBranchProbability, updateProbabilisticBranchQueueTarget, updateConditionalBranch,
   updateDefaultQueueName, addBlankRoutingBranch, removeRoutingBranch, applyBEventRoutingMode,
+  setBEventRoutingMode, updateVisualNode,
   alignNodes, distributeNodes,
 } from '../graph-operations.js';
 import { deriveGraphFromModel, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from '../graph.js';
@@ -953,5 +954,75 @@ describe('deleteVisualEdge — condition edge on an advanced activity', () => {
     expect(cEvent.effect).toEqual([]);
     expect(cEvent.condition).toBe('');
     expect(cEvent.cSchedules).toEqual([]);
+  });
+});
+
+describe('surgical rewrites — sibling macros survive canvas edits', () => {
+  test('switching a sink terminal macro preserves co-located macros and array shape', () => {
+    const model = makeModel();
+    model.bEvents.push({ id: 'exit-1', name: 'Exit', scheduledTime: '9999', effect: 'COST(5);COMPLETE()', schedules: [] });
+    const node = { type: VISUAL_NODE_TYPES.SINK, refId: 'exit-1' };
+
+    const next = updateVisualNode(model, node, { terminalMacro: 'RENEGE' });
+    expect(next.bEvents.find(be => be.id === 'exit-1').effect).toBe('COST(5);RENEGE()');
+
+    model.bEvents = model.bEvents.map(be => be.id !== 'exit-1' ? be : { ...be, effect: ['COST(5)', 'COMPLETE()'] });
+    const nextArray = updateVisualNode(model, node, { terminalMacro: 'RENEGE' });
+    expect(nextArray.bEvents.find(be => be.id === 'exit-1').effect).toEqual(['COST(5)', 'RENEGE()']);
+  });
+
+  test('patching a source customerType/queueName preserves sibling macros', () => {
+    const model = makeModel();
+    model.bEvents[0] = { ...model.bEvents[0], effect: ['SET(arrivals, 1)', 'ARRIVE(Customer, Queue 1)'] };
+    const node = { type: VISUAL_NODE_TYPES.SOURCE, refId: 'arrival-1' };
+
+    const next = updateVisualNode(model, node, { queueName: 'Queue 2' });
+    expect(next.bEvents.find(be => be.id === 'arrival-1').effect)
+      .toEqual(['SET(arrivals, 1)', 'ARRIVE(Customer, Queue 2)']);
+  });
+
+  test('deleting a queue strips only the RELEASE queue argument — server still released, siblings kept', () => {
+    const model = makeModel();
+    model.bEvents = model.bEvents.map(be => be.id !== 'route-activity-1-queue-2' ? be : {
+      ...be, effect: 'SET(handoffs, 1);RELEASE(Server, Queue 2)',
+    });
+    const graph = deriveGraphFromModel(model);
+    const queueNode = graph.nodes.find(n => n.refId === 'queue-2');
+
+    const next = deleteVisualNode(model, queueNode);
+    expect(next.bEvents.find(be => be.id === 'route-activity-1-queue-2').effect)
+      .toBe('SET(handoffs, 1);RELEASE(Server)');
+  });
+
+  test('deleting a queue handles RELEASE_COSEIZED without shredding the type list', () => {
+    const model = makeModel();
+    model.bEvents = model.bEvents.map(be => be.id !== 'route-activity-1-queue-2' ? be : {
+      ...be, effect: 'RELEASE_COSEIZED([Nurse, Doctor], Queue 2)',
+    });
+    const graph = deriveGraphFromModel(model);
+    const queueNode = graph.nodes.find(n => n.refId === 'queue-2');
+
+    const next = deleteVisualNode(model, queueNode);
+    expect(next.bEvents.find(be => be.id === 'route-activity-1-queue-2').effect)
+      .toBe('RELEASE_COSEIZED([Nurse, Doctor])');
+  });
+
+  test('switching routing mode to "none" restores the RELEASE destination from the removed routing', () => {
+    const withRouting = applyBEventRoutingMode(makeModel(), 'route-activity-1-queue-2', 'probabilistic');
+    let bEvent = withRouting.bEvents.find(be => be.id === 'route-activity-1-queue-2');
+    // Seeded blank branch gets a real target, as the route dialog would set.
+    bEvent = { ...bEvent, probabilisticRouting: [{ probability: 1, queueName: 'Queue 3' }] };
+    expect(bEvent.effect).toBe('RELEASE(Server)'); // target was stripped on mode switch
+
+    const reverted = setBEventRoutingMode(bEvent, 'none');
+    expect(reverted.probabilisticRouting).toBeUndefined();
+    expect(reverted.effect).toBe('RELEASE(Server, Queue 3)');
+  });
+
+  test('switching to "none" keeps an effect that still carries its own target untouched', () => {
+    const bEvent = { id: 'x', effect: 'RELEASE(Server, Queue 2)', routing: [{ condition: {}, queueName: 'Queue 3' }] };
+    const reverted = setBEventRoutingMode(bEvent, 'none');
+    expect(reverted.effect).toBe('RELEASE(Server, Queue 2)');
+    expect(reverted.routing).toBeUndefined();
   });
 });
