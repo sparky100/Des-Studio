@@ -969,3 +969,77 @@ describe('Visual Designer shell', () => {
     expect(screen.getByTestId('react-flow').getAttribute('data-selected-edge')).toBe('');
   });
 });
+
+// Run-overlap advisory: the toolbar warns when objects' Run-canvas footprints
+// (bigger cards than Draw's) would collide during execution, and the "Run size"
+// toggle previews those footprints. Advisory only — never blocks editing.
+describe('Visual Designer — run overlap chip and Run size toggle', () => {
+  // Two queues 100px apart vertically: fine for 68-tall Draw cards, but their
+  // 120-tall Run cards overlap by 20px.
+  const overlappingQueuesModel = {
+    id: 'model-run-overlap',
+    name: 'Overlap Check',
+    entityTypes: [{ id: 'cust', name: 'Customer', role: 'customer', attrDefs: [] }],
+    stateVariables: [],
+    queues: [
+      { id: 'q1', name: 'Queue One', customerType: 'Customer', discipline: 'FIFO' },
+      { id: 'q2', name: 'Queue Two', customerType: 'Customer', discipline: 'FIFO' },
+    ],
+    bEvents: [],
+    cEvents: [],
+    graph: {
+      version: 1,
+      nodes: [
+        { id: 'queue:q1', type: 'queue', refId: 'q1', x: 0, y: 0 },
+        { id: 'queue:q2', type: 'queue', refId: 'q2', x: 0, y: 100 },
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 },
+    },
+  };
+  const clearQueuesModel = {
+    ...overlappingQueuesModel,
+    graph: {
+      ...overlappingQueuesModel.graph,
+      nodes: [
+        { id: 'queue:q1', type: 'queue', refId: 'q1', x: 0, y: 0 },
+        { id: 'queue:q2', type: 'queue', refId: 'q2', x: 0, y: 300 },
+      ],
+    },
+  };
+
+  it('shows the overlap chip with a count when Run footprints collide', () => {
+    render(<VisualDesignerPanel model={overlappingQueuesModel} canEdit onModelChange={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /1 run overlap/i })).toBeInTheDocument();
+  });
+
+  it('shows no overlap chip when Run footprints are clear', () => {
+    render(<VisualDesignerPanel model={clearQueuesModel} canEdit onModelChange={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /run overlap/i })).not.toBeInTheDocument();
+  });
+
+  it('clicking the chip focuses an offending node (opens its inspector)', async () => {
+    const user = userEvent.setup();
+    render(<VisualDesignerPanel model={overlappingQueuesModel} canEdit onModelChange={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: /1 run overlap/i }));
+    expect(screen.getByDisplayValue('Queue One')).toBeInTheDocument();
+  });
+
+  it('persists the Run size toggle to localStorage', async () => {
+    const user = userEvent.setup();
+    localStorage.removeItem('des.runFootprint.show');
+    render(<VisualDesignerPanel model={clearQueuesModel} canEdit onModelChange={vi.fn()} />);
+    const toggle = screen.getByRole('button', { name: /^run size$/i });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(localStorage.getItem('des.runFootprint.show')).toBe('1');
+    await user.click(toggle);
+    expect(localStorage.getItem('des.runFootprint.show')).toBe('0');
+  });
+
+  it('keeps the chip and toggle available in read-only mode', () => {
+    render(<VisualDesignerPanel model={overlappingQueuesModel} canEdit={false} onModelChange={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /1 run overlap/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^run size$/i })).toBeInTheDocument();
+  });
+});

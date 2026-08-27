@@ -277,6 +277,43 @@ describe('FlowDiagramReactFlow — delete button suppressed for activity routing
   });
 });
 
+// "Run size" ghosts show each object's Run-canvas footprint (160 wide,
+// per-type heights) behind the Draw card; the amber overlap badge marks nodes
+// whose Run footprints collide. Both are advisory — see runFootprint.js.
+describe('FlowDiagramReactFlow — run footprint ghosts and overlap badges', () => {
+  it('renders a ghost per node with per-type Run dimensions when showRunFootprint is on', () => {
+    const { container } = render(
+      <FlowDiagramReactFlow graph={makeGraph()} canEdit showRunFootprint />
+    );
+    const ghosts = container.querySelectorAll('.run-footprint-ghost');
+    expect(ghosts.length).toBe(2);
+    const sizes = [...ghosts].map(g => `${g.style.width}x${g.style.height}`).sort();
+    expect(sizes).toEqual(['160pxx120px', '160pxx145px']); // queue 120, activity 145
+  });
+
+  it('renders no ghosts when showRunFootprint is off', () => {
+    const { container } = render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    expect(container.querySelectorAll('.run-footprint-ghost').length).toBe(0);
+  });
+
+  it('shows the amber overlap badge only on nodes in overlapNodeIds', () => {
+    render(
+      <FlowDiagramReactFlow
+        graph={makeGraph()}
+        canEdit
+        overlapNodeIds={new Set(['queue:queue-1'])}
+      />
+    );
+    const badges = screen.getAllByTitle(/Overlaps another object on the Run canvas/i);
+    expect(badges.length).toBe(1);
+  });
+
+  it('shows no overlap badges when overlapNodeIds is empty or absent', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit overlapNodeIds={new Set()} />);
+    expect(screen.queryByTitle(/Overlaps another object on the Run canvas/i)).not.toBeInTheDocument();
+  });
+});
+
 // Item 2 of the b7be68c UX batch: box-drag selections must behave exactly like
 // click-built ones. Two library defaults broke that — selectionKeyCode='Shift'
 // hijacked Shift+click on a node (wiping the selection before onNodeClick's
