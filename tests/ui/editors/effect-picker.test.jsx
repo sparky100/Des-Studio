@@ -1,16 +1,44 @@
-// EffectPicker — scaling the structured pickers (M-2, M-3, F-8, S-4).
-// BATCH/DRAIN/FILL/SPLIT/COSEIZE now go through the expression-macro row
-// (operand picker(s) + a validated numeric field) instead of a fixed
-// enumerated list, and the flat <select> gets a type-ahead search box.
+// EffectPicker — scaling the structured pickers (M-2, M-3, F-8, S-4), and
+// Sprint 94's composer-depth upgrades (docs/reviews/macro-library-ui-coverage-audit.md,
+// Group A gaps 1-8): expression-capable BATCH/FILL/DRAIN/ASSIGN-container amounts,
+// a combined ASSIGN composer (source, server/ANY, optional skill, optional
+// container gate), an N-server-type COSEIZE composer with per-type skills, an
+// optional MATCH predicate, and a SPLIT clone-type picker.
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { EffectPicker, assignOptions, bEffectOptions } from "../../../src/ui/editors/helpers.jsx";
+import { MACROS, applyScalar } from "../../../src/engine/macros.js";
 
 const oneQueueCtx = {
   matchQueues: [{ name: "Triage Queue", type: "Customer" }],
   containerTypes: [{ id: "Fuel" }],
   serverTypes: ["Nurse", "Doctor"],
 };
+
+// Richer context exercising every new expressionContext field (numericAttrs,
+// stringAttrs, skills, customerTypes, serverSkillsByType) added for the
+// composer-depth workstreams.
+const fullCtx = {
+  matchQueues: [{ name: "Triage Queue", type: "Customer" }, { name: "Ward Queue", type: "Customer" }],
+  containerTypes: [{ id: "Fuel" }],
+  serverTypes: ["Nurse", "Doctor", "Porter"],
+  stateVars: ["load"],
+  numericAttrs: ["batchSize", "units"],
+  stringAttrs: ["specialty"],
+  skills: ["Triage"],
+  customerTypes: ["Customer", "VIP"],
+  serverSkillsByType: { Nurse: ["Triage"], Doctor: ["Surgery"], Porter: [] },
+};
+
+// Engine round-trip guard — the audit's core issue was UI composers emitting
+// forms the engine doesn't actually parse (or being needlessly narrower than
+// what it accepts). Every string this file asserts via onChange, and every
+// enumerated option produced by the option generators, is checked against the
+// engine's own MACROS[].pattern (or applyScalar's scalar-effect grammar) so UI
+// output can never drift from engine grammar undetected.
+const matchesScalar = s => /^\w+\+\+$/.test(s) || /^\w+--$/.test(s)
+  || /^\w+\s*\+=\s*.+$/.test(s) || /^\w+\s*-=\s*.+$/.test(s) || /^\w+\s*=\s*.+$/.test(s);
+const matchesEngine = s => MACROS.some(m => m.pattern.test(s)) || matchesScalar(s);
 
 describe("EffectPicker — quantity-bearing macros (M-3)", () => {
   it("adds BATCH with a chosen queue and a typed quantity, clamped to >= 2", () => {
@@ -23,6 +51,7 @@ describe("EffectPicker — quantity-bearing macros (M-3)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     expect(onChange).toHaveBeenCalledWith(["BATCH(Triage Queue, 7)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
   });
 
   it("clamps an invalid BATCH quantity up to the engine's minimum of 2", () => {
@@ -55,7 +84,7 @@ describe("EffectPicker — quantity-bearing macros (M-3)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
     fireEvent.click(screen.getByRole("button", { name: "DRAIN" }));
-    fireEvent.change(screen.getByPlaceholderText("amount (> 0)"), { target: { value: "25" } });
+    fireEvent.change(screen.getByPlaceholderText("amount — number or expression (e.g. Entity.units * 2)"), { target: { value: "25" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     expect(onChange).toHaveBeenCalledWith(["DRAIN(Fuel, 25)"]);
@@ -67,7 +96,7 @@ describe("EffectPicker — quantity-bearing macros (M-3)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
     fireEvent.click(screen.getByRole("button", { name: "FILL" }));
-    fireEvent.change(screen.getByPlaceholderText("amount (> 0)"), { target: { value: "6" } });
+    fireEvent.change(screen.getByPlaceholderText("amount — number or expression (e.g. Entity.units * 2)"), { target: { value: "6" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     expect(onChange).toHaveBeenCalledWith(["FILL(Fuel, 6)"]);
@@ -79,33 +108,194 @@ describe("EffectPicker — quantity-bearing macros (M-3)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
     fireEvent.click(screen.getByRole("button", { name: "DRAIN" }));
-    fireEvent.change(screen.getByPlaceholderText("amount (> 0)"), { target: { value: "-5" } });
+    fireEvent.change(screen.getByPlaceholderText("amount — number or expression (e.g. Entity.units * 2)"), { target: { value: "-5" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     expect(onChange).not.toHaveBeenCalled();
   });
 });
 
-describe("EffectPicker — COSEIZE composer", () => {
-  it("adds COSEIZE with the chosen queue and two distinct server types", () => {
+describe("EffectPicker — expression-capable amounts (Sprint 94, audit gaps 4/5)", () => {
+  it("BATCH attribute mode emits an Entity reference instead of a literal", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "BATCH" }));
+    fireEvent.click(screen.getByRole("button", { name: "from attribute" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["BATCH(Triage Queue, Entity.batchSize)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("FILL accepts an expression amount", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "FILL" }));
+    fireEvent.change(screen.getByPlaceholderText("amount — number or expression (e.g. Entity.units * 2)"), { target: { value: "Entity.units * 2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["FILL(Fuel, Entity.units * 2)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("DRAIN rejects a malformed expression", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "DRAIN" }));
+    fireEvent.change(screen.getByPlaceholderText("amount — number or expression (e.g. Entity.units * 2)"), { target: { value: "foo(" } });
+
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("EffectPicker — ASSIGN composer (Sprint 94, audit gaps 1/2/3)", () => {
+  it("adds a plain ASSIGN with the default queue and server", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "ASSIGN (any server, skill + container)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["ASSIGN(Triage Queue, Nurse)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("pools any idle server type with no skill (gap 3)", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "ASSIGN (any server, skill + container)" }));
+    fireEvent.change(screen.getByDisplayValue("Nurse"), { target: { value: "ANY" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["ASSIGN(Triage Queue, ANY)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds a literal-skill ASSIGN", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "ASSIGN (any server, skill + container)" }));
+    // Two "— none —" selects render (skill, container) — the skill one is first in the DOM.
+    fireEvent.change(screen.getAllByDisplayValue("— none —")[0], { target: { value: "lit:Triage" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(['ASSIGN(Triage Queue, Nurse, "Triage")']);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds an entity-attribute-skill ASSIGN", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "ASSIGN (any server, skill + container)" }));
+    fireEvent.change(screen.getAllByDisplayValue("— none —")[0], { target: { value: "attr:specialty" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["ASSIGN(Triage Queue, Nurse, Entity.specialty)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds a container-gated ASSIGN with an expression amount (gap 1)", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "ASSIGN (any server, skill + container)" }));
+    // Index 1: the skill select (index 0) stays unset, so this is the container select.
+    fireEvent.change(screen.getAllByDisplayValue("— none —")[1], { target: { value: "Fuel" } });
+    fireEvent.change(screen.getByPlaceholderText("amount — number or expression"), { target: { value: "Entity.units" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["ASSIGN(Triage Queue, Nurse, Fuel:Entity.units)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("combines a skill and a container gate on one ASSIGN (gap 2)", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "ASSIGN (any server, skill + container)" }));
+    // Setting the skill first collapses the ambiguity — only the container
+    // select still reads "— none —" afterward.
+    fireEvent.change(screen.getAllByDisplayValue("— none —")[0], { target: { value: "lit:Triage" } });
+    fireEvent.change(screen.getByDisplayValue("— none —"), { target: { value: "Fuel" } });
+    fireEvent.change(screen.getByPlaceholderText("amount — number or expression"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(['ASSIGN(Triage Queue, Nurse, "Triage", Fuel:2)']);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("does not offer ASSIGN with no server types in context", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()}
+      expressionContext={{ ...fullCtx, serverTypes: [] }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    expect(screen.queryByRole("button", { name: /^ASSIGN/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("EffectPicker — COSEIZE composer v2 (Sprint 94, audit gap 6)", () => {
+  it("adds COSEIZE with the default two server types (regression)", () => {
     const onChange = vi.fn();
     render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={oneQueueCtx} />);
 
     fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
-    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (2 server types)" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     expect(onChange).toHaveBeenCalledWith(["COSEIZE(Triage Queue, Nurse, Doctor)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
   });
 
-  it("disables Add when both COSEIZE server pickers are set to the same type", () => {
+  it("adds a third server type via '+ add server type', with a per-type skill", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
+    fireEvent.click(screen.getByRole("button", { name: "＋ add server type" }));
+    // Row 1 (Nurse) gets its skill set to "Triage"; the newly added row defaults to Porter.
+    // All three rows still read "— no skill —" until changed — row 1 is first in the DOM.
+    fireEvent.change(screen.getAllByDisplayValue("— no skill —")[0], { target: { value: "Triage" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["COSEIZE(Triage Queue, Nurse[Triage], Doctor, Porter)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("disables Add when two rows share the same server type", () => {
     render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={oneQueueCtx} />);
 
     fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
-    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (2 server types)" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
     fireEvent.change(screen.getByDisplayValue("Doctor"), { target: { value: "Nurse" } });
 
     expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
+  it("cannot remove a row below the two-row minimum", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={oneQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
+
+    expect(screen.queryByRole("button", { name: /Remove server type row/ })).not.toBeInTheDocument();
   });
 
   it("does not offer COSEIZE with fewer than 2 server types", () => {
@@ -114,6 +304,50 @@ describe("EffectPicker — COSEIZE composer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
     expect(screen.queryByRole("button", { name: /COSEIZE/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("EffectPicker — MATCH composer with optional predicate (Sprint 94, audit gap 7)", () => {
+  it("emits the plain 5-arg form when the predicate is left empty", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "MATCH (compatible pair)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["MATCH(Customer, Triage Queue, Customer, Ward Queue, Triage Queue)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("keeps the quoted 6-arg form when a predicate is given (regression)", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "MATCH (compatible pair)" }));
+    fireEvent.change(screen.getByPlaceholderText("optional — e.g. Entity.bloodType == Other.bloodType"),
+      { target: { value: "Entity.bloodType == Other.bloodType" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(['MATCH(Customer, Triage Queue, Customer, Ward Queue, Triage Queue, "Entity.bloodType == Other.bloodType")']);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+});
+
+describe("EffectPicker — SPLIT clone-type picker (Sprint 94, audit gap 8)", () => {
+  it("overrides the queue-derived clone type", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "SPLIT" }));
+    fireEvent.change(screen.getByDisplayValue("— same as queue's entity —"), { target: { value: "VIP" } });
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 2)"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["SPLIT(VIP, 3, Triage Queue)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
   });
 });
 
@@ -195,5 +429,43 @@ describe("EffectPicker option generators — combinatorial caps (F-8)", () => {
     const bOpts = bEffectOptions([{ id: "cust", name: "Customer", role: "customer", attrDefs: [] }], queues, [], containerTypes);
     expect(bOpts.some(o => /^SPLIT\(/.test(o.value))).toBe(false);
     expect(bOpts.some(o => /^FILL\(/.test(o.value))).toBe(false);
+  });
+});
+
+describe("EffectPicker option generators — engine round-trip (Sprint 94 regression guard)", () => {
+  // Pins the whole enumerated-option surface to the engine's own grammar: every
+  // non-header, non-blank option value that either generator can produce must
+  // be parseable by some MACROS[].pattern, or be a scalar effect applyScalar
+  // understands. This is the guard the audit found missing — without it, a UI
+  // composer could silently emit a string the engine rejects at run time.
+  const entityTypes = [
+    { id: "cust", name: "Customer", role: "customer", attrDefs: [
+      { name: "priority", valueType: "number", mutable: true },
+      { name: "specialty", valueType: "string", mutable: true },
+    ] },
+    { id: "vip", name: "VIP", role: "customer", attrDefs: [] },
+    { id: "nurse", name: "Nurse", role: "server", skills: ["Triage"] },
+    { id: "doctor", name: "Doctor", role: "server", skills: ["Surgery"] },
+  ];
+  const queues = [
+    { name: "Triage Queue", customerType: "Customer" },
+    { name: "Ward Queue", customerType: "Customer" },
+  ];
+  const stateVariables = [{ name: "load" }];
+  const containerTypes = [{ id: "Fuel" }];
+  const skills = ["Triage", "Surgery"];
+
+  it("every assignOptions (C-event) option value matches the engine grammar", () => {
+    const opts = assignOptions(entityTypes, stateVariables, queues, "Service", containerTypes, null, skills);
+    const values = opts.filter(o => o.value && !o.disabled).map(o => o.value);
+    expect(values.length).toBeGreaterThan(0);
+    for (const v of values) expect(matchesEngine(v)).toBe(true);
+  });
+
+  it("every bEffectOptions (B-event) option value matches the engine grammar", () => {
+    const opts = bEffectOptions(entityTypes, queues, stateVariables, containerTypes);
+    const values = opts.filter(o => o.value && !o.disabled).map(o => o.value);
+    expect(values.length).toBeGreaterThan(0);
+    for (const v of values) expect(matchesEngine(v)).toBe(true);
   });
 });
