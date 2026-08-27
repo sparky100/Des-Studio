@@ -124,8 +124,8 @@ describe('saveModelSchedule (insert)', () => {
     };
 
     const mq = getMockQuery();
-    mq.single.mockResolvedValueOnce({
-      data: { ...SAMPLE_ROW, id: SCHED_ID_2, name: 'Weekend Schedule', is_default: false },
+    mq.select.mockResolvedValueOnce({
+      data: [{ ...SAMPLE_ROW, id: SCHED_ID_2, name: 'Weekend Schedule', is_default: false }],
       error: null,
     });
 
@@ -138,7 +138,7 @@ describe('saveModelSchedule (insert)', () => {
 
   it('throws when insert fails', async () => {
     const mq = getMockQuery();
-    mq.single.mockResolvedValueOnce({ data: null, error: { message: 'insert failed' } });
+    mq.select.mockResolvedValueOnce({ data: null, error: { message: 'insert failed' } });
 
     await expect(
       saveModelSchedule({ modelId: MODEL_ID, name: 'X', scheduleJson: [] }, USER_ID)
@@ -160,8 +160,8 @@ describe('saveModelSchedule (update)', () => {
     };
 
     const mq = getMockQuery();
-    mq.single.mockResolvedValueOnce({
-      data: { ...SAMPLE_ROW, name: 'Weekday May 2026 (revised)' },
+    mq.select.mockResolvedValueOnce({
+      data: [{ ...SAMPLE_ROW, name: 'Weekday May 2026 (revised)' }],
       error: null,
     });
 
@@ -169,6 +169,26 @@ describe('saveModelSchedule (update)', () => {
 
     expect(supabase.from).toHaveBeenCalledWith('model_schedules');
     expect(result.name).toBe('Weekday May 2026 (revised)');
+  });
+
+  it('throws a clear permission message instead of a raw PGRST116 coercion error when the update matches zero rows (RLS-filtered)', async () => {
+    const updatedSchedule = {
+      id:           SCHED_ID_1,
+      modelId:      MODEL_ID,
+      name:         'Weekday May 2026 (revised)',
+      scheduleJson: [],
+      isDefault:    true,
+    };
+
+    const mq = getMockQuery();
+    // No Postgres error — RLS just filtered the row out of the UPDATE (e.g.
+    // an editor collaborator hit by the RLS gap fixed in
+    // 20260827130000_editor_write_access.sql, or a deleted schedule).
+    mq.select.mockResolvedValueOnce({ data: [], error: null });
+
+    await expect(saveModelSchedule(updatedSchedule, USER_ID)).rejects.toThrow(
+      "You don't have permission to edit this schedule, or it no longer exists."
+    );
   });
 });
 
@@ -302,8 +322,8 @@ describe('extractInlineSchedule', () => {
   it('saves a schedule and returns updated bEvents with scheduleRef', async () => {
     const mq = getMockQuery();
     // Mock the insert for saveModelSchedule
-    mq.single.mockResolvedValueOnce({
-      data: { ...SAMPLE_ROW, id: SCHED_ID_1 },
+    mq.select.mockResolvedValueOnce({
+      data: [{ ...SAMPLE_ROW, id: SCHED_ID_1 }],
       error: null,
     });
 

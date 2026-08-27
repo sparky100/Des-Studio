@@ -319,19 +319,23 @@ export async function saveModel(model, userId) {
   const row = toRow(model, userId);
   /** @param {Record<string, any>} payload */
   const persist = async (payload) => {
+    // No .single() here: an UPDATE that RLS filters out (e.g. an editor
+    // collaborator, once the des_models "Allow update" policy is scoped
+    // wrongly, or a model deleted concurrently) legitimately affects zero
+    // rows with no Postgres error — .single() would turn that into a raw,
+    // user-facing PGRST116 "Cannot coerce the result to a single JSON
+    // object" instead of the clear message thrown below.
     if (model.id) {
       return supabase
         .from("des_models")
         .update(payload)
         .eq("id", model.id)
-        .select()
-        .single();
+        .select();
     }
     return supabase
       .from("des_models")
       .insert(payload)
-      .select()
-      .single();
+      .select();
   };
 
   const initialRow = desModelsSelectModeIndex === 0 ? row : (() => {
@@ -350,7 +354,10 @@ export async function saveModel(model, userId) {
     result = await persist(legacyRow);
   }
   if (result.error) throw result.error;
-  return norm(result.data);
+  if (!result.data || result.data.length === 0) {
+    throw new Error("You don't have permission to save this model, or it no longer exists.");
+  }
+  return norm(result.data[0]);
 }
 
 /**
@@ -816,15 +823,17 @@ export async function getShareLink(token) {
  * @param {string} userId
  */
 export async function revokeShareLink(id, userId) {
+  // No .single() — a mismatched id/created_by legitimately affects zero
+  // rows with no Postgres error, and .single() would throw the raw
+  // PGRST116 coercion error before the friendly check below ever ran.
   const { data, error } = await supabase
     .from("share_links")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", id)
     .eq("created_by", userId)
-    .select("id")
-    .single();
+    .select("id");
   if (error) throw error;
-  if (!data) throw new Error("Share link not found or you do not own it.");
+  if (!data || data.length === 0) throw new Error("Share link not found or you do not own it.");
   return { ok: true };
 }
 
@@ -1488,23 +1497,28 @@ export async function saveModelSchedule(schedule, userId) {
     created_by:    userId,
   };
 
+  // No .single() here — see saveModel's comment: an editor-role update RLS
+  // filters out affects zero rows with no Postgres error, and .single()
+  // would surface that as a raw PGRST116 coercion error instead of the
+  // clear message thrown below.
   let result;
   if (schedule.id) {
     result = await supabase
       .from('model_schedules')
       .update({ ...payload, updated_at: new Date().toISOString() })
       .eq('id', schedule.id)
-      .select()
-      .single();
+      .select();
   } else {
     result = await supabase
       .from('model_schedules')
       .insert(payload)
-      .select()
-      .single();
+      .select();
   }
   if (result.error) throw result.error;
-  return normSchedule(result.data);
+  if (!result.data || result.data.length === 0) {
+    throw new Error("You don't have permission to edit this schedule, or it no longer exists.");
+  }
+  return normSchedule(result.data[0]);
 }
 
 /**
