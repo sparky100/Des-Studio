@@ -268,6 +268,8 @@ All 6 queue disciplines.
 
 **Watching entities move:** entity animation (coloured dots travelling the edges — arrivals, seizes, routing hops including probabilistic branches, and completions) runs during **Step** and **Auto Run** only. **⚡ Batch Run** computes replications at full speed without animation. The "Show entity movement (Step and Auto Run)" checkbox in Run Setup controls it and the choice is remembered; it defaults off when the operating system requests reduced motion.
 
+**Adjust parameters (quick, ad-hoc run):** the **🎛 Adjust parameters** button next to the run settings summary opens the same searchable, grouped parameter browser used by the Business view curation and Scenario manager (`ParamBrowserPanel`) — but over the full set of sweepable parameters, not an owner-curated subset. Pick a parameter, type a new value, and it patches the model for every run mode (Step, Auto Run, Batch Run) via the same `effectiveModel`/`applySweepValues` mechanism a loaded Experiment already used — no Experiment or Scenario has to exist first. Changes are ad-hoc: they reset when you switch models or reload the page, and are never written to the database. **Reset all** clears them immediately; **Save as Experiment…** carries the current overrides and run settings into a new saved Experiment, if you decide to keep them. If a saved Experiment is also loaded, an ad-hoc change to the same parameter takes priority over the loaded value.
+
 ### Warmup Period
 
 **Purpose:** Exclude initial transient phase from statistics.

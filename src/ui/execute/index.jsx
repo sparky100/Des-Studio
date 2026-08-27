@@ -263,6 +263,42 @@ function ExperimentRunSettingsFields({
   );
 }
 
+/** Editable list of {path, value} parameter overrides, with a "+ Add" picker
+ * over the full sweepable-param universe. Shared by the saved-experiment
+ * New/Edit forms and the Run tab's ad-hoc "Adjust parameters" panel — all
+ * three used to carry an identical ~20-line copy of this JSX. */
+function OverrideChipList({ overrides, setOverrides, sweepParams, pickerOpen, setPickerOpen, extraAlreadyAdded }) {
+  const { C, FONT } = useTheme();
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER OVERRIDES</span>
+        <Btn small variant="ghost" onClick={() => setPickerOpen(o => !o)}>{pickerOpen ? "Done" : "+ Add"}</Btn>
+      </div>
+      {overrides.map((ov, idx) => {
+        const param = sweepParams.find(p => p.path === ov.path);
+        const chipColor = paramColor(param?.type, C);
+        return (
+          <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 1, background: alpha(chipColor, 0.09), border: `1px solid ${alpha(chipColor, 0.27)}`, borderRadius: RADIUS.sm, padding: "3px 8px", minWidth: 0 }}>
+              <span style={{ fontSize: 11, color: chipColor, fontFamily: FONT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{param?.label ?? ov.path}</span>
+              {param?.subLabel && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{param.subLabel}</span>}
+            </div>
+            <input aria-label={`Override value ${idx + 1}`} type="number" value={ov.value} onChange={e => setOverrides(prev => prev.map((o, i) => i === idx ? { ...o, value: e.target.value } : o))} placeholder="value"
+              style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px", flexShrink: 0 }} />
+            <Btn small variant="ghost" ariaLabel={`Remove override ${idx + 1}`} onClick={() => setOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
+          </div>
+        );
+      })}
+      {pickerOpen && (
+        <ParamBrowserPanel params={sweepParams} alreadyAdded={new Set([...overrides.map(o => o.path), ...(extraAlreadyAdded || [])].filter(Boolean))}
+          onSelect={path => { const found = sweepParams.find(p => p.path === path); const cv = found?.currentValue; const defaultVal = (cv !== undefined && Number.isFinite(cv)) ? String(cv) : ""; setOverrides(prev => [...prev, { path, value: defaultVal }]); }}
+          onClose={() => setPickerOpen(false)} />
+      )}
+    </div>
+  );
+}
+
 const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true }) => {
   const { C, FONT } = useTheme();
   const { confirm, confirmDialog } = useConfirm();
@@ -347,6 +383,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   // Resolved {paramConfig, value} pairs from the last loaded experiment with overrides.
   // When non-empty, effectiveModel patches the base model before running/snapshotting.
   const [activeExpOverrides, setActiveExpOverrides] = useState([]);
+  // Ad-hoc {path, value} overrides set directly on the Run tab's "Adjust parameters"
+  // panel — the same patch-before-run mechanism as a loaded experiment, but requiring
+  // no saved Experiment or Scenario. Never persisted; see effectiveModel below.
+  const [runOverrides, setRunOverrides] = useState([]);
+  const [runOverridesPickerOpen, setRunOverridesPickerOpen] = useState(false);
+  const [showRunOverridesPanel, setShowRunOverridesPanel] = useState(false);
   const [reportGenerating, setReportGenerating] = useState(false); // still used for report progress indicator in status banner
   const [modelCheckerIssues, setModelCheckerIssues] = useState(null);
   const [modelCheckerOpen, setModelCheckerOpen] = useState(false);
@@ -439,6 +481,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     }
   }, [model?.experimentDefaults?.resultDetailLevel]);
 
+  // Parameter overrides (loaded-experiment or ad-hoc Run-tab) are specific to one
+  // model's parameter universe — clear them on model switch so a path from model A
+  // never silently rides along (and mismatches) into model B's run.
+  useEffect(() => {
+    setActiveExpOverrides([]);
+    setRunOverrides([]);
+  }, [modelId]);
+
   // Fetch model_schedules when modelId changes (ADR-016)
   useEffect(() => {
     if (!modelId || !userId) {
@@ -502,12 +552,34 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }, [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
   const hasValidationErrors = validation.errors.length > 0;
 
-  // When an experiment has parameter overrides loaded, apply them on top of the base
-  // model so the engine, snapshot, and narrative all reflect the experiment's values.
+  // Resolve the Run tab's ad-hoc overrides (raw {path, value} strings) against the
+  // sweepable-param universe, same as loadCfg() does for a saved experiment's overrides.
+  const resolvedRunOverrides = useMemo(() => {
+    if (!runOverrides.length) return [];
+    const params = sweepParams.length > 0 ? sweepParams : enumerateSweepableParams(model);
+    return runOverrides.flatMap(ov => {
+      if (!ov.path || ov.value === "") return [];
+      const paramConfig = params.find(p => p.path === ov.path);
+      return paramConfig ? [{ paramConfig, value: Number(ov.value) }] : [];
+    });
+  }, [runOverrides, sweepParams, model]);
+
+  // Combine a loaded experiment's overrides with the Run tab's ad-hoc ones — an ad-hoc
+  // edit for the same parameter path wins, since it's the more recent, local change.
+  const effectiveOverrides = useMemo(() => {
+    if (!resolvedRunOverrides.length) return activeExpOverrides;
+    const adhocPaths = new Set(resolvedRunOverrides.map(o => o.paramConfig.path));
+    return [...activeExpOverrides.filter(o => !adhocPaths.has(o.paramConfig.path)), ...resolvedRunOverrides];
+  }, [activeExpOverrides, resolvedRunOverrides]);
+
+  // When there are parameter overrides in effect — from a loaded experiment, an ad-hoc
+  // Run-tab adjustment, or both — apply them on top of the base model so the engine,
+  // snapshot, and narrative all reflect the overridden values. This is the ONLY place
+  // overrides are applied, so Reset/Step/Auto Run/Batch Run all honour them uniformly.
   const effectiveModel = useMemo(() => {
-    if (!activeExpOverrides.length) return model;
-    return applySweepValues(model, activeExpOverrides);
-  }, [model, activeExpOverrides]);
+    if (!effectiveOverrides.length) return model;
+    return applySweepValues(model, effectiveOverrides);
+  }, [model, effectiveOverrides]);
 
   // Build schedulesMap for the selected schedule (ADR-016).
   // Passed to buildEngine via options.schedulesMap so resolveInlineSchedules()
@@ -1768,32 +1840,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               model={model}
             />
             {/* Parameter overrides */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER OVERRIDES</span>
-                <Btn small variant="ghost" onClick={() => setExpFormPickerOpen(o => !o)}>{expFormPickerOpen ? "Done" : "+ Add"}</Btn>
-              </div>
-              {expFormOverrides.map((ov, idx) => {
-                const param = sweepParams.find(p => p.path === ov.path);
-                const chipColor = paramColor(param?.type, C);
-                return (
-                  <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 1, background: alpha(chipColor, 0.09), border: `1px solid ${alpha(chipColor, 0.27)}`, borderRadius: RADIUS.sm, padding: "3px 8px", minWidth: 0 }}>
-                      <span style={{ fontSize: 11, color: chipColor, fontFamily: FONT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{param?.label ?? ov.path}</span>
-                      {param?.subLabel && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{param.subLabel}</span>}
-                    </div>
-                    <input aria-label={`Override value ${idx + 1}`} type="number" value={ov.value} onChange={e => setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, value: e.target.value } : o))} placeholder="value"
-                      style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px", flexShrink: 0 }} />
-                    <Btn small variant="ghost" ariaLabel={`Remove override ${idx + 1}`} onClick={() => setExpFormOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
-                  </div>
-                );
-              })}
-              {expFormPickerOpen && (
-                <ParamBrowserPanel params={sweepParams} alreadyAdded={new Set(expFormOverrides.map(o => o.path).filter(Boolean))}
-                  onSelect={path => { const found = sweepParams.find(p => p.path === path); const cv = found?.currentValue; const defaultVal = (cv !== undefined && Number.isFinite(cv)) ? String(cv) : ""; setExpFormOverrides(prev => [...prev, { path, value: defaultVal }]); }}
-                  onClose={() => setExpFormPickerOpen(false)} />
-              )}
-            </div>
+            <OverrideChipList overrides={expFormOverrides} setOverrides={setExpFormOverrides} sweepParams={sweepParams}
+              pickerOpen={expFormPickerOpen} setPickerOpen={setExpFormPickerOpen} />
             <div style={{ display: "flex", gap: 8 }}>
               <Btn small variant="primary" disabled={!expFormName.trim() || expFormSaving} onClick={async () => {
                 const config = { replications, seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition: terminationMode === "condition" ? terminationCondition : null, overrides: expFormOverrides.filter(o => o.path && o.value !== "").map(o => ({ path: o.path, value: Number(o.value) })) };
@@ -1927,32 +1975,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                             model={model}
                           />
                           {/* Parameter overrides */}
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER OVERRIDES</span>
-                              <Btn small variant="ghost" onClick={() => setExpFormPickerOpen(o => !o)}>{expFormPickerOpen ? "Done" : "+ Add"}</Btn>
-                            </div>
-                            {expFormOverrides.map((ov, i2) => {
-                              const param = sweepParams.find(p => p.path === ov.path);
-                              const chipColor = paramColor(param?.type, C);
-                              return (
-                                <div key={i2} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                  <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 1, background: alpha(chipColor, 0.09), border: `1px solid ${alpha(chipColor, 0.27)}`, borderRadius: RADIUS.sm, padding: "3px 8px", minWidth: 0 }}>
-                                    <span style={{ fontSize: 11, color: chipColor, fontFamily: FONT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{param?.label ?? ov.path}</span>
-                                    {param?.subLabel && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{param.subLabel}</span>}
-                                  </div>
-                                  <input type="number" value={ov.value} onChange={e => setExpFormOverrides(prev => prev.map((o, j) => j === i2 ? { ...o, value: e.target.value } : o))} placeholder="value"
-                                    style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px", flexShrink: 0 }} />
-                                  <Btn small variant="ghost" onClick={() => setExpFormOverrides(prev => prev.filter((_, j) => j !== i2))}>×</Btn>
-                                </div>
-                              );
-                            })}
-                            {expFormPickerOpen && (
-                              <ParamBrowserPanel params={sweepParams} alreadyAdded={new Set(expFormOverrides.map(o => o.path).filter(Boolean))}
-                                onSelect={path => { const found = sweepParams.find(p => p.path === path); const cv = found?.currentValue; const defaultVal = (cv !== undefined && Number.isFinite(cv)) ? String(cv) : ""; setExpFormOverrides(prev => [...prev, { path, value: defaultVal }]); }}
-                                onClose={() => setExpFormPickerOpen(false)} />
-                            )}
-                          </div>
+                          <OverrideChipList overrides={expFormOverrides} setOverrides={setExpFormOverrides} sweepParams={sweepParams}
+                            pickerOpen={expFormPickerOpen} setPickerOpen={setExpFormPickerOpen} />
                           <div style={{ display: "flex", gap: 8 }}>
                             <Btn small variant="primary" disabled={!expFormName.trim() || expFormSaving} onClick={async () => {
                               const config = { replications, seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition: terminationMode === "condition" ? terminationCondition : null, overrides: expFormOverrides.filter(o => o.path && o.value !== "").map(o => ({ path: o.path, value: Number(o.value) })) };
@@ -2551,6 +2575,54 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
             {replications} rep{replications !== 1 ? "s" : ""} · {terminationMode === "time" ? `${maxSimTime} time units` : "condition stop"} · seed {seed}{warmupPeriod > 0 ? ` · warm-up ${warmupPeriod}` : ""}
           </span>
+          <div style={{ position: "relative" }}>
+            <Btn small variant={effectiveOverrides.length ? "primary" : "ghost"}
+              title="Change parameter values for this run only — no experiment or scenario needed"
+              onClick={() => {
+                if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
+                setShowRunOverridesPanel(v => !v);
+              }}>
+              🎛 {effectiveOverrides.length > 0 ? `${effectiveOverrides.length} param${effectiveOverrides.length !== 1 ? "s" : ""}` : "Adjust parameters"}
+            </Btn>
+            {showRunOverridesPanel && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 99 }}
+                  onClick={() => { setShowRunOverridesPanel(false); setRunOverridesPickerOpen(false); }} />
+                <div style={{
+                  position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 100, width: 360,
+                  background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 12,
+                  display: "flex", flexDirection: "column", gap: 8, boxShadow: SHADOW.dropdown,
+                }}>
+                  <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                    Change parameter values for this run only — no experiment or scenario needed. Resets when you switch models or reload the page.
+                  </div>
+                  {activeExpOverrides.length > 0 && (
+                    <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                      {activeExpOverrides.length} loaded from an experiment; ad-hoc changes for the same parameter take priority.
+                    </div>
+                  )}
+                  <OverrideChipList overrides={runOverrides} setOverrides={setRunOverrides}
+                    sweepParams={sweepParams.length ? sweepParams : enumerateSweepableParams(model)}
+                    pickerOpen={runOverridesPickerOpen} setPickerOpen={setRunOverridesPickerOpen}
+                    extraAlreadyAdded={activeExpOverrides.map(o => o.paramConfig.path)} />
+                  <div style={{ display: "flex", gap: 8, justifyContent: "space-between", marginTop: 4 }}>
+                    <Btn small variant="ghost" disabled={!effectiveOverrides.length}
+                      onClick={() => { setRunOverrides([]); setActiveExpOverrides([]); }}>Reset all</Btn>
+                    {userId && (
+                      <Btn small variant="ghost" disabled={!effectiveOverrides.length}
+                        title="Keep these changes as a named, reusable Experiment"
+                        onClick={() => {
+                          setExpFormOverrides(effectiveOverrides.map(o => ({ path: o.paramConfig.path, value: String(o.value) })));
+                          setExpEditId(null); setExpFormName(""); setExpFormDesc(""); setExpFormPickerOpen(false);
+                          setExecuteSection("saved-experiments"); setExpFormOpen(true);
+                          setShowRunOverridesPanel(false);
+                        }}>Save as Experiment…</Btn>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           <Btn small variant="ghost" onClick={() => setShowRunSetup(v => !v)}>{showRunSetup ? "▲ Hide" : "⚙ Edit"}</Btn>
         </div>
       </div>

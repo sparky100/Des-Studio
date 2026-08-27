@@ -299,15 +299,28 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       // Mock the entire chain for an update operation
       supabase.from('des_models').update.mockReturnThis();
       supabase.from('des_models').eq.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({ data: { ...model, owner_id: 'u1' }, error: null });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ ...model, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
       expect(supabase.from).toHaveBeenCalledWith('des_models');
       expect(supabase.from('des_models').update).toHaveBeenCalled();
       expect(supabase.from('des_models').eq).toHaveBeenCalledWith('id', 'm1');
       expect(supabase.from('des_models').select).toHaveBeenCalled();
-      expect(supabase.from('des_models').single).toHaveBeenCalled();
+    });
+
+    it('throws a clear permission message instead of a raw PGRST116 coercion error when the update matches zero rows (RLS-filtered)', async () => {
+      const model = { id: 'm1', name: 'Test' };
+      supabase.from('des_models').update.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+      // No Postgres error — RLS just filtered the row out of the UPDATE, so
+      // it legitimately affects zero rows (e.g. an editor collaborator hit
+      // by the RLS gap fixed in 20260827130000_editor_write_access.sql, or
+      // any update whose target no longer exists).
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [], error: null });
+
+      await expect(saveModel(model, 'u1')).rejects.toThrow(
+        "You don't have permission to save this model, or it no longer exists."
+      );
     });
 
     it('persists canonical model_json with graph and experiment defaults', async () => {
@@ -324,8 +337,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       };
       supabase.from('des_models').update.mockReturnThis();
       supabase.from('des_models').eq.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({ data: { ...model, owner_id: 'u1' }, error: null });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ ...model, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -352,10 +364,9 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       };
       supabase.from('des_models').update.mockReturnThis();
       supabase.from('des_models').eq.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single
+      supabase.from('des_models').select
         .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
-        .mockResolvedValueOnce({ data: { ...model, owner_id: 'u1' }, error: null });
+        .mockResolvedValueOnce({ data: [{ ...model, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -384,9 +395,8 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       vi.clearAllMocks();
       supabase.from('des_models').update.mockReturnThis();
       supabase.from('des_models').eq.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'm1', name: 'Legacy known', owner_id: 'u1' },
+      supabase.from('des_models').select.mockResolvedValueOnce({
+        data: [{ id: 'm1', name: 'Legacy known', owner_id: 'u1' }],
         error: null,
       });
 
@@ -940,8 +950,8 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
     });
 
     it('revokeShareLink sets revoked_at and guards by userId', async () => {
-      supabase.from('share_links').single.mockResolvedValueOnce({
-        data: { id: 'link-1' },
+      supabase.from('share_links').select.mockResolvedValueOnce({
+        data: [{ id: 'link-1' }],
         error: null,
       });
 
@@ -952,6 +962,14 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
         expect.objectContaining({ revoked_at: expect.any(String) })
       );
       expect(supabase.from('share_links').eq).toHaveBeenCalledWith('created_by', 'user-1');
+    });
+
+    it('revokeShareLink throws a friendly not-found message (not a raw PGRST116 error) when the update matches zero rows', async () => {
+      supabase.from('share_links').select.mockResolvedValueOnce({ data: [], error: null });
+
+      await expect(revokeShareLink('link-1', 'user-1')).rejects.toThrow(
+        'Share link not found or you do not own it.'
+      );
     });
 
     it('listShareLinks returns active and revoked links for a model', async () => {
@@ -1306,11 +1324,7 @@ describe('Sprint 71 — persistence layer', () => {
         dataSources: [{ id: 'ds1', url: 'https://example.com/data.csv' }],
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'new-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'new-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1332,11 +1346,7 @@ describe('Sprint 71 — persistence layer', () => {
         graph: { nodes: [], edges: [] },
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'new-id-2', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'new-id-2', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1373,11 +1383,7 @@ describe('Sprint 71 — persistence layer', () => {
         queues: [],
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'x', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'x', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1411,11 +1417,7 @@ describe('Sprint 71 — persistence layer', () => {
         queues: [],
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'skill-priority-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'skill-priority-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1462,11 +1464,7 @@ describe('Sprint 71 — persistence layer', () => {
         ],
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'exposed-params-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'exposed-params-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1492,11 +1490,7 @@ describe('Sprint 71 — persistence layer', () => {
 
     it('defaults exposedParams to an empty array and omits it from model_json when absent', async () => {
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'no-exposed-id', name: 'Plain', owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'no-exposed-id', name: 'Plain', owner_id: 'u1' }], error: null });
 
       await saveModel({ name: 'Plain', entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [] }, 'u1');
 
@@ -1522,11 +1516,7 @@ describe('Sprint 71 — persistence layer', () => {
         queues: [],
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'entity-inheritance-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'entity-inheritance-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1567,11 +1557,7 @@ describe('Sprint 71 — persistence layer', () => {
         queues: [],
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'sequence-enforcement-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'sequence-enforcement-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1676,11 +1662,7 @@ describe('Sprint 71 — persistence layer', () => {
       };
 
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'rt-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1708,11 +1690,7 @@ describe('Sprint 71 — persistence layer', () => {
       };
 
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'rt-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1760,11 +1738,7 @@ describe('Sprint 71 — persistence layer', () => {
       };
 
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'rt-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1808,11 +1782,7 @@ describe('Sprint 71 — persistence layer', () => {
       };
 
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'rt-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1848,11 +1818,7 @@ describe('Sprint 71 — persistence layer', () => {
       };
 
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'rt-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1877,11 +1843,7 @@ describe('Sprint 71 — persistence layer', () => {
       };
 
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'rt-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1909,11 +1871,7 @@ describe('Sprint 71 — persistence layer', () => {
       };
 
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'rt-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1940,11 +1898,7 @@ describe('Sprint 71 — persistence layer', () => {
       };
 
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'rt-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -1977,10 +1931,7 @@ describe('Sprint 71 — persistence layer', () => {
       ];
       const model = { name: 'Sections RT', entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [], sections };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'sec-rt-id', name: model.name, owner_id: 'u1' }, error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'sec-rt-id', name: model.name, owner_id: 'u1' }], error: null });
       await saveModel(model, 'u1');
       const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
       expect(insertArg.model_json.sections).toEqual(sections);
@@ -2084,10 +2035,7 @@ describe('Sprint 71 — persistence layer', () => {
         containerTypes,
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'ct-rt-id', name: model.name, owner_id: 'u1' }, error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'ct-rt-id', name: model.name, owner_id: 'u1' }], error: null });
       await saveModel(model, 'u1');
       const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
       expect(insertArg.model_json.containerTypes).toEqual(containerTypes);
@@ -2099,10 +2047,7 @@ describe('Sprint 71 — persistence layer', () => {
         entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'no-ct-id', name: model.name, owner_id: 'u1' }, error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'no-ct-id', name: model.name, owner_id: 'u1' }], error: null });
       await saveModel(model, 'u1');
       const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
       expect(insertArg.model_json.containerTypes).toEqual([]);
@@ -2153,10 +2098,7 @@ describe('Sprint 71 — persistence layer', () => {
         distances,
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'dist-rt-id', name: model.name, owner_id: 'u1' }, error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'dist-rt-id', name: model.name, owner_id: 'u1' }], error: null });
       await saveModel(model, 'u1');
       const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
       expect(insertArg.model_json.distances).toEqual(distances);
@@ -2168,10 +2110,7 @@ describe('Sprint 71 — persistence layer', () => {
         entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'no-dist-id', name: model.name, owner_id: 'u1' }, error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'no-dist-id', name: model.name, owner_id: 'u1' }], error: null });
       await saveModel(model, 'u1');
       const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
       expect(insertArg.model_json.distances).toEqual([]);
@@ -2217,10 +2156,7 @@ describe('Sprint 71 — persistence layer', () => {
         notes,
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'notes-rt-id', name: model.name, owner_id: 'u1' }, error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'notes-rt-id', name: model.name, owner_id: 'u1' }], error: null });
       await saveModel(model, 'u1');
       const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
       expect(insertArg.model_json.notes).toBe(notes);
@@ -2232,10 +2168,7 @@ describe('Sprint 71 — persistence layer', () => {
         entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'no-notes-id', name: model.name, owner_id: 'u1' }, error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'no-notes-id', name: model.name, owner_id: 'u1' }], error: null });
       await saveModel(model, 'u1');
       const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
       expect(insertArg.model_json.notes).toBeUndefined();
@@ -2280,10 +2213,7 @@ describe('Sprint 71 — persistence layer', () => {
         tags,
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'tag-rt-id', name: model.name, owner_id: 'u1' }, error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'tag-rt-id', name: model.name, owner_id: 'u1' }], error: null });
       await saveModel(model, 'u1');
       const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
       expect(insertArg.tags).toEqual(tags);
@@ -2295,10 +2225,7 @@ describe('Sprint 71 — persistence layer', () => {
         entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
       };
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'no-tag-id', name: model.name, owner_id: 'u1' }, error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'no-tag-id', name: model.name, owner_id: 'u1' }], error: null });
       await saveModel(model, 'u1');
       const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
       expect(insertArg.tags).toEqual([]);
@@ -2405,11 +2332,7 @@ describe('Sprint 71 — persistence layer', () => {
       };
 
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'sp-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'sp-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 
@@ -2457,11 +2380,7 @@ describe('Sprint 71 — persistence layer', () => {
       };
 
       supabase.from('des_models').insert.mockReturnThis();
-      supabase.from('des_models').select.mockReturnThis();
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { id: 'skills-id', name: model.name, owner_id: 'u1' },
-        error: null,
-      });
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'skills-id', name: model.name, owner_id: 'u1' }], error: null });
 
       await saveModel(model, 'u1');
 

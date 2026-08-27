@@ -285,4 +285,22 @@ New tests: 4 same-cycle re-seize cases in `execute-canvas-routing-events.test.js
 
 ---
 
+## 14. Status — Run-tab ad-hoc parameter adjustment implemented (2026-08-27, same branch): the Business view's "change a value and run" pattern, now for modellers
+
+Direct follow-on to §10's Stakeholder View: "we have made it easier for business users to change parameters and run a model without creating an experiment or scenario — let's allow the same capability on the run canvas." Before this, the *only* way a modeller could vary a parameter for a run was to save a named Experiment (Name required, immediate `saveExperiment()` DB write) or a named Scenario (same shape, immediate `createScenario()` insert) and then load it back — there was no path from "type a new value" to "run" without persisting something first, unlike the viewer-only Stakeholder View (`exposedParams` → `applySweepValues` → `runReplications`, nothing saved).
+
+| Piece | Notes |
+|---|---|
+| **🎛 Adjust parameters** popover (`ExecutePanel`, `src/ui/execute/index.jsx`) | Next to the run settings summary on the Run tab. Opens the same searchable `ParamBrowserPanel` used everywhere else, over the *full* `enumerateSweepableParams()` universe (not an owner-curated subset — this is the modeller's own model). Add/edit/remove ad-hoc `{path, value}` overrides; the trigger button doubles as a live count badge ("🎛 2 params"). **Reset all** clears everything; **Save as Experiment…** seeds the existing New-Experiment form with the current overrides and run settings, landing on the Experiments tab — saving stays available, it's just no longer required |
+| `effectiveModel` merge (same file) | The ad-hoc overrides resolve against `sweepParams` and merge with any loaded-experiment overrides (`activeExpOverrides`) — an ad-hoc edit for the same path wins. This feeds the *same* `effectiveModel` that Reset/Step/Auto Run/Batch Run already consumed for a loaded Experiment, so no new run-path code was needed; every run mode honours ad-hoc changes identically, exactly like it already did for saved Experiments |
+| Model-switch hygiene (incidental fix) | Neither ad-hoc nor loaded-experiment overrides were previously cleared when `modelId` changed — a latent gap (masked by `applySweepValues` silently skipping unresolvable `targetId`s) that could leave a stale override from model A silently absent-but-not-obviously-so on model B. A new effect clears both on model switch |
+| De-duplication | The "PARAMETER OVERRIDES" chip-list-plus-picker JSX existed identically in the New and Edit Experiment forms (~20 lines each). Extracted to `OverrideChipList`, now also the Adjust-parameters panel's editor — three call sites instead of two duplicates plus one near-miss |
+| Docs | User Guide §4.4 and help-reference's Experiment Controls section both describe the button, that changes are ad-hoc/never persisted, that they reset on model switch, and the priority rule when an Experiment is also loaded |
+
+New tests (`tests/ui/execute/quick-parameter-adjust.test.jsx`, 5): the trigger renders with no saved Experiment/Scenario in sight; picking a parameter and changing its value patches the model actually handed to `runReplications` (without mutating the model prop) and the base model prop is never mutated; **Reset all** clears the badge; overrides are dropped on a `modelId` change; **Save as Experiment…** pre-fills the New Experiment form with Name left blank. Existing `OverrideChipList` call sites (New/Edit Experiment forms) covered by the full `tests/ui/execute/` run (24 files, 184 tests, all green) since no dedicated coverage existed for that JSX before extraction.
+
+Verified: lint/typecheck/build clean; full `tests/ui/execute/` + `param-browser-panel.test.jsx` green (24/24 files); full suite before push.
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*
