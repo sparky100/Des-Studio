@@ -16,7 +16,7 @@ This project uses **OpenCode**, not Claude Code. See the following files for aut
 | `docs/reviews/expert-review-2026-08-ux.md` | 2026-08 UX expert / modeller review (maturity 7.5/10) |
 | `docs/reviews/expert-review-2026-08-functionality.md` | 2026-08 functionality & capability review |
 | `docs/reviews/expert-review-2026-08-code.md` | 2026-08 code review |
-| `docs/decisions/ADR-020-draw-run-live-preview.md` | Draw/Run integration — Phase 1 (live preview strip) shipped, dogfooded, then removed; direction on hold |
+| `docs/decisions/ADR-020-draw-run-live-preview.md` | Draw/Run integration — explored (Phase 1 live preview shipped, dogfooded, removed), then decided against: the Draw and Run canvases remain separate surfaces |
 
 ## Schema Contract
 

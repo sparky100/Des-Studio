@@ -2,7 +2,7 @@
 // Derives graph topology from canonical model_json (same helper as Visual Designer).
 // Receives live snap state and overlays queue depths, server busy/idle counts on each node.
 // Returns null when the model yields no derivable nodes — caller falls back to VisualView.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -30,6 +30,22 @@ import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
 import { ContainerGaugeStrip } from "./ContainerGaugeStrip.jsx";
 import { buildServerTypeIndex, deriveActivityLiveData } from "./activityLiveData.js";
 export { DEFAULT_KPI_SLOTS };
+
+// ── Canvas height (maximise-by-default, F9C.9) ───────────────────────────────
+const CANVAS_DRAG_MIN = 250;
+const CANVAS_DRAG_MAX = 900;
+const CANVAS_FILL_FLOOR = 280;
+// Space reserved below the canvas for the collapsed BottomPanel bar + layout gap.
+const CANVAS_RESERVED_BOTTOM = 64;
+
+/**
+ * How tall the canvas should be to fill the remaining viewport below it.
+ * Pure so it's directly testable without mounting ReactFlow.
+ */
+export function computeCanvasFillHeight(topOffset, viewportHeight, reservedBottom = CANVAS_RESERVED_BOTTOM) {
+  if (!Number.isFinite(topOffset) || !Number.isFinite(viewportHeight)) return null;
+  return Math.max(CANVAS_FILL_FLOOR, viewportHeight - topOffset - reservedBottom);
+}
 
 // ── Configurable KPI bar (F9C.7) ─────────────────────────────────────────────
 
@@ -528,7 +544,17 @@ export function ExecuteCanvas({
     const served = [...sinkRefs].reduce((sum, refId) => sum + (eventCounts[refId] || 0), 0);
     return { arrived, served, reneged: snap.reneged ?? 0 };
   }, [baseGraph.nodes, snap]);
-  const [canvasHeight, setCanvasHeight] = useState(480);
+  // Height: auto-fill the viewport by default; a manual drag overrides and is
+  // remembered (des.canvas.height), matching how BottomPanel persists its height.
+  const canvasWrapRef = useRef(null);
+  const [autoFillHeight, setAutoFillHeight] = useState(null);
+  const [userCanvasHeight, setUserCanvasHeight] = useState(() => {
+    try {
+      const stored = parseInt(localStorage.getItem("des.canvas.height") || "", 10);
+      return Number.isFinite(stored) ? Math.max(CANVAS_DRAG_MIN, Math.min(CANVAS_DRAG_MAX, stored)) : null;
+    } catch { return null; }
+  });
+  const canvasHeight = userCanvasHeight ?? autoFillHeight ?? 480;
   const [showSections, setShowSections] = useState(() => {
     try { return localStorage.getItem("des.sections.show") !== "0"; } catch { return true; }
   });
@@ -537,26 +563,64 @@ export function ExecuteCanvas({
 
   useEffect(() => { if (!showSections) setFocusedSectionId(null); }, [showSections]);
 
+  // Restore the viewport the user last had on the Draw canvas, so switching
+  // Design → Run shows the model at the same place and scale. Both canvases
+  // share coordinates (computeExecuteLayout preserves saved Draw positions).
+  // The key is per-browser, so a first visit or another device falls back to
+  // fit-all. Run never writes this key — Draw owns it.
+  const drawViewport = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem(`des.vp.${model?.id}`) || "null"); } catch { return null; }
+  }, [model?.id]);
+
+  const hasSnap = Boolean(snap);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = canvasWrapRef.current;
+      if (!el) return;
+      setAutoFillHeight(computeCanvasFillHeight(el.getBoundingClientRect().top, window.innerHeight));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+    };
+  }, [hasSnap]);
+
   useEffect(() => {
+    const pointerY = (event) => (event.touches ? event.touches[0]?.clientY : event.clientY);
     const handlePointerMove = (event) => {
       if (!dragStateRef.current) return;
-      const nextHeight = dragStateRef.current.startHeight + (event.clientY - dragStateRef.current.startY);
-      setCanvasHeight(Math.max(250, Math.min(900, nextHeight)));
+      const y = pointerY(event);
+      if (y == null) return;
+      const nextHeight = Math.max(CANVAS_DRAG_MIN, Math.min(CANVAS_DRAG_MAX, dragStateRef.current.startHeight + (y - dragStateRef.current.startY)));
+      dragStateRef.current.lastHeight = nextHeight;
+      setUserCanvasHeight(nextHeight);
     };
     const handlePointerUp = () => {
+      if (dragStateRef.current?.lastHeight != null) {
+        try { localStorage.setItem("des.canvas.height", String(dragStateRef.current.lastHeight)); } catch { /* storage unavailable (private mode) — non-critical */ }
+      }
       dragStateRef.current = null;
     };
     window.addEventListener("mousemove", handlePointerMove);
     window.addEventListener("mouseup", handlePointerUp);
+    window.addEventListener("touchmove", handlePointerMove);
+    window.addEventListener("touchend", handlePointerUp);
     return () => {
       window.removeEventListener("mousemove", handlePointerMove);
       window.removeEventListener("mouseup", handlePointerUp);
+      window.removeEventListener("touchmove", handlePointerMove);
+      window.removeEventListener("touchend", handlePointerUp);
     };
   }, []);
 
   const startResize = (event) => {
     event.preventDefault();
-    dragStateRef.current = { startY: event.clientY, startHeight: canvasHeight };
+    const startY = event.touches ? event.touches[0]?.clientY : event.clientY;
+    if (startY == null) return;
+    dragStateRef.current = { startY, startHeight: canvasHeight };
   };
 
   // Jump to a node picked from the search results dropdown: pan/select it,
@@ -818,6 +882,7 @@ export function ExecuteCanvas({
       )}
 
       <div
+        ref={canvasWrapRef}
         aria-label="Execute canvas"
         style={{
           height: canvasHeight,
@@ -833,13 +898,14 @@ export function ExecuteCanvas({
           edges={flowEdges}
           nodeTypes={liveNodeTypes}
           edgeTypes={edgeTypes}
-          fitView
-          fitViewOptions={{ padding: 0.18, duration: 0 }}
+          {...(drawViewport
+            ? { defaultViewport: drawViewport }
+            : { fitView: true, fitViewOptions: { padding: 0.18, duration: 0 } })}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable
           panOnScroll
-          minZoom={0.15}
+          minZoom={0.1}
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
           onNodeClick={(_, node) => {
@@ -893,6 +959,7 @@ export function ExecuteCanvas({
         aria-orientation="horizontal"
         aria-label="Resize canvas"
         onMouseDown={startResize}
+        onTouchStart={startResize}
         style={{
           height: 10,
           cursor: "ns-resize",

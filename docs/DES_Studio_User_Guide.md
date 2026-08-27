@@ -1,8 +1,8 @@
 # simmodlr — User Guide
 
-**Version:** 7.8.0  
-**Date:** 2026-08-26  
-**Sprint baseline:** Sprint 89, plus the 2026-08 expert-review remediation work (named scenarios, Business view, Visual Designer alignment guides)  
+**Version:** 7.9.0  
+**Date:** 2026-08-27  
+**Sprint baseline:** Sprint 89, plus the 2026-08 expert-review remediation work (named scenarios, Business view, Visual Designer alignment guides, Run-canvas scale parity and layout density)  
 **Audience:** Simulation practitioners, operations analysts, engineering students
 
 ---
@@ -253,7 +253,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    | **Schedule** | If the model has multiple timetables (e.g. Weekday, Weekend), select which one to use. |
    | **Purge period** | Optional run-down time after the simulation clock reaches Max sim time. New arrivals stop but the system continues until all queues drain. Useful for end-of-day or shift-end scenarios — set to the longest expected remaining service time. |
 
-3. Click **Run**. The Execute canvas animates entity flow in real time. During execution, the sidebar and header collapse to give maximum canvas space, and a compact run bar appears with **Step**, **Auto Run**, speed, and **Cancel** controls. A **⚠** badge in the run bar shows real-time warnings when utilisation, starvation, or queue capacity thresholds are exceeded — click it to see details.
+3. Click **Run**. The Execute canvas opens at roughly the same pan and zoom you last had on the Draw canvas for this model, so the layout doesn't shrink when you switch screens (falls back to fitting the whole model if you haven't drawn it yet, or on another device). The canvas fills the available window height by default — drag its bottom edge to resize manually. A one-line **run readiness** strip above the canvas summarises "Ready to run" or "Needs attention" plus any advisory count; click **Details ▸** to see the full breakdown (a genuine blocking issue always shows full detail automatically). The Execute canvas animates entity flow in real time. During execution, the sidebar and header collapse to give maximum canvas space, and a compact run bar appears with **Step**, **Auto Run**, speed, and **Cancel** controls. A **⚠** badge in the run bar shows real-time warnings when utilisation, starvation, or queue capacity thresholds are exceeded — click it to see details.
 
 4. When the run completes, the Results tab shows:
 
@@ -333,7 +333,7 @@ Scenarios store only the parameter changes, not a copy of the model, so they alw
 
 Each flag includes an actionable suggestion: adding capacity, rebalancing upstream stages, extending simulation time, or addressing reliability. Key Findings replaces the need to scan individual charts for problems — the critical issues are surfaced first.
 
-**Bottom Panel.** The collapsible bottom panel in the Execute view is collapsed by default. Click any tab name (**Log**, **Entities**, **Charts**, **Stage KPIs**) to expand the panel at that tab. The panel has a touch-friendly resize handle along its top edge — drag up or down to adjust the height. The **Step Log** tab shows only the last 50 event entries for readability; during a run this scrolls automatically as new events arrive. Click on an entity in the Entity Table or on the Execute canvas to open the **Entity Inspector** for that entity's full state and history.
+**Bottom Panel.** The collapsible bottom panel in the Execute view is collapsed by default, keeping the canvas maximised. Click any tab name (**Log**, **Entities**, **Charts**, **Stage KPIs**) to expand the panel at that tab — your expand/collapse choice is remembered for next time. The panel has a touch-friendly resize handle along its top edge — drag up or down to adjust the height. The **Step Log** tab shows only the last 50 event entries for readability; during a run this scrolls automatically as new events arrive. Click on an entity in the Entity Table or on the Execute canvas to open the **Entity Inspector** for that entity's full state and history.
 
 **Optimise.** Inside the Simulation Assistant sidebar, click **⚡ Optimise** to run an adaptive batch analysis. The AI analyses results for bottlenecks, quick wins, and investment opportunities. Each suggestion has an **Apply ↗** button that proposes the change to the model with a before/after diff so you can review it before committing.
 

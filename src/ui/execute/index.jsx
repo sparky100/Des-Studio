@@ -303,6 +303,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [runLabel, setRunLabel] = useState("");
   const [executeSection, setExecuteSection] = useState("run");
   const [hideRunReadiness, setHideRunReadiness] = useState(false);
+  const [readinessExpanded, setReadinessExpanded] = useState(false);
   const [showRunSetup, setShowRunSetup] = useState(false);
   const [showEstimate, setShowEstimate] = useState(null);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
@@ -564,6 +565,16 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     ? `${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length === 1 ? "" : "s"} to resolve before running.`
     : "No blocking issues found for this scenario.";
   const readinessIssues = runAdmission.hardErrors;
+  // A hard blocker always shows full detail — collapsing "Needs attention" to
+  // one line would hide *why* the run is blocked. The advisory/all-green case
+  // defaults to one line; the user can still expand it.
+  const effectiveReadinessExpanded = hasAdmissionErrors || readinessExpanded;
+  const readinessAdvisoryCount = runAdmission.warnings.length;
+  const readinessDigestParts = [
+    formatEstimate(complexityEstimate.expectedEntities) !== "—" ? `≈ ${formatEstimate(complexityEstimate.expectedEntities)} entities` : null,
+    formatEstimate(complexityEstimate.estimatedCEventScans) !== "—" ? `${formatEstimate(complexityEstimate.estimatedCEventScans)} scans` : null,
+    complexityEstimate.confidence ? `${complexityEstimate.confidence} confidence` : null,
+  ].filter(Boolean);
 
   const initEngine = useCallback(async () => {
     if (hasValidationErrors) return;
@@ -2625,6 +2636,43 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             gap: 10,
           }}
         >
+          {!effectiveReadinessExpanded ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span
+                style={{
+                  background: readinessTagBg,
+                  border: `1px solid ${readinessBorder}`,
+                  borderRadius: 999,
+                  color: readinessTagColor,
+                  fontFamily: FONT,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: "5px 10px",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {readinessTitle}
+              </span>
+              {readinessAdvisoryCount > 0 && (
+                <span style={{ fontSize: 11, color: C.amber, fontFamily: FONT, whiteSpace: "nowrap" }}>
+                  {readinessAdvisoryCount} advisor{readinessAdvisoryCount === 1 ? "y" : "ies"}
+                </span>
+              )}
+              {readinessDigestParts.length > 0 && (
+                <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
+                  {readinessDigestParts.join(" · ")}
+                </span>
+              )}
+              {runLabel.trim() && <Tag label={runLabel.trim()} color={C.accent} />}
+              <button
+                onClick={() => setReadinessExpanded(true)}
+                style={{ marginLeft: "auto", background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 8px", cursor: "pointer" }}
+              >
+                Details ▸
+              </button>
+            </div>
+          ) : (
+          <>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span
@@ -2650,7 +2698,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 </div>
               </div>
             </div>
-            {runLabel.trim() && <Tag label={runLabel.trim()} color={C.accent} />}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {runLabel.trim() && <Tag label={runLabel.trim()} color={C.accent} />}
+              {!hasAdmissionErrors && (
+                <button
+                  onClick={() => setReadinessExpanded(false)}
+                  style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 8px", cursor: "pointer" }}
+                >
+                  ▴ Collapse
+                </button>
+              )}
+            </div>
           </div>
           {readinessIssues.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2760,6 +2818,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             )}
             </div>}
           </div>
+          </>
+          )}
         </div>
       )}
 

@@ -1,7 +1,7 @@
 # ADR-020: Draw/Run Integration — Live Preview While Authoring
 
 **Date:** 2026-08-25
-**Status:** On hold (2026-08-25) — Phase 1 was implemented, dogfooded, reviewed, and then removed at the product owner's decision; Phase 2+ is paused, not cancelled. See "On Hold" section at the end of this document.
+**Status:** Decided against (2026-08-26) — the Draw and Run canvases will remain separate surfaces. Phase 1 was implemented, dogfooded, reviewed, and removed; the product owner has since confirmed the decision not to integrate the two canvases, closing the direction rather than pausing it. See "Decision Not to Integrate" at the end of this document.
 **Sprint:** Post-91/92 (unified-canvas prerequisite work)
 
 ---
@@ -90,3 +90,9 @@ After the fixes above shipped and the feature was dogfooded on a real model, the
 **Why this document stays.** This isn't a record of a mistake — Phase 1 did what it was for: it let the product owner try the idea cheaply, on a real model, before committing to the much larger Phase 2 investment, and the answer that came back was "not now." The two deep-exploration passes into the Draw canvas and execution architecture (Context/Why-not-a-full-merge sections above), the benchmarks, and the fixes made along the way (the freeze-on-edit bug, documented above) remain accurate and directly reusable if this direction is picked back up later — nothing here needs to be re-derived from scratch.
 
 **If this is revisited:** start from this document rather than a blank page. The "Why a Full Merge Is Not Phase 1" findings and the benchmark numbers are unlikely to have changed meaningfully; re-verify them rather than assuming they still hold, since the codebase will have moved on. The removed code is recoverable from git history (search the commit that fixed the freeze-on-edit bug) as a starting point, though it should be re-reviewed rather than restored as-is given the schedule/live-data gap noted above was never resolved.
+
+## Decision Not to Integrate (2026-08-26)
+
+The product owner has confirmed the final call: **the Draw canvas and the Run (Execute) canvas will not be integrated.** They remain two deliberately separate surfaces — Draw for authoring structure, Run for watching and measuring execution — each keeping its own node components, layout pass, and lifecycle. This closes the direction the "On Hold" section above left open: Phase 2+ (dual-mode node components, structural-vs-parametric rebuild skipping, lifecycle unification) is cancelled, not paused.
+
+The rationale from dogfooding stands: the separation between authoring and execution turned out to be a feature, not a gap — each surface can stay optimised for its own job without carrying the other's complexity. The document is retained as the record of how the question was explored and answered; the architectural findings ("Why a Full Merge Is Not Phase 1", the benchmarks) remain a useful reference for any future work that touches either canvas individually.

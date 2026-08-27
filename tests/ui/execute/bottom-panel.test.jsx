@@ -91,6 +91,17 @@ describe("BottomPanel — F9C.8", () => {
     expect(screen.getByRole("separator", { name: /resize bottom panel/i })).toBeInTheDocument();
   });
 
+  test("remembers an expanded choice across remounts (des.bottomPanel.collapsed)", () => {
+    localStorage.setItem("des.bottomPanel.collapsed", "0");
+    render(<BottomPanel log={log} snap={snap} model={model} />);
+    expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
+  });
+
+  test("still defaults to collapsed when the key has never been set", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} />);
+    expect(screen.queryByText(/ARRIVE Customer/)).not.toBeInTheDocument();
+  });
+
 });
 
 describe("BottomPanel — F9C.9 live metrics", () => {
