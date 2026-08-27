@@ -347,8 +347,8 @@ rng(); // → number in [0, 1)
 | `UNBATCH(Queue)` | Release batch members back as individual entities |
 | `MATCH(TypeA, QueueA, TypeB, QueueB, Target)` | Pair one entity from each queue into a batch. Merged attrs = `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — QueueB's value wins on any name collision with QueueA. |
 | `MATCH(TypeA, QueueA, TypeB, QueueB, Target, "predicate")` | Same, but scans both queues for the first pair satisfying the quoted predicate instead of always taking the front of each. `Entity.<attr>` = the QueueA candidate, `Other.<attr>` = the QueueB candidate. No compatible pair → no-op. |
-| `COSEIZE(Queue, Srv1[, Srv2, ...])` | Atomically seize one customer and multiple server types |
-| `RELEASE_COSEIZED([Srv1, Srv2, ...][, Queue])` | Atomically release all servers claimed by a COSEIZE for the context entity; re-queue to Queue if given. Never stack separate `RELEASE(Srv)` calls per co-seized type — use this instead. |
+| `COSEIZE(Queue, Srv1[Skill1][:N1][, Srv2[Skill2][:N2], ...])` | Atomically seize one customer and multiple server types, optionally N of a type via `:N` (default 1) |
+| `RELEASE_COSEIZED([Srv1, Srv2, ...][, Queue])` | Atomically release **all** servers claimed by a COSEIZE for the context entity (quantity-agnostic — releases every unit of a listed type, however many were seized); re-queue to Queue if given. Never stack separate `RELEASE(Srv)` calls per co-seized type — use this instead. |
 | `SET(varName, expr)` | Set state variable to arithmetic expression result |
 | `SET_ATTR(attr, expr)` | Set context entity attribute to expression result |
 | `COST(expr)` | Accumulate expression result to `summary.totalCost` |

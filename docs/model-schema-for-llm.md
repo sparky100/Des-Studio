@@ -671,8 +671,8 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 |-------|--------|---------|
 | `ARRIVE` | `ARRIVE(EntityType, QueueName)` | Creates an entity of type `EntityType` and places it in `QueueName`. |
 | `RELEASE` | `RELEASE(ServerType, QueueName)` | **Intermediate stage only.** Releases a server of type `ServerType`, moves served entity to `QueueName` for the next stage. Sets entity status to `"waiting"`. **Do NOT follow with `COMPLETE()` in the same effect — use `COMPLETE()` alone for terminal events.** Do not use for a COSEIZE-scheduled B-event — see `RELEASE_COSEIZED` below. |
-| `COSEIZE` | `COSEIZE(QueueName, Type1, Type2, ...)` | Atomically seizes one server of each listed type for the same entity. Requires `idle(<Type>).count > 0` for every listed type in the C-event condition. See §"COSEIZE — Multi-resource start". |
-| `RELEASE_COSEIZED` | `RELEASE_COSEIZED([Type1, Type2, ...], QueueName)` | Releases all listed co-seized servers atomically for the context entity and moves it to `QueueName` for the next stage (queue argument optional; omit to use a routing table instead). The **only** correct way to release co-seized resources without ending the entity's lifecycle — never stack separate `RELEASE(Type)` calls for co-seized types. |
+| `COSEIZE` | `COSEIZE(QueueName, Type1[:N1], Type2[:N2], ...)` | Atomically seizes one server of each listed type for the same entity — or N servers of a type via the optional `:N` quantity suffix (default 1), e.g. `COSEIZE(Q, Nurse:2, Doctor)` for 2 Nurses + 1 Doctor. Requires `idle(<Type>).count >= N` for every listed type in the C-event condition. A type may appear as only one arg — request more via `Type:N`, not by repeating the arg. See §"COSEIZE — Multi-resource start". |
+| `RELEASE_COSEIZED` | `RELEASE_COSEIZED([Type1, Type2, ...], QueueName)` | Releases **all** currently-claimed servers of each listed type atomically for the context entity and moves it to `QueueName` for the next stage (queue argument optional; omit to use a routing table instead) — quantity-agnostic: if a type was seized with `Type:N`, all N are released, however many. The **only** correct way to release co-seized resources without ending the entity's lifecycle — never stack separate `RELEASE(Type)` calls for co-seized types. There is no partial-release syntax (e.g. releasing only 1 of 2 seized Nurses) — not supported, permanently. |
 | `COMPLETE` | `COMPLETE()` | Marks current entity as served and removes it from the system. Also releases the server automatically — no preceding `RELEASE()` needed. For a COSEIZE-scheduled B-event, this releases **all** co-seized servers. Use this alone as the terminal effect on the final service B-event. |
 | `RENEGE` | `RENEGE(ctx)` | Marks current entity as reneged (abandoned). Always use `ctx` as the argument. |
 | `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch entity, sends each member to `QueueName`. `QueueName` must reference a defined queue (V23). Every UNBATCH should be paired with a corresponding BATCH that created the batch entity being unbatched. |
@@ -914,6 +914,22 @@ When a task requires multiple resource types simultaneously (e.g. a surgery need
 }
 ```
 
+**Quantity variant** — seize N servers of one type in the same atomic call via the
+optional `:N` suffix (default 1). "2 Nurses + 1 Doctor" for a triage team:
+
+```jsonc
+{
+  "id": "c_triage",
+  "name": "Triage Team",
+  "priority": 1,
+  "condition": "queue(TriageQueue).length > 0 AND idle(Nurse).count >= 2 AND idle(Doctor).count > 0",
+  "effect": ["COSEIZE(TriageQueue, Nurse:2, Doctor)"],
+  "cSchedules": [
+    { "eventId": "b_triage_done", "dist": "Fixed", "distParams": { "value": "15" }, "useEntityCtx": true }
+  ]
+}
+```
+
 If the entity needs to **continue** after the co-seized resources are released (e.g. move on to recovery), use `RELEASE_COSEIZED` instead of `COMPLETE()`:
 
 ```jsonc
@@ -936,7 +952,9 @@ The target queue argument is optional — omit it (`RELEASE_COSEIZED([Surgeon, A
 - **Do NOT** issue separate single `RELEASE(Surgeon)` + `RELEASE(Anesthetist)` calls for co-seized types on the same B-event — each resolves against the same cached primary-server context, so only the first call actually releases anything and the rest silently leave that resource stuck busy forever. The model validator flags this pattern (V38c).
 - The `RELEASE_COSEIZED([...])` type list must exactly match (or be a subset of) the types in the scheduling C-event's `COSEIZE(...)` call, or the release will fail at runtime (validator rule V38d catches mismatches ahead of time).
 - Spell it **`RELEASE_COSEIZED`** — with the trailing "D". `RELEASE_COSEIZE(...)` (missing it) is not a macro; it silently no-ops at runtime instead of raising an error, so this typo can go unnoticed until you see servers never releasing (validator rule V38e catches it ahead of time).
-- The condition MUST check `idle(<Type>).count > 0` for **every** server type — otherwise Phase C will waste passes on COSEIZE attempts that always fail.
+- The condition MUST check `idle(<Type>).count >= N` for **every** server type when using `Type:N` quantity syntax (not just `> 0`) — otherwise Phase C will waste passes on COSEIZE attempts that always fail for lack of enough idle servers.
+- A server type must appear as only **one** arg — request more than one via `Type:N` (e.g. `Nurse:2`), never by repeating the arg (`COSEIZE(Q, Nurse, Nurse)`); the latter fails at runtime with "duplicate server type" and is flagged at design time (validator rule V38f).
+- `RELEASE_COSEIZED` is quantity-agnostic: it releases **every** server of a listed type currently claimed by the entity, regardless of how many were seized. There is no partial-release syntax — releasing only some of the N units seized for a type is not supported.
 - `cSchedules[].useEntityCtx` MUST be `true` so the B-event knows which entity and servers to release.
 - The B-event's `scheduledTime` should be a high placeholder (e.g. `"9999"`) since it is only fired via the `cSchedules` entry, not by the clock.
 - `"schedules": []` on the completion B-event — it has no self-scheduling; the C-event drives it.
@@ -997,8 +1015,8 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `ASSIGN` (consumable-gated) | `ASSIGN(QueueName, ServerType, ContainerId:amount)` | Optional trailing `ContainerId:amount` clause gates the assignment on a declared container (§8) having a level ≥ `amount`. The server claim and the container deduction happen **atomically** — if either the server or the container check fails, neither is committed (no partial seizure). `ContainerId` must match a declared container `id` (V27); `amount` accepts the same literal/state-variable/expression forms as `DRAIN`. Combine with a skill clause by putting the container clause last: `ASSIGN(QueueName, ServerType, "Skill", ContainerId:amount)`. Use for "this activity also consumes a physical/consumable resource" (a test kit, a dose, a part) in addition to seizing staff/equipment. |
 | `DELAY` | `DELAY(QueueName)` | Holds the front entity from `QueueName` for the duration sampled by the `cSchedules` entry, **without seizing any server**. Use for resource-free waits (cooling period, mandatory hold, recovery, paperwork delay). `DELAY` must be the entire effect — never combine with `ASSIGN`/`RELEASE` in the same C-event. The completion B-event needs `"useEntityCtx": true` to know which entity to route, and may use `COMPLETE()` or routing-table exit, same as a normal service completion. `QueueName` must reference a defined queue (V47). See §6.2. |
 | `BATCH` | `BATCH(QueueName, N)` | Accumulates N entities from `QueueName` into a parent batch entity. N ≥ 2 (V22). `QueueName` must reference a defined queue. |
-| `COSEIZE` | `COSEIZE(QueueName, Srv1, Srv2, ...)` | Atomically seizes one entity and multiple server types simultaneously. Fails cleanly if any server is unavailable. All server type names must reference defined server entity types. |
-| `COSEIZE` (skilled) | `COSEIZE(QueueName, Doctor[Surgery], Nurse[Triage])` | Per-type bracket syntax: each server type may be followed by `[Skill]` in brackets to require that skill for that role. Only idle servers whose `skills[]` contains the specified skill are considered for that position. The skill name must be a valid entry in the model's top-level `skills` registry (V-SKILL-2). Any server type without brackets defaults to unskilled matching (same as the base COSEIZE). |
+| `COSEIZE` | `COSEIZE(QueueName, Srv1[:N1], Srv2[:N2], ...)` | Atomically seizes one entity and multiple server types simultaneously, optionally N of a type via the `:N` quantity suffix (default 1). Fails cleanly if any type's idle count is below its requested N. All server type names must reference defined server entity types. |
+| `COSEIZE` (skilled) | `COSEIZE(QueueName, Doctor[Surgery], Nurse[Triage])` | Per-type bracket syntax: each server type may be followed by `[Skill]` in brackets to require that skill for that role. Only idle servers whose `skills[]` contains the specified skill are considered for that position. The skill name must be a valid entry in the model's top-level `skills` registry (V-SKILL-2). Any server type without brackets defaults to unskilled matching (same as the base COSEIZE). Composes with quantity as `Type[Skill]:N`, e.g. `Doctor[Surgery]:2`. |
 | `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each of `QueueA` and `QueueB` into a combined batch in `TargetQueue`. All queue names must reference defined queues. `TypeA` and `TypeB` must match defined customer entity type names. The resulting batch entity's attrs are `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — on any attribute name collision, `QueueB`'s value overwrites `QueueA`'s. Order the two source queues deliberately when both define an attribute with the same name. |
 | `MATCH` (compatibility predicate) | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue, "Entity.bloodType == Other.bloodType")` | Optional 6th argument: a quoted predicate evaluated against both candidates — `Entity.<attr>` refers to the `QueueA` candidate being tested, `Other.<attr>` refers to the `QueueB` candidate. When present, scans both queues for the first compatible pair (front-to-back on `QueueA`, then `QueueB`) instead of always taking the front of each — use for blood-type/skill-requirement-style compatibility matching. No compatible pair found → no-op, same as an empty queue. A malformed predicate is caught and treated as no-match rather than crashing the run, but is flagged at design time (V66). |
 | `SET` | `SET(variableName, expression)` | Sets a state variable to an arithmetic expression. |
@@ -1437,6 +1455,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V38c | A COSEIZE-scheduled B-event stacks two or more separate `RELEASE(Type)` calls for co-seized types — only the first actually releases anything. Use `RELEASE_COSEIZED([...])` or `COMPLETE()` instead. |
 | V38d | A `RELEASE_COSEIZED([...])` type list includes a type that isn't part of the scheduling C-event's `COSEIZE(...)` types — will fail at runtime with "no claimed ... server". |
 | V38e | A B-event effect calls `RELEASE_COSEIZE(...)` — missing the trailing "D". This is not a registered macro; it silently no-ops as an "Unknown effect" at runtime, so the co-seized servers are never released and the entity never routes onward. Use `RELEASE_COSEIZED([...])`. |
+| V38f | A C-event's `COSEIZE(...)` effect lists the same server type as more than one arg. This fails at runtime with "duplicate server type" — request more than one via `Type:N` (e.g. `Nurse:2`) instead of repeating the arg. |
 | V40 | `SET_ATTR(attrName, ...)` targets an attribute that isn't declared on any entity class — likely a typo. The engine still applies the effect. |
 | V42 | A queue uses `discipline: "SPT"` but the customer entity type reaching it has no `serviceTime`/`processingTime` attribute — SPT can't rank entities and falls back to arrival order. |
 | V43 | A queue uses `discipline: "EDD"` but the customer entity type reaching it has no `dueDate` attribute — EDD can't rank entities and falls back to arrival order. |

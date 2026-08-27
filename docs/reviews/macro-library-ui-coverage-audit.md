@@ -85,8 +85,12 @@ supports the feature but no picker can write it. Group B is genuine engine limit
   (e.g. "preempt the lowest-priority in-service entity").
 - **FAIL / REPAIR are all-or-nothing per server type** — no partial `FAIL(Type, N)` for modelling a
   single machine of a bank breaking down.
-- **COSEIZE seizes exactly one server per type** — quantities like "2 Nurses + 1 Doctor" require
-  duplicate server types, which the macro explicitly rejects.
+- ~~**COSEIZE seizes exactly one server per type** — quantities like "2 Nurses + 1 Doctor" require
+  duplicate server types, which the macro explicitly rejects.~~ **Closed by Sprint 95** — see
+  `docs/reviews/sprint-95-coseize-quantities-plan.md`. `COSEIZE(Q, Nurse:2, Doctor)` now seizes N
+  servers of a type via an optional `:N` quantity suffix, threaded through the engine, validation,
+  the UI composer, and SimPy export. `RELEASE_COSEIZED` releases all N (quantity-agnostic,
+  permanently — no partial release).
 - **MATCH is strictly pairwise** — no k-way assembly; merged attrs let B silently overwrite A.
 - **SPLIT has no JOIN counterpart.** `_splitFrom`/`_splitChildren` lineage is recorded but nothing
   consumes it — a fork/join pattern (wait for all N clones, then proceed) cannot be modelled.
