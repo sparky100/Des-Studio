@@ -224,17 +224,14 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
   }
   // COSEIZE(QueueName, ServerType1, ServerType2[, ...]) — atomically seizes one
   // customer and multiple server types together; fails cleanly if any is unavailable.
-  // Capped (F-8): O(|Q|·|S|²·skills) — same rationale as MATCH above. The
-  // EffectPicker's COSEIZE composer (queue + two server-type pickers, no
-  // skill variants) covers the capped case; skill-specific combinations
-  // stay available via the enumerated list while it's under the cap.
+  // Capped (F-8): O(|Q|·|S|²) — same rationale as MATCH above. Retired the
+  // one-sided-skill enumerated variants (Sprint 94): the EffectPicker's
+  // COSEIZE composer now supports any number of server types with a
+  // per-type skill on each, which this plain-pairs enumeration could never
+  // reach anyway — it stays only as a quick pick for the unskilled 2-type
+  // case, under the cap.
   const COSEIZE_OPTION_CAP = 50;
-  let coseizeCombosPerQueue = 0;
-  for(let i=0;i<servers.length;i++){
-    for(let j=i+1;j<servers.length;j++){
-      coseizeCombosPerQueue += 1 + (serverSkills[servers[i]]||[]).length + (serverSkills[servers[j]]||[]).length;
-    }
-  }
+  const coseizeCombosPerQueue = servers.length*(servers.length-1)/2;
   if(queues.length>0&&servers.length>=2&&queues.length*coseizeCombosPerQueue<=COSEIZE_OPTION_CAP){
     opts.push({label:'── COSEIZE (seize entity + 2 server types at once) ──',value:'',disabled:true});
     queues.forEach(q=>{
@@ -242,22 +239,9 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       for(let i=0;i<servers.length;i++){
         for(let j=i+1;j<servers.length;j++){
           const s1=servers[i], s2=servers[j];
-          const sk1=serverSkills[s1]||[], sk2=serverSkills[s2]||[];
           opts.push({
             label: `Seize ${s1} + ${s2} for ${entityLabel} from ${queueDisplayName(q.name)}`,
             value: `COSEIZE(${q.name}, ${s1}, ${s2})`,
-          });
-          sk1.forEach(skill=>{
-            opts.push({
-              label: `Seize ${s1}[${skill}] + ${s2} for ${entityLabel} from ${queueDisplayName(q.name)}`,
-              value: `COSEIZE(${q.name}, ${s1}[${skill}], ${s2})`,
-            });
-          });
-          sk2.forEach(skill=>{
-            opts.push({
-              label: `Seize ${s1} + ${s2}[${skill}] for ${entityLabel} from ${queueDisplayName(q.name)}`,
-              value: `COSEIZE(${q.name}, ${s1}, ${s2}[${skill}])`,
-            });
           });
         }
       }
