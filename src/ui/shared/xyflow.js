@@ -33,4 +33,5 @@ export {
   ReactFlow,
   SelectionMode,
   useReactFlow,
+  useStoreApi,
 } from '@xyflow/react';

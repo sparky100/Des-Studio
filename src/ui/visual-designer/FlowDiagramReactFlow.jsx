@@ -12,6 +12,7 @@ import {
   Position,
   ReactFlow,
   SelectionMode as ReactFlowSelectionMode,
+  useStoreApi,
 } from "../shared/xyflow.js";
 import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
@@ -323,6 +324,25 @@ function AlignmentGuidesOverlay({ guides, reactFlowInstance, wrapperRef, C }) {
   );
 }
 
+// After a box-drag, React Flow activates an internal "nodes selection" rect
+// covering the selection's bounding box (never for click-built selections).
+// Clicks in the gaps between the selected nodes land on that rect instead of
+// the pane, so onPaneClick doesn't fire and the selection can't be cleared by
+// clicking empty space inside it. This component's selection model is fully
+// controlled (selected props + onNodeSelectionChange) and never needs the
+// overlay, so flip the flag back off whenever React Flow turns it on.
+// Group-drag still works by dragging any selected node directly.
+function SelectionRectSuppressor() {
+  const store = useStoreApi();
+  useEffect(() => {
+    if (store.getState().nodesSelectionActive) store.setState({ nodesSelectionActive: false });
+    return store.subscribe(state => {
+      if (state.nodesSelectionActive) store.setState({ nodesSelectionActive: false });
+    });
+  }, [store]);
+  return null;
+}
+
 function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId }) {
   const { C, FONT } = useTheme();
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -381,7 +401,7 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
             padding: "5px 12px",
             whiteSpace: "nowrap",
           }}>
-            Connect: drag from the <strong>●</strong> handle on a node's right edge to another node's left handle &nbsp;·&nbsp; Click an activity's outgoing connection to edit its conditions/probabilities, or press Del / click the <strong style={{color:"#e55"}}>×</strong> button to delete &nbsp;·&nbsp; Drag canvas = pan &nbsp;·&nbsp; Scroll = pan &nbsp;·&nbsp; Ctrl+Scroll = zoom
+            Connect: drag from the <strong>●</strong> handle on a node's right edge to another node's left handle &nbsp;·&nbsp; Click an activity's outgoing connection to edit its conditions/probabilities, or press Del / click the <strong style={{color:"#e55"}}>×</strong> button to delete &nbsp;·&nbsp; Shift/Ctrl-click = add or remove a node from the selection &nbsp;·&nbsp; Drag canvas = pan &nbsp;·&nbsp; Scroll = pan &nbsp;·&nbsp; Ctrl+Scroll = zoom
           </div>
         </Panel>
       )}
@@ -598,6 +618,12 @@ export function FlowDiagramReactFlow({
         elementsSelectable
         edgesFocusable={canEdit}
         selectionOnDrag={canEdit}
+        // Without this, React Flow's default selectionKeyCode of 'Shift' turns
+        // Shift+click ON A NODE into a zero-pixel rubber-band selection that
+        // wipes the existing selection and swallows the click before
+        // onNodeClick's toggle can run. Box-select survives via selectionOnDrag;
+        // Shift/Ctrl/Cmd+click all toggle uniformly through onNodeClick.
+        selectionKeyCode={null}
         selectionMode={ReactFlowSelectionMode.Partial}
         panOnDrag={canEdit ? [1, 2] : true}
         panActivationKeyCode="Space"
@@ -609,7 +635,7 @@ export function FlowDiagramReactFlow({
         onNodeClick={(event, node) => {
           if (node.type === "sectionPanel") return;
           nodeClickHandledRef.current = true;
-          const toggle = event?.shiftKey || event?.ctrlKey || event?.metaKey;
+          const toggle = !!(event?.shiftKey || event?.ctrlKey || event?.metaKey);
           onNodeSelect?.(node.id, { toggle });
         }}
         onPaneClick={() => {
@@ -691,6 +717,7 @@ export function FlowDiagramReactFlow({
         onConnectEnd={() => setConnecting(false)}
         proOptions={{ hideAttribution: true }}
       >
+        <SelectionRectSuppressor />
         <Background color={C.border} gap={24} size={1} />
         <Controls showInteractive={false} />
         <MiniMap

@@ -44,6 +44,7 @@ vi.mock('../../../src/ui/shared/xyflow.js', () => ({
   Position:     { Left: 'left', Right: 'right' },
   SelectionMode: { Full: 'full', Partial: 'partial' },
   useReactFlow: () => ({ fitView: vi.fn() }),
+  useStoreApi: () => ({ getState: () => ({}), setState: () => {}, subscribe: () => () => {} }),
   ReactFlow: ({ nodes = [], children, onNodeClick }) => {
     const source = nodes.find(n => n.id.startsWith('source:'));
     return (
