@@ -64,10 +64,19 @@ describe('M/M/c golden fixture (seed=42, λ=1.6, μ=1.0, c=2)', () => {
   const N_SERVED = 2000;
   const N_WARMUP = 500;
 
+  // No explicit timeout override — beforeAll/afterAll hooks use Vitest's
+  // separate hookTimeout (soak project sets it to 240s in vite.config.js),
+  // NOT testTimeout. This run takes ~19-20s, comfortably inside that, but
+  // was originally left at this fixture's old per-test timeout (30000ms —
+  // a leftover from before the two tests below shared one run) which is a
+  // TEST timeout, not a hook one; a bare hookTimeout default (10s) is even
+  // tighter. Either one silently skips this block's tests rather than
+  // failing loudly, which is why this needs the project-level default
+  // rather than a number here that looks reasonable but is the wrong kind.
   let meanWait;
   beforeAll(async () => {
     meanWait = await runUntilServed(makeMMcModel(1.6, 1.0, 2), N_SERVED, SEED, N_WARMUP);
-  }, 30000);
+  });
 
   test('mean queue wait is within 5% of Erlang-C analytical value (1.7778)', () => {
     const pctError = Math.abs(meanWait - ANALYTICAL) / ANALYTICAL;

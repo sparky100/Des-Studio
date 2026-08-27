@@ -112,20 +112,33 @@ export default defineConfig({
           // (default) recycles the worker process between test files to
           // reset its heap, but `singleFork` forces the whole run into one
           // OS process for its entire duration, which disables that
-          // recycling — heap from earlier heavy files (this tier's biggest
-          // single file allocates ~1.35M entities) then accumulates across
-          // the rest of the run until a later file tips it over the
-          // ceiling. That's exactly what happened in CI (not locally, which
-          // has more headroom) once this tier had more than a couple of
-          // heavy files in it. `maxForks: 2` still bounds how many heavy
+          // recycling. `maxForks: 2` still bounds how many heavy
           // simulations run concurrently — soak is its own isolated CI job
           // now, so the original reason a single fork existed at all
           // (avoid starving the fast tiers' parallel workers of CPU) no
           // longer applies within this job.
+          //
+          // execArgv raises each worker's heap ceiling above Node's ~4GB
+          // default: determinism-parity.test.js's stress scenarios include
+          // one deliberately-unstable queue (ρ>1, grows without bound up to
+          // its 250k-cycle cap) and the engine has no way to opt out of
+          // full trace-log accumulation (that's a src/engine/ change, out
+          // of scope here) — that single file's worst case exceeds 4GB on
+          // its own on a standard CI runner, independent of cross-file
+          // accumulation. 6144MB x maxForks(2) = 12GB worst case, safely
+          // under a standard GitHub-hosted runner's 16GB.
           testTimeout: 240000,
+          // Vitest's beforeAll/afterAll hooks use a SEPARATE default timeout
+          // (10s) from testTimeout — easy to miss, since a hook that merely
+          // wraps a run() call reads like it inherits the test's own budget.
+          // Match hookTimeout to testTimeout here so a soak-tier beforeAll
+          // that runs a full simulation doesn't silently timeout-and-skip
+          // its dependent tests instead of failing loudly.
+          hookTimeout: 240000,
           poolOptions: {
             forks: {
               maxForks: 2,
+              execArgv: ['--max-old-space-size=6144'],
             },
           },
           include: [
