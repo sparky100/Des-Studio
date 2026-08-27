@@ -553,10 +553,32 @@ export function validateModel(model) {
     const cText = effectText(c.effect);
     const m = cText.match(/COSEIZE\s*\(([^)]+)\)/i);
     if (!m) return;
+    // Strip both the optional per-type skill bracket ("Doctor[Surgery]") and
+    // the optional trailing quantity suffix ("Nurse:2", Sprint 95) so the
+    // comparison sets below are built from bare type names either way.
     const types = m[1].split(",").map(s => s.trim()).filter(Boolean).slice(1)
-      .map(s => s.replace(/\[[^\]]*\]/, '').trim())
+      .map(s => s.replace(/\[[^\]]*\]/, '').replace(/:\s*\d+$/, '').trim())
       .filter(Boolean);
     if (types.length === 0) return;
+
+    // V38f: COSEIZE listing the same server type as more than one arg fails at
+    // runtime ("duplicate server type") — surface it at authoring time too,
+    // mirroring the engine's own rejection (Sprint 95). Requesting more than
+    // one of a type is Type:N, not a repeated arg.
+    const seenTypes = new Set();
+    const dupType = types.find(t => {
+      const key = t.toLowerCase();
+      if (seenTypes.has(key)) return true;
+      seenTypes.add(key);
+      return false;
+    });
+    if (dupType) {
+      warn('V38f',
+        `C-Event '${c.name || c.id}' calls COSEIZE(...) listing server type "${dupType}" more than once — COSEIZE seizes one server per listed type; request more than one via "Type:N" (e.g. ${dupType}:2), not by repeating the arg. This will fail at runtime with "duplicate server type".`,
+        'cevents',
+        { eventIds: [c.id] });
+    }
+
     (c.cSchedules || []).forEach((/** @type {any} */ cs) => {
       if (!cs.eventId) return;
       const existing = coseizeTypesByBEventId.get(cs.eventId) || new Set();
@@ -592,7 +614,13 @@ export function validateModel(model) {
     parts.forEach(p => {
       const rcMatch = p.match(/^RELEASE_COSEIZED\(\s*\[([^\]]+)\]/i);
       if (!rcMatch) return;
-      const listedTypes = rcMatch[1].split(",").map(s => s.trim()).filter(Boolean);
+      // RELEASE_COSEIZED is quantity-agnostic (Sprint 95: releases all
+      // claimed servers of a type regardless of how many were seized) — its
+      // type list never carries "[Skill]"/":N", but strip defensively in
+      // case a user pasted seize-side syntax here by mistake.
+      const listedTypes = rcMatch[1].split(",")
+        .map(s => s.trim().replace(/\[[^\]]*\]/, '').replace(/:\s*\d+$/, '').trim())
+        .filter(Boolean);
       const mismatched = listedTypes.filter(t => !coseizeTypes.has(t.toLowerCase()));
       if (mismatched.length > 0) {
         warn('V38d',
@@ -1592,7 +1620,12 @@ export function validateModel(model) {
         if (!inner) return;
         const args = inner[1].split(',').map(a => a.trim());
         for (let i = 1; i < args.length; i++) {
-          const bracketMatch = args[i].match(/^([^\[]+)\[([^\]]+)\]$/);
+          // Strip a trailing quantity suffix ("Doctor[Surgery]:2", Sprint 95)
+          // before the bracket match — the bracket regex anchors on "]$" and
+          // would otherwise fail to match at all on a quantified arg,
+          // silently skipping skill validation for it.
+          const argNoQty = args[i].replace(/:\s*\d+$/, '').trim();
+          const bracketMatch = argNoQty.match(/^([^\[]+)\[([^\]]+)\]$/);
           if (bracketMatch) {
             const sType = bracketMatch[1].trim();
             const skill = bracketMatch[2].trim();

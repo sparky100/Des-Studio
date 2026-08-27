@@ -2146,4 +2146,74 @@ describe("V38c/V38d — RELEASE / RELEASE_COSEIZED consistency with scheduling C
     ]));
     expect(errors.filter(e => e.code === "V45" && e.message.includes("WardQueue"))).toHaveLength(0);
   });
+
+  // Sprint 95 — COSEIZE Type:N quantity syntax
+  it("V38f: warns when COSEIZE(...) lists the same server type twice", () => {
+    const model = coseizeModel(["COMPLETE()"]);
+    model.cEvents[0].effect = "COSEIZE(SurgeryQueue, Surgeon, Surgeon)";
+    const { warnings } = validateModel(model);
+    const v38f = warnings.find(w => w.code === "V38f");
+    expect(v38f).toBeTruthy();
+    expect(v38f.message).toContain("Surgeon");
+    expect(v38f.message).toContain("Surgeon:2");
+  });
+
+  it("V38f: is case-insensitive", () => {
+    const model = coseizeModel(["COMPLETE()"]);
+    model.cEvents[0].effect = "COSEIZE(SurgeryQueue, surgeon, Surgeon)";
+    const { warnings } = validateModel(model);
+    expect(warnings.some(w => w.code === "V38f")).toBe(true);
+  });
+
+  it("V38f: does not warn when Type:N is used instead of repeating the arg", () => {
+    const model = coseizeModel(["COMPLETE()"]);
+    model.cEvents[0].effect = "COSEIZE(SurgeryQueue, Surgeon:2, Anesthetist)";
+    const { warnings } = validateModel(model);
+    expect(warnings.filter(w => w.code === "V38f")).toHaveLength(0);
+  });
+
+  it("V38c/V38d type extraction strips a :N quantity suffix", () => {
+    // Proves the strip doesn't corrupt the bare-type comparison set: V38c
+    // still fires for stacked RELEASE() calls even though the scheduling
+    // COSEIZE uses Nurse:2.
+    const model = coseizeModel(["RELEASE(Surgeon)", "RELEASE(Anesthetist)"]);
+    model.cEvents[0].effect = "COSEIZE(SurgeryQueue, Surgeon:2, Anesthetist)";
+    const { warnings } = validateModel(model);
+    expect(warnings).toEqual(expect.arrayContaining([expect.objectContaining({ code: "V38c" })]));
+  });
+});
+
+describe("V-SKILL-2 — quantified skilled COSEIZE arg (Sprint 95)", () => {
+  const skillModel = (coseizeEffect) => ({
+    entityTypes: [
+      { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+      { id: "surgeon", name: "Surgeon", role: "server", count: 2, attrDefs: [], skills: ["Surgery"] },
+      { id: "anesthetist", name: "Anesthetist", role: "server", count: 1, attrDefs: [] },
+    ],
+    skills: ["Surgery"],
+    stateVariables: [],
+    queues: [{ id: "surgery_q", name: "SurgeryQueue", discipline: "FIFO" }],
+    bEvents: [
+      { id: "arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Patient, SurgeryQueue)",
+        schedules: [{ eventId: "arrive", dist: "Fixed", distParams: { value: "1" } }] },
+    ],
+    cEvents: [{
+      id: "ce_surgery", name: "Perform Surgery", priority: 1,
+      condition: "queue(SurgeryQueue).length > 0",
+      effect: coseizeEffect,
+      cSchedules: [],
+    }],
+  });
+
+  it("still fires for a skilled+quantified arg referencing an undefined skill", () => {
+    const model = skillModel("COSEIZE(SurgeryQueue, Surgeon[NotARealSkill]:2, Anesthetist)");
+    const { errors } = validateModel(model);
+    expect(errors).toEqual(expect.arrayContaining([expect.objectContaining({ code: "V-SKILL-2" })]));
+  });
+
+  it("does not fire for a skilled+quantified arg referencing a real skill", () => {
+    const model = skillModel("COSEIZE(SurgeryQueue, Surgeon[Surgery]:2, Anesthetist)");
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V-SKILL-2")).toHaveLength(0);
+  });
 });
