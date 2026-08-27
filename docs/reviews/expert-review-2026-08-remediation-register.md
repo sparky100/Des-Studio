@@ -250,4 +250,24 @@ Verified: lint/typecheck/build clean; full `tests/ui/execute/` directory green (
 
 ---
 
+## 12. Status — Canvas lossy-edit guards implemented (2026-08-27, same branch): advanced constructs survive canvas edits
+
+An expressiveness audit of the Draw↔Define mapping (prompted by the user asking whether Draw's restrictions require the form editors) confirmed the intended split — the canvas projects only source/queue/activity/sink/container, and `docs/reviews/visual-designer-inspector-review.md` deliberately scopes the 12 invisible macros out of canvas parity — but found **six canvas code paths that silently destroyed advanced constructs** during ordinary structural edits. Layout edits were always safe (position-only writes). User-approved scope: guard or make surgical every silent-loss path; no parity work.
+
+Shipped as 5 commits:
+
+| Piece | Notes |
+|---|---|
+| `src/model/macroParser.js` surgical utilities | Bracket-aware tokeniser (RELEASE_COSEIZED's `[Type1, Type2]` list survives), `replaceMacroCall` (rewrite one call, preserve siblings and array-vs-string shape), `withReleaseTarget` (inverse of `stripReleaseTarget`, whose `^`-anchor bug — silent no-op when RELEASE wasn't the first macro — is also fixed), and `classifyActivityEffect` (assign/delay/advanced/empty — single source of truth replacing divergent regexes in graph-operations and the inspector) |
+| Q→A connect refusal | Drawing a Queue→Activity edge onto a COSEIZE / skill-ASSIGN / BATCH / MATCH / multi-macro activity used to overwrite effect+condition wholesale with boilerplate `ASSIGN`. Now refused with a message (same contract as the existing `when`-schedules block); a plain ASSIGN rewires byte-identically as before; a DELAY rewires surgically (slot-capacity arg and the non-queue part of the condition survive — the old "preserve delay" branch dropped both). Condition-edge delete gets the same guard. The add-node auto-link no longer reports "linked" on a refused connect |
+| Surgical rewrites | Sink COMPLETE↔RENEGE switch keeps co-located `COST`/`SET` macros; source customerType/queueName patch rewrites only the `ARRIVE` call; queue delete strips only the queue argument from `RELEASE`/`RELEASE_COSEIZED` (server still released — previously the whole effect was emptied, leaving the server claimed forever); routing-mode "none" restores the RELEASE destination from the removed routing instead of leaving the B-event with no destination |
+| Inspector honesty | A no-ASSIGN activity (COSEIZE etc.) hides the Server-type dropdown (previously rendered empty and interacted as a silent no-op) and shows a read-only note pointing at the C-Events editor; a skill-gated ASSIGN now displays its server correctly. The underlying serverType patch is guarded at the operations layer too |
+| Docs | help-reference.md: stale badge claim fixed (`conditional` was never emitted; the real badges are `feed` and `when`) + a new "Advanced effects and the canvas" note; User Guide §4.2 sentence on the refusal behaviour |
+
+New tests: 18 macroParser unit tests, 12 graph-operations tests (four of the six lossy paths previously had zero coverage), 2 inspector tests, 1 panel auto-link-refusal test.
+
+Verified: lint/typecheck clean per commit; visual-designer + editors + model suites green throughout (260+ tests); full suite before push.
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*
