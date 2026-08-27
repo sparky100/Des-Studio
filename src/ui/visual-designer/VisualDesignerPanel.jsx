@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, searchGraphNodes, VISUAL_NODE_TYPES, isActivityRouteEdge, NODE_WIDTH, ALIGN_GAP } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
-import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, alignNodes, distributeNodes, VISUAL_PATTERNS } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, alignNodes, distributeNodes, VISUAL_PATTERNS, ADVANCED_EFFECT_BLOCK_MESSAGE } from "./graph-operations.js";
+import { classifyActivityEffect } from "../../model/macroParser.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { RouteEdgeDialog } from "./RouteEdgeDialog.jsx";
@@ -668,7 +669,17 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     if (selectedNode && newest && selectedNode.id !== newest.id && autoLinkTypes.includes(selectedNode.type)) {
       const validation = validateVisualConnection(nextGraph, selectedNode.id, newest.id);
       if (validation.ok) {
-        next = connectVisualNodes(next, nextGraph, selectedNode.id, newest.id).model;
+        const linkResult = connectVisualNodes(next, nextGraph, selectedNode.id, newest.id);
+        if (!linkResult.validation.ok) {
+          // The connect itself refused (e.g. the activity's effect can't be
+          // rewired from the canvas) — keep the new node, but say so honestly
+          // instead of claiming it was linked.
+          applyModel(next);
+          selectNode(newest.id);
+          setMessage({ state: "error", text: linkResult.validation.message });
+          return;
+        }
+        next = linkResult.model;
         nextGraph = deriveGraphFromModel(next);
         const linkedNewest = nextGraph.nodes.find(node => node.id === newest.id);
         applyModel(next);
@@ -743,6 +754,18 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   };
   const deleteEdge = (edgeId) => {
     if (!canEdit) return;
+    // A condition edge into an activity with an advanced effect can't be
+    // cleared from the canvas without destroying that effect — refuse with a
+    // pointer to the C-Events editor (deleteVisualEdge itself also no-ops).
+    const edge = (graph.edges || []).find(e => e.id === edgeId);
+    if (edge?.source === "condition") {
+      const activityNode = graph.nodes.find(n => n.id === edge.to);
+      const cEvent = (model.cEvents || []).find(ce => ce.id === activityNode?.refId);
+      if (cEvent && classifyActivityEffect(cEvent.effect).kind === "advanced") {
+        setMessage({ state: "error", text: ADVANCED_EFFECT_BLOCK_MESSAGE });
+        return;
+      }
+    }
     const nextModel = deleteVisualEdge(model, graph, edgeId);
     applyModel(nextModel);
     setMessage({ state: "success", text: "Connection removed." });

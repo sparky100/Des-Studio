@@ -148,7 +148,7 @@ const MAX_TOKENS_PER_EDGE = 5;
 const TOKEN_TTL_MS = 350;
 
 // Compare consecutive snaps to detect entity routing transitions.
-function detectRoutingEvents(prevSnap, currSnap, graph) {
+export function detectRoutingEvents(prevSnap, currSnap, graph) {
   const events = [];
   const prevById = new Map((prevSnap.entities || []).map(e => [e.id, e]));
   const edges = graph.edges || [];
@@ -157,9 +157,25 @@ function detectRoutingEvents(prevSnap, currSnap, graph) {
   const findEdge = (predicate) => edges.find(predicate);
   const nodeById = new Map(nodes.map(n => [n.id, n]));
 
+  // Which activity node(s) an entity could just have left, given the queue it
+  // joined before starting service (claimServerForEntity sets entity.lastQueue
+  // to that queue and never touches it again until the entity's next queue
+  // join — see src/engine/entities.js — so it survives unchanged through the
+  // whole service/delay duration up to the exact routing/completion moment
+  // this function inspects). A queue usually feeds one activity; when several
+  // share it this is best-effort (first match) — the same class of
+  // imprecision routing branches sharing a destination queue already have.
+  const activityIdsFedByQueue = (queueName) => {
+    if (!queueName) return [];
+    return edges
+      .filter(e => e.source === "condition" && nodeById.get(e.from)?.label === queueName)
+      .map(e => e.to);
+  };
+
   for (const curr of currSnap.entities || []) {
     if (curr.role === "server") continue;
     const prev = prevById.get(curr.id);
+    const wasActive = prev && prev.status !== "waiting" && prev.status !== "done" && prev.status !== "reneged";
 
     if (!prev) {
       // New entity arrived → Source → Queue edge
@@ -174,10 +190,24 @@ function detectRoutingEvents(prevSnap, currSnap, graph) {
       const edge = findEdge(e =>
         e.source === "condition" && nodeById.get(e.from)?.label === prev.queue);
       if (edge) events.push({ edgeId: edge.id, entityType: curr.type });
-    } else if (prev.status !== "done" && prev.status !== "reneged"
-               && (curr.status === "done" || curr.status === "reneged")) {
-      // Entity completed → Activity → Sink edge
-      const edge = findEdge(e => e.source === "terminal");
+    } else if (wasActive && curr.status === "waiting" && curr.queue) {
+      // Entity routed onward to another queue (plain RELEASE, conditional
+      // routing[], or probabilisticRouting[]) → Activity → Queue "routing" edge
+      const activityIds = activityIdsFedByQueue(prev.lastQueue ?? prev.queue);
+      const edge = findEdge(e => e.source === "routing" && activityIds.includes(e.from)
+                              && nodeById.get(e.to)?.label === curr.queue)
+        // Best-effort fallback only if activity-scoping resolves nothing — this
+        // closes a previously-zero-events case, so any correct-destination
+        // match is an improvement over no token at all.
+        || findEdge(e => e.source === "routing" && nodeById.get(e.to)?.label === curr.queue);
+      if (edge) events.push({ edgeId: edge.id, entityType: curr.type });
+    } else if (wasActive && (curr.status === "done" || curr.status === "reneged")) {
+      // Entity completed after being served/delayed → Activity → Sink edge,
+      // scoped to the activity it actually left. No unscoped fallback here —
+      // an entity reneging directly out of a queue (never entering an
+      // activity) has no edge to animate and correctly produces no token.
+      const activityIds = activityIdsFedByQueue(prev.lastQueue ?? prev.queue);
+      const edge = findEdge(e => e.source === "terminal" && activityIds.includes(e.from));
       if (edge) events.push({ edgeId: edge.id, entityType: curr.type });
     }
   }

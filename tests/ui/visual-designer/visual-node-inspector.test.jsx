@@ -274,3 +274,43 @@ describe('VisualNodeInspector — read-only mode', () => {
     expect(screen.getByText(/read-only/i)).toBeInTheDocument();
   });
 });
+
+describe('VisualNodeInspector — advanced activity effects', () => {
+  it('hides the Server type control for a COSEIZE activity and shows the C-Events pointer instead', () => {
+    const model = makeModel({
+      cEvents: [{
+        id: 'activity-1',
+        name: 'Joint Procedure',
+        priority: 1,
+        condition: 'queue(Queue 1).length > 0',
+        effect: 'COSEIZE(Queue 1, Nurse, Doctor)',
+        cSchedules: [],
+      }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.queryByLabelText(/server type/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/advanced effect .* the canvas can't edit/i)).toBeInTheDocument();
+    expect(screen.getByText(/C-Events editor/i)).toBeInTheDocument();
+  });
+
+  it('still shows the Server type control, with the right server, for a skill-gated ASSIGN', () => {
+    const model = makeModel({
+      cEvents: [{
+        id: 'activity-1',
+        name: 'Triage',
+        priority: 1,
+        condition: 'queue(Queue 1).length > 0 AND idle(Server).count > 0',
+        effect: 'ASSIGN(Queue 1, Server, "Paediatrics")',
+        cSchedules: [],
+      }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByLabelText(/server type/i)).toHaveValue('Server');
+  });
+});

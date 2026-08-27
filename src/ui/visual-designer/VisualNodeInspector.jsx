@@ -4,13 +4,9 @@ import { Btn, CommitInput, DistPicker, SH, Tag } from "../shared/components.jsx"
 import { ConditionBuilder, EntityFilterBuilder } from "../editors/index.jsx";
 import { reorderCEventByPriority } from "../editors/helpers.jsx";
 import { VISUAL_NODE_TYPES, conditionLabel } from "./graph.js";
+import { classifyActivityEffect, macroCalls } from "../../model/macroParser.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { disciplineAttr, disciplineBase } from "../shared/utils.js";
-
-function effectValue(effect = "", pattern) {
-
-  return String(effect || "").match(pattern)?.[1]?.trim() || "";
-}
 
 function SelectField({ label, value, onChange, children, disabled }) {
   const { C, FONT } = useTheme();
@@ -137,14 +133,22 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
   const cEvent = (model.cEvents || []).find(event => event.id === node.refId);
   const queue = (model.queues || []).find(item => item.id === node.refId);
   const containerType = (model.containerTypes || []).find(item => item.id === node.refId);
-  const sourceCustomer = effectValue(bEvent?.effect, /ARRIVE\(([^,)]+)/i);
-  const sourceQueue = effectValue(bEvent?.effect, /ARRIVE\([^,]+,\s*([^)]+)\)/i);
-  const sinkMacro = String(bEvent?.effect || "").toUpperCase().includes("RENEGE") ? "RENEGE" : "COMPLETE";
+  const bEventCalls = macroCalls(bEvent?.effect || "");
+  const sourceArrive = bEventCalls.find(call => call.macro === "ARRIVE");
+  const sourceCustomer = sourceArrive?.args[0] || "";
+  const sourceQueue = sourceArrive?.args[1] || "";
+  const sinkMacro = bEventCalls.some(call => call.macro === "RENEGE") ? "RENEGE" : "COMPLETE";
   const sourceSchedule = bEvent?.schedules?.[0] || {};
   const activityCSchedules = cEvent?.cSchedules || [];
   const activitySchedule = activityCSchedules[0] || {};
-  const activityServer = effectValue(cEvent?.effect, /ASSIGN\([^,)]+,\s*([^)]+)\)/i);
-  const isDelayActivity = /DELAY\(/i.test(String(cEvent?.effect || ""));
+  // A single-server ASSIGN (with or without a skill/container gate) keeps its
+  // server editable here; an effect with no ASSIGN at all (COSEIZE, BATCH,
+  // MATCH, …) has no server the canvas can honestly offer to change.
+  const activityAssignCall = macroCalls(cEvent?.effect || "").find(call => call.macro === "ASSIGN");
+  const activityServer = activityAssignCall?.args[1] || "";
+  const activityEffectKind = classifyActivityEffect(cEvent?.effect).kind;
+  const isDelayActivity = activityEffectKind === "delay";
+  const isAdvancedActivity = activityEffectKind === "advanced" && !activityAssignCall;
 
   const sections = model.sections || [];
   // bEventRefId already strips the route-exit: prefix, and equals node.refId for
@@ -299,6 +303,16 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
           {isDelayActivity ? (
             <div style={{ background: "#fef3c710", border: "1px solid #d9770640", borderRadius: 6, padding: "8px 10px", fontSize: 11, color: "#d97706", fontFamily: FONT, lineHeight: 1.5 }}>
               Delay activity — entity held for a sampled duration with no resource claimed.
+            </div>
+          ) : isAdvancedActivity ? (
+            <div style={{ background: `${C.amber}10`, border: `1px solid ${C.amber}33`, borderRadius: 6, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: C.amber, fontFamily: FONT }}>Advanced effect</span>
+              <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
+                This activity uses an advanced effect (e.g. co-seizing several servers) that the canvas can't edit.
+              </div>
+              <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+                Edit it in the C-Events editor.
+              </div>
             </div>
           ) : (
             <>
