@@ -232,12 +232,18 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                   expressionContext={{
                     stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
                     attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean)),
+                    numericAttrs: [...new Set((entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false&&(a.valueType==='number'||a.valueType==null)).map(a=>a.name).filter(Boolean)))],
                     eventNames: [...(events||[]),...(cEvents||[])].map(e=>e.name).filter(Boolean),
                     matchQueues: (queues||[]).map(q=>({
                       name: q.name,
                       type: q.customerType ? normTypeName(q.customerType) : (normTypeName((entityTypes||[]).find(e=>e.role==='customer')?.name)||'Entity'),
                     })),
                     containerTypes,
+                    customerTypes: (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name)),
+                    // Deliberately no serverTypes/skills here — COSEIZE and the ASSIGN
+                    // composer are C-event-only (COSEIZE is a seize-side macro; B-events
+                    // handle the release side), so EffectPicker's gates on those fields
+                    // keep those composer chips out of the B-event picker entirely.
                   }}
                   onChange={updEffects}
                 />

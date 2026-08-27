@@ -78,8 +78,11 @@ function resolveContextEntity(ctx) {
 // ── Safe scalar expression evaluator (replaces new Function in applyScalar) ──
 
 // Recursive descent parser for arithmetic on number literals: + - * / ()
+// Exported so the UI (EffectPicker) can validate expression-bearing effect
+// operands (BATCH/FILL/DRAIN/ASSIGN container amounts) against the exact
+// grammar the engine accepts, without duplicating or drifting from it.
 /** @param {string} s */
-function safeArithmetic(s) {
+export function safeArithmetic(s) {
   let i = 0;
   function skipWS() { while (i < s.length && s[i] === ' ') i++; }
   /** @returns {number} */

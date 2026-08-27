@@ -345,6 +345,8 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                             expressionContext={{
                               stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
                               attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean)),
+                              numericAttrs: [...new Set((entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false&&(a.valueType==='number'||a.valueType==null)).map(a=>a.name).filter(Boolean)))],
+                              stringAttrs: [...new Set((entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false&&a.valueType==='string').map(a=>a.name).filter(Boolean)))],
                               eventNames: [...(bEvents||[]),...(events||[])].map(e=>e.name).filter(Boolean),
                               matchQueues: (queues||[]).map(q=>({
                                 name: q.name,
@@ -352,6 +354,9 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                               })),
                               containerTypes,
                               serverTypes: (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name)),
+                              customerTypes: (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name)),
+                              skills,
+                              serverSkillsByType: Object.fromEntries((entityTypes||[]).filter(e=>e.role==='server').map(e=>[normTypeName(e.name),Array.isArray(e.skills)?e.skills:[]])),
                             }}
                             onChange={arr=>upd(i,'effect',arr)}
                           />
