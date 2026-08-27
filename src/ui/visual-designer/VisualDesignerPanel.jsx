@@ -721,10 +721,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
         : `${pattern?.label || "Pattern"} added. Review names and timing before running.`,
     });
   };
-  const moveNode = (nodeId, position) => {
-    if (!canEdit) return;
-    applyModel(updateGraphLayout(model, graph, { nodes: [{ id: nodeId, x: position.x, y: position.y }] }));
-  };
   const moveNodes = (nodes) => {
     if (!canEdit || !nodes?.length) return;
     applyModel(updateGraphLayout(model, graph, { nodes }));
@@ -1487,7 +1483,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               }}
               onEdgeSelect={selectEdge}
               onDeleteEdge={canEdit ? deleteEdge : null}
-              onNodeMove={moveNode}
               onNodesMove={moveNodes}
               onViewportChange={changeViewport}
               onConnectNodes={connectNodes}

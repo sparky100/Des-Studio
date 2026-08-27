@@ -1,6 +1,28 @@
 import { render, screen, act } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FlowDiagramReactFlow } from '../../../src/ui/visual-designer/FlowDiagramReactFlow.jsx';
+
+// Captures the props of the latest <ReactFlow> render so tests can assert
+// configuration (selectionKeyCode, snapToGrid, node positions) and drive the
+// interaction handlers (onNodeClick, onNodesChange, onNodeDragStop) directly.
+const latestFlowProps = vi.hoisted(() => ({ current: null }));
+
+// Controllable stand-in for React Flow's internal zustand store, so the
+// SelectionRectSuppressor's subscription can be exercised.
+const mockStore = vi.hoisted(() => {
+  const listeners = new Set();
+  return {
+    state: { nodesSelectionActive: false },
+    getState() { return this.state; },
+    setState: null, // assigned in the factory below (needs vi.fn())
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    emit(partial) {
+      this.state = { ...this.state, ...partial };
+      listeners.forEach(l => l(this.state));
+    },
+    reset() { this.state = { nodesSelectionActive: false }; listeners.clear(); },
+  };
+});
 
 // Real node/edge rendering, unlike the lighter mock used by visual-designer-panel.test.jsx —
 // this exercises the actual nodeTypes/edgeTypes components (DesNode, DesEdge) so the
@@ -24,20 +46,31 @@ vi.mock('../../../src/ui/shared/xyflow.js', () => ({
     setCenter: vi.fn(),
     getViewport: vi.fn(() => ({ zoom: 1 })),
   }),
-  ReactFlow: ({ nodes = [], edges = [], nodeTypes = {}, edgeTypes = {}, children }) => (
-    <div data-testid="react-flow">
-      {nodes.map(node => {
-        const Comp = nodeTypes[node.type];
-        return Comp ? <div key={node.id} data-node-id={node.id} style={node.style}><Comp data={node.data} selected={!!node.selected} /></div> : null;
-      })}
-      {edges.map(edge => {
-        const Comp = edgeTypes[edge.type];
-        return Comp ? <div key={edge.id} data-edge-id={edge.id}><Comp {...edge} /></div> : null;
-      })}
-      {children}
-    </div>
-  ),
+  useStoreApi: () => mockStore,
+  ReactFlow: (props) => {
+    latestFlowProps.current = props;
+    const { nodes = [], edges = [], nodeTypes = {}, edgeTypes = {}, children } = props;
+    return (
+      <div data-testid="react-flow">
+        {nodes.map(node => {
+          const Comp = nodeTypes[node.type];
+          return Comp ? <div key={node.id} data-node-id={node.id} data-x={node.position?.x} data-y={node.position?.y} style={node.style}><Comp data={node.data} selected={!!node.selected} /></div> : null;
+        })}
+        {edges.map(edge => {
+          const Comp = edgeTypes[edge.type];
+          return Comp ? <div key={edge.id} data-edge-id={edge.id}><Comp {...edge} /></div> : null;
+        })}
+        {children}
+      </div>
+    );
+  },
 }));
+
+beforeEach(() => {
+  latestFlowProps.current = null;
+  mockStore.setState = vi.fn(partial => { mockStore.state = { ...mockStore.state, ...partial }; });
+  mockStore.reset();
+});
 
 function makeGraph(overrides = {}) {
   return {
@@ -278,5 +311,110 @@ describe('FlowDiagramReactFlow — run footprint ghosts and overlap badges', () 
   it('shows no overlap badges when overlapNodeIds is empty or absent', () => {
     render(<FlowDiagramReactFlow graph={makeGraph()} canEdit overlapNodeIds={new Set()} />);
     expect(screen.queryByTitle(/Overlaps another object on the Run canvas/i)).not.toBeInTheDocument();
+  });
+});
+
+// Item 2 of the b7be68c UX batch: box-drag selections must behave exactly like
+// click-built ones. Two library defaults broke that — selectionKeyCode='Shift'
+// hijacked Shift+click on a node (wiping the selection before onNodeClick's
+// toggle ran), and the post-box-drag nodes-selection overlay swallowed clicks
+// in the gaps between selected nodes so empty space couldn't clear it.
+describe('FlowDiagramReactFlow — box-drag selection parity', () => {
+  it('disables the Shift rubber-band key so Shift+click reaches onNodeClick', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    expect(latestFlowProps.current.selectionKeyCode).toBeNull();
+    // Box-drag selection itself must survive via selectionOnDrag.
+    expect(latestFlowProps.current.selectionOnDrag).toBe(true);
+  });
+
+  it('Shift+click on a node toggles it via onNodeSelect, like Ctrl/Cmd+click', () => {
+    const onNodeSelect = vi.fn();
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit onNodeSelect={onNodeSelect} />);
+    act(() => latestFlowProps.current.onNodeClick({ shiftKey: true }, { id: 'queue:queue-1', type: 'desNode' }));
+    expect(onNodeSelect).toHaveBeenCalledWith('queue:queue-1', { toggle: true });
+    act(() => latestFlowProps.current.onNodeClick({}, { id: 'queue:queue-1', type: 'desNode' }));
+    expect(onNodeSelect).toHaveBeenLastCalledWith('queue:queue-1', { toggle: false });
+  });
+
+  it('flips the post-box-drag nodesSelectionActive overlay back off whenever it turns on', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    expect(mockStore.setState).not.toHaveBeenCalled();
+    act(() => mockStore.emit({ nodesSelectionActive: true }));
+    expect(mockStore.setState).toHaveBeenCalledWith({ nodesSelectionActive: false });
+  });
+
+  it('suppresses an overlay that is already active at mount time', () => {
+    mockStore.state = { nodesSelectionActive: true };
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    expect(mockStore.setState).toHaveBeenCalledWith({ nodesSelectionActive: false });
+  });
+
+  it('documents Shift/Ctrl-click selection toggling in the ? Keys panel', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    act(() => { screen.getByRole('button', { name: '? Keys' }).click(); });
+    expect(screen.getByText(/add or remove a node from the selection/i)).toBeInTheDocument();
+  });
+});
+
+// Item 3 of the b7be68c UX batch: alignment guides shipped but never appeared.
+// Nodes are fully controlled and onNodesChange used to discard position
+// changes, so a dragged node never moved until drop — guides computed against
+// a phantom position with no node next to them — and snapToGrid's 24-unit
+// steps could never land inside the guides' 6-screen-px window.
+describe('FlowDiagramReactFlow — live drag positions', () => {
+  it('moves the dragged node in the controlled nodes prop while dragging', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    const before = latestFlowProps.current.nodes.find(n => n.id === 'queue:queue-1');
+    expect(before.position).toEqual({ x: 0, y: 0 });
+
+    act(() => latestFlowProps.current.onNodesChange([
+      { type: 'position', id: 'queue:queue-1', position: { x: 37, y: 53 }, dragging: true },
+    ]));
+
+    const during = latestFlowProps.current.nodes.find(n => n.id === 'queue:queue-1');
+    expect(during.position).toEqual({ x: 37, y: 53 });
+    // Other nodes keep their graph-derived positions.
+    expect(latestFlowProps.current.nodes.find(n => n.id === 'activity:activity-1').position).toEqual({ x: 100, y: 0 });
+  });
+
+  it('ignores position changes that are not part of an active drag', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    act(() => latestFlowProps.current.onNodesChange([
+      { type: 'position', id: 'queue:queue-1', position: { x: 37, y: 53 }, dragging: false },
+    ]));
+    expect(latestFlowProps.current.nodes.find(n => n.id === 'queue:queue-1').position).toEqual({ x: 0, y: 0 });
+  });
+
+  it('clears the live override on drag stop and commits through onNodesMove', () => {
+    const onNodesMove = vi.fn();
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit onNodesMove={onNodesMove} />);
+    act(() => latestFlowProps.current.onNodesChange([
+      { type: 'position', id: 'queue:queue-1', position: { x: 37, y: 53 }, dragging: true },
+    ]));
+
+    const dropped = { id: 'queue:queue-1', type: 'desNode', position: { x: 37, y: 53 } };
+    act(() => latestFlowProps.current.onNodeDragStop({}, dropped, []));
+
+    // Override cleared — position falls back to the (unchanged) graph value.
+    expect(latestFlowProps.current.nodes.find(n => n.id === 'queue:queue-1').position).toEqual({ x: 0, y: 0 });
+    expect(onNodesMove).toHaveBeenCalledTimes(1);
+    const [positions] = onNodesMove.mock.calls[0];
+    expect(positions).toHaveLength(1);
+    expect(positions[0].id).toBe('queue:queue-1');
+  });
+
+  it('snaps a single dropped node to a nearby neighbour edge via the alignment snap', () => {
+    const onNodesMove = vi.fn();
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit onNodesMove={onNodesMove} />);
+    // activity-1 sits at x=100; drop queue-1 at x=103 — inside the 6px window at zoom 1.
+    const dropped = { id: 'queue:queue-1', type: 'desNode', position: { x: 103, y: 300 } };
+    act(() => latestFlowProps.current.onNodeDragStop({}, dropped, []));
+    expect(onNodesMove).toHaveBeenCalledWith([{ id: 'queue:queue-1', x: 100, y: 300 }]);
+  });
+
+  it('no longer forces 24px grid snapping (alignment snap is the only snap)', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    expect(latestFlowProps.current.snapToGrid).toBeUndefined();
+    expect(latestFlowProps.current.snapGrid).toBeUndefined();
   });
 });

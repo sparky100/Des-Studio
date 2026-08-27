@@ -1271,11 +1271,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     } catch { /* storage unavailable (private mode) — non-critical */ }
   }, [userId]);
 
-  const toggleAnimation = useCallback(() => {
-    const next = !animationEnabled;
+  // Checkbox handler — updates state AND persists the choice. Previously the
+  // raw setter was wired to the checkbox and this persisting version was dead
+  // code, so a stored animateTokens: false reloaded on every mount and the
+  // checkbox appeared to work but never stuck.
+  const toggleAnimation = useCallback((next) => {
     setAnimationEnabled(next);
     saveExecuteSetting({ animateTokens: next });
-  }, [animationEnabled, saveExecuteSetting]);
+  }, [saveExecuteSetting]);
 
   const handleKpiSlotChange = useCallback((slotIndex, newKey) => {
     setKpiSlots(prev => {
@@ -1697,7 +1700,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             model={model}
             onDetectWarmup={handleDetectWarmup}
             persistExperimentDefaults={persistExperimentDefaults}
-            animationEnabled={animationEnabled} setAnimationEnabled={setAnimationEnabled}
+            animationEnabled={animationEnabled} setAnimationEnabled={toggleAnimation}
             collectTimeSeries={collectTimeSeries} setCollectTimeSeries={setCollectTimeSeries}
             forceTraceCollection={forceTraceCollection} setForceTraceCollection={setForceTraceCollection}
             traceAutoDisabled={traceWouldAutoDisable}
@@ -2510,7 +2513,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             style={{ width: 72, accentColor: C.accent, cursor: "pointer" }}
           />
         </div>
-        <Btn variant="ghost" onClick={doRunAll} disabled={hasAdmissionErrors || runBusy || saveStatus?.state === 'saving' || saveInProgressRef.current}>
+        <Btn variant="ghost" onClick={doRunAll} disabled={hasAdmissionErrors || runBusy || saveStatus?.state === 'saving' || saveInProgressRef.current}
+          title="Runs all replications at full speed without canvas animation — use Auto Run to watch entities move">
           {hasAdmissionErrors ? `✕ ${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length !== 1 ? "s" : ""}` : "⚡ Batch Run"}
         </Btn>
         {canOpenResultsView && (

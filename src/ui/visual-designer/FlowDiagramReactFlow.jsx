@@ -12,6 +12,7 @@ import {
   Position,
   ReactFlow,
   SelectionMode as ReactFlowSelectionMode,
+  useStoreApi,
 } from "../shared/xyflow.js";
 import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
@@ -350,7 +351,7 @@ function AlignmentGuidesOverlay({ guides, reactFlowInstance, wrapperRef, C }) {
   if (!guides.length || !reactFlowInstance || !wrapperRef.current) return null;
   const rect = wrapperRef.current.getBoundingClientRect();
   return (
-    <svg style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
+    <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
       {guides.map((g, i) => {
         const from = g.orientation === "vertical"
           ? reactFlowInstance.flowToScreenPosition({ x: g.position, y: g.from })
@@ -367,6 +368,25 @@ function AlignmentGuidesOverlay({ guides, reactFlowInstance, wrapperRef, C }) {
       })}
     </svg>
   );
+}
+
+// After a box-drag, React Flow activates an internal "nodes selection" rect
+// covering the selection's bounding box (never for click-built selections).
+// Clicks in the gaps between the selected nodes land on that rect instead of
+// the pane, so onPaneClick doesn't fire and the selection can't be cleared by
+// clicking empty space inside it. This component's selection model is fully
+// controlled (selected props + onNodeSelectionChange) and never needs the
+// overlay, so flip the flag back off whenever React Flow turns it on.
+// Group-drag still works by dragging any selected node directly.
+function SelectionRectSuppressor() {
+  const store = useStoreApi();
+  useEffect(() => {
+    if (store.getState().nodesSelectionActive) store.setState({ nodesSelectionActive: false });
+    return store.subscribe(state => {
+      if (state.nodesSelectionActive) store.setState({ nodesSelectionActive: false });
+    });
+  }, [store]);
+  return null;
 }
 
 // Amber dashed rects marking the Run-canvas footprints that collide while a
@@ -451,7 +471,7 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
             padding: "5px 12px",
             whiteSpace: "nowrap",
           }}>
-            Connect: drag from the <strong>●</strong> handle on a node's right edge to another node's left handle &nbsp;·&nbsp; Click an activity's outgoing connection to edit its conditions/probabilities, or press Del / click the <strong style={{color:"#e55"}}>×</strong> button to delete &nbsp;·&nbsp; Drag canvas = pan &nbsp;·&nbsp; Scroll = pan &nbsp;·&nbsp; Ctrl+Scroll = zoom
+            Connect: drag from the <strong>●</strong> handle on a node's right edge to another node's left handle &nbsp;·&nbsp; Click an activity's outgoing connection to edit its conditions/probabilities, or press Del / click the <strong style={{color:"#e55"}}>×</strong> button to delete &nbsp;·&nbsp; Shift/Ctrl-click = add or remove a node from the selection &nbsp;·&nbsp; Drag canvas = pan &nbsp;·&nbsp; Scroll = pan &nbsp;·&nbsp; Ctrl+Scroll = zoom
           </div>
         </Panel>
       )}
@@ -495,7 +515,6 @@ export function FlowDiagramReactFlow({
   onNodeSelectionChange,
   onEdgeSelect,
   onDeleteEdge,
-  onNodeMove,
   onNodesMove,
   onNodeMeasure,
   onViewportChange,
@@ -508,6 +527,11 @@ export function FlowDiagramReactFlow({
   const [connecting, setConnecting] = useState(false);
   const [focusedSectionId, setFocusedSectionId] = useState(null);
   const [alignmentGuides, setAlignmentGuides] = useState([]);
+  // Live positions for nodes mid-drag. Nodes are fully controlled (positions
+  // derive from the graph), so without echoing React Flow's position changes
+  // back into the nodes prop a dragged node wouldn't visibly move until drop —
+  // and the alignment guides would draw next to a node that isn't there.
+  const [dragPositions, setDragPositions] = useState({});
   const [dragOverlapRects, setDragOverlapRects] = useState([]);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const wrapperRef = useRef(null);
@@ -538,6 +562,7 @@ export function FlowDiagramReactFlow({
         (matchedNodeIds && matchedNodeIds.size > 0 && !matchedNodeIds.has(node.id));
       return {
         ...base,
+        position: dragPositions[node.id] ?? base.position,
         selected: selectedSet.has(node.id),
         selectable: true,
         data: {
@@ -574,7 +599,7 @@ export function FlowDiagramReactFlow({
     }
 
     return flowNodes;
-  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet, matchedNodeIds, showRunFootprint, overlapNodeIds]);
+  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet, matchedNodeIds, showRunFootprint, overlapNodeIds, dragPositions]);
 
   // Ref-synced copy of `nodes` so onNodeDrag/onNodeDragStop's alignment-guide
   // computation always reads current node positions, not a stale closure
@@ -673,18 +698,22 @@ export function FlowDiagramReactFlow({
         elementsSelectable
         edgesFocusable={canEdit}
         selectionOnDrag={canEdit}
+        // Without this, React Flow's default selectionKeyCode of 'Shift' turns
+        // Shift+click ON A NODE into a zero-pixel rubber-band selection that
+        // wipes the existing selection and swallows the click before
+        // onNodeClick's toggle can run. Box-select survives via selectionOnDrag;
+        // Shift/Ctrl/Cmd+click all toggle uniformly through onNodeClick.
+        selectionKeyCode={null}
         selectionMode={ReactFlowSelectionMode.Partial}
         panOnDrag={canEdit ? [1, 2] : true}
         panActivationKeyCode="Space"
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
-        snapToGrid={canEdit}
-        snapGrid={[24, 24]}
         panOnScroll
         isValidConnection={isValidConnection}
         onNodeClick={(event, node) => {
           if (node.type === "sectionPanel") return;
           nodeClickHandledRef.current = true;
-          const toggle = event?.shiftKey || event?.ctrlKey || event?.metaKey;
+          const toggle = !!(event?.shiftKey || event?.ctrlKey || event?.metaKey);
           onNodeSelect?.(node.id, { toggle });
         }}
         onPaneClick={() => {
@@ -731,6 +760,17 @@ export function FlowDiagramReactFlow({
               onNodeMeasureRef.current?.(change.id, { width: change.dimensions.width, height: change.dimensions.height });
             }
           }
+          // Echo mid-drag position changes back into the controlled nodes so
+          // the dragged node moves under the cursor (commit happens on drop,
+          // in onNodeDragStop — nothing is written to the graph here).
+          const moving = changes.filter(c => c.type === "position" && c.dragging && c.position);
+          if (moving.length) {
+            setDragPositions(prev => {
+              const next = { ...prev };
+              for (const c of moving) next[c.id] = c.position;
+              return next;
+            });
+          }
         }}
         onNodeDrag={(_event, node, draggingNodes) => {
           // Live Run-overlap feedback for any drag (single or multi): swap the
@@ -758,6 +798,7 @@ export function FlowDiagramReactFlow({
         }}
         onNodeDragStop={(_, node, movedNodes = []) => {
           setAlignmentGuides([]);
+          setDragPositions({});
           setDragOverlapRects(prev => prev.length ? [] : prev);
           const moved = movedNodes.length ? movedNodes : [node];
           let movedPositions = moved.map(item => ({ id: item.id, x: item.position.x, y: item.position.y }));
@@ -767,8 +808,7 @@ export function FlowDiagramReactFlow({
             const { snappedPosition } = computeAlignmentGuides(node, others, zoom);
             movedPositions = [{ id: node.id, x: snappedPosition.x, y: snappedPosition.y }];
           }
-          if (onNodesMove) onNodesMove(movedPositions);
-          else if (!movedNodes.length) onNodeMove?.(node.id, movedPositions[0]);
+          onNodesMove?.(movedPositions);
         }}
         onMoveEnd={(_, viewport) => {
           if (suppressViewportSyncRef.current) {
@@ -782,6 +822,7 @@ export function FlowDiagramReactFlow({
         onConnectEnd={() => setConnecting(false)}
         proOptions={{ hideAttribution: true }}
       >
+        <SelectionRectSuppressor />
         <Background color={C.border} gap={24} size={1} />
         <Controls showInteractive={false} />
         <MiniMap

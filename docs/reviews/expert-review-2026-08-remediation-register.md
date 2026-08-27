@@ -270,4 +270,19 @@ Verified: lint/typecheck clean per commit; visual-designer + editors + model sui
 
 ---
 
+## 13. Status — b7be68c user-testing batch implemented (2026-08-27, same branch): animation visible, box-drag deselect, alignment guides appear, header ••• sized
+
+Four defects from the user testing deployed build `b7be68c`, shipped as four commits:
+
+| Item | Root causes → fix |
+|---|---|
+| Entity animation showed nothing ("i am still not seeing any animation") | Three stacked bugs: (1) the engine snapshots once per A→B→C cycle *after* Phase C, so a routed entity is usually re-claimed in the same cycle and consecutive snapshots read serving→serving — no `detectRoutingEvents` case matched, losing every arrival and routing hop on non-saturated models. New case diffs `lastQueue`/`serviceStart` between two active snapshots and spawns both the routing-edge and seize-edge tokens (arrivals seized in their arrival cycle likewise). (2) SMIL `begin="0s"` is relative to the SVG *document* timeline, so late-inserted dots rendered already-finished; each dot now begins `indefinite` and calls `beginElement()` on mount (skipped under reduced motion). (3) The persisting animation-toggle handler was dead code, so a stored "off" could never be cleared — rewired. Plus one docs lie: the User Guide claimed ⚡ Batch Run animates; it cannot by construction (no per-step snapshots) — §4.4, help-reference, and the button tooltip now say Step/Auto Run animate, Batch Run doesn't |
+| Box-drag selections couldn't be deselected | React Flow's default `selectionKeyCode='Shift'` turned Shift+click on a node into a zero-pixel rubber-band that wiped the selection before `onNodeClick`'s toggle ran (`selectionKeyCode={null}` now); and the post-box-drag nodes-selection overlay rect swallowed clicks in the gaps between selected nodes (a `SelectionRectSuppressor` flips `nodesSelectionActive` back off — the selection model is fully controlled and never needs it). `? Keys` panel and User Guide now document Shift/Ctrl-click toggling |
+| Alignment guides never appeared | Nodes are fully controlled and `onNodesChange` discarded position changes — the dragged node never moved until drop, so guides drew next to a phantom position; and `snapToGrid={[24,24]}` steps could essentially never land inside the 6-screen-px guide window. Mid-drag positions are now echoed into the controlled nodes via a `dragPositions` override (cleared on drop; graph still written only on drop), and the grid props are gone — free placement, alignment snap-on-release as the only snap (deliberate change, docs updated). Dead `onNodeMove` fallback and `moveNode` deleted |
+| Header ••• button oversized | `HeaderAccountMenu` trigger was hard-coded 40×40 radius-8 beside ~28px siblings; restyled to the settings gear's `navBtnStyle` recipe (height 28, padding 5/10, radius 5) |
+
+New tests: 4 same-cycle re-seize cases in `execute-canvas-routing-events.test.js` (12 total), `animated-edge.test.jsx` (4 — beginElement per mount, indefinite begin, reduced-motion skip, empty render), an animation-toggle persistence case, and 11 additions to `flow-diagram-react-flow.test.jsx` (selection parity + live-drag positions + snap assertions; the suite's ReactFlow mock now captures rendered props and stubs the store API). Noted follow-up, not attempted: streaming snapshots so single-run Batch Run could animate; prune-cycle sink-token loss on 500-cycle boundaries.
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*

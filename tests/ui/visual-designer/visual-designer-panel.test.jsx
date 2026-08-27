@@ -30,6 +30,7 @@ vi.mock('../../../src/ui/shared/xyflow.js', () => ({
     setCenter: vi.fn(),
     getViewport: vi.fn(() => ({ zoom: 1 })),
   }),
+  useStoreApi: () => ({ getState: () => ({}), setState: () => {}, subscribe: () => () => {} }),
   ReactFlow: ({ nodes = [], edges = [], children, fitView, defaultViewport, onNodeClick, onNodeDragStop, onSelectionChange, onConnect, onEdgeClick, selectionOnDrag, panOnDrag, panActivationKeyCode, minZoom, maxZoom }) => {
     const source = nodes.find(node => node.id.startsWith('source:'));
     const firstActivity = nodes.find(node => node.id.startsWith('activity:'));
