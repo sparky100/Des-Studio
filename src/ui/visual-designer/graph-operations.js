@@ -1769,9 +1769,15 @@ export function updateVisualNode(model, node, patch = {}) {
         ...(patch.entityFilter !== undefined ? { entityFilter: patch.entityFilter } : {}),
       };
       if (patch.serverType) {
-        const oldServer = String(nextEvent.effect || "").match(/ASSIGN\([^,)]+,\s*([^,)]+)(?:\s*,.*)?\)/i)?.[1]?.trim() || "";
-        nextEvent.condition = replaceServerName(nextEvent.condition || "", oldServer, patch.serverType);
-        nextEvent.effect = replaceServerName(nextEvent.effect || "", oldServer, patch.serverType);
+        // Only an ASSIGN carries a server the canvas can rename. Without this
+        // guard a COSEIZE/BATCH activity matched nothing and the empty
+        // old-server string made replaceServerName a silent no-op.
+        const assignCall = macroCalls(nextEvent.effect || "").find(call => call.macro === "ASSIGN");
+        const oldServer = assignCall?.args[1] || "";
+        if (oldServer) {
+          nextEvent.condition = replaceServerName(nextEvent.condition || "", oldServer, patch.serverType);
+          nextEvent.effect = replaceServerName(nextEvent.effect || "", oldServer, patch.serverType);
+        }
       }
       if (patch.serviceTime) {
         const idx = patch.serviceTimeIndex ?? 0;
