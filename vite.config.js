@@ -104,14 +104,28 @@ export default defineConfig({
           environment: 'node',
           setupFiles: ['tests/setup-node.js'],
           // Full-simulation / replication / benchmark runs genuinely take
-          // minutes of CPU-bound work; keep them serialised in one fork so
-          // they don't compete with each other for CPU, but out of the fast
-          // tiers above so everyday `npm test` stays quick. Run on every push
-          // via CI's separate "Simulation soak" job (`npm run test:soak`).
+          // minutes of CPU-bound work, out of the fast tiers above so
+          // everyday `npm test` stays quick. Run on every push via CI's
+          // separate "Simulation soak" job (`npm run test:soak`).
+          //
+          // Deliberately NOT `singleFork: true`: Vitest's `isolate: true`
+          // (default) recycles the worker process between test files to
+          // reset its heap, but `singleFork` forces the whole run into one
+          // OS process for its entire duration, which disables that
+          // recycling — heap from earlier heavy files (this tier's biggest
+          // single file allocates ~1.35M entities) then accumulates across
+          // the rest of the run until a later file tips it over the
+          // ceiling. That's exactly what happened in CI (not locally, which
+          // has more headroom) once this tier had more than a couple of
+          // heavy files in it. `maxForks: 2` still bounds how many heavy
+          // simulations run concurrently — soak is its own isolated CI job
+          // now, so the original reason a single fork existed at all
+          // (avoid starving the fast tiers' parallel workers of CPU) no
+          // longer applies within this job.
           testTimeout: 240000,
           poolOptions: {
             forks: {
-              singleFork: true,
+              maxForks: 2,
             },
           },
           include: [

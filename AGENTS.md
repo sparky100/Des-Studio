@@ -845,7 +845,7 @@ The suite is split into three Vitest **projects** (`vite.config.js`, `test.proje
 | `ui` | `jsdom` | `tests/ui/**`, `src/ui/**/__tests__/**` | 15s |
 | `soak` | `node`, single-forked | full-simulation / replication / analytical-benchmark files (see below) | 240s |
 
-`npm test` runs `unit` + `ui` only (the fast tier, real cross-file parallelism via Vitest's default `forks` pool — this is *not* the same as the `soak` project's deliberate `singleFork`). `npm run test:soak` runs the heavy tier. `npm run test:all` runs everything and is what CI's overall bar amounts to (`test` and `soak` are separate, parallel CI jobs, both blocking).
+`npm test` runs `unit` + `ui` only (the fast tier, real cross-file parallelism via Vitest's default `forks` pool). `npm run test:soak` runs the heavy tier, capped to `maxForks: 2` — enough to bound how many full simulations run concurrently (protects `performance.test.js`'s wall-clock assertion from CPU contention) without forcing the whole run into one process (that reintroduces the OOM described in §22.1b: `singleFork` disables Vitest's per-file worker-process recycling, so heap from earlier heavy files accumulates for the rest of the run). `npm run test:all` runs everything and is what CI's overall bar amounts to (`test` and `soak` are separate, parallel CI jobs, both blocking).
 
 **What belongs in `soak`:** anything that runs a full simulation to completion for its own sake at a scale of tens of seconds or more — determinism-parity snapshots over the whole benchmark-scenario set, `perf_timing`'s scenario-timing suite, replication-CI gates (20-30 reps), the analytical-benchmark register, and `tests/benchmarks/golden.test.js` (the project's sole M/M/1/M/M/c correctness gate — do not re-add a standalone `mm1_benchmark.js`-style script or a duplicate check elsewhere; extend `golden.test.js` instead). Everything else — including tests that build+run an engine for a `maxSimTime` in the tens or low hundreds — belongs in `unit`, which is why `unit`'s default 15s timeout is intentionally tight: a new test that needs longer almost always means it's soak-tier work, not a slow unit test that needs a bigger number.
 
@@ -862,7 +862,7 @@ export default defineConfig({
     projects: [
       { extends: true, test: { name: 'unit', environment: 'node', setupFiles: ['tests/setup-node.js'], testTimeout: 15000, include: [...] } },
       { extends: true, test: { name: 'ui', environment: 'jsdom', setupFiles: ['tests/setup-jsdom.js'], testTimeout: 15000, include: [...] } },
-      { extends: true, test: { name: 'soak', environment: 'node', setupFiles: ['tests/setup-node.js'], testTimeout: 240000, poolOptions: { forks: { singleFork: true } }, include: [...] } },
+      { extends: true, test: { name: 'soak', environment: 'node', setupFiles: ['tests/setup-node.js'], testTimeout: 240000, poolOptions: { forks: { maxForks: 2 } }, include: [...] } },
     ],
   },
 });
@@ -1813,7 +1813,9 @@ Failure to complete this checklist means the sprint is not closed.
 
 **Root cause:** Unlike §22.1, this was pure Vitest configuration, not an unbounded test. `vite.config.js` set `poolOptions.forks.singleFork: true` globally, intending — per its own comment — to apply only to `tests/benchmarks/**` via `poolMatchGlobs`. But `poolOptions` is not scoped by `poolMatchGlobs` (that only routes which pool a file uses; `poolOptions` configures the pool itself, globally), and Vitest's default pool was already `forks` — so every one of the suite's ~226 files ran serialised in a single child process, with heap accumulating across the whole run until the default 4 GB limit was hit. Locally this was merely slow (single-fork, no parallelism); in CI, sharding masked it into "OOM sometimes, depending on shard contents" until the gate was actually enabled.
 
-**Fix:** Replaced the global `singleFork` + `poolMatchGlobs`/`environmentMatchGlobs` combination with Vitest 3.2's `test.projects` — three named projects (`unit`, `ui`, `soak`), only the last of which sets `singleFork: true`. See §12.3 for the current structure. This also fixed the underlying slowness this section's readers are usually chasing: the fast tier now gets real cross-file parallelism instead of none.
+**Fix:** Replaced the global `singleFork` + `poolMatchGlobs`/`environmentMatchGlobs` combination with Vitest 3.2's `test.projects` — three named projects (`unit`, `ui`, `soak`). See §12.3 for the current structure. This also fixed the underlying slowness this section's readers are usually chasing: the fast tier now gets real cross-file parallelism instead of none.
+
+The `soak` project's first version set `singleFork: true` (reasoning: keep heavy simulations from competing with each other for CPU) — this reintroduced the exact same class of bug at a smaller scale: `singleFork` disables Vitest's per-file worker-process recycling (its `isolate: true` default normally resets the heap between files by restarting the process), so heap from `soak`'s earlier heavy files accumulated across its whole run until a later file (the ~100s `refugee-displacement-corridor` scenario) tipped it over the ceiling — reproduced in CI, not locally, which has more headroom. Fixed by capping concurrency instead (`maxForks: 2`), which bounds CPU contention between simulations while letting the process recycle between files.
 
 **Status:** Resolved 2026-08-27.
 
