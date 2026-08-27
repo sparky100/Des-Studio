@@ -2095,6 +2095,21 @@ describe("V38c/V38d — RELEASE / RELEASE_COSEIZED consistency with scheduling C
     expect(warnings.filter(w => w.code === "V38d")).toHaveLength(0);
   });
 
+  it("V38c: still detects stacked RELEASE() calls for a 3-type COSEIZE (Sprint 94 composer)", () => {
+    // The COSEIZE composer (helpers.jsx) can now emit any arity of server
+    // types, e.g. COSEIZE(Q, A, B, C) via its dynamic row list — confirm V38c's
+    // arbitrary-arity type parsing (validation.js) still fires for 3 types.
+    const model = coseizeModel(["RELEASE(Surgeon)", "RELEASE(Anesthetist)", "RELEASE(Nurse)"]);
+    model.entityTypes.push({ id: "nurse", name: "Nurse", role: "server", count: 1, attrDefs: [] });
+    model.cEvents[0].effect = "COSEIZE(SurgeryQueue, Surgeon, Anesthetist, Nurse)";
+    const { warnings } = validateModel(model);
+    const v38c = warnings.find(w => w.code === "V38c");
+    expect(v38c).toBeTruthy();
+    expect(v38c.message).toContain("surgeon");
+    expect(v38c.message).toContain("anesthetist");
+    expect(v38c.message).toContain("nurse");
+  });
+
   it("does not warn V38c/V38d for a B-event not scheduled by any COSEIZE", () => {
     const model = coseizeModel(["RELEASE(Surgeon)"]);
     model.cEvents[0].effect = "ASSIGN(SurgeryQueue, Surgeon)";

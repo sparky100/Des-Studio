@@ -413,3 +413,33 @@ describe('BEventEditor — COSEIZE multi-resource awareness', () => {
     expect(screen.getByRole('option', { name: 'Release Anesthetist (entity stays in current stage)' })).toBeInTheDocument();
   });
 });
+
+describe('BEventEditor — COSEIZE/ASSIGN composers stay C-event-only (Sprint 94)', () => {
+  it('does not render the COSEIZE or ASSIGN composer chips even with 2+ server types available', () => {
+    render(
+      <BEventEditor
+        events={[{ id: 'b1', name: 'Release', scheduledTime: '0', effect: [''], schedules: [], description: '' }]}
+        onChange={vi.fn()}
+        entityTypes={[
+          { id: 'surgeon', name: 'Surgeon', role: 'server', count: 2, attrDefs: [], skills: ['Surgery'] },
+          { id: 'anesthetist', name: 'Anesthetist', role: 'server', count: 2, attrDefs: [] },
+          { id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] },
+        ]}
+        queues={[
+          { id: 'surgery_q', name: 'SurgeryQueue', customerType: 'Patient', discipline: 'FIFO' },
+        ]}
+        cEvents={[]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    fireEvent.click(screen.getByText('+ Add Effect'));
+
+    // COSEIZE and ASSIGN are seize-side macros authored from the C-Events
+    // editor; BEventEditor's expressionContext deliberately omits
+    // serverTypes/skills so these composer chips never appear here, even
+    // though RELEASE options for the same server types (above) do.
+    expect(screen.queryByRole('button', { name: /^COSEIZE/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^ASSIGN/ })).not.toBeInTheDocument();
+  });
+});
