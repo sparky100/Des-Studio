@@ -240,11 +240,11 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                     })),
                     containerTypes,
                     customerTypes: (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name)),
-                    // FAIL/REPAIR are B-event macros, so this is deliberately a distinct
-                    // field from `serverTypes` below (which gates the C-event-only
-                    // ASSIGN/COSEIZE composers) — it only unlocks the FAIL/REPAIR
-                    // partial-quantity composer, nothing else.
-                    failRepairServerTypes: (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name)),
+                    // FAIL/REPAIR/PREEMPT are B-event macros, so this is deliberately a
+                    // distinct field from `serverTypes` below (which gates the C-event-only
+                    // ASSIGN/COSEIZE composers) — it only unlocks the FAIL/REPAIR/PREEMPT
+                    // composers, nothing else.
+                    bEventServerTypes: (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name)),
                     // Deliberately no serverTypes/skills here — COSEIZE and the ASSIGN
                     // composer are C-event-only (COSEIZE is a seize-side macro; B-events
                     // handle the release side), so EffectPicker's gates on those fields

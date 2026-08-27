@@ -28,7 +28,7 @@ const fullCtx = {
   skills: ["Triage"],
   customerTypes: ["Customer", "VIP"],
   serverSkillsByType: { Nurse: ["Triage"], Doctor: ["Surgery"], Porter: [] },
-  failRepairServerTypes: ["Nurse", "Doctor"],
+  bEventServerTypes: ["Nurse", "Doctor"],
 };
 
 // Engine round-trip guard — the audit's core issue was UI composers emitting
@@ -454,11 +454,85 @@ describe("EffectPicker — FAIL/REPAIR partial-quantity composer (Sprint 96)", (
 
   it("does not offer FAIL/REPAIR composers with no server types in context", () => {
     render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()}
-      expressionContext={{ ...fullCtx, failRepairServerTypes: [] }} />);
+      expressionContext={{ ...fullCtx, bEventServerTypes: [] }} />);
 
     fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
     expect(screen.queryByRole("button", { name: /^FAIL/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^REPAIR/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("EffectPicker — PREEMPT/FINISH victim-selection composer (Sprint 97)", () => {
+  it("adds a plain PREEMPT with no criterion, matching the enumerated quick-pick's output", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "PREEMPT (by criterion)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["PREEMPT(Nurse)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds PREEMPT with a PRIORITY(attr) criterion", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "PREEMPT (by criterion)" }));
+    fireEvent.change(screen.getByDisplayValue("— first busy server —"), { target: { value: "PRIORITY" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["PREEMPT(Nurse, PRIORITY(batchSize))"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds PREEMPT with a LONGEST criterion", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "PREEMPT (by criterion)" }));
+    fireEvent.change(screen.getByDisplayValue("— first busy server —"), { target: { value: "LONGEST" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["PREEMPT(Nurse, LONGEST)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds FINISH with a SHORTEST criterion on a chosen server type", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "FINISH (by criterion)" }));
+    fireEvent.change(screen.getByDisplayValue("Nurse"), { target: { value: "Doctor" } });
+    fireEvent.change(screen.getByDisplayValue("— first busy server —"), { target: { value: "SHORTEST" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["FINISH(Doctor, SHORTEST)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("disables Add when the criterion is PRIORITY but no numeric attribute exists in context", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()}
+      expressionContext={{ ...fullCtx, numericAttrs: [] }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "PREEMPT (by criterion)" }));
+
+    // With no numeric attrs, the "by priority attribute" option isn't offered at all.
+    expect(screen.queryByRole("option", { name: "by priority attribute" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer PREEMPT/FINISH composers with no server types in context", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()}
+      expressionContext={{ ...fullCtx, bEventServerTypes: [], serverTypes: [] }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    expect(screen.queryByRole("button", { name: /^PREEMPT/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^FINISH/ })).not.toBeInTheDocument();
   });
 });
 
