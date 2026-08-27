@@ -12,7 +12,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
 // per-macro usages below for the (large, and macro-specific) set of fields
@@ -641,17 +641,22 @@ export const MACROS = [
     },
   },
 
-  // ── FINISH(ServerType) ─────────────────────────────────────────────────────
+  // ── FINISH(ServerType[, Criterion]) ────────────────────────────────────────
   // Ends the in-progress service of the entity currently held by a busy server of
   // ServerType, right now — for "activity of unknown duration" C-events where a
   // condition (not a sampled/scheduled B-event delay) determines when service ends.
   // Targets the server directly (like PREEMPT) rather than via felRef/getLastCustId,
   // since a bare C-event effect has no B-event context to inherit those from.
+  // Optional Criterion selects which busy server's entity to finish when more than
+  // one is busy: PRIORITY(attrName) (lowest value wins), LONGEST/SHORTEST (by
+  // elapsed service time). Omitted or unrecognized criterion picks the first busy
+  // server in filter order — today's behavior, unchanged.
   {
     name:    "FINISH",
-    pattern: /^FINISH\(([^,)]+)\)$/i,
+    pattern: /^FINISH\(([^,)]+)(?:\s*,\s*(.+))?\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
+      const criterion = match[2] ? match[2].trim() : null;
       const { entities, msgs, setLastCustId, setLastSrvId } = ctx;
       const key = normName(sType);
 
@@ -663,7 +668,8 @@ export const MACROS = [
         return;
       }
 
-      const srv = busyServers[0];
+      const srv = selectVictimServer(busyServers, criterion, entities, ctx.index,
+        (warning) => msgs.push(`FINISH(${sType}, ${criterion}): ${warning}`));
       const cust = findEntityById(ctx.index, entities, srv.currentCustId);
       if (!cust) {
         msgs.push(`FINISH(${sType}): server #${srv.id} has no customer`);
@@ -677,7 +683,8 @@ export const MACROS = [
       finishServiceForPair(cust, srv, ctx, { endedBy: "FINISH" });
       setLastCustId(cust.id);
       setLastSrvId(srv.id);
-      msgs.push(`FINISH(${sType}): #${cust.id} service ended early by server #${srv.id}`);
+      const criterionNote = criterion ? ` [by ${criterion}]` : '';
+      msgs.push(`FINISH(${sType}): #${cust.id} service ended early by server #${srv.id}${criterionNote}`);
     },
   },
 
@@ -1079,13 +1086,18 @@ export const MACROS = [
     },
   },
 
-  // ── PREEMPT(ServerType) ────────────────────────────────────────────────────
-  // Interrupts a busy server, re-queues the current customer with remaining service
+  // ── PREEMPT(ServerType[, Criterion]) ────────────────────────────────────────
+  // Interrupts a busy server, re-queues the current customer with remaining service.
+  // Optional Criterion selects which busy server to interrupt when more than one is
+  // busy: PRIORITY(attrName) (lowest value wins), LONGEST/SHORTEST (by elapsed
+  // service time). Omitted or unrecognized criterion picks the first busy server in
+  // filter order — today's behavior, unchanged.
   {
     name:    "PREEMPT",
-    pattern: /^PREEMPT\(([^,)]+)\)$/i,
+    pattern: /^PREEMPT\(([^,)]+)(?:\s*,\s*(.+))?\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
+      const criterion = match[2] ? match[2].trim() : null;
       const { entities, clock, helpers, msgs, _arbitration } = ctx;
       const key = normName(sType);
 
@@ -1098,7 +1110,8 @@ export const MACROS = [
         return;
       }
 
-      const srv = busyServers[0];
+      const srv = selectVictimServer(busyServers, criterion, entities, ctx.index,
+        (warning) => msgs.push(`PREEMPT(${sType}, ${criterion}): ${warning}`));
       const custId = srv.currentCustId;
       const cust = findEntityById(ctx.index, entities, custId);
 
@@ -1119,9 +1132,10 @@ export const MACROS = [
         });
       }
 
+      const criterionNote = criterion ? ` [by ${criterion}]` : '';
       msgs.push(
         `PREEMPT: server #${srv.id} (${sType}) interrupted #${cust.id} ` +
-        `[remaining ${remainingService.toFixed(3)} t] → re-queued`
+        `[remaining ${remainingService.toFixed(3)} t] → re-queued${criterionNote}`
       );
     },
   },

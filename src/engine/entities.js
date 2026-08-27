@@ -527,6 +527,63 @@ export function releaseServerClaim(customer, server, clock) {
   return true;
 }
 
+// Selects which busy server (and, implicitly, its current customer) a
+// PREEMPT/FINISH macro should act on. Mirrors queueDisciplineComparator's
+// PRIORITY(attrName) idiom exactly (case-insensitive attr lookup, Infinity
+// for missing, ascending sort) — the same attribute means the same thing
+// whether it's driving a queue's discipline or a preemption/finish
+// criterion. LONGEST/SHORTEST rank by elapsed service time (clock -
+// serviceStart) rather than remaining time, since remaining time
+// (srv._scheduledDuration) isn't reliably set for every busy server (only
+// primary claims whose completion schedule uses useEntityCtx: true).
+// No criterion, or an unrecognized one, falls back to the first busy
+// server in filter order — today's behavior, unchanged.
+/**
+ * @param {Record<string, any>[]} busyServers
+ * @param {string|null} criterion
+ * @param {Record<string, any>[]} entities
+ * @param {Record<string, any>|null} index
+ * @param {(msg: string) => void} [warn]
+ */
+export function selectVictimServer(busyServers, criterion, entities, index, warn) {
+  if (!criterion) return busyServers[0] ?? null;
+
+  const candidates = busyServers
+    .map((/** @type {any} */ srv) => ({ srv, cust: findEntityById(index, entities, srv.currentCustId) }))
+    .filter((/** @type {any} */ p) => p.cust);
+  if (candidates.length === 0) return busyServers[0] ?? null;
+
+  const priorityMatch = criterion.match(/^PRIORITY\((\w+)\)$/i);
+  /** @type {((a: any, b: any) => number)|null} */
+  let comparator = null;
+  if (priorityMatch) {
+    const attrNameUpper = priorityMatch[1].toUpperCase();
+    comparator = (a, b) => {
+      const findAttr = (/** @type {any} */ p) => {
+        if (!p.cust.attrs) return Infinity;
+        for (const key of Object.keys(p.cust.attrs)) {
+          if (key.toUpperCase() === attrNameUpper) return Number(p.cust.attrs[key]);
+        }
+        return Infinity;
+      };
+      const pa = findAttr(a), pb = findAttr(b);
+      if (pa !== pb) return pa - pb;
+      return (a.cust.serviceStart ?? 0) - (b.cust.serviceStart ?? 0);
+    };
+  } else if (/^LONGEST$/i.test(criterion)) {
+    comparator = (a, b) => (a.cust.serviceStart ?? 0) - (b.cust.serviceStart ?? 0);
+  } else if (/^SHORTEST$/i.test(criterion)) {
+    comparator = (a, b) => (b.cust.serviceStart ?? 0) - (a.cust.serviceStart ?? 0);
+  }
+
+  if (!comparator) {
+    warn?.(`unrecognized selection criterion "${criterion}" — falling back to first busy server`);
+    return busyServers[0] ?? null;
+  }
+
+  return [...candidates].sort(comparator)[0].srv;
+}
+
 // A preempted customer resumes an interrupted wait — it's not making a fresh decision
 // to join a queue, so balking is skipped, but capacity/overflow (F11.1/F11.3) still
 // applies (it could overflow/exit if its original queue is now full).
