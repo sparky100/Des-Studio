@@ -872,3 +872,86 @@ describe('distributeNodes', () => {
     expect(byId.c.x).toBe(300);
   });
 });
+
+describe('connectVisualNodes — QUEUE→ACTIVITY guard for advanced effects', () => {
+  // The canvas can only faithfully rewire a plain single-server ASSIGN or a
+  // DELAY. Anything else (COSEIZE, skill-gated ASSIGN, multi-macro effects…)
+  // used to be silently overwritten with boilerplate ASSIGN — these assert the
+  // refusal instead.
+  test('refuses to rewire a COSEIZE activity, returning the model untouched with a message', () => {
+    const model = makeModel();
+    model.cEvents[0] = { ...model.cEvents[0], effect: 'COSEIZE(Queue 1, Nurse, Doctor)' };
+    const graph = deriveGraphFromModel(model);
+
+    const result = connectVisualNodes(model, graph, 'queue:queue-3', 'activity:activity-1');
+
+    expect(result.validation.ok).toBe(false);
+    expect(result.validation.message).toMatch(/advanced effect/i);
+    expect(result.model).toBe(model);
+  });
+
+  test('refuses a skill-gated ASSIGN (3 args) and a multi-macro effect', () => {
+    for (const effect of ['ASSIGN(Queue 1, Server, "Triage")', ['SET(x, 1)', 'ASSIGN(Queue 1, Server)']]) {
+      const model = makeModel();
+      model.cEvents[0] = { ...model.cEvents[0], effect };
+      const graph = deriveGraphFromModel(model);
+      const result = connectVisualNodes(model, graph, 'queue:queue-3', 'activity:activity-1');
+      expect(result.validation.ok).toBe(false);
+      expect(result.model).toBe(model);
+    }
+  });
+
+  test('rewires a DELAY surgically — slot capacity and the rest of the condition survive', () => {
+    const model = makeModel();
+    model.cEvents[0] = { ...model.cEvents[0], effect: ['DELAY(Queue 1, 3)'] };
+    const graph = deriveGraphFromModel(model);
+
+    const result = connectVisualNodes(model, graph, 'queue:queue-3', 'activity:activity-1');
+
+    expect(result.validation.ok).toBe(true);
+    const cEvent = result.model.cEvents.find(e => e.id === 'activity-1');
+    expect(cEvent.effect).toEqual(['DELAY(Queue 3, 3)']);
+    expect(cEvent.condition).toBe('queue(Queue 3).length > 0 AND idle(Server).count > 0');
+  });
+
+  test('still rewires a plain ASSIGN activity exactly as before', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+
+    const result = connectVisualNodes(model, graph, 'queue:queue-3', 'activity:activity-1');
+
+    const cEvent = result.model.cEvents.find(e => e.id === 'activity-1');
+    expect(cEvent.effect).toBe('ASSIGN(Queue 3, Server)');
+    expect(cEvent.condition).toBe('queue(Queue 3).length > 0 AND idle(Server).count > 0');
+  });
+});
+
+describe('deleteVisualEdge — condition edge on an advanced activity', () => {
+  test('leaves a COSEIZE activity untouched instead of wiping its condition/effect/cSchedules', () => {
+    const model = makeModel();
+    model.cEvents[0] = { ...model.cEvents[0], effect: 'COSEIZE(Queue 1, Nurse, Doctor)' };
+    const graph = deriveGraphFromModel(model);
+    const conditionEdge = graph.edges.find(e => e.source === 'condition' && e.to === 'activity:activity-1');
+    expect(conditionEdge).toBeTruthy();
+
+    const next = deleteVisualEdge(model, graph, conditionEdge.id);
+
+    const cEvent = next.cEvents.find(e => e.id === 'activity-1');
+    expect(cEvent.effect).toBe('COSEIZE(Queue 1, Nurse, Doctor)');
+    expect(cEvent.condition).toBe(model.cEvents[0].condition);
+    expect(cEvent.cSchedules).toHaveLength(1);
+  });
+
+  test('still clears a plain ASSIGN activity as before', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const conditionEdge = graph.edges.find(e => e.source === 'condition' && e.to === 'activity:activity-1');
+
+    const next = deleteVisualEdge(model, graph, conditionEdge.id);
+
+    const cEvent = next.cEvents.find(e => e.id === 'activity-1');
+    expect(cEvent.effect).toEqual([]);
+    expect(cEvent.condition).toBe('');
+    expect(cEvent.cSchedules).toEqual([]);
+  });
+});

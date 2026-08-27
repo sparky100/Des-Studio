@@ -1,7 +1,7 @@
 import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from "./graph.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 import { renameQueue } from "../../engine/queue-refs.js";
-import { extractReleaseTarget, stripReleaseTarget } from "../../model/macroParser.js";
+import { classifyActivityEffect, extractReleaseTarget, replaceMacroCall, stripReleaseTarget } from "../../model/macroParser.js";
 
 function clean(value = "") {
   return String(value || "").trim();
@@ -496,6 +496,24 @@ function isBEventRouteEmpty(bEvent) {
 const ATTRIBUTE_CONDITIONAL_BLOCK_MESSAGE =
   "This activity has attribute-conditional completion schedules — edit routing in the B-Events editor instead of the canvas.";
 
+// Shown when a canvas edit would overwrite an effect the canvas can't
+// faithfully rewrite (COSEIZE, skill/container-gated ASSIGN, BATCH, MATCH,
+// multi-macro effects…). Refusing beats silently downgrading the model.
+export const ADVANCED_EFFECT_BLOCK_MESSAGE =
+  "This activity uses an advanced effect — edit its queue wiring in the C-Events editor instead of the canvas.";
+
+// Rewrites just the `queue(Old)` clause inside a string condition when the
+// activity's input queue changes, keeping the rest of the condition intact.
+// Falls back to the standard boilerplate when the condition isn't a string
+// or doesn't mention the old queue.
+function rewriteConditionQueue(condition, oldQueue, newQueue) {
+  if (typeof condition === "string" && oldQueue) {
+    const pattern = new RegExp(`queue\\(\\s*${escRe(oldQueue)}\\s*\\)`, "gi");
+    if (pattern.test(condition)) return condition.replace(pattern, `queue(${newQueue})`);
+  }
+  return `queue(${newQueue}).length > 0`;
+}
+
 export function validateVisualConnection(graph, from, to) {
   const source = findNode(graph, from);
   const target = findNode(graph, to);
@@ -987,15 +1005,21 @@ export function connectVisualNodes(model, graph, from, to) {
   }
 
   if (source.type === VISUAL_NODE_TYPES.QUEUE && target.type === VISUAL_NODE_TYPES.ACTIVITY) {
+    const targetCEvent = (next.cEvents || []).find(ce => ce.id === target.refId);
+    const { kind, call } = classifyActivityEffect(targetCEvent?.effect);
+    if (kind === "advanced") {
+      return { model, validation: { ok: false, message: ADVANCED_EFFECT_BLOCK_MESSAGE } };
+    }
     next.cEvents = updateByRef(next.cEvents, target.refId, event => {
-      const existingEffect = Array.isArray(event.effect) ? event.effect.join(";") : (event.effect || "");
-      const isDelay = /^DELAY\(/i.test(existingEffect.trim());
-      if (isDelay) {
-        // Preserve delay mode — just update the queue name in the DELAY effect and condition
+      if (kind === "delay") {
+        // Preserve delay mode — rewrite only the DELAY queue argument (keeping a
+        // slot-capacity 2nd arg) and only the queue(...) clause of the condition.
+        const capacity = call.args[1];
         return {
           ...event,
-          condition: `queue(${source.label}).length > 0`,
-          effect: [`DELAY(${source.label})`],
+          condition: rewriteConditionQueue(event.condition, call.args[0], source.label),
+          effect: replaceMacroCall(event.effect, "DELAY",
+            () => `DELAY(${source.label}${capacity ? `, ${capacity}` : ""})`).effect,
         };
       }
       return {
@@ -1232,10 +1256,15 @@ export function deleteVisualEdge(model, graph, edgeId) {
     );
   }
 
-  // Queue → Activity ("condition"): clear queue-specific condition, ASSIGN/DELAY effect and cSchedules
+  // Queue → Activity ("condition"): clear queue-specific condition, ASSIGN/DELAY effect and cSchedules.
+  // An advanced effect (COSEIZE, BATCH, multi-macro…) is left untouched — the
+  // panel refuses the delete with a message before calling this; keeping the
+  // no-op here too means no caller can wipe one by accident.
   if (edge.source === "condition" && fromNode.type === VISUAL_NODE_TYPES.QUEUE && toNode.type === VISUAL_NODE_TYPES.ACTIVITY) {
     next.cEvents = cEvents.map(ce =>
-      ce.id !== toNode.refId ? ce : { ...ce, condition: "", effect: [], cSchedules: [] }
+      ce.id !== toNode.refId || classifyActivityEffect(ce.effect).kind === "advanced"
+        ? ce
+        : { ...ce, condition: "", effect: [], cSchedules: [] }
     );
   }
 

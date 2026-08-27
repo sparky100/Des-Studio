@@ -32,6 +32,7 @@ vi.mock('../../../src/ui/shared/xyflow.js', () => ({
   }),
   ReactFlow: ({ nodes = [], edges = [], children, fitView, defaultViewport, onNodeClick, onNodeDragStop, onSelectionChange, onConnect, onEdgeClick, selectionOnDrag, panOnDrag, panActivationKeyCode, minZoom, maxZoom }) => {
     const source = nodes.find(node => node.id.startsWith('source:'));
+    const firstActivity = nodes.find(node => node.id.startsWith('activity:'));
     const firstQueue = nodes.find(node => node.id.startsWith('queue:'));
     const overflow = nodes.find(node => node.id === 'queue:consult-q');
     const first = nodes[0];
@@ -95,6 +96,11 @@ vi.mock('../../../src/ui/shared/xyflow.js', () => ({
         {firstQueue && (
           <button type="button" onClick={() => onNodeClick?.({}, firstQueue)}>
             Mock select queue
+          </button>
+        )}
+        {firstActivity && (
+          <button type="button" onClick={() => onNodeClick?.({}, firstActivity)}>
+            Mock select activity
           </button>
         )}
         {overflow && (
@@ -255,6 +261,41 @@ describe('Visual Designer shell', () => {
         expect.objectContaining({ id: 'arrive', effect: 'ARRIVE(Patient, Queue 3)' }),
       ]),
     }));
+  }, 15000);
+
+  it('shows the refusal as an error when auto-link is blocked, instead of a false "linked" success', async () => {
+    const user = userEvent.setup();
+    // Attribute-conditional (`when`) completion schedules make the activity's
+    // routing off-limits to the canvas — connectVisualNodes refuses.
+    const whenModel = {
+      ...twoStageModel,
+      cEvents: twoStageModel.cEvents.map(ce => ce.id !== 'start-triage' ? ce : {
+        ...ce,
+        cSchedules: [
+          { eventId: 'triage-complete', when: { variable: 'Entity.severity', operator: '>', value: '5' }, dist: 'Fixed', distParams: { value: '1' } },
+          { eventId: 'triage-complete', dist: 'Fixed', distParams: { value: '1' } },
+        ],
+      }),
+    };
+
+    render(
+      <ModelDetail
+        modelId="model-visual"
+        modelData={whenModel}
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        overrides={{ isOwner: true, canEdit: true, userId: 'user-1' }}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /^design$/i }));
+    await screen.findByLabelText('Visual Designer');
+    await user.click(screen.getByRole('button', { name: /mock select activity/i }));
+    await user.click(screen.getByRole('button', { name: /add queue/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/B-Events editor instead of the canvas/i);
+    expect(screen.queryByText(/linked to/i)).not.toBeInTheDocument();
   }, 15000);
 
   it('persists layout changes through the normal save path', async () => {
