@@ -420,6 +420,10 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const skillsList = expressionContext?.skills || [];
   const customerTypes = expressionContext?.customerTypes || [];
   const serverSkillsByType = expressionContext?.serverSkillsByType || {};
+  // Distinct from `serverTypes` (which is deliberately C-event-only — see the
+  // ASSIGN/COSEIZE composer gates below) so B-events can offer the FAIL/REPAIR
+  // partial-quantity composer without also unlocking those seize-side composers.
+  const failRepairServerTypes = expressionContext?.failRepairServerTypes || [];
   const CATEGORY_CONFIG = {
     queue:     {label:'Queue',     color:C.cEvent},
     service:   {label:'Service',   color:C.green},
@@ -448,6 +452,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const [assignSkill, setAssignSkill] = useState(''); // '' | `lit:<skill>` | `attr:<name>`
   const [assignContainer, setAssignContainer] = useState('');
   const [assignAmount, setAssignAmount] = useState('1');
+  const [failRepairType, setFailRepairType] = useState('');
   const [search, setSearch] = useState('');
 
   const remove = (j) => onChange(effects.filter((_,i)=>i!==j));
@@ -513,6 +518,13 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
       if (!q) return;
       const n = Math.max(2, Math.round(Number(exprValue)) || 2);
       add(`SPLIT(${splitType || q.type}, ${n}, ${opQueue})`);
+      setExprValue('');
+      return;
+    }
+    if (exprMacro === 'FAIL' || exprMacro === 'REPAIR') {
+      if (!failRepairType || !exprValue.trim()) return;
+      const n = Math.max(1, Math.round(Number(exprValue)) || 1);
+      add(`${exprMacro}(${failRepairType}, ${n})`);
       setExprValue('');
       return;
     }
@@ -752,6 +764,20 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
                     color:exprMacro==='COSEIZE'?C.red:C.muted,cursor:'pointer',fontWeight:700}}>COSEIZE (N server types)</button>
               )}
+              {failRepairServerTypes.length>0&&(
+                <button onClick={()=>{setExprMacro('FAIL');setExprValue('1');if(!failRepairType)setFailRepairType(failRepairServerTypes[0]);}}
+                  style={{background:exprMacro==='FAIL'?C.red+'22':'transparent',
+                    border:`1px solid ${exprMacro==='FAIL'?C.red:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='FAIL'?C.red:C.muted,cursor:'pointer',fontWeight:700}}>FAIL (N servers)</button>
+              )}
+              {failRepairServerTypes.length>0&&(
+                <button onClick={()=>{setExprMacro('REPAIR');setExprValue('1');if(!failRepairType)setFailRepairType(failRepairServerTypes[0]);}}
+                  style={{background:exprMacro==='REPAIR'?C.red+'22':'transparent',
+                    border:`1px solid ${exprMacro==='REPAIR'?C.red:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='REPAIR'?C.red:C.muted,cursor:'pointer',fontWeight:700}}>REPAIR (N servers)</button>
+              )}
             </div>
             {exprMacro==='MATCH'&&matchQueues.length>=2&&(
               <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
@@ -937,6 +963,13 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   {containerNames.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
               )}
+              {(exprMacro==='FAIL'||exprMacro==='REPAIR')&&failRepairServerTypes.length>0&&(
+                <select value={failRepairType||failRepairServerTypes[0]} onChange={e=>setFailRepairType(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.red}55`,borderRadius:4,
+                    color:C.red,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
+                  {failRepairServerTypes.map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+              )}
               {(exprMacro==='SET'||exprMacro==='ROUND_ROBIN')&&stateVars.length>0&&(
                 <select value={exprName||stateVars[0]} onChange={e=>setExprName(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
@@ -977,6 +1010,15 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     style={{width:220,flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
                       color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
                   />
+                ):exprMacro==='FAIL'||exprMacro==='REPAIR'?(
+                  <input type="number" min={1} step={1}
+                    value={exprValue}
+                    onChange={e=>setExprValue(e.target.value)}
+                    onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
+                    placeholder="quantity (≥ 1)"
+                    style={{width:120,flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                      color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
+                  />
                 ):(
                   <input
                     value={exprValue}
@@ -1001,6 +1043,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     : exprMacro==='BATCH' ? (!opQueue||(batchSizeMode==='attribute'?!batchAttr:!exprValue.trim()))
                     : exprMacro==='SPLIT' ? (!opQueue||!exprValue.trim())
                     : exprMacro==='DRAIN'||exprMacro==='FILL' ? (!opContainer||!(isPositiveNumber(exprValue.trim())||isValidAmountExpr(exprValue.trim(),stateVars)))
+                    : exprMacro==='FAIL'||exprMacro==='REPAIR' ? (!failRepairType||!Number.isInteger(Math.round(Number(exprValue)))||Number(exprValue)<1)
                     : (!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0])))
                   }>Add</Btn>
               )}

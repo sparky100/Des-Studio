@@ -28,6 +28,7 @@ const fullCtx = {
   skills: ["Triage"],
   customerTypes: ["Customer", "VIP"],
   serverSkillsByType: { Nurse: ["Triage"], Doctor: ["Surgery"], Porter: [] },
+  failRepairServerTypes: ["Nurse", "Doctor"],
 };
 
 // Engine round-trip guard — the audit's core issue was UI composers emitting
@@ -398,6 +399,66 @@ describe("EffectPicker — SPLIT clone-type picker (Sprint 94, audit gap 8)", ()
 
     expect(onChange).toHaveBeenCalledWith(["SPLIT(VIP, 3, Triage Queue)"]);
     expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+});
+
+describe("EffectPicker — FAIL/REPAIR partial-quantity composer (Sprint 96)", () => {
+  it("adds FAIL with a chosen server type and quantity", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "FAIL (N servers)" }));
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 1)"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["FAIL(Nurse, 1)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds REPAIR with a chosen server type and quantity", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "REPAIR (N servers)" }));
+    fireEvent.change(screen.getByDisplayValue("Nurse"), { target: { value: "Doctor" } });
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 1)"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["REPAIR(Doctor, 2)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("disables Add when the quantity is zero or empty", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "FAIL (N servers)" }));
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 1)"), { target: { value: "0" } });
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 1)"), { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
+  it("disables Add when the quantity is non-numeric", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "REPAIR (N servers)" }));
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 1)"), { target: { value: "abc" } });
+
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
+  it("does not offer FAIL/REPAIR composers with no server types in context", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()}
+      expressionContext={{ ...fullCtx, failRepairServerTypes: [] }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    expect(screen.queryByRole("button", { name: /^FAIL/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^REPAIR/ })).not.toBeInTheDocument();
   });
 });
 
