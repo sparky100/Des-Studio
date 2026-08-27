@@ -226,9 +226,10 @@ describe('Visual Designer shell', () => {
     await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /add queue/i }));
 
-    // Visual-tab edits surface as pending-changes indicators (header + banner),
-    // each paired with a Save action.
-    expect(screen.getAllByText(/Unsaved layout changes/).length).toBeGreaterThanOrEqual(1);
+    // A layout-only change surfaces exactly one pending-changes indicator, in
+    // the header — SaveBanner used to also render a second, duplicate one in
+    // the content area at the same time (reported as "very distracting").
+    expect(screen.getAllByText(/Unsaved layout changes/)).toHaveLength(1);
     expect(screen.getAllByRole('button', { name: /^save$/i }).length).toBeGreaterThanOrEqual(1);
   });
 
