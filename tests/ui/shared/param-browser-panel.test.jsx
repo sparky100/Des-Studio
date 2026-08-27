@@ -90,6 +90,13 @@ describe("ParamBrowserPanel", () => {
     expect(screen.queryByPlaceholderText(/filter parameters/i)).not.toBeInTheDocument();
   });
 
+  test("bounds the results list to a fixed, scrollable height instead of growing the page for a model with many parameters", () => {
+    renderPanel();
+    const results = screen.getByTestId("param-browser-results");
+    expect(results.style.overflowY).toBe("auto");
+    expect(parseFloat(results.style.maxHeight)).toBeGreaterThan(0);
+  });
+
   test("paramColor maps every param type family to a distinct themed colour", () => {
     const C = { server: "s", green: "g", bEvent: "b", cEvent: "c", muted: "m" };
     expect(paramColor("entityTypeCount", C)).toBe("s");
