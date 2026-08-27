@@ -295,7 +295,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
 **Named scenarios (Overview tab).** A sweep varies a parameter over a *range*; when you instead have a handful of *discrete alternatives* to compare — "current staffing" vs. "double clerk staffing" vs. "add a second counter" — use the **Named Scenarios** panel on the model's **Overview** tab:
 
-1. Click **+ New Scenario**. Give it a descriptive name, then add one or more parameter changes (each is a specific model setting plus its value for this scenario). Optionally set a seed and replication count.
+1. Click **+ New Scenario**. Give it a descriptive name, then add one or more parameter changes via **+ Choose parameter** — a searchable, category-grouped browser; picking a setting pre-fills its current value ready to override. Optionally set a seed and replication count.
 2. Saved scenarios appear as a list with checkboxes. Tick the scenarios to compare — you can include **Base model (current parameters)** as one of the groups.
 3. Click **Compare selected**. Each group is run fresh in your browser. With exactly 2 groups you get the paired-t comparison table (mean difference with confidence interval per KPI). With 3 or more groups you get a one-way ANOVA significance test plus Tukey HSD pairwise comparisons, so you can see not just *whether* the alternatives differ but *which pairs* differ.
 
@@ -594,7 +594,7 @@ Full API reference: `docs/architecture/results-api-design.md`.
 
 1. Open the model and go to the **Access** tab.
 2. Under **Collaborators**, add the stakeholder with **viewer** rights (they need a simmodlr account).
-3. In the **Business view** section below, pick which model settings they may adjust — the list offers the same parameters available to sweeps (server counts, distribution means, queue capacities, state-variable initial values, and so on).
+3. In the **Business view** section below, click **+ Add adjustable setting** and pick from the searchable browser — parameters are grouped by category (staffing & capacity, arrivals, service times, queues, starting values) with a filter box, and the list offers the same parameters available to sweeps.
 4. For each exposed setting you can add a plain-English **business label** (e.g. "Number of tellers" instead of the technical parameter name) and an optional **min**/**max** to keep adjustments within a sensible range.
 5. Click **Save**, then send them the model link (**🔗 Copy link**, §4.9).
 

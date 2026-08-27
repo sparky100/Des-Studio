@@ -2,9 +2,9 @@
 // Styled to match the B/C event editor visual language.
 
 import { useState } from "react";
-import { useTheme } from "../shared/ThemeContext.jsx";
-import { Btn, SectionPanel } from "../shared/components.jsx";
-import { alpha, SPACE, RADIUS, TYPO } from "../shared/tokens.js";
+import { useTheme } from "./ThemeContext.jsx";
+import { Btn, SectionPanel } from "./components.jsx";
+import { alpha, SPACE, RADIUS, TYPO } from "./tokens.js";
 
 export function paramColor(type, C) {
   if (type === "entityTypeCount" || type === "shiftCapacity") return C.server;
@@ -33,7 +33,7 @@ function ParamRow({ p, color, added, selected, onSelect }) {
         background: added ? "transparent" : isActive ? alpha(color, 0.1) : C.bg,
         border: `1px solid ${isActive ? color : C.border}`,
         borderRadius: RADIUS.sm,
-        padding: "5px 10px",
+        padding: "9px 10px",
         cursor: added ? "default" : "pointer",
         opacity: added ? 0.4 : 1,
         fontFamily: FONT,
@@ -41,7 +41,7 @@ function ParamRow({ p, color, added, selected, onSelect }) {
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 11, color: added ? C.muted : selected ? color : C.text, fontWeight: selected ? 700 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span style={{ fontSize: 12, color: added ? C.muted : selected ? color : C.text, fontWeight: selected ? 700 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {selected && "✓ "}{p.label}
         </span>
         {p.subLabel && (

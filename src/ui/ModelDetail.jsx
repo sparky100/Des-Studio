@@ -44,6 +44,7 @@ import { renameEntityType, renameQueue, renameStateVariable, renameContainer } f
 import { resolveRunAdmissionTier }          from "../engine/run-admission.js";
 import { resolveExposedParams }             from "../engine/exposed-params.js";
 import { enumerateSweepableParams }         from "../engine/sweep-params.js";
+import { ParamBrowserPanel }                from "./shared/ParamBrowserPanel.jsx";
 import { AdaptiveBatchPanel }               from "./execute/AdaptiveBatchPanel.jsx";
 import { normalizeModelConditions }         from "../model/conditionFormat.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
@@ -465,7 +466,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [showOptimisePanel,setShowOptimisePanel]=useState(false);
   const [aiAction,setAiAction]=useState(null);
   const [collabQuery,setCollabQuery]=useState("");
-  const [exposedParamPick,setExposedParamPick]=useState("");
+  const [exposedPickerOpen,setExposedPickerOpen]=useState(false);
   const [pendingRoles,setPendingRoles]=useState({});
   const [aiSeq,setAiSeq]=useState(0);
   const [describePrompt,setDescribePrompt]=useState("");
@@ -1901,7 +1902,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 const {resolved,orphans}=resolveExposedParams(model);
                 const resolvedByPath=new Map(resolved.map(r=>[r.path,r]));
                 const exposedPaths=new Set(exposed.map(e=>e.path));
-                const addable=enumerateSweepableParams(model).filter(p=>!exposedPaths.has(p.path));
+                const allParams=enumerateSweepableParams(model);
                 const updateEntry=(path,patch)=>setField("exposedParams",exposed.map(e=>e.path===path?{...e,...patch}:e));
                 const removeEntry=(path)=>setField("exposedParams",exposed.filter(e=>e.path!==path));
                 const numOrUndef=(v)=>v===""?undefined:Number(v);
@@ -1950,19 +1951,22 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                     {orphans.length===0&&exposed.length===0&&(
                       <div style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>No adjustable settings yet.</div>
                     )}
-                    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                      <select value={exposedParamPick} onChange={e=>setExposedParamPick(e.target.value)}
-                        aria-label="Add an adjustable setting"
-                        style={{flex:1,minWidth:200,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:SANS,fontSize:12,padding:"6px 8px"}}>
-                        <option value="">— choose a setting viewers may adjust —</option>
-                        {addable.map(p=><option key={p.path} value={p.path}>{p.label}{p.subLabel?` (${p.subLabel})`:""}</option>)}
-                      </select>
-                      <Btn small variant="ghost" disabled={!exposedParamPick} onClick={()=>{
-                        if(!exposedParamPick)return;
-                        setField("exposedParams",[...exposed,{path:exposedParamPick}]);
-                        setExposedParamPick("");
-                      }}>Add</Btn>
-                    </div>
+                    {!exposedPickerOpen&&(
+                      <div>
+                        <Btn small variant="ghost" ariaLabel="Add an adjustable setting" onClick={()=>setExposedPickerOpen(true)}>+ Add adjustable setting</Btn>
+                      </div>
+                    )}
+                    {exposedPickerOpen&&(
+                      <ParamBrowserPanel
+                        params={allParams}
+                        alreadyAdded={exposedPaths}
+                        onSelect={path=>{
+                          setField("exposedParams",[...exposed,{path}]);
+                          setExposedPickerOpen(false);
+                        }}
+                        onClose={()=>setExposedPickerOpen(false)}
+                      />
+                    )}
                     {resolved.some(r=>r.type==="queueCapacity"&&r.min==null)&&(
                       <div style={{fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>
                         Tip: for queue-size settings, viewers' entries are kept at 1 or above (0 would mean an unlimited queue).

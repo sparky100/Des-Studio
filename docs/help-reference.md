@@ -372,7 +372,7 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 
 **Access:** Model **Overview** tab → **Named Scenarios** panel. Requires sign-in.
 
-**Creating:** Click **+ New Scenario**, give it a name, add one or more parameter changes (same parameter list as sweeps: server counts, distribution means, queue capacities, state-variable initial values), optionally set a seed and replication count. Scenarios store only the parameter changes, so they always run against the model's latest version.
+**Creating:** Click **+ New Scenario**, give it a name, add one or more parameter changes via **+ Choose parameter** — a searchable browser grouped by category, same parameter list as sweeps; picking a parameter pre-fills its current value ready to override. Optionally set a seed and replication count. Scenarios store only the parameter changes, so they always run against the model's latest version.
 
 **Comparing:** Tick 2+ saved scenarios (the **Base model (current parameters)** row can be one of them) and click **Compare selected**. Each group runs fresh in the browser:
 
@@ -795,7 +795,7 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 **Owner setup (Access tab → "Business view" section, owner-only):**
 
 1. Add the person as a collaborator with the **viewer** role.
-2. In the Business view section, pick which settings they may adjust. The list is the model's sweepable parameters — server counts, shift capacities, queue capacities, arrival/service distribution parameters, state-variable starting values (the same list the parameter-sweep feature uses).
+2. In the Business view section, click **+ Add adjustable setting** and pick from the searchable browser — parameters are grouped by category (Servers & Capacity, Arrival Distributions, Service Distributions, State Variables, Queue Capacity) with a filter box, and already-exposed settings show greyed out. The list is the model's sweepable parameters (the same list the parameter-sweep feature uses).
 3. Per setting, optionally give it a plain-English name (e.g. "How many tellers on shift") and min/max bounds. Leave the list empty to let viewers run the model exactly as-is.
 4. **Save** — the curation is stored on the model (`exposedParams` in `model_json`). If a curated setting's target is later deleted or renamed, the section flags it as no longer existing so the owner can remove it; viewers never see broken entries.
 
