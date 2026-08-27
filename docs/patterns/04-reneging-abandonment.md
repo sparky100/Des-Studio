@@ -21,10 +21,10 @@ Arrival → [Queue] → (Server) → Complete
 
 ## How reneging is wired
 
-The patience timer is a second schedule entry on the **ARRIVE B-event**:
+The patience timer is a second schedule entry on the **ARRIVE Bound event**:
 
 ```
-B-events:
+Bound events:
   Arrival  t=0  effect: ARRIVE(Customer, Queue)
     schedules:
       - eventId: b_arrive   dist: Exponential(mean)          # next arrival
@@ -49,14 +49,14 @@ The `isRenege: true` flag tells the engine to bind the timer to the arriving cus
 
 ## Zero-wiring alternative: queue-level `renegeDist`
 
-Instead of hand-authoring a renege B-event and threading its `eventId` into every event that feeds a queue, set `renegeDist`/`renegeDistParams` directly on the Queue:
+Instead of hand-authoring a renege Bound event and threading its `eventId` into every event that feeds a queue, set `renegeDist`/`renegeDistParams` directly on the Queue:
 
 ```json
 { "id": "q_wait", "name": "Queue", "customerType": "Customer", "discipline": "FIFO",
   "renegeDist": "Fixed", "renegeDistParams": { "value": "patienceTime" } }
 ```
 
-The engine automatically schedules a patience timer the moment any entity joins this queue — via `ARRIVE`, `RELEASE`, routing, or batch/split — with no `RENEGE(ctx)` B-event or `schedules[].eventId` wiring required. Use this when every path into a queue should share the same patience distribution. The manual `schedules[{isRenege:true}]` pattern above remains valid and can coexist on the same model — use it when only certain paths into a queue need a renege timer, or when the trigger is conditional rather than purely distribution-based.
+The engine automatically schedules a patience timer the moment any entity joins this queue — via `ARRIVE`, `RELEASE`, routing, or batch/split — with no `RENEGE(ctx)` Bound event or `schedules[].eventId` wiring required. Use this when every path into a queue should share the same patience distribution. The manual `schedules[{isRenege:true}]` pattern above remains valid and can coexist on the same model — use it when only certain paths into a queue need a renege timer, or when the trigger is conditional rather than purely distribution-based.
 
 ## Example templates
 - Call Center (`call-center`) — callers abandon after 10 time units

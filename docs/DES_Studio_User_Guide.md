@@ -60,10 +60,10 @@ simmodlr implements Pidd's Three-Phase algorithm. Understanding these three phas
 | Phase | What happens |
 |-------|-------------|
 | **A — Clock advance** | The simulation clock jumps to the time of the next scheduled event. Nothing happens between events. |
-| **B — Bound events** | All events scheduled for this moment fire: arrivals, service completions, machine failures. B-Events are *time-triggered*. |
-| **C — Conditional events** | The engine scans C-Events by priority to find anything that *can* now happen given the current state — for example, "patient waiting AND doctor free → start consultation." When one C-Event fires, the scan restarts from the top. C-Events are *state-triggered*. |
+| **B — Bound events** | All events scheduled for this moment fire: arrivals, service completions, machine failures. Bound Events are *time-triggered*. |
+| **C — Conditional events** | The engine scans Conditional Events by priority to find anything that *can* now happen given the current state — for example, "patient waiting AND doctor free → start consultation." When one Conditional Event fires, the scan restarts from the top. Conditional Events are *state-triggered*. |
 
-B-Events handle "what happens when" and C-Events handle "what can happen now." This separation keeps the engine's behaviour predictable and theoretically grounded.
+Bound Events handle "what happens when" and Conditional Events handle "what can happen now." This separation keeps the engine's behaviour predictable and theoretically grounded.
 
 ---
 
@@ -118,7 +118,7 @@ Open simmodlr in your browser. Enter your email and password. On sign-in, the **
 
 ### Step 2 — Open a template
 
-Click **Browse Templates** (top-right of the Model Library). Select **Single Queue — M/M/1** and click **Open a copy**. This loads a complete, runnable model with one entity type, one queue, one B-Event (arrivals), and one C-Event (service). You will use this as a learning scaffold.
+Click **Browse Templates** (top-right of the Model Library). Select **Single Queue — M/M/1** and click **Open a copy**. This loads a complete, runnable model with one entity type, one queue, one Bound Event (arrivals), and one Conditional Event (service). You will use this as a learning scaffold.
 
 ### Step 3 — Run the model
 
@@ -134,7 +134,7 @@ When the run completes, the Results tab opens automatically. Key things to look 
 
 ### Step 5 — Change one parameter and re-run
 
-Go back to the **Design** tab. Click **Define**, then select **B-Events**. Find the arrival B-Event and change the inter-arrival time distribution mean from `10` to `8` (faster arrivals). Click **Save**. Go to **Run** and click **Run** again. Compare the new results with the previous run using **Run History → Compare**.
+Go back to the **Design** tab. Click **Define**, then select **Bound Events**. Find the arrival Bound Event and change the inter-arrival time distribution mean from `10` to `8` (faster arrivals). Click **Save**. Go to **Run** and click **Run** again. Compare the new results with the previous run using **Run History → Compare**.
 
 You have now completed the core simmodlr loop: build → run → analyse → adjust → re-run.
 
@@ -197,9 +197,9 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    |--------------------|-----------|
     | **Entity Types** | Add one entity type per distinct object class (e.g. "Customer", "Train"). Set attribute names, types (`number / string / boolean`), and default values. For server entity types you can also set a **Weekly Schedule Pattern** (a 24×7 grid editor for repeating capacity), a **Shift Schedule** (time-based or condition-triggered), and shift-change behavior (Delay / Preempt / Suspend). |
    | **Queues** | Add a queue for each waiting point. Set discipline (FIFO, LIFO, PRIORITY, SPT, EDD). Set capacity if finite. |
-   | **B-Events** | Add arrival events (with a distribution) and service-completion events. Use the distribution picker to choose Exponential, Uniform, Triangular, Fixed, Erlang, Empirical, or other supported types. |
-   | **C-Events** | Define the conditions under which service starts: entity waiting AND server idle. Use the Predicate Builder — a point-and-click condition builder that prevents type mismatches. Each C-Event has an **Activity Type** toggle: **Service (claim resource)** seizes a server entity; **Delay (no resource)** just holds the entity for a sampled time with no server involved (e.g. a recovery period, a fixed processing wait). Picking **Delay** swaps the Effects picker for a single **Source queue** select and auto-writes `DELAY(QueueName)` — see §5.4 for how to configure what happens when the delay ends. |
-   | **Time & Schedules** | Set the time unit and real-world epoch, and create named timetables for time-varying arrival rates. Import timetable rows from CSV or Excel and link them to B-Events. |
+   | **Bound Events** | Add arrival events (with a distribution) and service-completion events. Use the distribution picker to choose Exponential, Uniform, Triangular, Fixed, Erlang, Empirical, or other supported types. |
+   | **Conditional Events** | Define the conditions under which service starts: entity waiting AND server idle. Use the Predicate Builder — a point-and-click condition builder that prevents type mismatches. Each Conditional Event has an **Activity Type** toggle: **Service (claim resource)** seizes a server entity; **Delay (no resource)** just holds the entity for a sampled time with no server involved (e.g. a recovery period, a fixed processing wait). Picking **Delay** swaps the Effects picker for a single **Source queue** select and auto-writes `DELAY(QueueName)` — see §5.4 for how to configure what happens when the delay ends. |
+   | **Time & Schedules** | Set the time unit and real-world epoch, and create named timetables for time-varying arrival rates. Import timetable rows from CSV or Excel and link them to Bound Events. |
    | **Model Data** | Declare small named building blocks that other parts of the model reference by name: Skills (server capabilities for skill-based routing), Containers (tanks/buffers), Distances (travel time between queues), and counters you want to track (e.g. total cost, total reneges). |
    | **Data Sources** | Connect live data feeds to drive arrivals or entity attributes. |
 
@@ -211,7 +211,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 **Tips:**
 - Use descriptive names for entity types (e.g. "Patient" not "Entity1").
 - If you use a PRIORITY queue discipline, the entity type needs a `priority` attribute of type `number`.
-- B-Events set *when* things happen. C-Events set *what can happen given the current state*. If nothing is happening during a run, check your C-Event conditions.
+- Bound Events set *when* things happen. Conditional Events set *what can happen given the current state*. If nothing is happening during a run, check your Conditional Event conditions.
 
 **Visual Designer.** Click **Draw** in the Design toolbar to open the canvas-based Visual Designer and build or rearrange the same model graphically. Use **Pan** mode to move around the diagram. Use **Select** mode, or Shift/Ctrl-click with a mouse, to select more than one node; Shift/Ctrl-click a selected node to remove it from the selection again — this works the same whether the nodes were selected one by one or with a box-drag. Once nodes are selected, the toolbar above the canvas shows how many are selected and lets you clear the selection or delete the selected nodes together. Dragging a selected group moves the whole group and saves the updated layout with the model. Press **Ctrl+D** to duplicate the current selection in place, or **Ctrl+C**/**Ctrl+V** to copy and paste elsewhere on the canvas — duplicates land disconnected, ready to be wired up. While dragging a single node, dashed **alignment guides** appear whenever the node's edges or centre line up with another node's — release while a guide is showing and the node snaps exactly into alignment. Placement is otherwise free — nodes don't snap to a background grid, so the alignment snap is the only snap. (For aligning several nodes at once, select them and use the toolbar's align/distribute tools instead.) Moving and arranging nodes never changes model logic — only positions. If a structural canvas edit would overwrite an advanced effect that only the Define editors can express (such as co-seizing several servers), the canvas refuses with a message pointing you at the right editor rather than silently simplifying your model.
 
@@ -226,7 +226,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
    > "A hospital emergency department with two triage nurses and four doctors. Patients arrive on average every 8 minutes. Triage takes 3–7 minutes; consultation takes 10–25 minutes. High-priority patients are seen before low-priority ones. The target is that 90% of patients are seen within 30 minutes."
 
-3. Click **Generate**. The AI creates a complete `model_json`: entity types, queues, B-Events, C-Events, distributions, and performance goals.
+3. Click **Generate**. The AI creates a complete `model_json`: entity types, queues, Bound Events, Conditional Events, distributions, and performance goals.
 4. Review the generated model using **Define** (structured editors) or **Draw** (Visual Designer). Check:
    - Entity types match your description.
    - Queue disciplines are correct (PRIORITY if you described priority patients).
@@ -288,7 +288,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 1. Go to the **Run** tab. Click **Parametric Sweep**.
 2. Choose **1D Sweep** (one parameter) or **2D Sweep** (two parameters simultaneously).
 3. For each parameter:
-   - Select the element (e.g. a B-Event, a queue, a state variable).
+   - Select the element (e.g. a Bound Event, a queue, a state variable).
    - Select the field (e.g. `mean` of the inter-arrival distribution).
    - Set the range (min, max, step).
 4. Click **Run Sweep**. The engine runs the full replication set for each parameter combination.
@@ -339,7 +339,7 @@ Each flag includes an actionable suggestion: adding capacity, rebalancing upstre
 
 **Optimise.** Inside the Simulation Assistant sidebar, click **⚡ Optimise** to run an adaptive batch analysis. The AI analyses results for bottlenecks, quick wins, and investment opportunities. Each suggestion has an **Apply ↗** button that proposes the change to the model with a before/after diff so you can review it before committing.
 
-**Schedule Manager.** The **Schedules** sub-tab under the Design section lets you create named timetables for time-varying arrival patterns. You can import arrival rows from CSV or Excel files (including multi-event imports) and link timetables to B-Events.
+**Schedule Manager.** The **Schedules** sub-tab under the Design section lets you create named timetables for time-varying arrival patterns. You can import arrival rows from CSV or Excel files (including multi-event imports) and link timetables to Bound Events.
 
 **Run tier limits.** The number of replications available per run depends on your account tier: Free accounts can run up to 10 replications; Standard accounts up to 30; Pro accounts up to 100.
 
@@ -383,7 +383,7 @@ To use skills:
 
 2. **Assign skills to servers** — Go to the **Entity Types** tab. Expand a server entity type. If skills are defined, a **Skills** panel appears with checkboxes for each registered skill. Tick the skills this server type possesses. A doctor might have "Surgery" and "Consultation"; a nurse might have "Triage" and "Monitoring".
 
-3. **Use skills in C-Events** — Go to the **C-Events** tab. When you pick an ASSIGN or COSEIZE effect, the dropdown now shows skill-filtered options:
+3. **Use skills in Conditional Events** — Go to the **Conditional Events** tab. When you pick an ASSIGN or COSEIZE effect, the dropdown now shows skill-filtered options:
    - `Start service with Doctor (Surgery) and Patient from SurgeryQueue` — only idle doctors with the "Surgery" skill are considered
    - `Seize Doctor[Surgery] + Nurse[Triage] for Patient from ERQueue` — each server type is filtered by its required skill
 
@@ -420,7 +420,7 @@ To use skills:
 
 **Validation.** The engine checks that every skill referenced in an ASSIGN/COSEIZE effect or condition exists in the model's skill registry (V-SKILL-1, V-SKILL-2, V-SKILL-3). If you delete a skill from the registry, any effects or conditions referencing it will show a validation error.
 
-**Setting skill requirements on arrival (entity-side).** Instead of hardcoding one skill name per C-Event, you can give arriving entities different skill requirements using a weighted string attribute on the customer type:
+**Setting skill requirements on arrival (entity-side).** Instead of hardcoding one skill name per Conditional Event, you can give arriving entities different skill requirements using a weighted string attribute on the customer type:
 
 1. **Add a string attribute** — In the **Entity Types** tab, expand your customer type. Add an attribute (e.g. `requiredSkill`) with value type **String**.
 
@@ -428,15 +428,15 @@ To use skills:
 
 3. **Read the visual bar** — The bar always fills 100% width. Coloured segments show each option's proportion. Any remaining portion is labelled **No requirement** and produces no skill filter at runtime.
 
-4. **Connect in a C-event** — Go to the **C-Events** tab. When you pick an ASSIGN effect, the dropdown now shows `Start service with Doctor (left-arrow Entity.requiredSkill)` — select this to have the engine read each entity's `requiredSkill` attribute at runtime. The C-event uses `ASSIGN(Queue, Server, Entity.requiredSkill)`.
+4. **Connect in a Conditional event** — Go to the **Conditional Events** tab. When you pick an ASSIGN effect, the dropdown now shows `Start service with Doctor (left-arrow Entity.requiredSkill)` — select this to have the engine read each entity's `requiredSkill` attribute at runtime. The Conditional event uses `ASSIGN(Queue, Server, Entity.requiredSkill)`.
 
-5. **Falls back cleanly** — If an entity's `requiredSkill` is null or empty, the ASSIGN matches any idle server of that type (no skill filter). If no server with the matching skill is idle, the ASSIGN fails as usual and the C-event will re-evaluate on the next pass.
+5. **Falls back cleanly** — If an entity's `requiredSkill` is null or empty, the ASSIGN matches any idle server of that type (no skill filter). If no server with the matching skill is idle, the ASSIGN fails as usual and the Conditional event will re-evaluate on the next pass.
 
-This means one C-event handles all skill variations — no duplicate C-events per skill name. Combined with schedule-based overrides (see Schedule Manager), you can vary required skills per time slot.
+This means one Conditional event handles all skill variations — no duplicate Conditional events per skill name. Combined with schedule-based overrides (see Schedule Manager), you can vary required skills per time slot.
 
-**Routing to the shorter of two queues.** By default, a condition's value field only accepts a fixed number. To compare against another live value instead — "route to whichever queue currently has fewer people waiting" — open the **Condition Builder** on a routing table, C-event condition, or balking condition, add a clause with a number-type variable (e.g. `Number of Patients in Queue A`), and use the small **Number / Dynamic** toggle next to the value field. Switch it to **Dynamic** and a second dropdown appears listing the same queue/server/container values available on the left side — pick `Number of Patients in Queue B` to compare the two directly (`queue(A).length < queue(B).length`). This works anywhere a condition is built: C-event conditions, routing tables, balking conditions, and per-schedule `when` clauses.
+**Routing to the shorter of two queues.** By default, a condition's value field only accepts a fixed number. To compare against another live value instead — "route to whichever queue currently has fewer people waiting" — open the **Condition Builder** on a routing table, Conditional event condition, or balking condition, add a clause with a number-type variable (e.g. `Number of Patients in Queue A`), and use the small **Number / Dynamic** toggle next to the value field. Switch it to **Dynamic** and a second dropdown appears listing the same queue/server/container values available on the left side — pick `Number of Patients in Queue B` to compare the two directly (`queue(A).length < queue(B).length`). This works anywhere a condition is built: Conditional event conditions, routing tables, balking conditions, and per-schedule `when` clauses.
 
-**Ending a service when a condition becomes true, not on a timer.** Most services end after a sampled or fixed duration. For services whose length depends on something happening elsewhere in the model (e.g. "the doctor stops when the ward is cleared," not a fixed 20 minutes), add a C-event whose condition checks that state and whose effect picks **FINISH ServerType's current service immediately** from the effect dropdown (`FINISH(ServerType)`). The engine re-checks every condition after each event, so service ends the instant your condition becomes true — no scheduled delay involved. If no server of that type happens to be busy when the condition fires, FINISH simply does nothing.
+**Ending a service when a condition becomes true, not on a timer.** Most services end after a sampled or fixed duration. For services whose length depends on something happening elsewhere in the model (e.g. "the doctor stops when the ward is cleared," not a fixed 20 minutes), add a Conditional event whose condition checks that state and whose effect picks **FINISH ServerType's current service immediately** from the effect dropdown (`FINISH(ServerType)`). The engine re-checks every condition after each event, so service ends the instant your condition becomes true — no scheduled delay involved. If no server of that type happens to be busy when the condition fires, FINISH simply does nothing.
 
 **Matching only compatible pairs.** MATCH normally pairs whichever entity is at the front of each of two queues — useful when any pairing is acceptable (e.g. drivers and riders). When pairings must satisfy a rule (blood-type compatibility, a required certification matching a request), open the effect builder's MATCH option and fill in the compatibility field, e.g. `Entity.bloodType == Other.bloodType` — `Entity` refers to the candidate from the first queue, `Other` to the candidate from the second. The engine scans both queues for the first pair that satisfies the rule instead of always taking the front two; if no pair qualifies, it waits for the next opportunity.
 
@@ -444,14 +444,14 @@ This means one C-event handles all skill variations — no duplicate C-events pe
 
 **Reusing attributes and skills across similar entity types.** When several entity types are variations on a common theme — several patient sub-types that all need the same base intake attributes, or several nurse grades that all share a base skill set plus their own specialty — you can avoid redeclaring the shared fields on every type. In the **Entity Types** tab, expand a type and use the **"Inherits from"** dropdown to pick another entity type of the same role. The child type's attributes, skills, and skill profiles are combined with its parent's at run time — if the child declares its own attribute or skill with the same name as the parent's, the child's own definition wins; everything else is inherited unchanged. This only works between two customer types or two server types (not across the two), a type can't inherit from itself, and inheritance chains can't loop back on themselves — the editor won't offer a choice that would create either problem, and the engine's validation catches it if one somehow gets set anyway. If the types don't actually share much, or the overlap is a one-off coincidence, it's simpler to just leave them independent.
 
-**Catching routing mistakes in a multi-stage process.** When a customer type is meant to move through a fixed sequence of stages — Triage before Treatment before Discharge, or an approval pathway with a set order — you can declare that order and get a warning if a routing change accidentally sends entities backward through it. In the **Entity Types** tab, expand a customer type, open **Required Sequence**, and add the queues in the order they should be visited (use the ↑/↓ buttons to reorder, ✕ to remove). This doesn't change how the simulation runs — the engine still routes entities exactly as your C-events and routing tables say — it's purely a design-time check: after each edit, validation retraces how this entity type actually flows through the model and flags any routing step that jumps back to an earlier stage than declared. A copy-paste mistake in a routing table (accidentally pointing a completion event at Triage instead of Discharge) shows up immediately instead of silently corrupting your flow statistics. Intentional rework loops (send back for re-treatment, escalate and retry) are not blocked — the warning just asks you to confirm that a particular backward step is on purpose.
+**Catching routing mistakes in a multi-stage process.** When a customer type is meant to move through a fixed sequence of stages — Triage before Treatment before Discharge, or an approval pathway with a set order — you can declare that order and get a warning if a routing change accidentally sends entities backward through it. In the **Entity Types** tab, expand a customer type, open **Required Sequence**, and add the queues in the order they should be visited (use the ↑/↓ buttons to reorder, ✕ to remove). This doesn't change how the simulation runs — the engine still routes entities exactly as your Conditional events and routing tables say — it's purely a design-time check: after each edit, validation retraces how this entity type actually flows through the model and flags any routing step that jumps back to an earlier stage than declared. A copy-paste mistake in a routing table (accidentally pointing a completion event at Triage instead of Discharge) shows up immediately instead of silently corrupting your flow statistics. Intentional rework loops (send back for re-treatment, escalate and retry) are not blocked — the warning just asks you to confirm that a particular backward step is on purpose.
 
-**Modelling travel time between locations.** When part of a process involves physically moving something — a courier between a warehouse and a customer, ground crew between gates, a delivery vehicle between depots — you can make that leg's duration reflect an actual distance and speed instead of picking an arbitrary fixed or random time. Open the **Model Data** tab and add a **Distance** between the two queues involved (they don't need to be adjacent in your model — one entry covers travel in either direction). Then, on the C-event that starts that leg, pick **Distance** as the schedule's delay distribution: choose the from/to queues, whether the speed comes from the assigned server or the arriving entity, and which numeric attribute holds the speed value. The engine computes duration as distance ÷ speed at the moment the leg starts. If you later add more legs, or forget to declare a distance for a pair you're using, validation warns you rather than silently running with a zero-length leg. See the built-in **"Courier Ground Transport"** template (Logistics) for a working two-leg example.
+**Modelling travel time between locations.** When part of a process involves physically moving something — a courier between a warehouse and a customer, ground crew between gates, a delivery vehicle between depots — you can make that leg's duration reflect an actual distance and speed instead of picking an arbitrary fixed or random time. Open the **Model Data** tab and add a **Distance** between the two queues involved (they don't need to be adjacent in your model — one entry covers travel in either direction). Then, on the Conditional event that starts that leg, pick **Distance** as the schedule's delay distribution: choose the from/to queues, whether the speed comes from the assigned server or the arriving entity, and which numeric attribute holds the speed value. The engine computes duration as distance ÷ speed at the moment the leg starts. If you later add more legs, or forget to declare a distance for a pair you're using, validation warns you rather than silently running with a zero-length leg. See the built-in **"Courier Ground Transport"** template (Logistics) for a working two-leg example.
 
-**Sections (large-model organisation).** When a model grows beyond roughly ten queues or twenty events, you can group elements into named *sections* to keep the editors manageable. Open the **Sections** tab (under the Design area) and click **+ Add Section** to create a named, coloured group. Assign queues, entity types, B-events, and C-events to the section using the member checkboxes. For queues that act as handoff points between sections, mark them **IN** (entities arrive from another section) or **OUT** (entities leave to another section).
+**Sections (large-model organisation).** When a model grows beyond roughly ten queues or twenty events, you can group elements into named *sections* to keep the editors manageable. Open the **Sections** tab (under the Design area) and click **+ Add Section** to create a named, coloured group. Assign queues, entity types, Bound events, and Conditional events to the section using the member checkboxes. For queues that act as handoff points between sections, mark them **IN** (entities arrive from another section) or **OUT** (entities leave to another section).
 
 Once sections are defined:
-- Every table editor (Entity Types, Queues, B-Events, C-Events) shows a coloured filter tab strip — click a section name to see only its elements.
+- Every table editor (Entity Types, Queues, Bound Events, Conditional Events) shows a coloured filter tab strip — click a section name to see only its elements.
 - The Visual Designer shows a small coloured dot on each node that belongs to a section.
 - Sections are pure metadata: the simulation engine is unchanged and all elements remain part of the same flat model.
 
@@ -503,7 +503,7 @@ The LLM Bundle is a single Markdown file that gives an LLM everything it needs t
 | Section | What it contains |
 |---------|-----------------|
 | Preamble | Plain-English description of the Three-Phase DES method and how to read the results |
-| Model definition | Entity types and attributes (including weekly schedule patterns), queues and disciplines, B-Event and C-Event logic, performance goals |
+| Model definition | Entity types and attributes (including weekly schedule patterns), queues and disciplines, Bound Event and Conditional Event logic, performance goals |
 | Experiment configuration | Replications, warm-up period, max sim time, seed, schedule |
 | Headline KPIs | Average wait, average service time, average sojourn, throughput, renege rate |
 | Per-queue wait table | mean, p50, p90, p95, p99 for every queue |
@@ -623,20 +623,20 @@ Full API reference: `docs/architecture/results-api-design.md`.
 | V3 | An attribute's default value does not match its declared type | Change `defaultValue` or `valueType` to agree |
 | V4 | A PRIORITY queue has no entity with a `priority` attribute | Add a `number`-type attribute called `priority` to the entity type using that queue |
 | V37 | A resource has `MTBF` set but not `MTTR` (or vice versa) | Set both `MTBF` and `MTTR`, or remove both |
-| V38 | A B-Event fires `RELEASE(Server)` immediately before `COMPLETE()` — the `COMPLETE` is silently skipped | Reorder: `COMPLETE()` should come before `RELEASE()` |
-| V47 | A Delay activity's follow-on schedule samples the delay from "Server attribute," or the completion B-Event's effect is a bare `ARRIVE(...)` with nothing else | See §5.4 — pick a sampled distribution (Exponential, Fixed, …) instead of "Server attribute," and resolve the delayed entity with `COMPLETE()`, a routing table, or `RELEASE()` instead of (or alongside) `ARRIVE` |
+| V38 | A Bound Event fires `RELEASE(Server)` immediately before `COMPLETE()` — the `COMPLETE` is silently skipped | Reorder: `COMPLETE()` should come before `RELEASE()` |
+| V47 | A Delay activity's follow-on schedule samples the delay from "Server attribute," or the completion Bound Event's effect is a bare `ARRIVE(...)` with nothing else | See §5.4 — pick a sampled distribution (Exponential, Fixed, …) instead of "Server attribute," and resolve the delayed entity with `COMPLETE()`, a routing table, or `RELEASE()` instead of (or alongside) `ARRIVE` |
 
 Click any error in the Model Health panel to jump directly to the relevant editor tab.
 
 ### 5.2 "Entities are entering the queue but never being served"
 
-**Cause.** The C-Event condition that triggers service is always false, or the C-Event has a lower priority than another C-Event that also cannot fire. The Three-Phase C-scan keeps restarting on the highest-priority event and never reaches the service event.
+**Cause.** The Conditional Event condition that triggers service is always false, or the Conditional Event has a lower priority than another Conditional Event that also cannot fire. The Three-Phase C-scan keeps restarting on the highest-priority event and never reaches the service event.
 
 **Diagnosis steps:**
 
 1. Go to the Execute canvas. Click on a stuck entity in the entity table. The **Entity Inspector** panel shows its current state (queue, attributes, last transition time).
-2. Go to the **Step Log** (Bottom Panel → Log tab). Look for the C-Event you expect to fire. If it never appears, the condition is never true.
-3. Open the **C-Events** editor. Read the condition in the Predicate Builder. Common mistakes:
+2. Go to the **Step Log** (Bottom Panel → Log tab). Look for the Conditional Event you expect to fire. If it never appears, the condition is never true.
+3. Open the **Conditional Events** editor. Read the condition in the Predicate Builder. Common mistakes:
    - The queue name in the condition does not match the queue where entities are actually waiting.
    - The resource status check uses the wrong resource name.
    - The condition combines `AND` clauses that are mutually exclusive.
@@ -658,15 +658,15 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| Run completes instantly with zero entities served | Max sim time is too short, or arrival B-Event has no distribution set | Increase max sim time; verify B-Event has a distribution |
-| Phase C truncation warning appears | C-Event conditions are cycling (firing repeatedly) > 500 times per clock tick | Add a guard condition or simplify the C-Event predicate |
+| Run completes instantly with zero entities served | Max sim time is too short, or arrival Bound Event has no distribution set | Increase max sim time; verify Bound Event has a distribution |
+| Phase C truncation warning appears | Conditional Event conditions are cycling (firing repeatedly) > 500 times per clock tick | Add a guard condition or simplify the Conditional Event predicate |
 | Report generation is blank | Results payload is very large; LLM timeout | Reduce replication count; try Markdown format instead of HTML |
 | "Supabase auth failed" on load | `.env.local` credentials missing or expired | Regenerate the anon key in Supabase Dashboard and update `.env.local` |
 | LLM Bundle is missing confidence intervals | The run used only one replication | Run with ≥ 2 replications — the CI section is omitted for single-replication runs because there is no between-replication variance to report |
 | LLM Bundle option is greyed out in Export… | No run has been completed in the current session | Complete at least one run, then the option becomes available |
 | V50: "Weekly schedule pattern requires a startOfWeek epoch" on a server entity type | The entity type has a `schedulePattern.type === 'weekly'` but the model data does not set a `startOfWeek` epoch — the grid editor has no reference point to know which Monday to use | Go to **Time & Schedules** in the Define sub-sections and set a `startOfWeek` epoch (any date works, only the day-of-week matters). The first day of the schedule pattern is the week that contains this epoch. |
 | V51: "Weekly schedule pattern has unscheduled hours with no active shift" | The 24×7 grid has cells that are neither off (0) nor covered by any shift schedule row, meaning the server type would have zero capacity for some hours on some days | Open the **Weekly Schedule Pattern** editor for that entity type. Either fill every 1-hour cell with a capacity ≥ 0, or add a shift schedule row that covers the gap. A gap is any hour where the grid is `null` rather than an integer — set it to 0 explicitly if the server should be unavailable then. |
-| V52: "Set/Capacity schedule reference targets a non-schedule resource" | A C-Event or effect macro references a schedule by name or ID but the referenced entity type is not a server (its `role !== 'server'`) — only server entity types have schedule patterns | Ensure the `SET` or macro call that references this schedule targets a server entity type. If the resource is not a server, remove the schedule reference. |
+| V52: "Set/Capacity schedule reference targets a non-schedule resource" | A Conditional Event or effect macro references a schedule by name or ID but the referenced entity type is not a server (its `role !== 'server'`) — only server entity types have schedule patterns | Ensure the `SET` or macro call that references this schedule targets a server entity type. If the resource is not a server, remove the schedule reference. |
 | V53: "Schedule pattern capacity exceeds shift capacity at [time]" | A weekly grid cell has a capacity value that is larger than the shift schedule's capacity for the same time window — the grid defines how many *should* be available, the shift defines what staff are *actually* rostered, so grid > shift is a deployment mismatch | Either reduce the grid cell to ≤ the shift's capacity for that hour, or increase the shift's capacity (add more staff) to cover the planned level. |
 | V54: "Shift schedule rows overlap and are not merged" | Two shift rows in the same schedule have overlapping time windows — e.g. Row 1: 08:00–16:00 Mon–Fri, Row 2: 12:00–20:00 Mon–Fri — and the editor has not merged them (editor shows a yellow "overlap" badge) | Use the **Merge overlapping shifts** button in the shift schedule editor. The editor combines overlapping rows into a single row covering the union of their time windows with the max capacity. |
 | V55: "Per-shift utilisation chart is empty" | A weekly-pattern server entity type ran with zero capacity for all shifts, or the run ended before any shift could complete a service | Check that at least one schedule-pattern cell has capacity > 0 and that the run's `maxSimTime` is long enough for an entity to complete service. The per-shift chart appears only when `perShiftUtil[]` contains at least one entry. |
@@ -674,20 +674,20 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 
 ### 5.4 "What do I configure for a Delay (no resource) activity, and what happens when it ends?"
 
-**When this applies.** Your C-Event's Activity Type is set to **Delay (no resource)** — used for things like a recovery period, an unsupervised processing wait, or any hold that does not tie up a server entity.
+**When this applies.** Your Conditional Event's Activity Type is set to **Delay (no resource)** — used for things like a recovery period, an unsupervised processing wait, or any hold that does not tie up a server entity.
 
 **Two settings to get right:**
 
 1. **"delay via:" on the Schedule Follow-on Event panel.** Pick a sampled distribution — **Exponential**, **Fixed**, **Uniform**, etc. Do **not** pick **Server attribute**: a Delay activity never claims a server, so there is nothing to read an attribute from, and the engine silently falls back to a delay of 1 every time (flagged by validation rule V47, with an amber warning shown directly under the schedule row in the editor).
-2. **The completion B-Event's Effect** — what happens to the entity once the delay ends. There are three valid choices, pick based on what actually happens next:
+2. **The completion Bound Event's Effect** — what happens to the entity once the delay ends. There are three valid choices, pick based on what actually happens next:
 
-   | If the entity… | Configure the B-Event with… |
+   | If the entity… | Configure the Bound Event with… |
    |---|---|
    | …leaves the system entirely (process ends here) | `COMPLETE()` — works correctly even though no server was claimed. |
-   | …continues to another queue, and no server is involved anywhere in this entity's journey | A **routing table** (Conditional or Probabilistic routing, set in the B-Event's Routing panel) and **no effect macro at all** — leave Effects empty. The engine treats a delay-held entity the same as one waiting in a queue, so routing alone moves it on. |
+   | …continues to another queue, and no server is involved anywhere in this entity's journey | A **routing table** (Conditional or Probabilistic routing, set in the Bound Event's Routing panel) and **no effect macro at all** — leave Effects empty. The engine treats a delay-held entity the same as one waiting in a queue, so routing alone moves it on. |
    | …continues, and a server *was* genuinely seized earlier in this same entity's journey and is still held through the delay | `RELEASE(ServerType[, TargetQueue])` to free that server now. |
 
-   **Do not** use a bare `ARRIVE(...)` as the only effect on a Delay completion B-Event — `ARRIVE` always creates a brand-new entity and never resolves the one that was delayed, leaving it stuck forever (flagged by V47). `ARRIVE` is fine *combined with* one of the three options above (e.g. to also spawn a log/audit entity), just never alone.
+   **Do not** use a bare `ARRIVE(...)` as the only effect on a Delay completion Bound Event — `ARRIVE` always creates a brand-new entity and never resolves the one that was delayed, leaving it stuck forever (flagged by V47). `ARRIVE` is fine *combined with* one of the three options above (e.g. to also spawn a log/audit entity), just never alone.
 
    **Do not** invent a `RELEASE()` for a chain where no server was ever seized — `RELEASE` has no awareness that this entity came from a Delay, so it either does nothing (entity stuck, same problem as bare `ARRIVE`) or, worse, can release an unrelated server's claim on a different entity. If no server is involved, use `COMPLETE()` or a routing table instead.
 
@@ -697,11 +697,11 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 
 **How to set it up:**
 
-Conditions have no arithmetic evaluator — `(clock - state.lastSlotTime) >= N` is not valid syntax and throws an error at runtime. Use a recurring timer B-Event plus a boolean flag instead:
+Conditions have no arithmetic evaluator — `(clock - state.lastSlotTime) >= N` is not valid syntax and throws an error at runtime. Use a recurring timer Bound Event plus a boolean flag instead:
 
 1. **Create a state variable** to act as a "ready" flag (e.g., `slotReady`, initial value 0).
-2. **Create a self-rescheduling B-Event** (the same way an arrival event reschedules itself) that fires every `slotInterval` minutes with effect `SET(slotReady, 1)`.
-3. **Create a C-Event** with Activity Type **Delay (no resource)**. In the Source queue dropdown, pick the queue where entities wait for scheduling.
+2. **Create a self-rescheduling Bound Event** (the same way an arrival event reschedules itself) that fires every `slotInterval` minutes with effect `SET(slotReady, 1)`.
+3. **Create a Conditional Event** with Activity Type **Delay (no resource)**. In the Source queue dropdown, pick the queue where entities wait for scheduling.
 4. **Set the Slot capacity** field to the maximum number of entities to process per firing (e.g., 3). Leave it blank to drain all waiting entities (default behavior).
 5. **Add a condition** that combines:
    - `queue(QueueName).length >= 1` — there are entities waiting
@@ -712,12 +712,12 @@ Conditions have no arithmetic evaluator — `(clock - state.lastSlotTime) >= N` 
 **Example:** A clinic with 3 appointment slots per hour, weekdays 9am-5pm:
 
 ```
-Timer B-Event: fires every 60 min, effect: SET(slotReady, 1)
+Timer Bound Event: fires every 60 min, effect: SET(slotReady, 1)
 Condition: queue(BookingQueue).length >= 1 AND isWeekday AND hourOfDay >= 9 AND hourOfDay < 17 AND slotReady == 1
 Effect: DELAY(BookingQueue, 3), SET(slotReady, 0)
 ```
 
-The C-Event fires once per hour (when the condition is true), drains up to 3 entities from the queue, and consumes the flag. Remaining entities wait for the next slot.
+The Conditional Event fires once per hour (when the condition is true), drains up to 3 entities from the queue, and consumes the flag. Remaining entities wait for the next slot.
 
 ### 5.6 "How do I make different entity types get different delay times?"
 
@@ -727,7 +727,7 @@ The C-Event fires once per hour (when the condition is true), drains up to 3 ent
 
 1. **Add an attribute** to your customer entity type that stores the delay duration (e.g., `appointmentLength`, valueType: number).
 2. **Set the attribute at arrival** using a Categorical distribution or a fixed value per entity type.
-3. **In the C-Event's Schedule Follow-on Event panel**, pick **Entity attribute** from the "delay via:" dropdown and enter the attribute name (e.g., `appointmentLength`).
+3. **In the Conditional Event's Schedule Follow-on Event panel**, pick **Entity attribute** from the "delay via:" dropdown and enter the attribute name (e.g., `appointmentLength`).
 4. **Or use conditional schedules** — add multiple cSchedule rows with `when` predicates that check the entity's type attribute:
 
 ```json
@@ -749,7 +749,7 @@ The engine evaluates `when` predicates in order and uses the first match. The la
 **How to set it up:**
 
 1. **Set the model's epoch** in the Time & Schedules tab → "Real-world start date/time". This anchors simulation time to a real calendar datetime. Without an epoch, calendar variables return defaults (isWeekday=true, hourOfDay=0).
-2. **Use calendar variables** in your C-Event conditions:
+2. **Use calendar variables** in your Conditional Event conditions:
    - `isWeekday` — boolean, true Monday-Friday
    - `isWeekend` — boolean, true Saturday-Sunday
    - `hourOfDay` — integer 0-23
@@ -769,11 +769,11 @@ Condition: queue(MaintenanceQueue).length >= 1 AND isWeekend
 
 **Validation:** If you use calendar variables without setting an epoch, validation rule V-CAL-1 warns that the variables will return defaults. Set the epoch to get real calendar-aware behavior.
 
-### 5.8 Finding what a scheduled B-Event actually does
+### 5.8 Finding what a scheduled Bound Event actually does
 
-Each row in a C-Event's **Schedule Follow-on Event** panel shows a one-line, plain-language summary of the linked B-Event's effect right under the schedule preview — e.g. "Releases Nurse · routes 80% → Discharge Queue, 20% → Transfer Queue" or "Entity exits simulation." Macros without a friendly phrase yet (FILL, PREEMPT, FAIL, …) fall back to showing the raw macro call instead of being hidden. Click the bolded B-Event name to jump straight to it in the **B-Events** tab.
+Each row in a Conditional Event's **Schedule Follow-on Event** panel shows a one-line, plain-language summary of the linked Bound Event's effect right under the schedule preview — e.g. "Releases Nurse · routes 80% → Discharge Queue, 20% → Transfer Queue" or "Entity exits simulation." Macros without a friendly phrase yet (FILL, PREEMPT, FAIL, …) fall back to showing the raw macro call instead of being hidden. Click the bolded Bound Event name to jump straight to it in the **Bound Events** tab.
 
-The link works the other way too: open a B-Event in the **B-Events** editor, and if any C-Event schedules it as a follow-on, a **"Scheduled by"** link appears — click it to jump back to that C-Event.
+The link works the other way too: open a Bound Event in the **Bound Events** editor, and if any Conditional Event schedules it as a follow-on, a **"Scheduled by"** link appears — click it to jump back to that Conditional Event.
 
 ---
 
@@ -781,15 +781,15 @@ The link works the other way too: open a B-Event in the **B-Events** editor, and
 
 | Term | Definition |
 |------|-----------|
-| **B-Event** | A *bound* event: scheduled to fire at a specific time (e.g. an arrival, a service completion). Defined in the B-Events editor. |
-| **C-Event** | A *conditional* event: fires when a state condition is true (e.g. "entity waiting AND server idle"). Defined in the C-Events editor using the Predicate Builder. |
+| **Bound Event** | Also called a "B-Event" in classic three-phase DES. Scheduled to fire at a specific time (e.g. an arrival, a service completion). Defined in the Bound Events editor. |
+| **Conditional Event** | Also called a "C-Event" in classic three-phase DES. Fires when a state condition is true (e.g. "entity waiting AND server idle"). Defined in the Conditional Events editor using the Predicate Builder. |
 | **Confidence interval (CI)** | A between-replication t-confidence interval: the engine computes one mean per replication, then applies Student's t across those replication-level means. Narrower CIs → more reliable results (use more replications). For two-scenario comparison the UI uses paired-t confidence intervals with Bonferroni correction. (Note: `tukeyHSD()` and `oneWayANOVA()` are implemented in the engine but not yet exposed in the UI.) |
 | **Entity** | An object that flows through the model: a customer, patient, train, job. |
 | **Entity Family / Inheritance** | An entity type can set "Inherits from" to another entity type of the same role, picking up its attributes, skills, and skill profiles at run time (child definitions override the parent's by name). Set in the Entity Types editor. |
-| **Future Event List (FEL)** | The engine's internal queue of scheduled B-Events, ordered by time. |
+| **Future Event List (FEL)** | The engine's internal queue of scheduled Bound Events, ordered by time. |
 | **Macro** | A named effect instruction applied to entities or resources. The full set of 24 supported macros is: `ARRIVE`, `ASSIGN`, `BATCH`, `CANCEL`, `COMPLETE`, `COSEIZE`, `COST`, `DELAY`, `DRAIN`, `FAIL`, `FILL`, `FINISH`, `MATCH`, `PREEMPT`, `RELEASE`, `RELEASE_COSEIZED`, `RENEGE`, `RENEGE_OLDEST`, `REPAIR`, `ROUND_ROBIN`, `SET`, `SET_ATTR`, `SPLIT`, `UNBATCH`. `RELEASE_COSEIZED([Type1, Type2, ...], QueueName?)` atomically releases all servers seized together by a `COSEIZE` and is the correct way to free co-seized resources without ending the entity's lifecycle — never stack separate `RELEASE(Type)` calls for co-seized types. |
 | **MTBF / MTTR** | Mean time between failures / mean time to repair. Used for resource failure modelling. |
-| **Predicate Builder** | The point-and-click condition editor for C-Events. Prevents type mismatches; no free-text logic. |
+| **Predicate Builder** | The point-and-click condition editor for Conditional Events. Prevents type mismatches; no free-text logic. |
 | **Replication** | One independent run of the simulation from start to finish with a unique random seed. |
 | **Resource** | A capacity-limited service provider (server, machine, nurse, lane). |
 | **Seed** | The starting value for the pseudo-random number generator. The same seed always produces the same sequence of random samples (reproducibility). |
@@ -803,7 +803,7 @@ The link works the other way too: open a B-Event in the **B-Events** editor, and
 | **Schedule Adherence** | A per-resource metric comparing actual utilisation to the expected utilisation implied by the weekly schedule pattern. Shown as a colour-coded badge in resource cards (green ≤ 10 % gap, amber ≤ 25 %, red > 25 %). Only computed for server entity types with `schedulePattern.type === 'weekly'`. |
 | **Schedule Pattern** | A repeating 24×7 grid (hours × days of the week) defining the expected capacity of a server entity type at every hour of the week. Set in the Entity Types editor via the **Weekly Schedule Pattern** toggle. The grid interacts with the shift schedule — the shift defines rostered staff, the pattern defines planned deployment. |
 | **Required Sequence** | An ordered list of queues a customer entity type is expected to visit, set in the Entity Types editor's **Required Sequence** panel. Design-time only — validation warns if routing ever sends this entity type backward through the declared stages, but the engine does not otherwise enforce the order. |
-| **Distance** | A named, undirected travel distance between two queues, set in the **Model Data** tab. Consumed by picking **Distance** as a C-event schedule's delay distribution, which computes duration as distance ÷ a speed attribute read from the assigned server or arriving entity. |
+| **Distance** | A named, undirected travel distance between two queues, set in the **Model Data** tab. Consumed by picking **Distance** as a Conditional event schedule's delay distribution, which computes duration as distance ÷ a speed attribute read from the assigned server or arriving entity. |
 | **Model Data (tab)** | The Model Detail tab holding small named building blocks that other parts of the model reference by name — Skills (server capabilities), Containers (tanks/buffers), Distances (travel time between queues), and State Variables (counters, gates, tracked values). |
 | **Time & Schedules (tab)** | The Model Detail tab holding simulation time configuration (time unit, real-world epoch) and named schedules for time-varying arrival rates. |
 | **Data Sources (tab)** | The Model Detail tab for connecting live data feeds that drive arrivals or entity attributes. |

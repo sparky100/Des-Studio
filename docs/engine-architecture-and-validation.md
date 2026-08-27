@@ -43,7 +43,7 @@ approach (`src/engine/phases.js`, `src/engine/index.js`):
   entry in the Future Event List (FEL): `T_now = fel[0].scheduledTime`.
 - **Phase B** — fire every *bound* (time-triggered) event due at `T_now`
   (within `1e-9` tolerance), in deterministic order, applying each
-  B-Event's macro sequence (`ARRIVE`, `ASSIGN`, `COMPLETE`, `RELEASE`, …)
+  Bound Event's macro sequence (`ARRIVE`, `ASSIGN`, `COMPLETE`, `RELEASE`, …)
   and rescheduling any follow-on events.
 - **Phase C** — scan all *conditional* events in ascending priority order;
   evaluate each one's predicate against current state; if any fires,
@@ -246,7 +246,7 @@ at all, since they don't support live model mutation.
 retired) before any model is allowed to run — covering missing
 sources/sinks, dangling queue references, non-numeric scheduled times,
 unbalanced server counts, invalid balk probabilities, and macro-ordering
-hazards (e.g. V38: `RELEASE` before `COMPLETE` in the same B-Event). This
+hazards (e.g. V38: `RELEASE` before `COMPLETE` in the same Bound Event). This
 is itself a form of testing — a static correctness gate run on every model
 before simulation, analogous to a type-checker for the model DSL.
 

@@ -20,12 +20,12 @@ Items arrive → [Queue] → BATCH collects N → [batch entity] → (Worker) �
 ## Minimal template
 
 ```
-B-events:
+Bound events:
   ItemArrival  t=0   ARRIVE(Item, Items)
                  ↳ reschedule self: Exponential(mean)
   WorkDone     t=∞   COMPLETE()
 
-C-events:
+Conditional events:
   DoBatch  priority=1  condition: queue(Items).length >= N
                         effect:    BATCH(Items, N)
 
@@ -38,11 +38,11 @@ Servers: Worker count=w
 ```
 
 ## Important ordering
-The BATCH C-event must have **lower priority number** (fires first) than the ASSIGN C-event. This ensures batches are formed before workers try to seize them. After `BATCH(Items, N)` fires, the N items are merged into a single batch entity that remains in the queue with role `"batch"`. The ASSIGN then picks up the batch entity.
+The BATCH Conditional event must have **lower priority number** (fires first) than the ASSIGN Conditional event. This ensures batches are formed before workers try to seize them. After `BATCH(Items, N)` fires, the N items are merged into a single batch entity that remains in the queue with role `"batch"`. The ASSIGN then picks up the batch entity.
 
 ## Notes
 - `result.summary.departures` counts batches, not individual items. Multiply by N for throughput.
-- Do not put `cSchedules` on the BATCH C-event — scheduling happens on the ASSIGN C-event.
+- Do not put `cSchedules` on the BATCH Conditional event — scheduling happens on the ASSIGN Conditional event.
 - Batch size N must be a positive integer literal; it cannot be a runtime variable.
 
 ## Example templates
