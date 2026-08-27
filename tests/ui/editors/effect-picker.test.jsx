@@ -289,6 +289,56 @@ describe("EffectPicker — COSEIZE composer v2 (Sprint 94, audit gap 6)", () => 
     expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
   });
 
+  // Sprint 95 — COSEIZE Type:N quantity syntax
+  it("raising row 1's quantity emits Type:N", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={oneQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
+    fireEvent.change(screen.getByLabelText("Quantity for server type row 1"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["COSEIZE(Triage Queue, Nurse:2, Doctor)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("combines a per-row skill and quantity: Nurse[Triage]:2", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
+    fireEvent.change(screen.getAllByDisplayValue("— no skill —")[0], { target: { value: "Triage" } });
+    fireEvent.change(screen.getByLabelText("Quantity for server type row 1"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["COSEIZE(Triage Queue, Nurse[Triage]:2, Doctor)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("disables Add when a row's quantity is zero or empty", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={oneQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
+    fireEvent.change(screen.getByLabelText("Quantity for server type row 1"), { target: { value: "0" } });
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Quantity for server type row 1"), { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
+  it("disables Add when a row's quantity is non-numeric", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={oneQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
+    fireEvent.change(screen.getByLabelText("Quantity for server type row 1"), { target: { value: "abc" } });
+
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
   it("cannot remove a row below the two-row minimum", () => {
     render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={oneQueueCtx} />);
 

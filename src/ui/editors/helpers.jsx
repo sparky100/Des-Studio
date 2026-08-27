@@ -439,7 +439,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const [matchTarget, setMatchTarget] = useState('');
   const [opQueue, setOpQueue] = useState('');
   const [opContainer, setOpContainer] = useState('');
-  const [coseizeRows, setCoseizeRows] = useState([]); // [{type, skill}], skill '' = none
+  const [coseizeRows, setCoseizeRows] = useState([]); // [{type, skill, qty}], skill '' = none, qty default 1
   const [batchSizeMode, setBatchSizeMode] = useState('literal'); // 'literal' | 'attribute'
   const [batchAttr, setBatchAttr] = useState('');
   const [splitType, setSplitType] = useState(''); // '' = follow the target queue's type
@@ -482,8 +482,15 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
     if (exprMacro === 'COSEIZE') {
       const types = coseizeRows.map(r => r.type).filter(Boolean);
       const hasDup = new Set(types).size !== types.length;
-      if (!opQueue || coseizeRows.length < 2 || types.length < coseizeRows.length || hasDup) return;
-      const args = coseizeRows.map(r => r.skill ? `${r.type}[${r.skill}]` : r.type).join(', ');
+      const qtys = coseizeRows.map(r => parseInt(r.qty, 10) || 1);
+      const hasBadQty = coseizeRows.some(r => !Number.isInteger(parseInt(r.qty, 10)) || parseInt(r.qty, 10) < 1);
+      if (!opQueue || coseizeRows.length < 2 || types.length < coseizeRows.length || hasDup || hasBadQty) return;
+      // Quantity suffix (Sprint 95) only appears when >1, so the default
+      // (every row at qty 1) emits byte-identical strings to before.
+      const args = coseizeRows.map((r, i) => {
+        const base = r.skill ? `${r.type}[${r.skill}]` : r.type;
+        return qtys[i] > 1 ? `${base}:${qtys[i]}` : base;
+      }).join(', ');
       add(`COSEIZE(${opQueue}, ${args})`);
       return;
     }
@@ -736,8 +743,8 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     setExprMacro('COSEIZE');
                     if(!opQueue)setOpQueue(matchQueues[0].name);
                     if(coseizeRows.length<2)setCoseizeRows([
-                      {type:serverTypes[0],skill:''},
-                      {type:serverTypes[1],skill:''},
+                      {type:serverTypes[0],skill:'',qty:1},
+                      {type:serverTypes[1],skill:'',qty:1},
                     ]);
                   }}
                   style={{background:exprMacro==='COSEIZE'?C.red+'22':'transparent',
@@ -799,6 +806,12 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                         <option value="">— no skill —</option>
                         {rowSkills.map(sk=><option key={sk} value={sk}>{sk}</option>)}
                       </select>
+                      <input type="number" min={1} step={1} value={row.qty ?? 1}
+                        onChange={e=>updateRow(idx,{qty:e.target.value})}
+                        aria-label={`Quantity for server type row ${idx+1}`}
+                        style={{width:56,background:C.bg,border:`1px solid ${C.red}55`,borderRadius:4,
+                          color:C.red,fontFamily:FONT,fontSize:12,padding:'6px 4px'}}
+                      />
                       {coseizeRows.length>2&&(
                         <button onClick={()=>removeRow(idx)} aria-label={`Remove server type row ${idx+1}`}
                           style={{background:'none',border:'none',color:C.red,cursor:'pointer',padding:0,fontSize:13}}>✕</button>
@@ -807,7 +820,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   );
                 })}
                 {nextUnusedType&&(
-                  <button onClick={()=>setCoseizeRows(rows=>[...rows,{type:nextUnusedType,skill:''}])}
+                  <button onClick={()=>setCoseizeRows(rows=>[...rows,{type:nextUnusedType,skill:'',qty:1}])}
                     style={{alignSelf:'flex-start',background:'transparent',border:`1px dashed ${C.red}55`,
                       borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
                       color:C.red,cursor:'pointer',fontWeight:700}}>＋ add server type</button>
@@ -980,7 +993,11 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   disabled={
                     exprMacro==='CANCEL' ? !exprName
                     : exprMacro==='MATCH' ? (!matchQueueA||!matchQueueB||!matchTarget)
-                    : exprMacro==='COSEIZE' ? (()=>{const types=coseizeRows.map(r=>r.type).filter(Boolean);return !opQueue||coseizeRows.length<2||types.length<coseizeRows.length||new Set(types).size!==types.length;})()
+                    : exprMacro==='COSEIZE' ? (()=>{
+                        const types=coseizeRows.map(r=>r.type).filter(Boolean);
+                        const badQty=coseizeRows.some(r=>!Number.isInteger(parseInt(r.qty,10))||parseInt(r.qty,10)<1);
+                        return !opQueue||coseizeRows.length<2||types.length<coseizeRows.length||new Set(types).size!==types.length||badQty;
+                      })()
                     : exprMacro==='BATCH' ? (!opQueue||(batchSizeMode==='attribute'?!batchAttr:!exprValue.trim()))
                     : exprMacro==='SPLIT' ? (!opQueue||!exprValue.trim())
                     : exprMacro==='DRAIN'||exprMacro==='FILL' ? (!opContainer||!(isPositiveNumber(exprValue.trim())||isValidAmountExpr(exprValue.trim(),stateVars)))
