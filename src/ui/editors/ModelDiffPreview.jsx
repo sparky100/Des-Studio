@@ -3,6 +3,7 @@ import { validateModel } from "../../engine/validation.js";
 import { Btn, Empty, SH, Tag } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { METRIC_LABELS } from "../execute/executeHelpers.js";
+import { getPiecewisePeriods } from "../../engine/distributions.js";
 
 const SECTION_META = [
   { key: "entityTypes", label: "Entity Classes" },
@@ -191,29 +192,49 @@ function deriveSimulationSummary(proposedModel = {}) {
   const serverTypes = entityTypes.filter(e => e.role === "server");
   const entityName = customerType?.name || "entities";
 
-  // WHO ARRIVES — full sentence from arrival B-event
-  let arrivalText = null;
-  const arrivalEvent = bEvents.find(ev => {
+  // WHO ARRIVES — one line per arrival B-event, so multi-stream models (e.g.
+  // separate acuity levels, or day/night-varying rates) are all represented
+  // instead of only the first ARRIVE() event found.
+  const describeDist = (dist, params = {}) => {
+    if (/exponential/i.test(dist) && params.mean) return `every ~${params.mean} time units (Exponential)`;
+    if (/fixed/i.test(dist) && params.value) return `every ${params.value} time units (Fixed)`;
+    if (/triangular/i.test(dist) && params.mode) return `every ~${params.mode} time units (Triangular)`;
+    if (/uniform/i.test(dist) && params.min != null && params.max != null) return `every ${params.min}-${params.max} time units (Uniform)`;
+    if (/erlang/i.test(dist) && params.mean) return `every ~${params.mean} time units (Erlang)`;
+    if (dist) return `(${dist} distribution)`;
+    return null;
+  };
+  const describeSchedule = (schedule) => {
+    if (!schedule) return null;
+    const dist = schedule.dist || schedule.type || "";
+    if (/piecewise/i.test(dist)) {
+      const periods = getPiecewisePeriods(schedule.distParams || {});
+      if (!periods.length) return "time-varying arrivals (piecewise)";
+      const parts = periods.map(period => {
+        const raw = period.distribution || period;
+        const periodDist = raw.dist || raw.type || "Fixed";
+        const periodParams = raw.distParams || raw.params || period;
+        const desc = describeDist(periodDist, periodParams) || `(${periodDist})`;
+        const start = period.startTime ?? period.time ?? 0;
+        return `from t=${start}: ${desc}`;
+      });
+      return `time-varying arrivals — ${parts.join("; ")}`;
+    }
+    return describeDist(dist, schedule.distParams || {});
+  };
+  const arrivalEvents = bEvents.filter(ev => {
     const eff = Array.isArray(ev.effect) ? ev.effect.join(";") : String(ev.effect || "");
     return /\bARRIVE\(/i.test(eff);
   });
-  if (arrivalEvent) {
-    const schedule = Array.isArray(arrivalEvent.schedules) ? arrivalEvent.schedules[0] : null;
-    if (schedule) {
-      const dist = schedule.dist || schedule.type || "";
-      const params = schedule.distParams || {};
-      if (/exponential/i.test(dist) && params.mean) {
-        const mean = parseFloat(params.mean);
-        if (mean > 0) arrivalText = `${entityName} arrive approximately every ${mean} time units (Exponential distribution)`;
-      } else if (/fixed/i.test(dist) && params.value) {
-        arrivalText = `${entityName} arrive every ${params.value} time units (Fixed)`;
-      } else if (/triangular/i.test(dist) && params.mode) {
-        arrivalText = `${entityName} arrive approximately every ${params.mode} time units (Triangular distribution)`;
-      } else if (dist) {
-        arrivalText = `${entityName} arrive (${dist} distribution)`;
-      }
-    }
-  }
+  const arrivalLines = arrivalEvents.map(ev => {
+    const schedule = Array.isArray(ev.schedules) ? ev.schedules[0] : null;
+    const desc = describeSchedule(schedule);
+    if (!desc) return null;
+    // Only prefix with the event's own label when there's more than one arrival
+    // stream — otherwise a plain "<entity> arrive ..." sentence reads better.
+    const label = arrivalEvents.length > 1 ? (ev.name || ev.id || "Arrivals") : entityName;
+    return `${label} arrive ${desc}`;
+  }).filter(Boolean);
 
   // HOW THEY FLOW — per-stage flow path derived from queues + C-events + B-events
   const flowLines = queues.map(queue => {
@@ -287,14 +308,14 @@ function deriveSimulationSummary(proposedModel = {}) {
     : Array.isArray(experimentDefaults.goals) ? experimentDefaults.goals : [];
   const goals = goalsArr.filter(Boolean);
 
-  return { entityName, arrivalText, flowLines, renegeText, resourceLines, experimentText, goals };
+  return { entityName, arrivalLines, flowLines, renegeText, resourceLines, experimentText, goals };
 }
 
 function SimulationSummaryCard({ proposedModel }) {
   const { C, FONT } = useTheme();
-  const { entityName, arrivalText, flowLines, renegeText, resourceLines, experimentText, goals } = deriveSimulationSummary(proposedModel);
+  const { entityName, arrivalLines, flowLines, renegeText, resourceLines, experimentText, goals } = deriveSimulationSummary(proposedModel);
 
-  const hasContent = arrivalText || flowLines.length > 0 || resourceLines.length > 0 || experimentText || goals.length > 0;
+  const hasContent = arrivalLines.length > 0 || flowLines.length > 0 || resourceLines.length > 0 || experimentText || goals.length > 0;
   if (!hasContent) return null;
 
   const sectionLabel = { color: C.muted, fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 1, marginBottom: 4, textTransform: "uppercase" };
@@ -312,10 +333,12 @@ function SimulationSummaryCard({ proposedModel }) {
         {entityName} flowing through the system
       </div>
 
-      {arrivalText && (
+      {arrivalLines.length > 0 && (
         <div>
           <div style={sectionLabel}>Who arrives</div>
-          <div style={rowStyle}>{arrivalText}</div>
+          {arrivalLines.map((line, i) => (
+            <div key={i} style={rowStyle}>{line}</div>
+          ))}
         </div>
       )}
 
