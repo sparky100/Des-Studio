@@ -897,7 +897,7 @@ The complete macro set implemented in the engine. This is the authoritative list
 | RENEGE | B-Event | 1 | Removes entity from queue after patience timeout; routes to Sink |
 | BATCH | C-Event | 12 | Accumulates N entities per queue discipline into a parent batch entity |
 | UNBATCH | B-Event | 12 | Restores children from a parent batch to a target queue |
-| PREEMPT | B-Event | 32 | Interrupts busy server; re-queues displaced entity with remaining service time |
+| PREEMPT | B-Event | 32 | `PREEMPT(ServerType[, Criterion])` — interrupts a busy server; re-queues displaced entity with remaining service time. Criterion (`PRIORITY(attr)`/`LONGEST`/`SHORTEST`) selects which busy server when more than one qualifies (default: first busy server) |
 | FAIL | B-Event | 32 | `FAIL(ServerType[, N])` — sets up to N matching servers to failed status, idle-preferred (default: all) |
 | REPAIR | B-Event | 32 | `REPAIR(ServerType[, N])` — restores up to N failed servers to idle, oldest-failure-first (default: all) |
 | SPLIT | C/B-Event | 33 | `SPLIT(EntityType, N, Queue)` — exactly 3 args. Creates N-1 clones of the context entity and routes them to Queue; records `_splitParent`/`_splitChildren`. Trigger from a one-shot context only (e.g. a cSchedule-fired B-event) — a recurring C-event condition on the same entity/queue will refire unboundedly since SPLIT doesn't change the context entity's status. |

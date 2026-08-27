@@ -145,10 +145,10 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 | Macro | Syntax | Purpose | Side Effects | Common Mistakes |
 |-------|--------|---------|--------------|-----------------|
-| PREEMPT | `PREEMPT(ServerType)` | Interrupts in-service entity, replaces with higher-priority entity | Displaced entity re-queues with remaining service preserved; if the entity was co-seized (COSEIZE), any other claimed servers are released too | Using without priority queue discipline |
+| PREEMPT | `PREEMPT(ServerType[, Criterion])` | Interrupts an in-service entity of a busy server, replaces with a higher-priority entity. Optional Criterion selects which busy server to interrupt when more than one is busy: `PRIORITY(attrName)` (lowest value targeted), `LONGEST`/`SHORTEST` (by elapsed service time). Omitted or unrecognized criterion picks the first busy server (today's behavior). | Displaced entity re-queues with remaining service preserved; if the entity was co-seized (COSEIZE), any other claimed servers are released too | Using without priority queue discipline |
 | FAIL | `FAIL(ServerType[, N])` | Places up to N servers into failed (unavailable) state; interrupts any in-progress service on servers that must be preempted. Omitted or non-positive N means "all" (unchanged behavior). Prefers idle servers first — busy/serving ones are only touched once idle capacity runs out. | Sets server(s) to failed; in-progress entity re-queues with remaining service time; if the entity was co-seized (COSEIZE), any other claimed servers are released too | For pool scope, all servers fail at once; prefer unit scope for realistic modelling; requesting more than N are available fails all available and notes the shortfall |
 | REPAIR | `REPAIR(ServerType[, N])` | Restores up to N failed servers to idle, oldest-failure-first. Omitted or non-positive N means "all" (unchanged behavior). | Sets server(s) to idle; triggers C-scan | Repairing non-failed server (no effect); requesting more than N are failed repairs all failed and notes the shortfall |
-| FINISH | `FINISH(ServerType)` | Ends the in-progress service of whichever entity a busy server of ServerType is currently serving — right now, not at a scheduled time | Marks the entity done, releases the server, records the stage — same outcome as COMPLETE() but triggered by a condition instead of a delay | Use for "activity of unknown duration" (service ends when a condition becomes true); no busy server of that type → logs and no-ops |
+| FINISH | `FINISH(ServerType[, Criterion])` | Ends the in-progress service of the entity a busy server of ServerType is currently serving — right now, not at a scheduled time. Optional Criterion (same vocabulary as PREEMPT: `PRIORITY(attrName)`, `LONGEST`, `SHORTEST`) selects which busy server to target when more than one is busy; omitted or unrecognized criterion picks the first busy server (today's behavior). | Marks the entity done, releases the server, records the stage — same outcome as COMPLETE() but triggered by a condition instead of a delay | Use for "activity of unknown duration" (service ends when a condition becomes true); no busy server of that type → logs and no-ops |
 
 ### Resource-Free Activity Macros
 
@@ -1118,7 +1118,7 @@ Exports any model as a runnable Python SimPy script, or runs it directly in the 
 
 **Category 1 supported macros:** `ARRIVE`, `ASSIGN`, `COSEIZE`, `COMPLETE`, `RELEASE`, `FILL`, `DRAIN`, `SPLIT`, `SET`, `SET_ATTR`, `COST`, `UNBATCH`.
 
-**Category 2 macros (stubs generated):** `RENEGE`, `BATCH`, `RENEGE_OLDEST`, `MATCH`, `FAIL`, `REPAIR`, `PREEMPT`, `RELEASE_COSEIZED`. Note: all of these are fully implemented in the JS Three-Phase engine — they appear as stubs only because their Python translation is non-trivial to auto-generate.
+**Category 2 macros (stubs generated):** `RENEGE`, `BATCH`, `RENEGE_OLDEST`, `MATCH`, `FAIL`, `REPAIR`, `PREEMPT`, `FINISH`, `RELEASE_COSEIZED`. Note: all of these are fully implemented in the JS Three-Phase engine — they appear as stubs only because their Python translation is non-trivial to auto-generate.
 
 ### Run in Browser
 

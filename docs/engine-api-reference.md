@@ -338,10 +338,10 @@ rng(); // → number in [0, 1)
 | `RELEASE(Server[, Queue])` | Release server without completing; re-queue entity if Queue given |
 | `RENEGE(ctx)` | Remove context entity from queue (abandonment) |
 | `RENEGE_OLDEST(Queue)` | Remove oldest waiting entity from Queue |
-| `PREEMPT(Server)` | Interrupt mid-service; entity re-queues with remaining service |
+| `PREEMPT(Server[, Criterion])` | Interrupt mid-service; entity re-queues with remaining service. Criterion (`PRIORITY(attr)`/`LONGEST`/`SHORTEST`) selects which busy server when more than one qualifies; default: first busy server |
 | `FAIL(Server[, N])` | Mark up to N Server units as failed (idle-preferred; default: all); interrupt any in-progress service that must be preempted |
 | `REPAIR(Server[, N])` | Restore up to N failed Server units to idle, oldest-failure-first (default: all); trigger C-scan |
-| `FINISH(Server)` | End the in-progress service of whichever entity a busy Server is currently serving, right now — for condition-triggered completion ("activity of unknown duration") instead of a scheduled delay. No busy server of that type → no-op. |
+| `FINISH(Server[, Criterion])` | End the in-progress service of whichever entity a busy Server is currently serving, right now — for condition-triggered completion ("activity of unknown duration") instead of a scheduled delay. Criterion (`PRIORITY(attr)`/`LONGEST`/`SHORTEST`) selects which busy server when more than one qualifies; default: first busy server. No busy server of that type → no-op. |
 | `SPLIT(Type, N, Queue)` | Clone context entity N-1 times; place clones in Queue. Requires exactly 3 args — a 2-arg `SPLIT(N, Queue)` is invalid and silently does nothing. Trigger from a one-shot context (a cSchedule-fired B-event), never a recurring C-event condition on the entity's own queue: SPLIT doesn't change the context entity's status, so a condition that stays true refires it unboundedly. |
 | `BATCH(Queue[, Size\|Entity.attr])` | Accumulate N entities from Queue into one batch entity |
 | `UNBATCH(Queue)` | Release batch members back as individual entities |

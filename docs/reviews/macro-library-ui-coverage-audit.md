@@ -81,8 +81,12 @@ supports the feature but no picker can write it. Group B is genuine engine limit
 
 ### Group B — engine-level limits (UI faithfully reflects them)
 
-- **FINISH / PREEMPT take the first busy server** of the type — no victim-selection criterion
-  (e.g. "preempt the lowest-priority in-service entity").
+- ~~**FINISH / PREEMPT take the first busy server** of the type — no victim-selection criterion
+  (e.g. "preempt the lowest-priority in-service entity").~~ **Closed by Sprint 97** — see
+  `docs/reviews/sprint-97-preempt-finish-victim-selection-plan.md`. `PREEMPT(Type, Criterion)` /
+  `FINISH(Type, Criterion)` accept `PRIORITY(attrName)` (lowest value targeted), `LONGEST`, or
+  `SHORTEST` (by elapsed service time). Omitted or unrecognized criterion keeps today's
+  first-busy-server behavior.
 - ~~**FAIL / REPAIR are all-or-nothing per server type** — no partial `FAIL(Type, N)` for modelling a
   single machine of a bank breaking down.~~ **Closed by Sprint 96** — see
   `docs/reviews/sprint-96-fail-repair-quantities-plan.md`. `FAIL(Type, N)` fails up to N servers

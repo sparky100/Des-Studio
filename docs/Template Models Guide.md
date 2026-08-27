@@ -255,7 +255,7 @@ The model also uses `PREEMPT` to allow urgent jobs (flagged with `urgent = 1`) t
 - `ASSIGN(Machining, Machine)` — seizes a machine, schedules completion
 - `FAIL(Machine)` — B-Event fires at MTBF interval; sets machine status to `failed`, re-queues interrupted job
 - `REPAIR(Machine)` — B-Event fires after MTTR; restores machine to `idle`
-- `PREEMPT(Machine)` — C-Event for urgent jobs; interrupts current job, records remaining service time
+- `PREEMPT(Machine)` — B-Event for urgent jobs; interrupts current job, records remaining service time
 - `COMPLETE()` — job departs, machine freed
 
 **Entity type fields:** `mtbf = 120`, `mttr = 20` on the Machine entity type (Sprint 42 fields)
@@ -521,7 +521,8 @@ When you open a template, simmodlr saves a **private copy** to your account. The
 | `RENEGE_OLDEST(EntityType)` | B-Event | Removes the oldest waiting entity of a given type from queue |
 | `BATCH(QueueName, Count)` | C-Event | Accumulates N entities into one batch |
 | `UNBATCH(BatchEntity)` | B-Event | Restores children from parent batch entity |
-| `PREEMPT(ServerType)` | C-Event | Interrupts busy servers; re-queues entity with remaining service |
+| `PREEMPT(ServerType[, Criterion])` | B-Event | Interrupts a busy server; re-queues entity with remaining service. Criterion (`PRIORITY(attr)`/`LONGEST`/`SHORTEST`) selects which busy server when more than one qualifies (default: first busy server) |
+| `FINISH(ServerType[, Criterion])` | C-Event | Ends a busy server's in-progress service right now, on a condition instead of a scheduled delay ("activity of unknown duration"); same Criterion vocabulary as PREEMPT |
 | `FAIL(ServerType[, N])` | B-Event | Sets up to N matching servers to failed status, idle-preferred (default: all); re-queues busy entities that must be preempted |
 | `REPAIR(ServerType[, N])` | B-Event | Restores up to N failed servers to idle status, oldest-failure-first (default: all) |
 | `SPLIT(EntityType, N, TargetQueue)` | B/C-Event | Creates N-1 clones of context entity |
