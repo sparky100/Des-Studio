@@ -421,6 +421,50 @@ describe("exportToSimPy", () => {
       const result = exportToSimPy(coseizeModel);
       expect(result.script).toContain("_normal(30, 5)");
     });
+
+    // Sprint 95 — COSEIZE Type:N quantity syntax
+    describe("Type:N quantity", () => {
+      const qtyModel = {
+        ...coseizeModel,
+        cEvents: [{ ...coseizeModel.cEvents[0], effect: "COSEIZE(WaitRoom, Doctor, Nurse:2)" }],
+      };
+
+      it("generates two .request() calls for Nurse and one for Doctor, all against the same resource variable per type", () => {
+        const result = exportToSimPy(qtyModel);
+        const nurseRequests = result.script.match(/Nurse_resource\.request\(priority=9999\)/g) || [];
+        const doctorRequests = result.script.match(/Doctor_resource\.request\(priority=9999\)/g) || [];
+        expect(nurseRequests).toHaveLength(2);
+        expect(doctorRequests).toHaveLength(1);
+      });
+
+      it("combines all requests into a single simpy.AllOf", () => {
+        const result = exportToSimPy(qtyModel);
+        expect(result.script).toMatch(/simpy\.AllOf\(env, \[_req0, _req1, _req2\]\)/);
+      });
+
+      it("scales resource_busy accounting by qty for the quantity-seized type", () => {
+        const result = exportToSimPy(qtyModel);
+        expect(result.script).toContain('stats.resource_busy["Nurse"] = stats.resource_busy.get("Nurse", 0.0) + 2 * _svc_t');
+        expect(result.script).not.toContain('stats.resource_busy["Nurse"] = stats.resource_busy.get("Nurse", 0.0) + _svc_t');
+        expect(result.script).toContain('stats.resource_busy["Doctor"] = stats.resource_busy.get("Doctor", 0.0) + _svc_t');
+      });
+
+      it("default quantity (no :N) stays byte-identical to before (regression)", () => {
+        const result = exportToSimPy(coseizeModel);
+        expect(result.script).toContain('stats.resource_busy["Doctor"] = stats.resource_busy.get("Doctor", 0.0) + _svc_t');
+        expect(result.script).toContain('stats.resource_busy["Nurse"] = stats.resource_busy.get("Nurse", 0.0) + _svc_t');
+      });
+    });
+
+    it("strips a [Skill] bracket so the resource variable matches the declared resource (regression for a pre-existing bug)", () => {
+      const skilledModel = {
+        ...coseizeModel,
+        cEvents: [{ ...coseizeModel.cEvents[0], effect: "COSEIZE(WaitRoom, Doctor[Surgery], Nurse)" }],
+      };
+      const result = exportToSimPy(skilledModel);
+      expect(result.script).toContain("Doctor_resource.request(priority=9999)");
+      expect(result.script).not.toContain("DoctorSurgery_resource");
+    });
   });
 
   describe("entity dataclasses", () => {

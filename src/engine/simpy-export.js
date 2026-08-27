@@ -72,6 +72,23 @@ function safeId(name) {
   return s || 'unnamed';
 }
 
+// Parse one COSEIZE argument "Type[Skill]:N" — mirrors the engine's own
+// runtime parser (src/engine/macros.js COSEIZE handler) so the syntax means
+// the same thing in the live engine and the exported SimPy script. This
+// module has no JS import path into macros.js, so this is a deliberate,
+// kept-in-sync duplication (same pattern this file already uses elsewhere).
+// Stripping "[Skill]" here also fixes a pre-existing bug: safeId() alone
+// doesn't remove brackets, so a skilled arg like "Doctor[Surgery]" used to
+// generate a resource variable name ("DoctorSurgery_resource") that matched
+// nothing actually declared.
+/** @param {any} arg */
+function parseCoseizeArg(arg) {
+  const m = String(arg || '').trim().match(/^([^\[:]+?)\s*(?:\[\s*([^\]]+?)\s*\])?\s*(?::\s*(\d+))?$/);
+  if (!m) return { type: String(arg || '').trim(), skill: null, qty: 1 };
+  const rawQty = m[3] ? parseInt(m[3], 10) : 1;
+  return { type: m[1].trim(), skill: m[2] ? m[2].trim() : null, qty: (Number.isFinite(rawQty) && rawQty > 0) ? rawQty : 1 };
+}
+
 // Convert to PascalCase class name
 /** @param {any} name */
 function toPascal(name) {
@@ -655,7 +672,8 @@ class Stats:
       const isCoseize = assignCall.name === 'COSEIZE';
       const args = assignCall.rawArgs.split(',').map((/** @type {any} */ s) => s.trim());
       const queueName = args[0];
-      const serverTypes = isCoseize ? args.slice(1) : [args[1]];
+      const coseizeDefs = isCoseize ? args.slice(1).map(parseCoseizeArg) : null;
+      const serverTypes = isCoseize ? coseizeDefs.map((/** @type {any} */ d) => d.type) : [args[1]];
       const storeId = safeId(queueName) + '_store';
 
       const { dist: svcDist, distParams: svcParams, placeholder } = getServiceDist(c);
@@ -670,7 +688,10 @@ class Stats:
       const monFn = safeId(c.name || 'service') + '_monitor';
       const svcFn = safeId(c.name || 'service') + '_serve';
 
-      // Resource arguments string
+      // Resource arguments string — one variable per distinct TYPE (a
+      // quantity-N COSEIZE arg still shares one underlying simpy.Resource;
+      // qty controls how many .request() calls are issued against it below,
+      // not how many resource variables exist).
       const resArgs = serverTypes.map((/** @type {any} */ st) => safeId(st) + '_resource').join(', ');
       const resVars = serverTypes.map((/** @type {any} */ st) => safeId(st) + '_resource');
 
@@ -681,10 +702,23 @@ class Stats:
       // COSEIZE: AllOf across multiple resources
       let seizeBlock;
       if (isCoseize) {
-        const reqVars = resVars.map((/** @type {any} */ r, /** @type {number} */ i) => `_req${i}`);
-        const reqDecls = resVars.map((/** @type {any} */ r, /** @type {number} */ i) => `    ${reqVars[i]} = ${r}.request(priority=${priority})`).join('\n');
-        const svcBusyLines = serverTypes.map((/** @type {any} */ st) =>
-          `        stats.resource_busy["${st}"] = stats.resource_busy.get("${st}", 0.0) + _svc_t`
+        // Flatten to one .request() per unit — qty copies against the SAME
+        // resource variable for a qty-N type, not N separate resources —
+        // still combined into a single simpy.AllOf so the whole set (correct
+        // total request count) is acquired atomically, mirroring the
+        // engine's own check-all-before-claim-any.
+        const reqUnits = [];
+        coseizeDefs.forEach((/** @type {any} */ d) => {
+          const resVar = safeId(d.type) + '_resource';
+          for (let i = 0; i < d.qty; i++) reqUnits.push(resVar);
+        });
+        const reqVars = reqUnits.map((/** @type {any} */ _r, /** @type {number} */ i) => `_req${i}`);
+        const reqDecls = reqUnits.map((/** @type {any} */ r, /** @type {number} */ i) => `    ${reqVars[i]} = ${r}.request(priority=${priority})`).join('\n');
+        // Busy-time accounting scales by qty: seizing 2 Nurses for duration D
+        // is 2*D nurse-busy-seconds, not D — else utilization (resource_busy
+        // / (warmup_t * capacity)) is under-reported for a quantity-seized type.
+        const svcBusyLines = coseizeDefs.map((/** @type {any} */ d) =>
+          `        stats.resource_busy["${d.type}"] = stats.resource_busy.get("${d.type}", 0.0) + ${d.qty > 1 ? `${d.qty} * _svc_t` : '_svc_t'}`
         ).join('\n');
         const svcNoteLineCoseize = svcNote ? `        ${svcNote}\n` : '';
         seizeBlock =
@@ -725,8 +759,13 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       cEventRoutingStores.set(c.name, routingStoreVarNames);
       const rStoreComma = routingStoreVarNames.length > 0 ? ', ' + routingStoreVarNames.join(', ') : '';
 
+      // Rebuild qty-annotated arg text for the docstring only (the resource
+      // variable lists above are already qty-agnostic, one per distinct type).
+      const argsLabel = isCoseize
+        ? coseizeDefs.map((/** @type {any} */ d) => d.qty > 1 ? `${d.type}:${d.qty}` : d.type).join(', ')
+        : serverTypes.join(', ');
       let monBody = `def ${monFn}(env, ${storeId}, ${resArgs}${rStoreComma}, stats):\n`;
-      monBody += `    """C-event "${c.name}": ${assignCall.name}(${queueName}, ${serverTypes.join(', ')})"""\n`;
+      monBody += `    """C-event "${c.name}": ${assignCall.name}(${queueName}, ${argsLabel})"""\n`;
       monBody += `    while True:\n`;
       monBody += `        entity = yield ${storeId}.get()\n`;
       monBody += `        env.process(${svcFn}(env, entity, ${resArgs}${rStoreComma}, stats))\n`;
@@ -967,7 +1006,9 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       if (!assignCall) continue;
       const args = assignCall.rawArgs.split(',').map((/** @type {any} */ s) => s.trim());
       const queueName = args[0];
-      const serverTypes = assignCall.name === 'COSEIZE' ? args.slice(1) : [args[1]];
+      const serverTypes = assignCall.name === 'COSEIZE'
+        ? args.slice(1).map((/** @type {any} */ a) => parseCoseizeArg(a).type)
+        : [args[1]];
       const storeId = safeId(queueName) + '_store';
       const resArgs = serverTypes.map((/** @type {any} */ st) => safeId(st) + '_resource').join(', ');
       const monFn = safeId(c.name || 'service') + '_monitor';
