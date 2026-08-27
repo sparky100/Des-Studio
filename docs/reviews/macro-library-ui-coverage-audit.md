@@ -8,6 +8,10 @@ Designer (`graph-operations.js`, `VisualNodeInspector.jsx`). The editors are del
 structured-only (audit C1: no free-text effect field), so anything the pickers cannot compose is
 genuinely unreachable from the UI (short of the AI generator or JSON import).
 
+**Update (Sprint 94):** all eight Group A gaps below are now closed — see
+`docs/reviews/sprint-94-macro-ui-depth-plan.md`. Group B (engine-level limits) remains open
+backlog.
+
 ## Step 1 — Accessibility: is every macro reachable from the UI?
 
 **Yes — all 24 macros are reachable.** No macro is engine-only. Documentation also covers all 24
@@ -48,7 +52,7 @@ explanatory note rather than mangling it (`classifyActivityEffect`).
 These are the "ah, it can't do that" cliffs. Group A is UI-only shallowness — the engine already
 supports the feature but no picker can write it. Group B is genuine engine limits.
 
-### Group A — engine supports it, UI cannot author it
+### Group A — engine supports it, UI cannot author it (✅ closed by Sprint 94)
 
 1. **ASSIGN container gate is hard-coded to `:1`.** The engine regex accepts any positive
    expression — `ASSIGN(Q, Nurse, Blood:2)`, `Blood:Entity.unitsNeeded` — and evaluates it with
