@@ -30,6 +30,32 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    // Vitest's `poolOptions` is a POOL-CONSTRUCTION-time setting, not a
+    // per-file/per-test one: `test.projects` all share ONE 'forks' pool
+    // instance (built once, from this root config), so `poolOptions` set
+    // inside an individual project's `test` block below is silently
+    // ignored — confirmed empirically (an absurd `--max-old-space-size`
+    // nested there had zero effect). testTimeout/hookTimeout, in contrast,
+    // ARE read per-project at file-execution time, so those stay on the
+    // `soak` project below where they belong. maxForks/execArgv here apply
+    // to unit+ui too, not just soak — harmless (more heap headroom never
+    // hurts; a 2-fork cap still leaves real parallelism for the fast tier,
+    // just less than unbounded CPU-count-based default).
+    poolOptions: {
+      forks: {
+        maxForks: 2,
+        // determinism-parity.test.js's scenario set includes a
+        // deliberately-unstable queue (ρ>1, grows without bound up to its
+        // 250k-cycle cap); the engine has no flag to skip full trace-log
+        // accumulation (a src/engine/ change, out of scope for a
+        // test-suite change), so that single file's worst-case memory
+        // footprint exceeds Node's ~4GB default heap ceiling on a
+        // standard CI runner, independent of cross-file accumulation.
+        // 6144MB x maxForks(2) = 12GB worst case, safely under a standard
+        // GitHub-hosted runner's 16GB.
+        execArgv: ['--max-old-space-size=6144'],
+      },
+    },
     // Vitest reuses one jsdom `window`/environment across test files that
     // land on the same worker (this became visible under vitest 3 in a way
     // it wasn't under 1.x — a handful of tests were relying on a fresh
@@ -106,27 +132,9 @@ export default defineConfig({
           // Full-simulation / replication / benchmark runs genuinely take
           // minutes of CPU-bound work, out of the fast tiers above so
           // everyday `npm test` stays quick. Run on every push via CI's
-          // separate "Simulation soak" job (`npm run test:soak`).
-          //
-          // Deliberately NOT `singleFork: true`: Vitest's `isolate: true`
-          // (default) recycles the worker process between test files to
-          // reset its heap, but `singleFork` forces the whole run into one
-          // OS process for its entire duration, which disables that
-          // recycling. `maxForks: 2` still bounds how many heavy
-          // simulations run concurrently — soak is its own isolated CI job
-          // now, so the original reason a single fork existed at all
-          // (avoid starving the fast tiers' parallel workers of CPU) no
-          // longer applies within this job.
-          //
-          // execArgv raises each worker's heap ceiling above Node's ~4GB
-          // default: determinism-parity.test.js's stress scenarios include
-          // one deliberately-unstable queue (ρ>1, grows without bound up to
-          // its 250k-cycle cap) and the engine has no way to opt out of
-          // full trace-log accumulation (that's a src/engine/ change, out
-          // of scope here) — that single file's worst case exceeds 4GB on
-          // its own on a standard CI runner, independent of cross-file
-          // accumulation. 6144MB x maxForks(2) = 12GB worst case, safely
-          // under a standard GitHub-hosted runner's 16GB.
+          // separate "Simulation soak" job (`npm run test:soak`). Pool
+          // concurrency/heap settings (maxForks, execArgv) are configured
+          // on the root `test` block above, not here — see its comment.
           testTimeout: 240000,
           // Vitest's beforeAll/afterAll hooks use a SEPARATE default timeout
           // (10s) from testTimeout — easy to miss, since a hook that merely
@@ -135,12 +143,6 @@ export default defineConfig({
           // that runs a full simulation doesn't silently timeout-and-skip
           // its dependent tests instead of failing loudly.
           hookTimeout: 240000,
-          poolOptions: {
-            forks: {
-              maxForks: 2,
-              execArgv: ['--max-old-space-size=6144'],
-            },
-          },
           include: [
             'tests/benchmarks/**/*.test.js',
             'tests/engine/benchmarks/**/*.test.js',
