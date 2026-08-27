@@ -233,4 +233,21 @@ Verified: lint/typecheck clean per commit, build clean, targeted suites green pe
 
 ---
 
+## 11. Status — Run screen implemented (2026-08-27, same branch): canvas scale parity with Draw, one-line readiness, maximised canvas
+
+Direct user feedback on the Execute (Run) screen, from screenshots of a real ED model: switching from Design to Run shrank the model to fit a fixed 480px canvas at as low as 15% zoom, even though Draw remembers a per-model pan/zoom; the RUN READINESS + advisory cards + WORKLOAD ESTIMATE stack cost ~90-250px of pre-flight information above the canvas every time, all-green case included; and the canvas itself should be maximised, with the Bottom Panel collapsed by default but expandable. This followed directly on ADR-020's decision that the Draw and Run canvases stay separate surfaces (§7 above) — the fix here is scale/layout parity between two still-independent canvases, not integration.
+
+| Piece | Notes |
+|---|---|
+| Viewport parity (`ExecuteCanvas.jsx`) | Reads the same `des.vp.<modelId>` localStorage key Draw already writes (`VisualDesignerPanel.jsx`) and, when present, passes it as `defaultViewport` instead of `fitView` — both canvases share coordinates (`computeExecuteLayout` preserves saved Draw node positions), so Draw's last pan/zoom is directly meaningful on Run. Falls back to today's `fitView` on first visit or another device/browser (the key is per-browser); `minZoom` aligned to Draw's `0.1`. Run never writes the key — Draw stays the sole owner |
+| One-line run readiness strip (`index.jsx`) | Collapses by default to a single row: status chip, advisory count (when any), a short workload digest (entities/scans/confidence), and a **Details ▸** control that reveals today's full panel unchanged. A genuine hard blocker (`hasAdmissionErrors`) always renders full detail automatically, with no collapse control — a blocked run is never a one-line mystery |
+| Maximised, responsive canvas (`ExecuteCanvas.jsx`) | Replaced the fixed 480px default with a fill-the-viewport measurement (`computeCanvasFillHeight`, exported and unit-tested), recalculated on window resize and orientation change; a manual drag on the existing resize handle (now touch-enabled) overrides auto-fill and is persisted (`des.canvas.height`), matching how the Bottom Panel already persists its own height |
+| Bottom Panel collapse persistence (`BottomPanel.jsx`) | `des.bottomPanel.collapsed` was write-only — every expand/collapse click wrote it, but nothing ever read it back, so the choice reset to collapsed on every remount. Now read on mount; default (key unset) stays collapsed, unchanged from before |
+
+New tests: `tests/ui/execute/execute-canvas-viewport.test.jsx` (7 — stored-viewport vs. fitView fallback, minZoom, `computeCanvasFillHeight` clamp maths), `tests/ui/execute/run-readiness-strip.test.jsx` (3 — collapsed-by-default with Details/Collapse controls, advisory count shown without advisory text, a hard blocker forces full detail with no collapse control), plus two additions to `tests/ui/execute/bottom-panel.test.jsx` (persisted-expanded vs. default-collapsed).
+
+Verified: lint/typecheck/build clean; full `tests/ui/execute/` directory green (20/20 files, 155 tests); full-suite run at 220/222 files, 3234 passed, 2 skipped — the same 2 pre-existing `supabase/functions/*` Deno-ESM-loader failures as every prior sprint this session, no new flakes.
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*

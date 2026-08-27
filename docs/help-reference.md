@@ -3,7 +3,7 @@
 **Purpose:** System context for Help Assistant LLM responses  
 **Audience:** LLM consuming as prompt context (machine-readable)  
 **Maintenance:** Updated at end of each sprint alongside core documents  
-**Last updated:** 2026-08-26
+**Last updated:** 2026-08-27
 
 ---
 
@@ -257,6 +257,14 @@ All 6 queue disciplines.
 ---
 
 ## Experiment Controls
+
+### Run Readiness and the Execute Canvas
+
+**Run readiness** collapses to one line by default ("Ready to run" or "Needs attention" plus an advisory count when there are any); click **Details ▸** to see the full breakdown (blocking issues, advisories, and the workload estimate). A genuine blocking issue always shows full detail automatically — it never collapses to a one-line "Blocked" with no explanation.
+
+**Canvas scale parity with Draw:** the Execute canvas opens at the same pan and zoom you last used on the Draw canvas for this model (both canvases share coordinates), rather than always zooming out to fit everything. First-time viewing of a model (or opening it on a different browser/device, since this is a local per-browser setting) falls back to fitting the whole model.
+
+**Maximised canvas:** the Execute canvas fills the available window height by default and recalculates on resize/rotation; drag its bottom edge to set a manual height instead, which is then remembered. The Bottom Panel (Log/Entities/Charts/Live Metrics/Future Events) stays collapsed by default so the canvas gets the space; expanding it is remembered for next time.
 
 ### Warmup Period
 
