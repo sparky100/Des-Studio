@@ -846,7 +846,7 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 
 **Advanced effects and the canvas:** Layout edits (dragging, aligning, panning) never change model logic — they only save positions. Structural canvas edits that would overwrite an advanced effect (COSEIZE, skill-gated ASSIGN, BATCH, MATCH, multi-macro effects, attribute-conditional `when` schedules) are refused with a message pointing at the Define editors — the C-Events/B-Events editors remain the home of the advanced macro vocabulary. Simpler edits near advanced constructs are surgical: switching a sink between COMPLETE and RENEGE, changing a source's queue, or deleting a queue preserves any co-located macros (COST, SET, …) instead of rewriting the whole effect.
 
-**Alignment guides:** While dragging a single node, dashed guide lines appear whenever the dragged node's edges or centre line up with another node's edges or centre. Release while a guide is showing and the node snaps exactly into alignment. Guides don't appear for multi-node drags — use the selection toolbar's align/distribute tools for those.
+**Alignment guides:** While dragging a single node, dashed guide lines appear whenever the dragged node's edges or centre line up with another node's edges or centre. Release while a guide is showing and the node snaps exactly into alignment. Guides don't appear for multi-node drags — use the selection toolbar's align/distribute tools for those. Placement is otherwise free: nodes don't snap to a background grid, so the alignment snap is the only snap.
 
 ---
 

@@ -318,3 +318,66 @@ describe('FlowDiagramReactFlow — box-drag selection parity', () => {
     expect(screen.getByText(/add or remove a node from the selection/i)).toBeInTheDocument();
   });
 });
+
+// Item 3 of the b7be68c UX batch: alignment guides shipped but never appeared.
+// Nodes are fully controlled and onNodesChange used to discard position
+// changes, so a dragged node never moved until drop — guides computed against
+// a phantom position with no node next to them — and snapToGrid's 24-unit
+// steps could never land inside the guides' 6-screen-px window.
+describe('FlowDiagramReactFlow — live drag positions', () => {
+  it('moves the dragged node in the controlled nodes prop while dragging', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    const before = latestFlowProps.current.nodes.find(n => n.id === 'queue:queue-1');
+    expect(before.position).toEqual({ x: 0, y: 0 });
+
+    act(() => latestFlowProps.current.onNodesChange([
+      { type: 'position', id: 'queue:queue-1', position: { x: 37, y: 53 }, dragging: true },
+    ]));
+
+    const during = latestFlowProps.current.nodes.find(n => n.id === 'queue:queue-1');
+    expect(during.position).toEqual({ x: 37, y: 53 });
+    // Other nodes keep their graph-derived positions.
+    expect(latestFlowProps.current.nodes.find(n => n.id === 'activity:activity-1').position).toEqual({ x: 100, y: 0 });
+  });
+
+  it('ignores position changes that are not part of an active drag', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    act(() => latestFlowProps.current.onNodesChange([
+      { type: 'position', id: 'queue:queue-1', position: { x: 37, y: 53 }, dragging: false },
+    ]));
+    expect(latestFlowProps.current.nodes.find(n => n.id === 'queue:queue-1').position).toEqual({ x: 0, y: 0 });
+  });
+
+  it('clears the live override on drag stop and commits through onNodesMove', () => {
+    const onNodesMove = vi.fn();
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit onNodesMove={onNodesMove} />);
+    act(() => latestFlowProps.current.onNodesChange([
+      { type: 'position', id: 'queue:queue-1', position: { x: 37, y: 53 }, dragging: true },
+    ]));
+
+    const dropped = { id: 'queue:queue-1', type: 'desNode', position: { x: 37, y: 53 } };
+    act(() => latestFlowProps.current.onNodeDragStop({}, dropped, []));
+
+    // Override cleared — position falls back to the (unchanged) graph value.
+    expect(latestFlowProps.current.nodes.find(n => n.id === 'queue:queue-1').position).toEqual({ x: 0, y: 0 });
+    expect(onNodesMove).toHaveBeenCalledTimes(1);
+    const [positions] = onNodesMove.mock.calls[0];
+    expect(positions).toHaveLength(1);
+    expect(positions[0].id).toBe('queue:queue-1');
+  });
+
+  it('snaps a single dropped node to a nearby neighbour edge via the alignment snap', () => {
+    const onNodesMove = vi.fn();
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit onNodesMove={onNodesMove} />);
+    // activity-1 sits at x=100; drop queue-1 at x=103 — inside the 6px window at zoom 1.
+    const dropped = { id: 'queue:queue-1', type: 'desNode', position: { x: 103, y: 300 } };
+    act(() => latestFlowProps.current.onNodeDragStop({}, dropped, []));
+    expect(onNodesMove).toHaveBeenCalledWith([{ id: 'queue:queue-1', x: 100, y: 300 }]);
+  });
+
+  it('no longer forces 24px grid snapping (alignment snap is the only snap)', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} canEdit />);
+    expect(latestFlowProps.current.snapToGrid).toBeUndefined();
+    expect(latestFlowProps.current.snapGrid).toBeUndefined();
+  });
+});

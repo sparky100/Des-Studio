@@ -305,7 +305,7 @@ function AlignmentGuidesOverlay({ guides, reactFlowInstance, wrapperRef, C }) {
   if (!guides.length || !reactFlowInstance || !wrapperRef.current) return null;
   const rect = wrapperRef.current.getBoundingClientRect();
   return (
-    <svg style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
+    <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
       {guides.map((g, i) => {
         const from = g.orientation === "vertical"
           ? reactFlowInstance.flowToScreenPosition({ x: g.position, y: g.from })
@@ -443,7 +443,6 @@ export function FlowDiagramReactFlow({
   onNodeSelectionChange,
   onEdgeSelect,
   onDeleteEdge,
-  onNodeMove,
   onNodesMove,
   onNodeMeasure,
   onViewportChange,
@@ -456,6 +455,11 @@ export function FlowDiagramReactFlow({
   const [connecting, setConnecting] = useState(false);
   const [focusedSectionId, setFocusedSectionId] = useState(null);
   const [alignmentGuides, setAlignmentGuides] = useState([]);
+  // Live positions for nodes mid-drag. Nodes are fully controlled (positions
+  // derive from the graph), so without echoing React Flow's position changes
+  // back into the nodes prop a dragged node wouldn't visibly move until drop —
+  // and the alignment guides would draw next to a node that isn't there.
+  const [dragPositions, setDragPositions] = useState({});
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const wrapperRef = useRef(null);
   const suppressViewportSyncRef = useRef(true);
@@ -485,6 +489,7 @@ export function FlowDiagramReactFlow({
         (matchedNodeIds && matchedNodeIds.size > 0 && !matchedNodeIds.has(node.id));
       return {
         ...base,
+        position: dragPositions[node.id] ?? base.position,
         selected: selectedSet.has(node.id),
         selectable: true,
         data: {
@@ -519,7 +524,7 @@ export function FlowDiagramReactFlow({
     }
 
     return flowNodes;
-  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet, matchedNodeIds]);
+  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet, matchedNodeIds, dragPositions]);
 
   // Ref-synced copy of `nodes` so onNodeDrag/onNodeDragStop's alignment-guide
   // computation always reads current node positions, not a stale closure
@@ -628,8 +633,6 @@ export function FlowDiagramReactFlow({
         panOnDrag={canEdit ? [1, 2] : true}
         panActivationKeyCode="Space"
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
-        snapToGrid={canEdit}
-        snapGrid={[24, 24]}
         panOnScroll
         isValidConnection={isValidConnection}
         onNodeClick={(event, node) => {
@@ -682,6 +685,17 @@ export function FlowDiagramReactFlow({
               onNodeMeasureRef.current?.(change.id, { width: change.dimensions.width, height: change.dimensions.height });
             }
           }
+          // Echo mid-drag position changes back into the controlled nodes so
+          // the dragged node moves under the cursor (commit happens on drop,
+          // in onNodeDragStop — nothing is written to the graph here).
+          const moving = changes.filter(c => c.type === "position" && c.dragging && c.position);
+          if (moving.length) {
+            setDragPositions(prev => {
+              const next = { ...prev };
+              for (const c of moving) next[c.id] = c.position;
+              return next;
+            });
+          }
         }}
         onNodeDrag={(_event, node, draggingNodes) => {
           if ((draggingNodes?.length || 1) > 1 || node.type === "sectionPanel") {
@@ -694,6 +708,7 @@ export function FlowDiagramReactFlow({
         }}
         onNodeDragStop={(_, node, movedNodes = []) => {
           setAlignmentGuides([]);
+          setDragPositions({});
           const moved = movedNodes.length ? movedNodes : [node];
           let movedPositions = moved.map(item => ({ id: item.id, x: item.position.x, y: item.position.y }));
           if (moved.length === 1 && node.type !== "sectionPanel") {
@@ -702,8 +717,7 @@ export function FlowDiagramReactFlow({
             const { snappedPosition } = computeAlignmentGuides(node, others, zoom);
             movedPositions = [{ id: node.id, x: snappedPosition.x, y: snappedPosition.y }];
           }
-          if (onNodesMove) onNodesMove(movedPositions);
-          else if (!movedNodes.length) onNodeMove?.(node.id, movedPositions[0]);
+          onNodesMove?.(movedPositions);
         }}
         onMoveEnd={(_, viewport) => {
           if (suppressViewportSyncRef.current) {
