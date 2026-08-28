@@ -736,6 +736,26 @@ describe("exportToSimPy", () => {
       expect(result.script).toContain("# NOT SUPPORTED (RELEASE_COSEIZED):");
     });
 
+    it("includes a JOIN stub and classifies the model category 2 when a C-event JOINs (Sprint 98)", () => {
+      const model = {
+        ...minimalModel,
+        queues: [...minimalModel.queues, { id: "q_sync", name: "SyncQueue" }, { id: "q_review", name: "ReviewQueue" }],
+        cEvents: [
+          ...minimalModel.cEvents,
+          {
+            id: "c_join", name: "Rendezvous",
+            condition: "queue(SyncQueue).length > 0",
+            effect: "JOIN(SyncQueue, ReviewQueue)",
+          },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.category).toBe(2);
+      expect(result.todoMacros).toContain("JOIN");
+      expect(result.script).toContain("# NOT SUPPORTED (JOIN):");
+      expect(result.warnings.some(w => /NOT SUPPORTED: JOIN at "Rendezvous"/.test(w))).toBe(true);
+    });
+
     it("warns per actual usage site for a TODO macro, not just per macro name", () => {
       const result = exportToSimPy(todoModel);
       // todoModel's RENEGE usage is on the "CheckRenege" b-event, BATCH on "BatchUp",

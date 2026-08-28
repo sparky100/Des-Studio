@@ -11,7 +11,7 @@
 
 // Macros whose SimPy translation requires manual completion
 const TODO_MACRO_SET = new Set([
-  'RENEGE', 'BATCH', 'RENEGE_OLDEST', 'MATCH', 'FAIL', 'REPAIR', 'PREEMPT', 'FINISH', 'RELEASE_COSEIZED',
+  'RENEGE', 'BATCH', 'RENEGE_OLDEST', 'MATCH', 'FAIL', 'REPAIR', 'PREEMPT', 'FINISH', 'RELEASE_COSEIZED', 'JOIN',
 ]);
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -895,6 +895,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       PREEMPT: `# NOT SUPPORTED (PREEMPT): Use simpy.PreemptiveResource for the target server. If\n# a Criterion was given (PREEMPT(Type, Criterion) -- PRIORITY(attr), LONGEST, or\n# SHORTEST), rank the in-progress requests by that criterion and preempt the one\n# it selects rather than an arbitrary one -- otherwise preempt any in-progress request.\n# Replace simpy.Resource with simpy.PreemptiveResource at declaration.\n# Use: resource.request(priority=0, preempt=True)`,
       FINISH: `# NOT SUPPORTED (FINISH): End the in-progress service of a busy server right now\n# (on a condition, not a scheduled delay) -- e.g. an "activity of unknown duration".\n# If a Criterion was given (FINISH(Type, Criterion) -- PRIORITY(attr), LONGEST, or\n# SHORTEST), rank the in-progress requests by that criterion and finish the one it\n# selects rather than an arbitrary one.\n# Pattern:\n#   # trigger the process holding the target request's timeout early, e.g. via an\n#   # env.event() the service process also yields on:\n#   finish_event.succeed()`,
       RELEASE_COSEIZED: `# NOT SUPPORTED (RELEASE_COSEIZED): Atomically release multiple previously co-seized resources for the current entity, mirroring COSEIZE's own AllOf() seize.\n# Pattern:\n#   for _req in entity.coseized_requests:  # however you tracked the requests from the matching COSEIZE\n#       try: _req.resource.release(_req)\n#       except: pass\n#   entity.coseized_requests = []`,
+      JOIN: `# NOT SUPPORTED (JOIN): Fork/join rendezvous for SPLIT families -- hold split-family\n# members arriving in the rendezvous store until the family is complete, then merge\n# them into one surviving entity routed to the target store. Needs a per-family\n# counting mechanism keyed by the family root id.\n# Pattern:\n#   # each branch process signals its completion event for the family:\n#   family_done = simpy.AllOf(env, branch_events[family_id])\n#   yield family_done\n#   survivor = Entity(id=parent_id, arrival_time=parent_arrival)  # parent keeps its stats\n#   yield target_store.put(survivor)`,
     };
     for (const m of todoList) {
       if (stubs[m]) stubParts.push(stubs[m]);
