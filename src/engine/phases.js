@@ -211,6 +211,14 @@ export function applyEffect(effect, ctx) {
   const felEntries = [];
   let lastCustId   = felRef?._contextCustId ?? null;
   let lastSrvId    = felRef?._contextSrvId  ?? null;
+  // No-op protocol: a macro whose triggering condition can stay true across
+  // passes without the macro having anything to do (JOIN waiting on an
+  // incomplete split family) calls ctx.markNoOp() when it changed no state.
+  // When EVERY part of the effect marks itself a no-op, the firing is
+  // reported as noOp so Phase C can skip the restart it would otherwise
+  // trigger. Opt-in per macro — anything that never calls markNoOp keeps
+  // today's always-restart behavior.
+  let noopParts    = 0;
 
   /** @type {Record<string, any>} */
   const macroCtx = {
@@ -230,10 +238,12 @@ export function applyEffect(effect, ctx) {
     setLastCustId: (/** @type {any} */ id) => { lastCustId = id; },
     setLastSrvId:  (/** @type {any} */ id) => { lastSrvId  = id; },
     scheduleEvent: (/** @type {any} */ entry) => felEntries.push(entry),
+    markNoOp:      () => { noopParts++; },
     msgs,
   };
 
-  for (const part of effect.split(";").map((/** @type {string} */ s) => s.trim()).filter(Boolean)) {
+  const parts = effect.split(";").map((/** @type {string} */ s) => s.trim()).filter(Boolean);
+  for (const part of parts) {
     let handled = false;
 
     // Try each registered macro
@@ -263,7 +273,7 @@ export function applyEffect(effect, ctx) {
   ctx._lastSrvId  = lastSrvId;
   if (macroCtx._delayedCustIds) ctx._delayedCustIds = macroCtx._delayedCustIds;
 
-  return { msgs, felEntries };
+  return { msgs, felEntries, noOp: parts.length > 0 && noopParts >= parts.length };
 }
 
 // ── Phase B: fire one bound event ────────────────────────────────────────────
@@ -507,7 +517,14 @@ export function fireCEvent(ev, ctx) {
   const { clock, model } = ctx;
   const effectCtx = { ...ctx, felRef: null, entityFilter: ev.entityFilter ?? null, ceventName: ev.name };
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
-  const { msgs, felEntries } = applyEffect(effectStr, effectCtx);
+  const { msgs, felEntries, noOp } = applyEffect(effectStr, effectCtx);
+
+  // Every part of the effect declared itself a no-op (see applyEffect): no
+  // state changed, so scheduling this event's cSchedules would be spurious —
+  // report the no-op firing so Phase C can skip its restart.
+  if (noOp) {
+    return { msgs, felEntries, noOp: true };
+  }
 
   // Resolve attribute-conditional cSchedules.
   // When ANY entry has a `when` predicate, first-match semantics apply:

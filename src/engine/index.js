@@ -186,16 +186,30 @@ function compileEffectImpactTemplate(effectStr) {
     } else if ((m = part.match(/^RENEGE(?:_OLDEST)?\(([^)]*)\)$/i))) {
       actions.push({ kind: "renege", queueHint: m[1]?.trim() || null });
     } else if ((m = part.match(/^COSEIZE\(([^,)]+)\s*,\s*(.+)\)$/i))) {
-      actions.push({ kind: "coseize", queueName: m[1].trim(), resourceNames: m[2].split(",").map(s => s.trim()).filter(Boolean) });
+      // Strip per-type "[Skill]" brackets and ":N" quantity suffixes so the
+      // dirty resource names match real server type names — an unstripped
+      // "Nurse:2"/"Doctor[Surgery]" would never intersect an idle(Nurse)/
+      // idle(Doctor) condition dep and the waiting C-event would be skipped.
+      actions.push({ kind: "coseize", queueName: m[1].trim(), resourceNames: m[2].split(",")
+        .map(s => s.trim().replace(/\[[^\]]*\]/, "").replace(/:\s*\d+$/, "").trim())
+        .filter(Boolean) });
     } else if ((m = part.match(/^MATCH\(([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\)$/i))) {
       actions.push({ kind: "match", queueNames: [m[2].trim(), m[4].trim(), m[5].trim()] });
     } else if ((m = part.match(/^BATCH\(([^,)]+)\s*,/i))) {
       actions.push({ kind: "queueOnly", queueNames: [m[1].trim()] });
     } else if ((m = part.match(/^UNBATCH\(([^,)]+)\)$/i))) {
       actions.push({ kind: "queueOnly", queueNames: [m[1].trim()] });
-    } else if ((m = part.match(/^PREEMPT\(([^,)]+)\)$/i))) {
+    } else if ((m = part.match(/^JOIN\(([^,)]+)\s*,\s*([^,)]+)\)$/i))) {
+      // JOIN consumes family members from the rendezvous queue and routes the
+      // survivor to the target — precise marking matters here more than for
+      // most macros, since a JOIN C-event fires on every cycle its rendezvous
+      // queue is non-empty (including no-op passes over incomplete families);
+      // the unrecognized-macro fallback would set dirty.all each such cycle
+      // and largely defeat the filter for the whole model.
+      actions.push({ kind: "queueOnly", queueNames: [m[1].trim(), m[2].trim()] });
+    } else if ((m = part.match(/^PREEMPT\(([^,)]+)(?:\s*,\s*.+)?\)$/i))) {
       actions.push({ kind: "preempt", resourceName: m[1].trim() });
-    } else if ((m = part.match(/^FAIL\(([^,)]+)\)$/i)) || (m = part.match(/^REPAIR\(([^,)]+)\)$/i))) {
+    } else if ((m = part.match(/^FAIL\(([^,)]+)(?:\s*,\s*\d+\s*)?\)$/i)) || (m = part.match(/^REPAIR\(([^,)]+)(?:\s*,\s*\d+\s*)?\)$/i))) {
       actions.push({ kind: "resourceOnly", resourceName: m[1].trim() });
     } else if ((m = part.match(/^SET\((\w+)\s*,/i))) {
       actions.push({ kind: "stateVar", stateVarName: m[1] });
@@ -1376,14 +1390,36 @@ const cycleLog = [];
         for (const k in _arbitration) delete _arbitration[k];
         const ctx = makeCtx(null);
         ctx.clock = clock;
-        let msgs, felEntries;
+        let msgs, felEntries, effectNoOp = false;
         if (ev._isShiftWhen) {
           ev._fired = true;
           const fakeEv = { serverTypeName: ev.entityTypeName, newCapacity: ev.capacity };
           msgs = applyShiftChange(fakeEv, ctx);
           felEntries = [];
         } else {
-          ({ msgs, felEntries } = fireCEvent(ev, ctx));
+          ({ msgs, felEntries, noOp: effectNoOp = false } = fireCEvent(ev, ctx));
+        }
+        if (effectNoOp) {
+          // The effect declared itself a complete no-op (e.g. JOIN over an
+          // incomplete split family): no state changed, so restarting the
+          // scan would spin every remaining pass on the same no-op — treat
+          // it like a false condition and move to the next C-event instead.
+          if (collectTrace) {
+            const noopEntry = makeTraceEntry("C", {
+              message: `C: "${ev.name || ev.id}" — no-op (nothing to do)${msgs.length ? `  ·  ${msgs.join("  ·  ")}` : ""}`,
+              cEval: {
+                eventId: ev.id || ev.name || "?",
+                eventName: ev.name || ev.id || "?",
+                priority: ev.priority ?? 9999,
+                pass: cPass,
+                conditionTrue: true,
+                failureReason: "effect no-op",
+              },
+            });
+            cycleLog.push(noopEntry);
+            log.push(noopEntry);
+          }
+          continue;
         }
         if (enableFilteredPhaseC) {
           // enableFilteredPhaseC true guarantees phaseCDirty was initialised

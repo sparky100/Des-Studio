@@ -1288,6 +1288,138 @@ export const MACROS = [
     },
   },
 
+  // ── JOIN(QueueName, TargetQueue) — fork/join rendezvous for SPLIT families ─
+  // The consumer of SPLIT's lineage: holds split-family members (the original
+  // parent plus its clones) as they arrive in QueueName, and once a family is
+  // complete, merges it back into one surviving entity routed to TargetQueue.
+  //
+  // Completeness is lenient: a family is complete once every member that can
+  // still arrive is waiting here — members that went terminal (done/reneged)
+  // or vanished from the system (balk/overflow splice) along their branch are
+  // counted as "never coming", so one lost clone degrades the join instead of
+  // deadlocking it. The ORIGINAL parent survives when present (preserving its
+  // arrivalTime and stage history, so sojourn spans the whole fork-join);
+  // otherwise the earliest member to reach the rendezvous survives. Merged
+  // members are terminated MATCH-style (visible in results with
+  // endedBy: "JOIN") and snapshotted onto survivor.joined.children so branch
+  // histories stay inspectable. Non-split entities waiting in QueueName are
+  // never touched. Single-level families only — do not re-SPLIT a clone.
+  {
+    name:    "JOIN",
+    pattern: /^JOIN\(([^,)]+)\s*,\s*([^,)]+)\)$/i,
+    apply(match, ctx) {
+      const queueName   = match[1].trim();
+      const targetQueue = match[2].trim();
+      const { entities, model, clock, msgs, setLastCustId } = ctx;
+
+      const qDef = (model.queues || []).find(
+        (/** @type {any} */ q) => q.name?.trim().toLowerCase() === queueName.trim().toLowerCase()
+      );
+      if (!qDef) {
+        msgs.push(`JOIN(${queueName},${targetQueue}): queue not found`);
+        ctx.markNoOp?.();
+        return;
+      }
+      const discipline = qDef.discipline || 'FIFO';
+      const waiting = listWaiting(queueName, discipline, entities, null, true, false, ctx.index);
+
+      // Group arrived family members by family root. Entities without split
+      // lineage — and survivors of a previous join (e.joined) — pass through.
+      /** @type {Map<any, any[]>} */
+      const arrivedByRoot = new Map();
+      for (const e of waiting) {
+        if (e.joined) continue;
+        const rootId = e._splitFrom ?? (e._splitParent ? e.id : null);
+        if (rootId == null) continue;
+        if (!arrivedByRoot.has(rootId)) arrivedByRoot.set(rootId, []);
+        arrivedByRoot.get(rootId).push(e);
+      }
+      // JOIN's triggering condition (queue non-empty) stays true while a
+      // family is still assembling, so do-nothing passes are the common case
+      // — mark them so Phase C doesn't restart on a firing that changed
+      // nothing (see applyEffect's no-op protocol).
+      if (arrivedByRoot.size === 0) {
+        ctx.markNoOp?.();
+        return; // nothing join-relevant waiting — silent
+      }
+
+      const TERMINAL = new Set(["done", "reneged"]);
+      const arrivedIds = new Set(waiting.map((/** @type {any} */ e) => e.id));
+      let mergedFamilies = 0;
+
+      for (const [rootId, arrived] of arrivedByRoot) {
+        // Pending = live family members that haven't reached the rendezvous
+        // yet. Scanning entities[] (rather than trusting only the parent's
+        // _splitChildren ledger) keeps this correct even when the parent was
+        // lost or pruned: clones are discoverable via _splitFrom alone.
+        const pending = entities.filter((/** @type {any} */ e) =>
+          !TERMINAL.has(e.status) &&
+          !arrivedIds.has(e.id) &&
+          (e.id === rootId ? e._splitParent === true : e._splitFrom === rootId)
+        );
+        if (pending.length > 0) continue; // family incomplete — keep waiting, no log spam
+
+        // Lost members = expected (parent + its recorded clones — SPLIT only
+        // records clones that actually joined at birth) minus those that arrived.
+        const parentEntity = arrived.find((/** @type {any} */ e) => e.id === rootId)
+          ?? findEntityById(ctx.index, entities, rootId);
+        const expectedIds = new Set([rootId, ...(parentEntity?._splitChildren || [])]);
+        arrived.forEach((/** @type {any} */ e) => expectedIds.add(e.id));
+        const lostIds = [...expectedIds].filter(id => !arrived.some((/** @type {any} */ a) => a.id === id));
+
+        // Survivor: the original parent when it made it here; otherwise the
+        // earliest member to reach the rendezvous (lastStageStart is set when
+        // a branch completion routes the member here; arrivalTime fallback).
+        const survivor = arrived.find((/** @type {any} */ e) => e.id === rootId)
+          ?? [...arrived].sort((/** @type {any} */ a, /** @type {any} */ b) =>
+            (a.lastStageStart ?? a.arrivalTime ?? 0) - (b.lastStageStart ?? b.arrivalTime ?? 0))[0];
+
+        const mergedSnapshots = [];
+        for (const member of arrived) {
+          if (member === survivor) continue;
+          if (!member.stages) member.stages = [];
+          member.stages.push(buildStageRecord(member, null, clock));
+          mergedSnapshots.push({
+            ...member,
+            attrs: { ...(member.attrs || {}) },
+            stages: member.stages.map((/** @type {any} */ s) => ({ ...s })),
+          });
+          clearWaitingState(member, ctx.index);
+          member.status = "done";
+          member.completionTime = clock;
+          setOutcome(member, {
+            status: "completed",
+            routeId: "macro:JOIN",
+            routeLabel: `Joined into #${survivor.id}`,
+            endedBy: "JOIN",
+            endedAt: clock,
+          });
+          member._joinedInto = survivor.id;
+        }
+
+        if (!survivor.stages) survivor.stages = [];
+        survivor.stages.push(buildStageRecord(survivor, null, clock));
+        survivor.lastStageStart = clock;
+        clearWaitingState(survivor, ctx.index);
+        survivor.joined = { at: clock, children: mergedSnapshots, lostMemberIds: lostIds };
+        const joinedOk = attemptQueueJoin(survivor, targetQueue, clock, ctx);
+        setLastCustId(survivor.id);
+
+        const lostNote = lostIds.length
+          ? `, ${lostIds.length} lost en route: ${lostIds.map(id => `#${id}`).join(', ')}`
+          : '';
+        msgs.push(
+          `JOIN: family #${rootId} → #${survivor.id} continues ` +
+          `[${mergedSnapshots.length} member(s) merged${lostNote}] → "${targetQueue}"` +
+          `${joinedOk ? '' : ' (blocked/balked at target)'}`
+        );
+        mergedFamilies++;
+      }
+
+      if (mergedFamilies === 0) ctx.markNoOp?.(); // every family still assembling
+    },
+  },
+
   // ── COSEIZE(Queue, ServerType1[Skill1]:N1, ServerType2[Skill2]:N2[, ...]) ──
   // Seizes one customer and multiple server types simultaneously.
   // Optional per-type bracket skill: Doctor[Surgery] filters idle pool by skill.

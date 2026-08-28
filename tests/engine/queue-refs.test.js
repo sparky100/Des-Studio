@@ -67,4 +67,39 @@ describe("queue and entity rename propagation", () => {
     expect(next.cEvents[0].condition).toBe("queue(Patient).length > 0");
     expect(next.cEvents[0].effect).toBe("ASSIGN(Patient, Nurse)");
   });
+
+  it("updates both JOIN arguments when either queue is renamed (Sprint 98)", () => {
+    const model = {
+      queues: [
+        { id: "q1", name: "SyncQueue", customerType: "Patient", discipline: "FIFO" },
+        { id: "q2", name: "ReviewQueue", customerType: "Patient", discipline: "FIFO" },
+      ],
+      bEvents: [],
+      cEvents: [{ id: "c1", condition: "queue(SyncQueue).length > 0", effect: "JOIN(SyncQueue, ReviewQueue)" }],
+    };
+
+    const renamedRendezvous = renameQueue(model, "SyncQueue", "Rendezvous");
+    expect(renamedRendezvous.cEvents[0].condition).toBe("queue(Rendezvous).length > 0");
+    expect(renamedRendezvous.cEvents[0].effect).toBe("JOIN(Rendezvous, ReviewQueue)");
+
+    const renamedTarget = renameQueue(model, "ReviewQueue", "Consult Queue");
+    expect(renamedTarget.cEvents[0].effect).toBe("JOIN(SyncQueue, Consult Queue)");
+  });
+
+  it("preserves array-shaped C-event effects through a queue rename instead of coercing them to a string", () => {
+    const model = {
+      queues: [{ id: "q1", name: "SyncQueue", customerType: "Patient", discipline: "FIFO" }],
+      bEvents: [],
+      cEvents: [{
+        id: "c1",
+        condition: "queue(SyncQueue).length > 0",
+        effect: ["JOIN(SyncQueue, ReviewQueue)", "joinCount++"],
+      }],
+    };
+
+    const next = renameQueue(model, "SyncQueue", "Rendezvous");
+
+    expect(Array.isArray(next.cEvents[0].effect)).toBe(true);
+    expect(next.cEvents[0].effect).toEqual(["JOIN(Rendezvous, ReviewQueue)", "joinCount++"]);
+  });
 });
