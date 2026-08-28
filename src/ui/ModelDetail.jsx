@@ -633,6 +633,25 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     }
     return merged;
   };
+  // Access-map changes (add/remove/re-role a collaborator) persist immediately —
+  // unlike the rest of the model, they're never batched into the main dirty/Save
+  // flow. Previously these calls were fire-and-forget: no await, no error
+  // handling, and no onRefresh — so a failed write silently vanished with no
+  // feedback, and even a successful write left App.jsx's cached model list
+  // stale until some other action happened to refresh it (reproducing "the
+  // collaborator disappears after navigating away" even when the DB write
+  // landed). Mirrors saveGeneratedModel's optimistic-update/await/revert-on-
+  // error/refresh-on-success shape above.
+  const persistAccess=(nextAccess,prevAccess)=>{
+    setModel(m=>({...m,access:nextAccess}));
+    if(!overrides.onSetAccess)return;
+    Promise.resolve(overrides.onSetAccess(modelId,nextAccess))
+      .then(()=>onRefresh?.())
+      .catch(err=>{
+        setModel(m=>({...m,access:prevAccess}));
+        toast.error(err?.message||"Could not update collaborator access");
+      });
+  };
   const undo=()=>{
     if(!past.length)return;
     const prev=past[past.length-1];
@@ -1759,8 +1778,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             <section aria-label="Sharing settings" style={{display:"flex",flexDirection:"column",gap:10}}>
               <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS,borderBottom:`1px solid ${C.border}`,paddingBottom:4}}>Sharing</div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{setModel(m=>({...m,visibility:"private"}));if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"private").then(onRefresh);}} small>🔒 Private</Btn>
-                <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{setModel(m=>({...m,visibility:"public"}));if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"public").then(onRefresh);}} small>🌐 Public</Btn>
+                <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{setModel(m=>({...m,visibility:"private"}));if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"private").then(onRefresh).catch(err=>toast.error(err?.message||"Could not update visibility"));}} small>🔒 Private</Btn>
+                <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{setModel(m=>({...m,visibility:"public"}));if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"public").then(onRefresh).catch(err=>toast.error(err?.message||"Could not update visibility"));}} small>🌐 Public</Btn>
                 <Btn variant="ghost" small onClick={()=>{
                   const url=`${window.location.origin}${window.location.pathname}#model/${modelId}`;
                   const onCopied=()=>toast.success("Link copied — share it with anyone who has access");
@@ -1836,12 +1855,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                           {u.initials&&<div style={{fontSize:11,color:C.muted,fontFamily:SANS}}>{u.initials}</div>}
                         </div>
                         <select value={model.access?.[u.id]||"viewer"}
-                          onChange={e=>{const a={...(model.access||{}),[u.id]:e.target.value};setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}
+                          onChange={e=>{const prev=model.access||{};const a={...prev,[u.id]:e.target.value};persistAccess(a,prev);}}
                           style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
                           <option value="viewer">Viewer</option>
                           <option value="editor">Editor</option>
                         </select>
-                        <Btn small variant="ghost" onClick={()=>{const a={...(model.access||{})};delete a[u.id];setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}>Remove</Btn>
+                        <Btn small variant="ghost" onClick={()=>{const prev=model.access||{};const a={...prev};delete a[u.id];persistAccess(a,prev);}}>Remove</Btn>
                       </div>
                     ))}
                   </div>
@@ -1881,10 +1900,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         </select>
                         <Btn small variant="primary" onClick={()=>{
                           const role=pendingRoles[u.id]||"viewer";
-                          const a={...(model.access||{}),[u.id]:role};
-                          setModel(m=>({...m,access:a}));
+                          const prev=model.access||{};
+                          const a={...prev,[u.id]:role};
                           setCollabQuery("");
-                          overrides.onSetAccess?.(modelId,a);
+                          persistAccess(a,prev);
                         }}>Add</Btn>
                       </div>
                     ))}

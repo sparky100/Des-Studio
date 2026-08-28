@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { ToastProvider } from "../../src/ui/shared/ToastContext.jsx";
 
 const mockFetchRunHistory = vi.hoisted(() => vi.fn());
 const mockListShareLinks = vi.hoisted(() => vi.fn());
@@ -29,17 +30,25 @@ const baseModel = {
   owner_id: "user-1",
 };
 
+const PROFILES = [
+  { id: "user-2", full_name: "Grainne Parkinson", initials: "GP" },
+];
+
 function renderAccessTab(model = baseModel, overridesExtra = {}) {
+  const onRefresh = overridesExtra.onRefresh ?? vi.fn();
   render(
-    <ModelDetail
-      modelId={model.id}
-      modelData={model}
-      onBack={vi.fn()}
-      onRefresh={vi.fn()}
-      overrides={{ isOwner: true, canEdit: true, profiles: [], userId: "user-1", onSetVisibility: vi.fn(() => Promise.resolve()), onSetAccess: vi.fn(), ...overridesExtra }}
-    />
+    <ToastProvider>
+      <ModelDetail
+        modelId={model.id}
+        modelData={model}
+        onBack={vi.fn()}
+        onRefresh={onRefresh}
+        overrides={{ isOwner: true, canEdit: true, profiles: PROFILES, userId: "user-1", onSetVisibility: vi.fn(() => Promise.resolve()), onSetAccess: vi.fn(() => Promise.resolve()), ...overridesExtra }}
+      />
+    </ToastProvider>
   );
   fireEvent.click(screen.getByRole("button", { name: /^access$/i }));
+  return { onRefresh };
 }
 
 describe("ModelDetail Access tab — shareable link", () => {
@@ -128,5 +137,60 @@ describe("ModelDetail Access tab — shareable link", () => {
     expect(onSetVisibility).toHaveBeenCalledWith("m1", "public");
 
     resolveSetVisibility();
+  });
+});
+
+describe("ModelDetail Access tab — adding/editing/removing collaborators", () => {
+  beforeEach(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn(() => Promise.resolve()) },
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  test("searching and adding a person persists via onSetAccess and refreshes on success", async () => {
+    const onSetAccess = vi.fn(() => Promise.resolve());
+    const { onRefresh } = renderAccessTab(baseModel, { onSetAccess });
+
+    fireEvent.change(screen.getByPlaceholderText(/search by name/i), { target: { value: "grainne" } });
+    fireEvent.click(screen.getByRole("button", { name: /^add$/i }));
+
+    // Optimistic: shows immediately in "WITH ACCESS", before the save resolves.
+    expect(screen.getByText("Grainne Parkinson")).toBeInTheDocument();
+    expect(onSetAccess).toHaveBeenCalledWith("m1", { "user-2": "viewer" });
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+  });
+
+  test("changing an existing collaborator's role persists the updated map", () => {
+    const onSetAccess = vi.fn(() => Promise.resolve());
+    renderAccessTab({ ...baseModel, access: { "user-2": "viewer" } }, { onSetAccess });
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "editor" } });
+
+    expect(onSetAccess).toHaveBeenCalledWith("m1", { "user-2": "editor" });
+  });
+
+  test("removing a collaborator persists the map without them", () => {
+    const onSetAccess = vi.fn(() => Promise.resolve());
+    renderAccessTab({ ...baseModel, access: { "user-2": "viewer" } }, { onSetAccess });
+
+    fireEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+
+    expect(onSetAccess).toHaveBeenCalledWith("m1", {});
+  });
+
+  test("reverts the optimistic update and shows an error toast when the save fails, instead of silently vanishing", async () => {
+    const onSetAccess = vi.fn(() => Promise.reject(new Error("network error")));
+    renderAccessTab(baseModel, { onSetAccess });
+
+    fireEvent.change(screen.getByPlaceholderText(/search by name/i), { target: { value: "grainne" } });
+    fireEvent.click(screen.getByRole("button", { name: /^add$/i }));
+
+    expect(screen.getByText("Grainne Parkinson")).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("network error"));
+    // Reverted: back to "no one else has access" instead of leaving the phantom entry.
+    expect(screen.getByText(/no one else has access yet/i)).toBeInTheDocument();
   });
 });
