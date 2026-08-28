@@ -389,12 +389,20 @@ export async function deleteModel(id, userId) {
  * @param {string} userId
  */
 export async function setVisibility(id, visibility, userId) {
-  const { error } = await supabase
+  // .select("id") + a 0-row check, not just `if (error)` — an UPDATE whose
+  // WHERE clause matches nothing (wrong id, row deleted concurrently) is not
+  // a Postgres error, so without this a mismatch here silently "succeeds"
+  // with nothing written. Same pattern as deleteModel/saveModel/setAccess.
+  const { data, error } = await supabase
     .from("des_models")
     .update({ visibility })
     .eq("id", id)
-    .eq("owner_id", userId);
+    .eq("owner_id", userId)
+    .select("id");
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error("You don't have permission to change this model's visibility, or it no longer exists.");
+  }
 }
 
 /**
@@ -403,12 +411,19 @@ export async function setVisibility(id, visibility, userId) {
  * @param {string} userId
  */
 export async function setAccess(id, access, userId) {
-  const { error } = await supabase
+  // Same 0-row hardening as setVisibility above — a silently-empty match here
+  // was one plausible cause of "the collaborator disappears": the write
+  // reports success with nothing actually written.
+  const { data, error } = await supabase
     .from("des_models")
     .update({ access })
     .eq("id", id)
-    .eq("owner_id", userId);
+    .eq("owner_id", userId)
+    .select("id");
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error("You don't have permission to change this model's collaborators, or it no longer exists.");
+  }
 }
 
 /**

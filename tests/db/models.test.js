@@ -11,6 +11,8 @@ import {
   saveUserSettings,
   saveModel,
   deleteModel,
+  setVisibility,
+  setAccess,
   saveSimulationRun,
   normalizeRunHistoryRow,
   fetchRunStatsForModels,
@@ -429,6 +431,57 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
 
       expect(result.ok).toBe(false);
       expect(supabase.from).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setVisibility', () => {
+    it('updates visibility scoped by id and owner_id', async () => {
+      supabase.from('des_models').update.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'm1' }], error: null });
+
+      await setVisibility('m1', 'public', 'u1');
+
+      expect(supabase.from('des_models').update).toHaveBeenCalledWith({ visibility: 'public' });
+      expect(supabase.from('des_models').eq).toHaveBeenCalledWith('id', 'm1');
+      expect(supabase.from('des_models').eq).toHaveBeenCalledWith('owner_id', 'u1');
+    });
+
+    it('throws a clear permission message instead of silently no-oping when the update matches zero rows', async () => {
+      supabase.from('des_models').update.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [], error: null });
+
+      await expect(setVisibility('m1', 'public', 'u1')).rejects.toThrow(
+        "You don't have permission to change this model's visibility, or it no longer exists."
+      );
+    });
+  });
+
+  describe('setAccess', () => {
+    it('updates the access map scoped by id and owner_id', async () => {
+      supabase.from('des_models').update.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'm1' }], error: null });
+
+      await setAccess('m1', { 'user-2': 'viewer' }, 'u1');
+
+      expect(supabase.from('des_models').update).toHaveBeenCalledWith({ access: { 'user-2': 'viewer' } });
+      expect(supabase.from('des_models').eq).toHaveBeenCalledWith('id', 'm1');
+      expect(supabase.from('des_models').eq).toHaveBeenCalledWith('owner_id', 'u1');
+    });
+
+    it('throws a clear permission message instead of silently no-oping when the update matches zero rows', async () => {
+      // No Postgres error — this is exactly how a previously-reported bug ("I added a
+      // collaborator but it doesn't seem to save it") could go silently unnoticed: the
+      // write reports success with nothing actually written.
+      supabase.from('des_models').update.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [], error: null });
+
+      await expect(setAccess('m1', { 'user-2': 'viewer' }, 'u1')).rejects.toThrow(
+        "You don't have permission to change this model's collaborators, or it no longer exists."
+      );
     });
   });
 
