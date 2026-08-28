@@ -687,7 +687,7 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | `CANCEL` | `CANCEL(EventName)` | Removes the pending FEL entry named `EventName` that was scheduled for the **current context entity only** (never a global cancel-all). `EventName` must match a real B-Event or C-Event `name` in the model. No-op with a log message if nothing matches. Typical use: race a timeout against normal completion, then cancel the loser — e.g. `["CANCEL(TimeoutCheck)", "COMPLETE()"]`. See TOP LLM MISTAKES #22. |
 | `ROUND_ROBIN` | `ROUND_ROBIN(StateVar, N)` | Advances `StateVar` through a `0..N-1` rotation (wraps back to 0 after N-1). `N` must be a positive integer literal. Pair with a `routing[]` table whose branches compare `StateVar` to each literal index (`== 0`, `== 1`, ...) to cycle entities across N destination queues. There is no modulo operator elsewhere in expressions — this is the only way to build a rotation. |
 
-> ⚠ **SET_ATTR ordering — V44:** `SET_ATTR` requires a context entity established by a preceding `ARRIVE`, `ASSIGN`, `COSEIZE`, `SEIZE`, `BATCH`, or `SPLIT` macro in the same effect array. A `SET_ATTR` appearing before any such macro is silently skipped at runtime.
+> ⚠ **SET_ATTR ordering — V44:** `SET_ATTR` requires a context entity established by a preceding `ARRIVE`, `ASSIGN`, `COSEIZE`, `SEIZE`, `BATCH`, `SPLIT`, or `JOIN` macro in the same effect array. A `SET_ATTR` appearing before any such macro is silently skipped at runtime.
 > 
 > ✓ `["ARRIVE(Patient, Queue)", "SET_ATTR(severity, 3)"]` — ARRIVE first establishes context, SET_ATTR follows  
 > ✗ `["SET_ATTR(severity, 3)", "ARRIVE(Patient, Queue)"]` — SET_ATTR fires before context exists, silently skipped  

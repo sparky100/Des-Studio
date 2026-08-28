@@ -2217,3 +2217,71 @@ describe("V-SKILL-2 — quantified skilled COSEIZE arg (Sprint 95)", () => {
     expect(errors.filter(e => e.code === "V-SKILL-2")).toHaveLength(0);
   });
 });
+
+// ── Sprint 98: JOIN(Queue, TargetQueue) — validation knows the macro ─────────
+describe("JOIN validation (Sprint 98)", () => {
+  const joinModel = (overrides = {}) => ({
+    entityTypes: [
+      { id: "et_p", name: "Patient", role: "customer", attrDefs: [{ name: "severity", valueType: "number" }] },
+      { id: "et_n", name: "Nurse", role: "server", count: 1, attrDefs: [] },
+    ],
+    stateVariables: [],
+    queues: [
+      { id: "q_intake", name: "IntakeQueue", discipline: "FIFO" },
+      { id: "q_test", name: "TestQueue", discipline: "FIFO" },
+      { id: "q_sync", name: "SyncQueue", discipline: "FIFO" },
+      { id: "q_review", name: "ReviewQueue", discipline: "FIFO" },
+    ],
+    bEvents: [
+      { id: "b_arr", name: "Arrival", effect: ["ARRIVE(Patient, IntakeQueue)"], schedules: [] },
+      { id: "b_split", name: "Fork", effect: ["SPLIT(Patient, 3, TestQueue)", "RELEASE(Nurse, SyncQueue)"], schedules: [] },
+      { id: "b_done", name: "Complete", effect: ["COMPLETE()"], schedules: [] },
+    ],
+    cEvents: [
+      { id: "c_triage", name: "Triage", condition: "queue(IntakeQueue).length > 0 AND idle(Nurse).count > 0",
+        effect: "ASSIGN(IntakeQueue, Nurse)",
+        cSchedules: [{ eventId: "b_split", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }] },
+      { id: "c_join", name: "Rendezvous", condition: "queue(SyncQueue).length > 0",
+        effect: "JOIN(SyncQueue, ReviewQueue)", cSchedules: [] },
+    ],
+    ...overrides,
+  });
+
+  it("V45: does not flag a queue as orphaned when it's only reachable as JOIN's TargetQueue", () => {
+    // ReviewQueue is fed by nothing except JOIN's second argument.
+    const { errors } = validateModel(joinModel());
+    expect(errors.filter(e => e.code === "V45")).toHaveLength(0);
+  });
+
+  it("V45: still flags a genuinely orphaned queue alongside a JOIN-reached one", () => {
+    const model = joinModel();
+    model.queues.push({ id: "q_orphan", name: "OrphanQueue", discipline: "FIFO" });
+    const { errors } = validateModel(model);
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V45", affectedIds: { queueIds: ["q_orphan"] } }),
+    ]));
+    expect(errors.filter(e => e.code === "V45" && e.affectedIds?.queueIds?.includes("q_review"))).toHaveLength(0);
+  });
+
+  it("V44: SET_ATTR after JOIN passes — JOIN establishes a context entity (the survivor)", () => {
+    const model = joinModel();
+    model.cEvents[1].effect = ["JOIN(SyncQueue, ReviewQueue)", "SET_ATTR(severity, 3)"];
+    const { warnings } = validateModel(model);
+    expect(warnings.filter(w => w.code === "V44")).toHaveLength(0);
+  });
+
+  it("V68: quiet when JOIN's rendezvous → target flow follows the declared sequence", () => {
+    const model = joinModel();
+    model.entityTypes[0].requiredSequence = ["IntakeQueue", "SyncQueue", "ReviewQueue"];
+    const { warnings } = validateModel(model);
+    expect(warnings.filter(w => w.code === "V68")).toHaveLength(0);
+  });
+
+  it("V68: warns when JOIN routes backward against the declared sequence (proves the edge is extracted)", () => {
+    const model = joinModel();
+    model.entityTypes[0].requiredSequence = ["IntakeQueue", "ReviewQueue", "SyncQueue"];
+    const { warnings } = validateModel(model);
+    const v68 = warnings.filter(w => w.code === "V68" && w.affectedIds?.eventIds?.includes("c_join"));
+    expect(v68.length).toBeGreaterThan(0);
+  });
+});

@@ -1,6 +1,6 @@
-// src/simulation/modelChecker.test.js — F69.2 unit tests
+// tests/simulation/modelChecker.test.js — F69.2 unit tests (moved from src/simulation/, which no vitest project include pattern matched — the suite was silently never running)
 import { describe, test, expect } from "vitest";
-import { checkModel } from "./modelChecker.js";
+import { checkModel } from "../../src/simulation/modelChecker.js";
 
 // ── Base well-formed model ────────────────────────────────────────────────────
 
@@ -588,3 +588,55 @@ describe("checkModel well-formed model", () => {
 });
 
 const SEV_ORDER = { error: 0, warning: 1, info: 2 };
+
+describe("CHK-013 JOIN consumes its rendezvous queue (Sprint 98)", () => {
+  const joinModel = (extraCEvents = []) => ({
+    name: "ForkJoin",
+    entityTypes: [
+      { id: "et1", name: "Patient", role: "customer", attrDefs: [] },
+      { id: "et2", name: "Nurse", role: "server", count: "1", attrDefs: [] },
+    ],
+    queues: [
+      { id: "q1", name: "IntakeQueue" },
+      { id: "q2", name: "SyncQueue" },
+      { id: "q3", name: "ReviewQueue" },
+    ],
+    bEvents: [
+      { id: "arrive1", name: "Arrive", scheduledTime: 0, effect: "ARRIVE(Patient, IntakeQueue)",
+        schedules: [{ eventId: "arrive1", dist: "fixed", distParams: { value: 1 } }] },
+      { id: "triage_done", name: "Triage Done", scheduledTime: 9999,
+        effect: ["SPLIT(Patient, 3, SyncQueue)", "RELEASE(Nurse, SyncQueue)"], schedules: [] },
+    ],
+    cEvents: [
+      {
+        id: "ce_triage", name: "Triage", priority: 1,
+        condition: { clauses: [{ variable: "Queue.IntakeQueue.length", operator: ">", value: 0 }], logic: "AND" },
+        effect: "ASSIGN(IntakeQueue, Nurse)",
+        cSchedules: [{ eventId: "triage_done", dist: "fixed", distParams: { value: 2 } }],
+      },
+      ...extraCEvents,
+    ],
+    stateVariables: [],
+  });
+
+  test("does not trigger for a queue drained only by a JOIN C-event", () => {
+    const model = joinModel([
+      {
+        id: "ce_join", name: "Rendezvous", priority: 2,
+        condition: { clauses: [{ variable: "Queue.SyncQueue.length", operator: ">", value: 0 }], logic: "AND" },
+        effect: "JOIN(SyncQueue, ReviewQueue)",
+        cSchedules: [],
+      },
+    ]);
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-013" && i.message.includes("SyncQueue"))).toHaveLength(0);
+  });
+
+  test("still triggers when nothing at all consumes the fed queue (JOIN absent)", () => {
+    const model = joinModel();
+    const issues = checkModel(model);
+    const chk = issues.filter(i => i.code === "CHK-013");
+    expect(chk.length).toBeGreaterThan(0);
+    expect(chk.some(i => i.message.includes("SyncQueue"))).toBe(true);
+  });
+});

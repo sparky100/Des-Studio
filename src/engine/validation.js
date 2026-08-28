@@ -1182,7 +1182,7 @@ export function validateModel(model) {
     const immutableNames = new Set(
       allAttrDefs.filter(a => a.mutable === false).map(a => (a.name || '').trim()).filter(Boolean)
     );
-    const CTX_MACRO_RE = /(?:ARRIVE|ASSIGN|SEIZE|COSEIZE|BATCH|SPLIT)\s*\(/i;
+    const CTX_MACRO_RE = /(?:ARRIVE|ASSIGN|SEIZE|COSEIZE|BATCH|SPLIT|JOIN)\s*\(/i;
 
     const checkEffects = (/** @type {any} */ events, /** @type {any} */ tab) => {
       events.forEach((/** @type {any} */ ev) => {
@@ -1260,6 +1260,9 @@ export function validateModel(model) {
     // both route into a queue named in their final argument — same as ARRIVE/RELEASE.
     const MATCH_QUEUE_G = /MATCH\s*\([^,)]+,\s*[^,)]+,\s*[^,)]+,\s*[^,)]+,\s*([^)]+)\)/gi;
     const SPLIT_QUEUE_G = /SPLIT\s*\([^,)]+,\s*\d+\s*,\s*([^)]+)\)/gi;
+    // JOIN(RendezvousQueue, TargetQueue) routes the merged survivor into its
+    // second argument — a queue fed only by JOIN is reachable.
+    const JOIN_QUEUE_G = /JOIN\s*\([^,)]+,\s*([^)]+)\)/gi;
 
     const collectFromEffect = (/** @type {any} */ text) => {
       for (const m of text.matchAll(ARRIVE_QUEUE_G))  reachableNames.add(m[1].trim().toLowerCase());
@@ -1267,6 +1270,7 @@ export function validateModel(model) {
       for (const m of text.matchAll(RELEASE_COSEIZED_QUEUE_G)) reachableNames.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(MATCH_QUEUE_G))   reachableNames.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(SPLIT_QUEUE_G))   reachableNames.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(JOIN_QUEUE_G))    reachableNames.add(m[1].trim().toLowerCase());
     };
 
     bEvents.forEach(b => {
@@ -1308,7 +1312,7 @@ export function validateModel(model) {
   // intentionally revisit an earlier stage are a legitimate DES pattern, so
   // this must never block a run — it's a nudge to double-check, not a rule.
   {
-    const SOURCE_QUEUE_G  = /\b(?:ASSIGN|DELAY|COSEIZE|BATCH)\s*\(\s*([^,)]+)/gi;
+    const SOURCE_QUEUE_G  = /\b(?:ASSIGN|DELAY|COSEIZE|BATCH|JOIN)\s*\(\s*([^,)]+)/gi;
     const MATCH_SOURCES_G = /\bMATCH\s*\(\s*[^,)]+,\s*([^,)]+)\s*,\s*[^,)]+,\s*([^,)]+)\s*,/gi;
     const QUEUE_TOKEN_G   = /\bqueue\(\s*([^)]+?)\s*\)/gi;
     const ARRIVE_QUEUE_G2  = /ARRIVE\s*\([^,)]+,\s*([^)]+)\)/gi;
@@ -1316,6 +1320,7 @@ export function validateModel(model) {
     const RELEASE_COSEIZED_QUEUE_G2 = /RELEASE_COSEIZED\s*\(\s*\[[^\]]+\]\s*,\s*([^)]+)\)/gi;
     const MATCH_QUEUE_G2 = /MATCH\s*\([^,)]+,\s*[^,)]+,\s*[^,)]+,\s*[^,)]+,\s*([^)]+)\)/gi;
     const SPLIT_QUEUE_G2 = /SPLIT\s*\([^,)]+,\s*\d+\s*,\s*([^)]+)\)/gi;
+    const JOIN_QUEUE_G2 = /JOIN\s*\([^,)]+,\s*([^)]+)\)/gi;
 
     const extractSources = (/** @type {any} */ ev) => {
       const names = new Set();
@@ -1334,6 +1339,7 @@ export function validateModel(model) {
       for (const m of text.matchAll(RELEASE_COSEIZED_QUEUE_G2)) names.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(MATCH_QUEUE_G2))   names.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(SPLIT_QUEUE_G2))   names.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(JOIN_QUEUE_G2))    names.add(m[1].trim().toLowerCase());
       (ev.routing || []).forEach((/** @type {any} */ r) => r.queueName && names.add(r.queueName.toLowerCase()));
       (ev.probabilisticRouting || []).forEach((/** @type {any} */ r) => r.queueName && names.add(r.queueName.toLowerCase()));
       if (ev.defaultQueueName) names.add(ev.defaultQueueName.toLowerCase());
