@@ -331,4 +331,23 @@ Verified: lint/typecheck clean (pre-existing unrelated `phases.js`/`simpy-export
 
 ---
 
+## 17. Status — Typecheck restored to green on main (2026-08-28, same branch): 26 errors from #488, plus a process finding
+
+Main's CI Typecheck job had been red since #488 merged (every `main` push run from `3a884c2` onward: Typecheck failure, all other jobs green). All 26 errors were introduced by #488 in four `src/engine/` files; typecheck was verified clean at the immediately preceding commit (`6c59edd`).
+
+**Process finding (evidence, not speculation):** the gate itself worked — the Typecheck job ran on #488's PR and failed, twice. The PR merged anyway, which means **Typecheck (and the Vitest shards) are not required status checks in branch protection**. Until an admin marks them required (GitHub → Settings → Branches → protection rule for `main`), any red check is advisory only and this will recur. That is the C-1 lesson in a new form: the check exists, the enforcement doesn't.
+
+The fixes (all typing-level; one semantically-identical restructure, zero behavior change):
+
+| File | Error | Fix |
+|---|---|---|
+| `phases.js` (22 errors) | `applyEffect`'s early-exit branch returns `{ msgs: [], felEntries: [] }` whose `[]` literals infer as `never[]`; unioned with the main branch, `.push()`'s parameter collapses to `never` at every call site | Explicit `@returns {{ msgs: any[], felEntries: any[], noOp?: boolean }}` JSDoc |
+| `macros.js:1335` | `arrivedByRoot.get(rootId).push(e)` — TS can't see the preceding `.has()` guard | `let family = get(...); if (!family) { family = []; set(...) }` — same semantics, guard TS can follow |
+| `entities.js:552` | `selectVictimServer`'s `index` param typed `Record<string, any>\|null` but passed to `findEntityById(QueueIndex\|null)` | Param retyped `QueueIndex\|null` (what every caller actually passes) |
+| `simpy-export.js:710` | `const reqUnits = []` implicit `any[]` | `/** @type {string[]} */` |
+
+Verified: `npm run typecheck` exits 0; engine test suite green (the `macros.js` restructure is the only executable-code change).
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*

@@ -542,7 +542,7 @@ export function releaseServerClaim(customer, server, clock) {
  * @param {Record<string, any>[]} busyServers
  * @param {string|null} criterion
  * @param {Record<string, any>[]} entities
- * @param {Record<string, any>|null} index
+ * @param {QueueIndex|null} index
  * @param {(msg: string) => void} [warn]
  */
 export function selectVictimServer(busyServers, criterion, entities, index, warn) {

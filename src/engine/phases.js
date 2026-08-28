@@ -193,6 +193,10 @@ export function applyShiftChange(ev, ctx) {
 /**
  * @param {string} effect
  * @param {any} ctx
+ * @returns {{ msgs: any[], felEntries: any[], noOp?: boolean }} — without this
+ *   annotation the early-exit branch's `[]` literals infer as `never[]`, and
+ *   the union with the main branch collapses `.push()`'s parameter to `never`
+ *   at every call site.
  */
 export function applyEffect(effect, ctx) {
   const { entities, state, model, clock, felRef, helpers, fel } = ctx;
