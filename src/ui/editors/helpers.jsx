@@ -395,7 +395,7 @@ const DropField = ({value, onChange, options, color}) => {
 const categorizeEffect = (value) => {
   const v = String(value||"").trim();
   if (!v) return 'other';
-  if (/^ARRIVE\s*\(/i.test(v)||/^BATCH\s*\(/i.test(v)||/^UNBATCH\s*\(/i.test(v)||/^SPLIT\s*\(/i.test(v)||/^MATCH\s*\(/i.test(v)||/^RENEGE/i.test(v)||/^CANCEL\s*\(/i.test(v)) return 'queue';
+  if (/^ARRIVE\s*\(/i.test(v)||/^BATCH\s*\(/i.test(v)||/^UNBATCH\s*\(/i.test(v)||/^SPLIT\s*\(/i.test(v)||/^JOIN\s*\(/i.test(v)||/^MATCH\s*\(/i.test(v)||/^RENEGE/i.test(v)||/^CANCEL\s*\(/i.test(v)) return 'queue';
   if (/^(COMPLETE|RELEASE|ASSIGN|COSEIZE|FINISH)\s*\(/i.test(v)) return 'service';
   if (/^SET_ATTR\s*\(/i.test(v)||/^SET\s*\(/i.test(v)||/^ROUND_ROBIN\s*\(/i.test(v)||/(\+\+|--|[+\-]=\s*\d|=\s*\d)/.test(v)) return 'state';
   if (/^COST\s*\(/i.test(v)) return 'cost';
@@ -447,6 +447,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const [batchSizeMode, setBatchSizeMode] = useState('literal'); // 'literal' | 'attribute'
   const [batchAttr, setBatchAttr] = useState('');
   const [splitType, setSplitType] = useState(''); // '' = follow the target queue's type
+  const [joinTarget, setJoinTarget] = useState(''); // JOIN's TargetQueue (arg 1); opQueue is the rendezvous queue
   const [assignSource, setAssignSource] = useState('');
   const [assignServer, setAssignServer] = useState('');
   const [assignSkill, setAssignSkill] = useState(''); // '' | `lit:<skill>` | `attr:<name>`
@@ -522,6 +523,14 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
       const n = Math.max(2, Math.round(Number(exprValue)) || 2);
       add(`SPLIT(${splitType || q.type}, ${n}, ${opQueue})`);
       setExprValue('');
+      return;
+    }
+    if (exprMacro === 'JOIN') {
+      // Both queues required; a distinct target keeps the merged survivor out
+      // of the rendezvous queue (routing it back would re-trigger the JOIN's
+      // own condition forever).
+      if (!opQueue || !joinTarget || opQueue === joinTarget) return;
+      add(`JOIN(${opQueue}, ${joinTarget})`);
       return;
     }
     if (exprMacro === 'FAIL' || exprMacro === 'REPAIR') {
@@ -750,6 +759,20 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     border:`1px solid ${exprMacro==='SPLIT'?C.cEvent:C.border}`,
                     borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
                     color:exprMacro==='SPLIT'?C.cEvent:C.muted,cursor:'pointer',fontWeight:700}}>SPLIT</button>
+              )}
+              {matchQueues.length>=2&&(
+                <button onClick={()=>{
+                    setExprMacro('JOIN');
+                    const rdv=opQueue||matchQueues[0].name;
+                    if(!opQueue)setOpQueue(rdv);
+                    // Commit a distinct-target default to state (not just a
+                    // display fallback) so Add isn't wrongly disabled.
+                    if(!joinTarget||joinTarget===rdv)setJoinTarget(matchQueues.find(q=>q.name!==rdv)?.name||'');
+                  }}
+                  style={{background:exprMacro==='JOIN'?C.cEvent+'22':'transparent',
+                    border:`1px solid ${exprMacro==='JOIN'?C.cEvent:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='JOIN'?C.cEvent:C.muted,cursor:'pointer',fontWeight:700}}>JOIN (fork/join)</button>
               )}
               {containerNames.length>0&&(
                 <button onClick={()=>{setExprMacro('DRAIN');setExprValue('');if(!opContainer)setOpContainer(containerNames[0]);}}
@@ -1025,6 +1048,23 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   )}
                 </>
               )}
+              {exprMacro==='JOIN'&&matchQueues.length>=2&&(
+                <>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>rendezvous:</span>
+                  <select value={opQueue||matchQueues[0].name} onChange={e=>setOpQueue(e.target.value)}
+                    style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+                      color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
+                    {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name}</option>)}
+                  </select>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>then route to:</span>
+                  <select value={joinTarget} onChange={e=>setJoinTarget(e.target.value)}
+                    style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+                      color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
+                    {matchQueues.filter(q=>q.name!==(opQueue||matchQueues[0].name))
+                      .map(q=><option key={q.name} value={q.name}>{q.name}</option>)}
+                  </select>
+                </>
+              )}
               {(exprMacro==='DRAIN'||exprMacro==='FILL')&&containerNames.length>0&&(
                 <select value={opContainer||containerNames[0]} onChange={e=>setOpContainer(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.purple}55`,borderRadius:4,
@@ -1060,7 +1100,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   {eventNames.map(n=><option key={n} value={n}>{n}</option>)}
                 </select>
               )}
-              {exprMacro!=='CANCEL'&&exprMacro!=='COSEIZE'&&exprMacro!=='ASSIGN'&&exprMacro!=='PREEMPT'&&exprMacro!=='FINISH'&&!(exprMacro==='BATCH'&&batchSizeMode==='attribute')&&(
+              {exprMacro!=='CANCEL'&&exprMacro!=='COSEIZE'&&exprMacro!=='ASSIGN'&&exprMacro!=='PREEMPT'&&exprMacro!=='FINISH'&&exprMacro!=='JOIN'&&!(exprMacro==='BATCH'&&batchSizeMode==='attribute')&&(
                 exprMacro==='BATCH'||exprMacro==='SPLIT'?(
                   <input type="number" min={2} step={1}
                     value={exprValue}
@@ -1111,6 +1151,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                       })()
                     : exprMacro==='BATCH' ? (!opQueue||(batchSizeMode==='attribute'?!batchAttr:!exprValue.trim()))
                     : exprMacro==='SPLIT' ? (!opQueue||!exprValue.trim())
+                    : exprMacro==='JOIN' ? (!opQueue||!joinTarget||opQueue===joinTarget)
                     : exprMacro==='DRAIN'||exprMacro==='FILL' ? (!opContainer||!(isPositiveNumber(exprValue.trim())||isValidAmountExpr(exprValue.trim(),stateVars)))
                     : exprMacro==='FAIL'||exprMacro==='REPAIR' ? (!failRepairType||!Number.isInteger(Math.round(Number(exprValue)))||Number(exprValue)<1)
                     : (!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0])))

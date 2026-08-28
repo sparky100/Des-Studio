@@ -654,3 +654,60 @@ describe("EffectPicker option generators — engine round-trip (Sprint 94 regres
     for (const v of values) expect(matchesEngine(v)).toBe(true);
   });
 });
+
+describe("EffectPicker — JOIN fork/join composer (Sprint 98)", () => {
+  it("adds JOIN with the default rendezvous queue and a distinct default target", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "JOIN (fork/join)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["JOIN(Triage Queue, Ward Queue)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds JOIN with a re-chosen rendezvous queue, keeping the two arguments distinct", () => {
+    const onChange = vi.fn();
+    const threeQueueCtx = {
+      ...fullCtx,
+      matchQueues: [
+        { name: "Triage Queue", type: "Customer" },
+        { name: "Sync Queue", type: "Customer" },
+        { name: "Ward Queue", type: "Customer" },
+      ],
+    };
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={threeQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "JOIN (fork/join)" }));
+    // Defaults committed on click: rendezvous "Triage Queue", target "Sync Queue".
+    fireEvent.change(screen.getByDisplayValue("Sync Queue"), { target: { value: "Ward Queue" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["JOIN(Triage Queue, Ward Queue)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("disables Add when the rendezvous and target queues are the same", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "JOIN (fork/join)" }));
+    // Move the rendezvous onto the committed target ("Ward Queue"): the two
+    // args now collide, and Add must refuse to emit JOIN(Q, Q).
+    fireEvent.change(screen.getByDisplayValue("Triage Queue"), { target: { value: "Ward Queue" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("does not offer the JOIN composer with fewer than two queues in context", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={oneQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    expect(screen.queryByRole("button", { name: /^JOIN/ })).not.toBeInTheDocument();
+  });
+});
