@@ -1,6 +1,6 @@
-// tests/simulation/modelChecker.test.js — F69.2 unit tests (moved from src/simulation/, which no vitest project include pattern matched — the suite was silently never running)
+// src/simulation/modelChecker.test.js — F69.2 unit tests
 import { describe, test, expect } from "vitest";
-import { checkModel } from "../../src/simulation/modelChecker.js";
+import { checkModel } from "./modelChecker.js";
 
 // ── Base well-formed model ────────────────────────────────────────────────────
 

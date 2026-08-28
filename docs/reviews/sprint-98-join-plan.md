@@ -65,9 +65,8 @@ Six commits on `claude/macro-library-ui-coverage-bydeiz`:
    `queue-refs.test.js`.
 2. **`engine: validation + model checker know JOIN`** — CHK-013 counts JOIN's arg 0 as a consumed
    queue; V45 counts arg 1 as a routing destination; V68 traces rendezvous → target edges; V44
-   accepts `SET_ATTR` after JOIN (the survivor is the context entity). Also moved
-   `modelChecker.test.js` from `src/simulation/` to `tests/simulation/` — no vitest include
-   pattern matched its old location, so the whole suite had been silently not running.
+   accepts `SET_ATTR` after JOIN (the survivor is the context entity). New JOIN coverage added to
+   `modelChecker.test.js` in its existing location (`src/simulation/`) alongside the CHK-013 suite.
 3. **`editors: JOIN in the C-event effect picker`** — a two-dropdown composer
    ("rendezvous:" → "then route to:"), composer-only (no O(|Q|²) enumeration), distinct-target
    guard, categorized under the Queue chip.
