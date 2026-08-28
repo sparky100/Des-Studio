@@ -96,6 +96,19 @@ export default defineConfig({
             'src/engine/**/__tests__/**/*.test.js',
             'src/llm/**/__tests__/**/*.test.js',
             'src/reports/**/__tests__/**/*.test.js',
+            // src/simulation co-locates its tests flat, without a __tests__/
+            // subfolder (unlike every other src/ dir above) — easy to miss
+            // when hand-listing include globs, which is exactly what
+            // happened here: this pattern was absent for this PR's first
+            // five commits, silently dropping modelChecker.test.js and
+            // traceCollector.test.js from every tier (not unit, not ui, not
+            // soak — verified with `vitest run --project <name> <file>` on
+            // each). Caught only because a human reviewer asked whether
+            // these two files were covered. Neither file's absence made any
+            // `vitest run` command report fewer tests as failing or
+            // missing — an include glob that stops matching a file doesn't
+            // error, it just silently runs one file fewer.
+            'src/simulation/**/*.test.js',
           ],
           exclude: [
             'tests/ui/**',

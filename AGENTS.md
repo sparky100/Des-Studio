@@ -1833,6 +1833,20 @@ The general lesson for anyone touching `vite.config.js`'s `test` block: **pool-l
 
 ---
 
+### 22.1c Vitest `test.projects`' `include` Globs Silently Dropped Two Test Files
+
+**Issue:** When §22.1b replaced the suite's single implicit glob with explicit `include` lists per project (`unit`, `ui`, `soak`), `src/simulation/modelChecker.test.js` and `src/simulation/traceCollector.test.js` (42 tests, testing `modelChecker.js` — the pre-run structural checker gating `run-admission.js` and used by `ExecutePanel`) matched none of the three projects' `include` arrays and silently stopped running, in every tier, on every push, from the very first `test.projects` commit onward. Every one of those CI runs reported 0 failures — an unmatched file is not a failure, it is invisible.
+
+**Root cause:** every other `src/` test directory co-locates tests inside a `__tests__/` subfolder (`src/engine/__tests__/`, `src/ui/shared/__tests__/`, etc.), which is the convention the hand-written `include` globs (`src/db/**/__tests__/**/*.test.js` and so on) were built around. `src/simulation/` is the one exception: its two tests sit flat, next to the modules they test, with no `__tests__/` folder — easy to miss when listing globs by directory rather than by literally auditing every test file that exists.
+
+**Caught by:** a human reviewer asking, after the PR was already open and green, whether this specific file was covered — not by any automated check, and not by the coverage review a few turns earlier either, which counted `src/simulation` as "2/2 tested" from a static import-graph pass (does some test file import this module) without ever confirming those tests actually match a `vitest run` include pattern. Static-import coverage and "this file will actually execute under the current config" are different questions; this incident is why.
+
+**Fix:** added `'src/simulation/**/*.test.js'` to the `unit` project's `include`. Verified with the same audit this incident should have started with: `find src -name '*.test.*' | grep -v __tests__` against every project's include list, not just the directories already named in it.
+
+**Status:** Resolved 2026-08-28.
+
+---
+
 ### 22.2 Vite Import Analysis Fails on UTF-8 Multi-Byte Characters (Em Dashes) in `.js` Test Files
 
 **Issue:** A `.js` test file containing em dash characters (U+2014) inside string literals caused Vite's import analysis to fail with: `Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.`
