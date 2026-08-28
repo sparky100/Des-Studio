@@ -51,7 +51,13 @@ function createSampleMm1Model() {
         id: "b_arrive",
         name: "Arrival",
         scheduledTime: "0",
-        effect: ["ARRIVE(Customer)"],
+        // Route explicitly into the declared "Customer" queue. Bare
+        // ARRIVE(Customer) defaults to a queue named "CustomerQueue", which
+        // this model does not declare — entities then wait in a queue the
+        // Seize condition (queue(Customer).length) never sees, and nobody is
+        // ever served. The visual designer always emits the explicit
+        // two-argument form for the same reason.
+        effect: ["ARRIVE(Customer, Customer)"],
         schedules: [
           {
             eventId: "b_arrive",
