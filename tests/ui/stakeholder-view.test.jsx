@@ -18,6 +18,15 @@ vi.mock('../../src/engine/replication-runner.js', () => ({
   runReplications: vi.fn(),
 }));
 
+const mockBuildEngine = vi.hoisted(() => vi.fn());
+vi.mock('../../src/engine/index.js', async () => {
+  const actual = await vi.importActual('../../src/engine/index.js');
+  return { ...actual, buildEngine: mockBuildEngine };
+});
+vi.mock('../../src/ui/execute/ExecuteCanvas.jsx', () => ({
+  ExecuteCanvas: ({ model }) => <div data-testid="execute-canvas" data-model-name={model?.name ?? ''} />,
+}));
+
 // Base on the app's own known-valid starter model so validateModel passes
 // and the Run gate genuinely opens.
 import { createSampleMm1Model } from '../../src/App.jsx';
@@ -154,5 +163,51 @@ describe('StakeholderView', () => {
 
     expect(await screen.findByText(/something went wrong while running the model/i)).toBeInTheDocument();
     expect(screen.queryByText(/worker exploded/)).not.toBeInTheDocument();
+  });
+});
+
+describe('StakeholderView — Watch it run', () => {
+  // setInterval/clearInterval are stubbed so StakeholderRunCanvas's auto-loop
+  // never actually fires during these wiring tests — only reachability of the
+  // canvas view and the patched model it receives are under test here.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchModelSchedules.mockResolvedValue([]);
+    mockBuildEngine.mockReturnValue({ getSnap: () => ({ clock: 0, entities: [] }), step: () => ({ done: false, cycleLog: [], snap: { clock: 1, entities: [] } }) });
+    vi.spyOn(global, 'setInterval').mockImplementation(() => 1);
+    vi.spyOn(global, 'clearInterval').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('swaps to the animated canvas with the patched model, leaving the statistical Run button untouched', async () => {
+    renderView();
+    await waitFor(() => expect(screen.getByRole('button', { name: /watch it run/i })).not.toBeDisabled());
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Number of tellers' }), { target: { value: '4' } });
+    fireEvent.click(screen.getByRole('button', { name: /watch it run/i }));
+
+    expect(await screen.findByTestId('execute-canvas')).toBeInTheDocument();
+    expect(mockBuildEngine).toHaveBeenCalledTimes(1);
+    const patched = mockBuildEngine.mock.calls[0][0];
+    expect(patched.entityTypes.find(e => e.id === 'et_srv').count).toBe('4');
+    // Run/runReplications path is completely separate — never invoked by Watch it run.
+    expect(runReplications).not.toHaveBeenCalled();
+    // Settings panel is swapped out, not layered underneath.
+    expect(screen.queryByRole('button', { name: /run the simulation/i })).not.toBeInTheDocument();
+  });
+
+  it('Close returns to the settings view', async () => {
+    renderView();
+    await waitFor(() => expect(screen.getByRole('button', { name: /watch it run/i })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: /watch it run/i }));
+    await screen.findByTestId('execute-canvas');
+
+    fireEvent.click(screen.getByRole('button', { name: /back to settings/i }));
+
+    expect(screen.getByRole('button', { name: /run the simulation/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('execute-canvas')).not.toBeInTheDocument();
   });
 });

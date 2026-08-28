@@ -315,4 +315,20 @@ Closing a long-running language-complexity debate: the "B-Events"/"C-Events" jar
 
 ---
 
+## 16. Status — "▶ Watch it run" implemented (2026-08-28, same branch): a viewer collaborator can watch an illustrative animated pass, alongside the statistical Run
+
+Follow-on from "if I add someone as a Collab where do they see it": the user's real expectation was that a viewer collaborator could watch the model running — entities moving on the canvas, as with Auto Run on the Execute screen — "rather than just see some results." Explicitly scoped to signed-in viewer collaborators only (no anonymous/no-account access); today's "Run" (N replications, full statistical summary) is completely unchanged — this adds a separate button, never a replacement, since one seeded pass isn't statistically representative.
+
+| Piece | Notes |
+|---|---|
+| `src/ui/StakeholderRunCanvas.jsx` (new) | Small, purpose-built animated single-run view — not a trimmed copy of `ExecutePanel`. Auto-plays on open (`buildEngine` + `setInterval(doStep, 350ms)`, mirroring Auto Run's mechanics) with Pause/Resume/Reset/Close, renders the same lazy-loaded `ExecuteCanvas` the Execute screen uses. **No save call of any kind, ever** — the one piece of `ExecutePanel`'s Auto Run this deliberately does not carry over (its save-on-completion branch is gated only on `modelId`, not `userId`) |
+| Admission reuse, not recomputation | Takes the `admission` object `StakeholderView` already computed for its own Run button (on the *unpatched* model) as a prop, rather than recomputing `getRunAdmission` against the patched, parameter-overridden model. Discovered during testing: `applySweepValues` stores numeric overrides as strings (e.g. entity count `"4"`, matching how the rest of the app stores these fields), which a fresh `validateModel` legitimately flags as non-integer (V19) — the real Run button never hits this because it never re-validates its patched model either, so this mirrors that existing behaviour instead of introducing a stricter, new false-blocker for any viewer who adjusts a knob |
+| `src/ui/StakeholderView.jsx` | New "▶ Watch it run" button beside Run, disabled under the same blocked/schedules-not-ready conditions. Builds the same patched model as `handleRun` (extracted to `buildPatchedModel()`) and swaps the settings view for the canvas; a Close button returns to settings. Existing Run/`runReplications`/`SummaryCardGrid` path is untouched |
+
+New tests: `tests/ui/stakeholder-run-canvas.test.jsx` (5) — engine build + auto-play-to-completion with the illustrative note, a regression guard that `saveSimulationRun`/`saveLocalRun`/`fetchUserSettings`/`saveUserSettings` are never called, the blocked state never builds an engine, Pause/Resume/Reset, Close+unmount stops the interval. `tests/ui/stakeholder-view.test.jsx` gains a "Watch it run" describe block (2) — the button wires through the patched model without touching the statistical Run path, and Close returns to settings. Existing Stakeholder View suite untouched.
+
+Verified: lint/typecheck clean (pre-existing unrelated `phases.js`/`simpy-export.js`/`entities.js`/`macros.js` errors confirmed via `git stash`); targeted + full suite before push.
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*
