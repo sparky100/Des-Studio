@@ -11,7 +11,7 @@
 
 // Macros whose SimPy translation requires manual completion
 const TODO_MACRO_SET = new Set([
-  'RENEGE', 'BATCH', 'RENEGE_OLDEST', 'MATCH', 'FAIL', 'REPAIR', 'PREEMPT', 'RELEASE_COSEIZED',
+  'RENEGE', 'BATCH', 'RENEGE_OLDEST', 'MATCH', 'FAIL', 'REPAIR', 'PREEMPT', 'FINISH', 'RELEASE_COSEIZED', 'JOIN',
 ]);
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -70,6 +70,23 @@ function safeId(name) {
     .replace(/[^A-Za-z0-9_]/g, '')
     .replace(/^([0-9])/, '_$1');
   return s || 'unnamed';
+}
+
+// Parse one COSEIZE argument "Type[Skill]:N" — mirrors the engine's own
+// runtime parser (src/engine/macros.js COSEIZE handler) so the syntax means
+// the same thing in the live engine and the exported SimPy script. This
+// module has no JS import path into macros.js, so this is a deliberate,
+// kept-in-sync duplication (same pattern this file already uses elsewhere).
+// Stripping "[Skill]" here also fixes a pre-existing bug: safeId() alone
+// doesn't remove brackets, so a skilled arg like "Doctor[Surgery]" used to
+// generate a resource variable name ("DoctorSurgery_resource") that matched
+// nothing actually declared.
+/** @param {any} arg */
+function parseCoseizeArg(arg) {
+  const m = String(arg || '').trim().match(/^([^\[:]+?)\s*(?:\[\s*([^\]]+?)\s*\])?\s*(?::\s*(\d+))?$/);
+  if (!m) return { type: String(arg || '').trim(), skill: null, qty: 1 };
+  const rawQty = m[3] ? parseInt(m[3], 10) : 1;
+  return { type: m[1].trim(), skill: m[2] ? m[2].trim() : null, qty: (Number.isFinite(rawQty) && rawQty > 0) ? rawQty : 1 };
 }
 
 // Convert to PascalCase class name
@@ -655,7 +672,8 @@ class Stats:
       const isCoseize = assignCall.name === 'COSEIZE';
       const args = assignCall.rawArgs.split(',').map((/** @type {any} */ s) => s.trim());
       const queueName = args[0];
-      const serverTypes = isCoseize ? args.slice(1) : [args[1]];
+      const coseizeDefs = isCoseize ? args.slice(1).map(parseCoseizeArg) : null;
+      const serverTypes = isCoseize ? coseizeDefs.map((/** @type {any} */ d) => d.type) : [args[1]];
       const storeId = safeId(queueName) + '_store';
 
       const { dist: svcDist, distParams: svcParams, placeholder } = getServiceDist(c);
@@ -670,7 +688,10 @@ class Stats:
       const monFn = safeId(c.name || 'service') + '_monitor';
       const svcFn = safeId(c.name || 'service') + '_serve';
 
-      // Resource arguments string
+      // Resource arguments string — one variable per distinct TYPE (a
+      // quantity-N COSEIZE arg still shares one underlying simpy.Resource;
+      // qty controls how many .request() calls are issued against it below,
+      // not how many resource variables exist).
       const resArgs = serverTypes.map((/** @type {any} */ st) => safeId(st) + '_resource').join(', ');
       const resVars = serverTypes.map((/** @type {any} */ st) => safeId(st) + '_resource');
 
@@ -681,10 +702,23 @@ class Stats:
       // COSEIZE: AllOf across multiple resources
       let seizeBlock;
       if (isCoseize) {
-        const reqVars = resVars.map((/** @type {any} */ r, /** @type {number} */ i) => `_req${i}`);
-        const reqDecls = resVars.map((/** @type {any} */ r, /** @type {number} */ i) => `    ${reqVars[i]} = ${r}.request(priority=${priority})`).join('\n');
-        const svcBusyLines = serverTypes.map((/** @type {any} */ st) =>
-          `        stats.resource_busy["${st}"] = stats.resource_busy.get("${st}", 0.0) + _svc_t`
+        // Flatten to one .request() per unit — qty copies against the SAME
+        // resource variable for a qty-N type, not N separate resources —
+        // still combined into a single simpy.AllOf so the whole set (correct
+        // total request count) is acquired atomically, mirroring the
+        // engine's own check-all-before-claim-any.
+        const reqUnits = [];
+        coseizeDefs.forEach((/** @type {any} */ d) => {
+          const resVar = safeId(d.type) + '_resource';
+          for (let i = 0; i < d.qty; i++) reqUnits.push(resVar);
+        });
+        const reqVars = reqUnits.map((/** @type {any} */ _r, /** @type {number} */ i) => `_req${i}`);
+        const reqDecls = reqUnits.map((/** @type {any} */ r, /** @type {number} */ i) => `    ${reqVars[i]} = ${r}.request(priority=${priority})`).join('\n');
+        // Busy-time accounting scales by qty: seizing 2 Nurses for duration D
+        // is 2*D nurse-busy-seconds, not D — else utilization (resource_busy
+        // / (warmup_t * capacity)) is under-reported for a quantity-seized type.
+        const svcBusyLines = coseizeDefs.map((/** @type {any} */ d) =>
+          `        stats.resource_busy["${d.type}"] = stats.resource_busy.get("${d.type}", 0.0) + ${d.qty > 1 ? `${d.qty} * _svc_t` : '_svc_t'}`
         ).join('\n');
         const svcNoteLineCoseize = svcNote ? `        ${svcNote}\n` : '';
         seizeBlock =
@@ -725,8 +759,13 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       cEventRoutingStores.set(c.name, routingStoreVarNames);
       const rStoreComma = routingStoreVarNames.length > 0 ? ', ' + routingStoreVarNames.join(', ') : '';
 
+      // Rebuild qty-annotated arg text for the docstring only (the resource
+      // variable lists above are already qty-agnostic, one per distinct type).
+      const argsLabel = isCoseize
+        ? coseizeDefs.map((/** @type {any} */ d) => d.qty > 1 ? `${d.type}:${d.qty}` : d.type).join(', ')
+        : serverTypes.join(', ');
       let monBody = `def ${monFn}(env, ${storeId}, ${resArgs}${rStoreComma}, stats):\n`;
-      monBody += `    """C-event "${c.name}": ${assignCall.name}(${queueName}, ${serverTypes.join(', ')})"""\n`;
+      monBody += `    """C-event "${c.name}": ${assignCall.name}(${queueName}, ${argsLabel})"""\n`;
       monBody += `    while True:\n`;
       monBody += `        entity = yield ${storeId}.get()\n`;
       monBody += `        env.process(${svcFn}(env, entity, ${resArgs}${rStoreComma}, stats))\n`;
@@ -851,10 +890,12 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       BATCH: `# NOT SUPPORTED (BATCH): Accumulate N entities from a store before processing.\n# Pattern:\n#   batch = []\n#   while len(batch) < BATCH_SIZE:\n#       batch.append(yield source_store.get())\n#   batch_entity = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(batch_entity)`,
       RENEGE_OLDEST: `# NOT SUPPORTED (RENEGE_OLDEST): Remove the oldest entity from a SimPy Store.\n# Pattern:\n#   if queue_store.items:\n#       oldest = queue_store.items.pop(0)  # FIFO: index 0 is oldest\n#       if env.now >= WARMUP_PERIOD: stats.reneged.append(oldest)`,
       MATCH: `# NOT SUPPORTED (MATCH): Pair entities from two stores.\n# Pattern:\n#   entity_a = yield store_a.get()\n#   entity_b = yield store_b.get()\n#   combined = Entity(id=..., arrival_time=env.now)\n#   yield target_store.put(combined)`,
-      FAIL: `# NOT SUPPORTED (FAIL): Simulate server failure.\n# Pattern:\n#   resource._capacity = 0  # blocks new requests\n#   # In-flight requests are not automatically interrupted.\n#   # To interrupt: use simpy.PreemptiveResource and resource.request(preempt=True).`,
-      REPAIR: `# NOT SUPPORTED (REPAIR): Restore server after failure (pair with FAIL).\n# Pattern:\n#   resource._capacity = ORIGINAL_CAPACITY`,
-      PREEMPT: `# NOT SUPPORTED (PREEMPT): Use simpy.PreemptiveResource for the target server.\n# Replace simpy.Resource with simpy.PreemptiveResource at declaration.\n# Use: resource.request(priority=0, preempt=True)`,
+      FAIL: `# NOT SUPPORTED (FAIL): Simulate server failure. If a quantity N was given\n# (FAIL(Type, N)), only N units should be taken offline -- otherwise all.\n# Pattern:\n#   resource._capacity -= N  # or set to 0 for "all" (no N given)\n#   # In-flight requests are not automatically interrupted.\n#   # To interrupt: use simpy.PreemptiveResource and resource.request(preempt=True).`,
+      REPAIR: `# NOT SUPPORTED (REPAIR): Restore server after failure (pair with FAIL). If a\n# quantity N was given (REPAIR(Type, N)), only N units should be restored.\n# Pattern:\n#   resource._capacity += N  # or set to ORIGINAL_CAPACITY for "all" (no N given)`,
+      PREEMPT: `# NOT SUPPORTED (PREEMPT): Use simpy.PreemptiveResource for the target server. If\n# a Criterion was given (PREEMPT(Type, Criterion) -- PRIORITY(attr), LONGEST, or\n# SHORTEST), rank the in-progress requests by that criterion and preempt the one\n# it selects rather than an arbitrary one -- otherwise preempt any in-progress request.\n# Replace simpy.Resource with simpy.PreemptiveResource at declaration.\n# Use: resource.request(priority=0, preempt=True)`,
+      FINISH: `# NOT SUPPORTED (FINISH): End the in-progress service of a busy server right now\n# (on a condition, not a scheduled delay) -- e.g. an "activity of unknown duration".\n# If a Criterion was given (FINISH(Type, Criterion) -- PRIORITY(attr), LONGEST, or\n# SHORTEST), rank the in-progress requests by that criterion and finish the one it\n# selects rather than an arbitrary one.\n# Pattern:\n#   # trigger the process holding the target request's timeout early, e.g. via an\n#   # env.event() the service process also yields on:\n#   finish_event.succeed()`,
       RELEASE_COSEIZED: `# NOT SUPPORTED (RELEASE_COSEIZED): Atomically release multiple previously co-seized resources for the current entity, mirroring COSEIZE's own AllOf() seize.\n# Pattern:\n#   for _req in entity.coseized_requests:  # however you tracked the requests from the matching COSEIZE\n#       try: _req.resource.release(_req)\n#       except: pass\n#   entity.coseized_requests = []`,
+      JOIN: `# NOT SUPPORTED (JOIN): Fork/join rendezvous for SPLIT families -- hold split-family\n# members arriving in the rendezvous store until the family is complete, then merge\n# them into one surviving entity routed to the target store. Needs a per-family\n# counting mechanism keyed by the family root id.\n# Pattern:\n#   # each branch process signals its completion event for the family:\n#   family_done = simpy.AllOf(env, branch_events[family_id])\n#   yield family_done\n#   survivor = Entity(id=parent_id, arrival_time=parent_arrival)  # parent keeps its stats\n#   yield target_store.put(survivor)`,
     };
     for (const m of todoList) {
       if (stubs[m]) stubParts.push(stubs[m]);
@@ -967,7 +1008,9 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       if (!assignCall) continue;
       const args = assignCall.rawArgs.split(',').map((/** @type {any} */ s) => s.trim());
       const queueName = args[0];
-      const serverTypes = assignCall.name === 'COSEIZE' ? args.slice(1) : [args[1]];
+      const serverTypes = assignCall.name === 'COSEIZE'
+        ? args.slice(1).map((/** @type {any} */ a) => parseCoseizeArg(a).type)
+        : [args[1]];
       const storeId = safeId(queueName) + '_store';
       const resArgs = serverTypes.map((/** @type {any} */ st) => safeId(st) + '_resource').join(', ');
       const monFn = safeId(c.name || 'service') + '_monitor';

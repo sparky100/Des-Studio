@@ -78,6 +78,7 @@ function buildConsumedQueues(cEvents) {
     for (const m of s.matchAll(/DELAY\s*\(\s*([^,)]+)/gi))   queues.add(m[1].trim().toLowerCase());
     for (const m of s.matchAll(/BATCH\s*\(\s*([^,)]+)/gi))   queues.add(m[1].trim().toLowerCase());
     for (const m of s.matchAll(/COSEIZE\s*\(\s*([^,)]+)/gi)) queues.add(m[1].trim().toLowerCase());
+    for (const m of s.matchAll(/JOIN\s*\(\s*([^,)]+)/gi))    queues.add(m[1].trim().toLowerCase());
     for (const m of s.matchAll(/MATCH\s*\(\s*[^,]+,\s*([^,]+),\s*[^,]+,\s*([^,)]+)/gi)) {
       queues.add(m[1].trim().toLowerCase());
       queues.add(m[2].trim().toLowerCase());

@@ -28,6 +28,7 @@ const fullCtx = {
   skills: ["Triage"],
   customerTypes: ["Customer", "VIP"],
   serverSkillsByType: { Nurse: ["Triage"], Doctor: ["Surgery"], Porter: [] },
+  bEventServerTypes: ["Nurse", "Doctor"],
 };
 
 // Engine round-trip guard — the audit's core issue was UI composers emitting
@@ -289,6 +290,56 @@ describe("EffectPicker — COSEIZE composer v2 (Sprint 94, audit gap 6)", () => 
     expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
   });
 
+  // Sprint 95 — COSEIZE Type:N quantity syntax
+  it("raising row 1's quantity emits Type:N", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={oneQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
+    fireEvent.change(screen.getByLabelText("Quantity for server type row 1"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["COSEIZE(Triage Queue, Nurse:2, Doctor)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("combines a per-row skill and quantity: Nurse[Triage]:2", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
+    fireEvent.change(screen.getAllByDisplayValue("— no skill —")[0], { target: { value: "Triage" } });
+    fireEvent.change(screen.getByLabelText("Quantity for server type row 1"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["COSEIZE(Triage Queue, Nurse[Triage]:2, Doctor)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("disables Add when a row's quantity is zero or empty", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={oneQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
+    fireEvent.change(screen.getByLabelText("Quantity for server type row 1"), { target: { value: "0" } });
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Quantity for server type row 1"), { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
+  it("disables Add when a row's quantity is non-numeric", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={oneQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "COSEIZE (N server types)" }));
+    fireEvent.change(screen.getByLabelText("Quantity for server type row 1"), { target: { value: "abc" } });
+
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
   it("cannot remove a row below the two-row minimum", () => {
     render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={oneQueueCtx} />);
 
@@ -348,6 +399,140 @@ describe("EffectPicker — SPLIT clone-type picker (Sprint 94, audit gap 8)", ()
 
     expect(onChange).toHaveBeenCalledWith(["SPLIT(VIP, 3, Triage Queue)"]);
     expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+});
+
+describe("EffectPicker — FAIL/REPAIR partial-quantity composer (Sprint 96)", () => {
+  it("adds FAIL with a chosen server type and quantity", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "FAIL (N servers)" }));
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 1)"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["FAIL(Nurse, 1)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds REPAIR with a chosen server type and quantity", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "REPAIR (N servers)" }));
+    fireEvent.change(screen.getByDisplayValue("Nurse"), { target: { value: "Doctor" } });
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 1)"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["REPAIR(Doctor, 2)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("disables Add when the quantity is zero or empty", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "FAIL (N servers)" }));
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 1)"), { target: { value: "0" } });
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 1)"), { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
+  it("disables Add when the quantity is non-numeric", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "REPAIR (N servers)" }));
+    fireEvent.change(screen.getByPlaceholderText("quantity (≥ 1)"), { target: { value: "abc" } });
+
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
+  it("does not offer FAIL/REPAIR composers with no server types in context", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()}
+      expressionContext={{ ...fullCtx, bEventServerTypes: [] }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    expect(screen.queryByRole("button", { name: /^FAIL/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^REPAIR/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("EffectPicker — PREEMPT/FINISH victim-selection composer (Sprint 97)", () => {
+  it("adds a plain PREEMPT with no criterion, matching the enumerated quick-pick's output", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "PREEMPT (by criterion)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["PREEMPT(Nurse)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds PREEMPT with a PRIORITY(attr) criterion", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "PREEMPT (by criterion)" }));
+    fireEvent.change(screen.getByDisplayValue("— first busy server —"), { target: { value: "PRIORITY" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["PREEMPT(Nurse, PRIORITY(batchSize))"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds PREEMPT with a LONGEST criterion", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "PREEMPT (by criterion)" }));
+    fireEvent.change(screen.getByDisplayValue("— first busy server —"), { target: { value: "LONGEST" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["PREEMPT(Nurse, LONGEST)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds FINISH with a SHORTEST criterion on a chosen server type", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "FINISH (by criterion)" }));
+    fireEvent.change(screen.getByDisplayValue("Nurse"), { target: { value: "Doctor" } });
+    fireEvent.change(screen.getByDisplayValue("— first busy server —"), { target: { value: "SHORTEST" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["FINISH(Doctor, SHORTEST)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("disables Add when the criterion is PRIORITY but no numeric attribute exists in context", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()}
+      expressionContext={{ ...fullCtx, numericAttrs: [] }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "PREEMPT (by criterion)" }));
+
+    // With no numeric attrs, the "by priority attribute" option isn't offered at all.
+    expect(screen.queryByRole("option", { name: "by priority attribute" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer PREEMPT/FINISH composers with no server types in context", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()}
+      expressionContext={{ ...fullCtx, bEventServerTypes: [], serverTypes: [] }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    expect(screen.queryByRole("button", { name: /^PREEMPT/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^FINISH/ })).not.toBeInTheDocument();
   });
 });
 
@@ -467,5 +652,62 @@ describe("EffectPicker option generators — engine round-trip (Sprint 94 regres
     const values = opts.filter(o => o.value && !o.disabled).map(o => o.value);
     expect(values.length).toBeGreaterThan(0);
     for (const v of values) expect(matchesEngine(v)).toBe(true);
+  });
+});
+
+describe("EffectPicker — JOIN fork/join composer (Sprint 98)", () => {
+  it("adds JOIN with the default rendezvous queue and a distinct default target", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "JOIN (fork/join)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["JOIN(Triage Queue, Ward Queue)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("adds JOIN with a re-chosen rendezvous queue, keeping the two arguments distinct", () => {
+    const onChange = vi.fn();
+    const threeQueueCtx = {
+      ...fullCtx,
+      matchQueues: [
+        { name: "Triage Queue", type: "Customer" },
+        { name: "Sync Queue", type: "Customer" },
+        { name: "Ward Queue", type: "Customer" },
+      ],
+    };
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={threeQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "JOIN (fork/join)" }));
+    // Defaults committed on click: rendezvous "Triage Queue", target "Sync Queue".
+    fireEvent.change(screen.getByDisplayValue("Sync Queue"), { target: { value: "Ward Queue" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith(["JOIN(Triage Queue, Ward Queue)"]);
+    expect(matchesEngine(onChange.mock.calls[0][0][0])).toBe(true);
+  });
+
+  it("disables Add when the rendezvous and target queues are the same", () => {
+    const onChange = vi.fn();
+    render(<EffectPicker effects={[]} options={[]} onChange={onChange} expressionContext={fullCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    fireEvent.click(screen.getByRole("button", { name: "JOIN (fork/join)" }));
+    // Move the rendezvous onto the committed target ("Ward Queue"): the two
+    // args now collide, and Add must refuse to emit JOIN(Q, Q).
+    fireEvent.change(screen.getByDisplayValue("Triage Queue"), { target: { value: "Ward Queue" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("does not offer the JOIN composer with fewer than two queues in context", () => {
+    render(<EffectPicker effects={[]} options={[]} onChange={vi.fn()} expressionContext={oneQueueCtx} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Effect" }));
+    expect(screen.queryByRole("button", { name: /^JOIN/ })).not.toBeInTheDocument();
   });
 });

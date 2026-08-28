@@ -255,7 +255,7 @@ The model also uses `PREEMPT` to allow urgent jobs (flagged with `urgent = 1`) t
 - `ASSIGN(Machining, Machine)` — seizes a machine, schedules completion
 - `FAIL(Machine)` — Bound Event fires at MTBF interval; sets machine status to `failed`, re-queues interrupted job
 - `REPAIR(Machine)` — Bound Event fires after MTTR; restores machine to `idle`
-- `PREEMPT(Machine)` — Conditional Event for urgent jobs; interrupts current job, records remaining service time
+- `PREEMPT(Machine)` — Bound Event for urgent jobs; interrupts current job, records remaining service time
 - `COMPLETE()` — job departs, machine freed
 
 **Entity type fields:** `mtbf = 120`, `mttr = 20` on the Machine entity type (Sprint 42 fields)
@@ -521,10 +521,12 @@ When you open a template, simmodlr saves a **private copy** to your account. The
 | `RENEGE_OLDEST(EntityType)` | Bound Event | Removes the oldest waiting entity of a given type from queue |
 | `BATCH(QueueName, Count)` | Conditional Event | Accumulates N entities into one batch |
 | `UNBATCH(BatchEntity)` | Bound Event | Restores children from parent batch entity |
-| `PREEMPT(ServerType)` | Conditional Event | Interrupts busy servers; re-queues entity with remaining service |
-| `FAIL(ServerType)` | Bound Event | Sets matching servers to failed status; re-queues busy entities |
-| `REPAIR(ServerType)` | Bound Event | Restores failed servers to idle status |
+| `PREEMPT(ServerType[, Criterion])` | Bound Event | Interrupts a busy server; re-queues entity with remaining service. Criterion (`PRIORITY(attr)`/`LONGEST`/`SHORTEST`) selects which busy server when more than one qualifies (default: first busy server) |
+| `FINISH(ServerType[, Criterion])` | Conditional Event | Ends a busy server's in-progress service right now, on a condition instead of a scheduled delay ("activity of unknown duration"); same Criterion vocabulary as PREEMPT |
+| `FAIL(ServerType[, N])` | Bound Event | Sets up to N matching servers to failed status, idle-preferred (default: all); re-queues busy entities that must be preempted |
+| `REPAIR(ServerType[, N])` | Bound Event | Restores up to N failed servers to idle status, oldest-failure-first (default: all) |
 | `SPLIT(EntityType, N, TargetQueue)` | B/Conditional Event | Creates N-1 clones of context entity |
+| `JOIN(QueueName, TargetQueue)` | Conditional Event | Fork/join rendezvous: merges a complete SPLIT family (lenient — lost members skipped) into one survivor, routed to TargetQueue |
 | `COSEIZE(Queue, ServerType1, ...)` | Conditional Event | Atomically seizes multiple server types simultaneously |
 | `MATCH(TypeA, QueueA, TypeB, QueueB, Output)` | Conditional Event | Pairs entities from two queues into one batch |
 | `FILL(ContainerName, Quantity)` | Bound Event | Adds a quantity to a named container (tank/stock) |

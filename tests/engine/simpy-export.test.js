@@ -260,6 +260,73 @@ describe("exportToSimPy", () => {
     });
   });
 
+  // Sprint 97 — PREEMPT/FINISH victim selection. FINISH was previously silently
+  // dropped by SimPy export (absent from TODO_MACRO_SET, and not handled by any
+  // other code path) -- a model using it exported as "fully supported" while the
+  // script contained no FINISH logic at all.
+  describe("FINISH TODO stub (Sprint 97)", () => {
+    const finishModel = {
+      name: "WithFinish",
+      bEvents: [
+        { id: "b1", name: "Arrive", effect: "ARRIVE(Customer, Queue1)",
+          schedules: [{ dist: "Exponential", distParams: { mean: 3 } }] },
+      ],
+      cEvents: [
+        { id: "c1", name: "Serve", effect: "ASSIGN(Queue1, Server1)",
+          cSchedules: [{ dist: "Exponential", distParams: { mean: 2 } }] },
+        { id: "c2", name: "FinishServer", effect: "FINISH(Server1)" },
+      ],
+      entityTypes: [
+        { id: "e1", name: "Customer", role: "customer" },
+        { id: "e2", name: "Server1", role: "server", count: 1 },
+      ],
+      queues: [{ id: "q1", name: "Queue1" }],
+      containerTypes: [],
+      stateVariables: [],
+      experimentDefaults: {},
+    };
+
+    it("assigns category 2 and lists FINISH as a todoMacro instead of silently dropping it", () => {
+      const result = exportToSimPy(finishModel);
+      expect(result.category).toBe(2);
+      expect(result.todoMacros).toContain("FINISH");
+    });
+
+    it("generates a NOT SUPPORTED (FINISH) stub comment", () => {
+      const result = exportToSimPy(finishModel);
+      expect(result.script).toContain("# NOT SUPPORTED (FINISH):");
+    });
+  });
+
+  describe("PREEMPT stub mentions the criterion argument (Sprint 97)", () => {
+    const preemptModel = {
+      name: "WithPreempt",
+      bEvents: [
+        { id: "b1", name: "Arrive", effect: "ARRIVE(Customer, Queue1)",
+          schedules: [{ dist: "Exponential", distParams: { mean: 3 } }] },
+        { id: "b2", name: "PreemptServer", effect: "PREEMPT(Server1)" },
+      ],
+      cEvents: [
+        { id: "c1", name: "Serve", effect: "ASSIGN(Queue1, Server1)",
+          cSchedules: [{ dist: "Exponential", distParams: { mean: 2 } }] },
+      ],
+      entityTypes: [
+        { id: "e1", name: "Customer", role: "customer" },
+        { id: "e2", name: "Server1", role: "server", count: 1 },
+      ],
+      queues: [{ id: "q1", name: "Queue1" }],
+      containerTypes: [],
+      stateVariables: [],
+      experimentDefaults: {},
+    };
+
+    it("PREEMPT's stub comment mentions Criterion", () => {
+      const result = exportToSimPy(preemptModel);
+      const stubSection = result.script.split("# NOT SUPPORTED (PREEMPT):")[1] || "";
+      expect(stubSection).toMatch(/Criterion/);
+    });
+  });
+
   describe("script header", () => {
     it("includes the model name in the docstring", () => {
       const result = exportToSimPy(minimalModel);
@@ -420,6 +487,50 @@ describe("exportToSimPy", () => {
     it("uses normal distribution for service time", () => {
       const result = exportToSimPy(coseizeModel);
       expect(result.script).toContain("_normal(30, 5)");
+    });
+
+    // Sprint 95 — COSEIZE Type:N quantity syntax
+    describe("Type:N quantity", () => {
+      const qtyModel = {
+        ...coseizeModel,
+        cEvents: [{ ...coseizeModel.cEvents[0], effect: "COSEIZE(WaitRoom, Doctor, Nurse:2)" }],
+      };
+
+      it("generates two .request() calls for Nurse and one for Doctor, all against the same resource variable per type", () => {
+        const result = exportToSimPy(qtyModel);
+        const nurseRequests = result.script.match(/Nurse_resource\.request\(priority=9999\)/g) || [];
+        const doctorRequests = result.script.match(/Doctor_resource\.request\(priority=9999\)/g) || [];
+        expect(nurseRequests).toHaveLength(2);
+        expect(doctorRequests).toHaveLength(1);
+      });
+
+      it("combines all requests into a single simpy.AllOf", () => {
+        const result = exportToSimPy(qtyModel);
+        expect(result.script).toMatch(/simpy\.AllOf\(env, \[_req0, _req1, _req2\]\)/);
+      });
+
+      it("scales resource_busy accounting by qty for the quantity-seized type", () => {
+        const result = exportToSimPy(qtyModel);
+        expect(result.script).toContain('stats.resource_busy["Nurse"] = stats.resource_busy.get("Nurse", 0.0) + 2 * _svc_t');
+        expect(result.script).not.toContain('stats.resource_busy["Nurse"] = stats.resource_busy.get("Nurse", 0.0) + _svc_t');
+        expect(result.script).toContain('stats.resource_busy["Doctor"] = stats.resource_busy.get("Doctor", 0.0) + _svc_t');
+      });
+
+      it("default quantity (no :N) stays byte-identical to before (regression)", () => {
+        const result = exportToSimPy(coseizeModel);
+        expect(result.script).toContain('stats.resource_busy["Doctor"] = stats.resource_busy.get("Doctor", 0.0) + _svc_t');
+        expect(result.script).toContain('stats.resource_busy["Nurse"] = stats.resource_busy.get("Nurse", 0.0) + _svc_t');
+      });
+    });
+
+    it("strips a [Skill] bracket so the resource variable matches the declared resource (regression for a pre-existing bug)", () => {
+      const skilledModel = {
+        ...coseizeModel,
+        cEvents: [{ ...coseizeModel.cEvents[0], effect: "COSEIZE(WaitRoom, Doctor[Surgery], Nurse)" }],
+      };
+      const result = exportToSimPy(skilledModel);
+      expect(result.script).toContain("Doctor_resource.request(priority=9999)");
+      expect(result.script).not.toContain("DoctorSurgery_resource");
     });
   });
 
@@ -623,6 +734,26 @@ describe("exportToSimPy", () => {
       const result = exportToSimPy(model);
       expect(result.todoMacros).toContain("RELEASE_COSEIZED");
       expect(result.script).toContain("# NOT SUPPORTED (RELEASE_COSEIZED):");
+    });
+
+    it("includes a JOIN stub and classifies the model category 2 when a C-event JOINs (Sprint 98)", () => {
+      const model = {
+        ...minimalModel,
+        queues: [...minimalModel.queues, { id: "q_sync", name: "SyncQueue" }, { id: "q_review", name: "ReviewQueue" }],
+        cEvents: [
+          ...minimalModel.cEvents,
+          {
+            id: "c_join", name: "Rendezvous",
+            condition: "queue(SyncQueue).length > 0",
+            effect: "JOIN(SyncQueue, ReviewQueue)",
+          },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.category).toBe(2);
+      expect(result.todoMacros).toContain("JOIN");
+      expect(result.script).toContain("# NOT SUPPORTED (JOIN):");
+      expect(result.warnings.some(w => /NOT SUPPORTED: JOIN at "Rendezvous"/.test(w))).toBe(true);
     });
 
     it("warns per actual usage site for a TODO macro, not just per macro name", () => {

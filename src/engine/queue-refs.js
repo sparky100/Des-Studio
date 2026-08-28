@@ -124,12 +124,18 @@ export function renameQueue(model, oldName, newName) {
     cEvents: (model.cEvents || []).map((/** @type {any} */ event) => ({
       ...event,
       condition: mapConditionVariables(event.condition, (/** @type {any} */ variable) => replaceQueueToken(variable, oldName, newName)),
-      effect: (() => {
-        let next = replaceQueueToken(event.effect, oldName, newName);
+      // mapEffects preserves the effect's array-vs-string shape — C-event
+      // effects authored via the Forms EffectPicker are arrays, and running
+      // them through replaceQueueToken directly would String()-coerce the
+      // array into one comma-joined string, corrupting the model.
+      effect: mapEffects(event.effect, (/** @type {any} */ effect) => {
+        let next = typeof effect === "string" ? replaceQueueToken(effect, oldName, newName) : effect;
         next = replaceMacroArg(next, "ASSIGN", 0, oldName, newName);
         next = replaceMacroArg(next, "BATCH", 0, oldName, newName);
+        next = replaceMacroArg(next, "JOIN", 0, oldName, newName);
+        next = replaceMacroArg(next, "JOIN", 1, oldName, newName);
         return next;
-      })(),
+      }),
     })),
     queues: (model.queues || []).map((/** @type {any} */ queue) => ({
       ...queue,

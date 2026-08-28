@@ -37,12 +37,17 @@ export function extractServerTypes(effect) {
   const coseizeMatch = text.match(/COSEIZE\s*\(([^)]+)\)/i);
   if (coseizeMatch) {
     const args = coseizeMatch[1].split(",").map(s => s.trim()).filter(Boolean);
-    // Strip the optional per-type skill filter (e.g. "Surgeon[Surgery]" -> "Surgeon")
+    // Strip the optional trailing quantity suffix ("Nurse:2", Sprint 95) and
+    // the optional per-type skill filter (e.g. "Surgeon[Surgery]" -> "Surgeon")
     // the same way the engine's own COSEIZE handler does, so the plain type name
-    // matches real entity.type values instead of comparing against a bracketed string.
+    // matches real entity.type values instead of comparing against a bracketed/
+    // quantified string. Live stats are computed against the real server-entity
+    // fleet per type (see deriveTypeStats below), so a quantity seize needs no
+    // further change here — just a clean type name to look up.
     return args.slice(1).map(arg => {
-      const bracketMatch = arg.match(/^([^[]+)\[([^\]]+)\]$/);
-      return bracketMatch ? bracketMatch[1].trim() : arg;
+      const noQty = arg.replace(/:\s*\d+$/, "").trim();
+      const bracketMatch = noQty.match(/^([^[]+)\[([^\]]+)\]$/);
+      return bracketMatch ? bracketMatch[1].trim() : noQty;
     });
   }
   return [];

@@ -395,7 +395,7 @@ const DropField = ({value, onChange, options, color}) => {
 const categorizeEffect = (value) => {
   const v = String(value||"").trim();
   if (!v) return 'other';
-  if (/^ARRIVE\s*\(/i.test(v)||/^BATCH\s*\(/i.test(v)||/^UNBATCH\s*\(/i.test(v)||/^SPLIT\s*\(/i.test(v)||/^MATCH\s*\(/i.test(v)||/^RENEGE/i.test(v)||/^CANCEL\s*\(/i.test(v)) return 'queue';
+  if (/^ARRIVE\s*\(/i.test(v)||/^BATCH\s*\(/i.test(v)||/^UNBATCH\s*\(/i.test(v)||/^SPLIT\s*\(/i.test(v)||/^JOIN\s*\(/i.test(v)||/^MATCH\s*\(/i.test(v)||/^RENEGE/i.test(v)||/^CANCEL\s*\(/i.test(v)) return 'queue';
   if (/^(COMPLETE|RELEASE|ASSIGN|COSEIZE|FINISH)\s*\(/i.test(v)) return 'service';
   if (/^SET_ATTR\s*\(/i.test(v)||/^SET\s*\(/i.test(v)||/^ROUND_ROBIN\s*\(/i.test(v)||/(\+\+|--|[+\-]=\s*\d|=\s*\d)/.test(v)) return 'state';
   if (/^COST\s*\(/i.test(v)) return 'cost';
@@ -420,6 +420,10 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const skillsList = expressionContext?.skills || [];
   const customerTypes = expressionContext?.customerTypes || [];
   const serverSkillsByType = expressionContext?.serverSkillsByType || {};
+  // Distinct from `serverTypes` (which is deliberately C-event-only — see the
+  // ASSIGN/COSEIZE composer gates below) so B-events can offer the FAIL/REPAIR/
+  // PREEMPT composers without also unlocking those seize-side composers.
+  const bEventServerTypes = expressionContext?.bEventServerTypes || [];
   const CATEGORY_CONFIG = {
     queue:     {label:'Queue',     color:C.cEvent},
     service:   {label:'Service',   color:C.green},
@@ -439,15 +443,20 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const [matchTarget, setMatchTarget] = useState('');
   const [opQueue, setOpQueue] = useState('');
   const [opContainer, setOpContainer] = useState('');
-  const [coseizeRows, setCoseizeRows] = useState([]); // [{type, skill}], skill '' = none
+  const [coseizeRows, setCoseizeRows] = useState([]); // [{type, skill, qty}], skill '' = none, qty default 1
   const [batchSizeMode, setBatchSizeMode] = useState('literal'); // 'literal' | 'attribute'
   const [batchAttr, setBatchAttr] = useState('');
   const [splitType, setSplitType] = useState(''); // '' = follow the target queue's type
+  const [joinTarget, setJoinTarget] = useState(''); // JOIN's TargetQueue (arg 1); opQueue is the rendezvous queue
   const [assignSource, setAssignSource] = useState('');
   const [assignServer, setAssignServer] = useState('');
   const [assignSkill, setAssignSkill] = useState(''); // '' | `lit:<skill>` | `attr:<name>`
   const [assignContainer, setAssignContainer] = useState('');
   const [assignAmount, setAssignAmount] = useState('1');
+  const [failRepairType, setFailRepairType] = useState('');
+  const [preemptFinishType, setPreemptFinishType] = useState('');
+  const [preemptFinishCriterion, setPreemptFinishCriterion] = useState(''); // '' | 'PRIORITY' | 'LONGEST' | 'SHORTEST'
+  const [preemptFinishAttr, setPreemptFinishAttr] = useState('');
   const [search, setSearch] = useState('');
 
   const remove = (j) => onChange(effects.filter((_,i)=>i!==j));
@@ -482,8 +491,15 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
     if (exprMacro === 'COSEIZE') {
       const types = coseizeRows.map(r => r.type).filter(Boolean);
       const hasDup = new Set(types).size !== types.length;
-      if (!opQueue || coseizeRows.length < 2 || types.length < coseizeRows.length || hasDup) return;
-      const args = coseizeRows.map(r => r.skill ? `${r.type}[${r.skill}]` : r.type).join(', ');
+      const qtys = coseizeRows.map(r => parseInt(r.qty, 10) || 1);
+      const hasBadQty = coseizeRows.some(r => !Number.isInteger(parseInt(r.qty, 10)) || parseInt(r.qty, 10) < 1);
+      if (!opQueue || coseizeRows.length < 2 || types.length < coseizeRows.length || hasDup || hasBadQty) return;
+      // Quantity suffix (Sprint 95) only appears when >1, so the default
+      // (every row at qty 1) emits byte-identical strings to before.
+      const args = coseizeRows.map((r, i) => {
+        const base = r.skill ? `${r.type}[${r.skill}]` : r.type;
+        return qtys[i] > 1 ? `${base}:${qtys[i]}` : base;
+      }).join(', ');
       add(`COSEIZE(${opQueue}, ${args})`);
       return;
     }
@@ -507,6 +523,33 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
       const n = Math.max(2, Math.round(Number(exprValue)) || 2);
       add(`SPLIT(${splitType || q.type}, ${n}, ${opQueue})`);
       setExprValue('');
+      return;
+    }
+    if (exprMacro === 'JOIN') {
+      // Both queues required; a distinct target keeps the merged survivor out
+      // of the rendezvous queue (routing it back would re-trigger the JOIN's
+      // own condition forever).
+      if (!opQueue || !joinTarget || opQueue === joinTarget) return;
+      add(`JOIN(${opQueue}, ${joinTarget})`);
+      return;
+    }
+    if (exprMacro === 'FAIL' || exprMacro === 'REPAIR') {
+      if (!failRepairType || !exprValue.trim()) return;
+      const n = Math.max(1, Math.round(Number(exprValue)) || 1);
+      add(`${exprMacro}(${failRepairType}, ${n})`);
+      setExprValue('');
+      return;
+    }
+    if (exprMacro === 'PREEMPT' || exprMacro === 'FINISH') {
+      if (!preemptFinishType) return;
+      let criterionArg = '';
+      if (preemptFinishCriterion === 'PRIORITY') {
+        if (!preemptFinishAttr) return;
+        criterionArg = `, PRIORITY(${preemptFinishAttr})`;
+      } else if (preemptFinishCriterion === 'LONGEST' || preemptFinishCriterion === 'SHORTEST') {
+        criterionArg = `, ${preemptFinishCriterion}`;
+      }
+      add(`${exprMacro}(${preemptFinishType}${criterionArg})`);
       return;
     }
     if (exprMacro === 'DRAIN' || exprMacro === 'FILL') {
@@ -717,6 +760,20 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
                     color:exprMacro==='SPLIT'?C.cEvent:C.muted,cursor:'pointer',fontWeight:700}}>SPLIT</button>
               )}
+              {matchQueues.length>=2&&(
+                <button onClick={()=>{
+                    setExprMacro('JOIN');
+                    const rdv=opQueue||matchQueues[0].name;
+                    if(!opQueue)setOpQueue(rdv);
+                    // Commit a distinct-target default to state (not just a
+                    // display fallback) so Add isn't wrongly disabled.
+                    if(!joinTarget||joinTarget===rdv)setJoinTarget(matchQueues.find(q=>q.name!==rdv)?.name||'');
+                  }}
+                  style={{background:exprMacro==='JOIN'?C.cEvent+'22':'transparent',
+                    border:`1px solid ${exprMacro==='JOIN'?C.cEvent:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='JOIN'?C.cEvent:C.muted,cursor:'pointer',fontWeight:700}}>JOIN (fork/join)</button>
+              )}
               {containerNames.length>0&&(
                 <button onClick={()=>{setExprMacro('DRAIN');setExprValue('');if(!opContainer)setOpContainer(containerNames[0]);}}
                   style={{background:exprMacro==='DRAIN'?C.purple+'22':'transparent',
@@ -736,14 +793,42 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     setExprMacro('COSEIZE');
                     if(!opQueue)setOpQueue(matchQueues[0].name);
                     if(coseizeRows.length<2)setCoseizeRows([
-                      {type:serverTypes[0],skill:''},
-                      {type:serverTypes[1],skill:''},
+                      {type:serverTypes[0],skill:'',qty:1},
+                      {type:serverTypes[1],skill:'',qty:1},
                     ]);
                   }}
                   style={{background:exprMacro==='COSEIZE'?C.red+'22':'transparent',
                     border:`1px solid ${exprMacro==='COSEIZE'?C.red:C.border}`,
                     borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
                     color:exprMacro==='COSEIZE'?C.red:C.muted,cursor:'pointer',fontWeight:700}}>COSEIZE (N server types)</button>
+              )}
+              {bEventServerTypes.length>0&&(
+                <button onClick={()=>{setExprMacro('FAIL');setExprValue('1');if(!failRepairType)setFailRepairType(bEventServerTypes[0]);}}
+                  style={{background:exprMacro==='FAIL'?C.red+'22':'transparent',
+                    border:`1px solid ${exprMacro==='FAIL'?C.red:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='FAIL'?C.red:C.muted,cursor:'pointer',fontWeight:700}}>FAIL (N servers)</button>
+              )}
+              {bEventServerTypes.length>0&&(
+                <button onClick={()=>{setExprMacro('REPAIR');setExprValue('1');if(!failRepairType)setFailRepairType(bEventServerTypes[0]);}}
+                  style={{background:exprMacro==='REPAIR'?C.red+'22':'transparent',
+                    border:`1px solid ${exprMacro==='REPAIR'?C.red:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='REPAIR'?C.red:C.muted,cursor:'pointer',fontWeight:700}}>REPAIR (N servers)</button>
+              )}
+              {bEventServerTypes.length>0&&(
+                <button onClick={()=>{setExprMacro('PREEMPT');setPreemptFinishCriterion('');setPreemptFinishAttr('');if(!preemptFinishType)setPreemptFinishType(bEventServerTypes[0]);}}
+                  style={{background:exprMacro==='PREEMPT'?C.red+'22':'transparent',
+                    border:`1px solid ${exprMacro==='PREEMPT'?C.red:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='PREEMPT'?C.red:C.muted,cursor:'pointer',fontWeight:700}}>PREEMPT (by criterion)</button>
+              )}
+              {serverTypes.length>0&&(
+                <button onClick={()=>{setExprMacro('FINISH');setPreemptFinishCriterion('');setPreemptFinishAttr('');if(!preemptFinishType)setPreemptFinishType(serverTypes[0]);}}
+                  style={{background:exprMacro==='FINISH'?C.green+'22':'transparent',
+                    border:`1px solid ${exprMacro==='FINISH'?C.green:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='FINISH'?C.green:C.muted,cursor:'pointer',fontWeight:700}}>FINISH (by criterion)</button>
               )}
             </div>
             {exprMacro==='MATCH'&&matchQueues.length>=2&&(
@@ -799,6 +884,12 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                         <option value="">— no skill —</option>
                         {rowSkills.map(sk=><option key={sk} value={sk}>{sk}</option>)}
                       </select>
+                      <input type="number" min={1} step={1} value={row.qty ?? 1}
+                        onChange={e=>updateRow(idx,{qty:e.target.value})}
+                        aria-label={`Quantity for server type row ${idx+1}`}
+                        style={{width:56,background:C.bg,border:`1px solid ${C.red}55`,borderRadius:4,
+                          color:C.red,fontFamily:FONT,fontSize:12,padding:'6px 4px'}}
+                      />
                       {coseizeRows.length>2&&(
                         <button onClick={()=>removeRow(idx)} aria-label={`Remove server type row ${idx+1}`}
                           style={{background:'none',border:'none',color:C.red,cursor:'pointer',padding:0,fontSize:13}}>✕</button>
@@ -807,7 +898,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   );
                 })}
                 {nextUnusedType&&(
-                  <button onClick={()=>setCoseizeRows(rows=>[...rows,{type:nextUnusedType,skill:''}])}
+                  <button onClick={()=>setCoseizeRows(rows=>[...rows,{type:nextUnusedType,skill:'',qty:1}])}
                     style={{alignSelf:'flex-start',background:'transparent',border:`1px dashed ${C.red}55`,
                       borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
                       color:C.red,cursor:'pointer',fontWeight:700}}>＋ add server type</button>
@@ -869,6 +960,46 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                 </div>
               </div>
             )}
+            {(exprMacro==='PREEMPT'||exprMacro==='FINISH')&&(()=>{
+              const typeOptions = exprMacro==='PREEMPT' ? bEventServerTypes : serverTypes;
+              if (typeOptions.length===0) return null;
+              const color = exprMacro==='PREEMPT' ? C.red : C.green;
+              return (
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Server:</span>
+                  <select value={preemptFinishType||typeOptions[0]} onChange={e=>setPreemptFinishType(e.target.value)}
+                    style={{background:C.bg,border:`1px solid ${color}55`,borderRadius:4,
+                      color,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
+                    {typeOptions.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Target:</span>
+                  <select value={preemptFinishCriterion} onChange={e=>{
+                      setPreemptFinishCriterion(e.target.value);
+                      if (e.target.value==='PRIORITY' && !preemptFinishAttr && numericAttrs[0]) setPreemptFinishAttr(numericAttrs[0]);
+                    }}
+                    style={{background:C.bg,border:`1px solid ${color}55`,borderRadius:4,
+                      color,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
+                    <option value="">— first busy server —</option>
+                    {numericAttrs.length>0&&<option value="PRIORITY">by priority attribute</option>}
+                    <option value="LONGEST">longest in service</option>
+                    <option value="SHORTEST">shortest in service</option>
+                  </select>
+                  {preemptFinishCriterion==='PRIORITY'&&numericAttrs.length>0&&(
+                    <select value={preemptFinishAttr||numericAttrs[0]} onChange={e=>setPreemptFinishAttr(e.target.value)}
+                      style={{background:C.bg,border:`1px solid ${color}55`,borderRadius:4,
+                        color,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
+                      {numericAttrs.map(a=><option key={a} value={a}>Entity.{a}</option>)}
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <Btn small variant="ghost" onClick={addExpr}
+                    disabled={!preemptFinishType||(preemptFinishCriterion==='PRIORITY'&&!preemptFinishAttr)}>Add</Btn>
+                </div>
+              </div>
+              );
+            })()}
             <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
               {exprMacro==='BATCH'&&matchQueues.length>0&&(
                 <>
@@ -917,11 +1048,35 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   )}
                 </>
               )}
+              {exprMacro==='JOIN'&&matchQueues.length>=2&&(
+                <>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>rendezvous:</span>
+                  <select value={opQueue||matchQueues[0].name} onChange={e=>setOpQueue(e.target.value)}
+                    style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+                      color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
+                    {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name}</option>)}
+                  </select>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>then route to:</span>
+                  <select value={joinTarget} onChange={e=>setJoinTarget(e.target.value)}
+                    style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+                      color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
+                    {matchQueues.filter(q=>q.name!==(opQueue||matchQueues[0].name))
+                      .map(q=><option key={q.name} value={q.name}>{q.name}</option>)}
+                  </select>
+                </>
+              )}
               {(exprMacro==='DRAIN'||exprMacro==='FILL')&&containerNames.length>0&&(
                 <select value={opContainer||containerNames[0]} onChange={e=>setOpContainer(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.purple}55`,borderRadius:4,
                     color:C.purple,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
                   {containerNames.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+              )}
+              {(exprMacro==='FAIL'||exprMacro==='REPAIR')&&bEventServerTypes.length>0&&(
+                <select value={failRepairType||bEventServerTypes[0]} onChange={e=>setFailRepairType(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.red}55`,borderRadius:4,
+                    color:C.red,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
+                  {bEventServerTypes.map(s=><option key={s} value={s}>{s}</option>)}
                 </select>
               )}
               {(exprMacro==='SET'||exprMacro==='ROUND_ROBIN')&&stateVars.length>0&&(
@@ -945,7 +1100,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   {eventNames.map(n=><option key={n} value={n}>{n}</option>)}
                 </select>
               )}
-              {exprMacro!=='CANCEL'&&exprMacro!=='COSEIZE'&&exprMacro!=='ASSIGN'&&!(exprMacro==='BATCH'&&batchSizeMode==='attribute')&&(
+              {exprMacro!=='CANCEL'&&exprMacro!=='COSEIZE'&&exprMacro!=='ASSIGN'&&exprMacro!=='PREEMPT'&&exprMacro!=='FINISH'&&exprMacro!=='JOIN'&&!(exprMacro==='BATCH'&&batchSizeMode==='attribute')&&(
                 exprMacro==='BATCH'||exprMacro==='SPLIT'?(
                   <input type="number" min={2} step={1}
                     value={exprValue}
@@ -964,6 +1119,15 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     style={{width:220,flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
                       color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
                   />
+                ):exprMacro==='FAIL'||exprMacro==='REPAIR'?(
+                  <input type="number" min={1} step={1}
+                    value={exprValue}
+                    onChange={e=>setExprValue(e.target.value)}
+                    onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
+                    placeholder="quantity (≥ 1)"
+                    style={{width:120,flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                      color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
+                  />
                 ):(
                   <input
                     value={exprValue}
@@ -975,15 +1139,21 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   />
                 )
               )}
-              {exprMacro!=='ASSIGN'&&(
+              {exprMacro!=='ASSIGN'&&exprMacro!=='PREEMPT'&&exprMacro!=='FINISH'&&(
                 <Btn small variant="ghost" onClick={addExpr}
                   disabled={
                     exprMacro==='CANCEL' ? !exprName
                     : exprMacro==='MATCH' ? (!matchQueueA||!matchQueueB||!matchTarget)
-                    : exprMacro==='COSEIZE' ? (()=>{const types=coseizeRows.map(r=>r.type).filter(Boolean);return !opQueue||coseizeRows.length<2||types.length<coseizeRows.length||new Set(types).size!==types.length;})()
+                    : exprMacro==='COSEIZE' ? (()=>{
+                        const types=coseizeRows.map(r=>r.type).filter(Boolean);
+                        const badQty=coseizeRows.some(r=>!Number.isInteger(parseInt(r.qty,10))||parseInt(r.qty,10)<1);
+                        return !opQueue||coseizeRows.length<2||types.length<coseizeRows.length||new Set(types).size!==types.length||badQty;
+                      })()
                     : exprMacro==='BATCH' ? (!opQueue||(batchSizeMode==='attribute'?!batchAttr:!exprValue.trim()))
                     : exprMacro==='SPLIT' ? (!opQueue||!exprValue.trim())
+                    : exprMacro==='JOIN' ? (!opQueue||!joinTarget||opQueue===joinTarget)
                     : exprMacro==='DRAIN'||exprMacro==='FILL' ? (!opContainer||!(isPositiveNumber(exprValue.trim())||isValidAmountExpr(exprValue.trim(),stateVars)))
+                    : exprMacro==='FAIL'||exprMacro==='REPAIR' ? (!failRepairType||!Number.isInteger(Math.round(Number(exprValue)))||Number(exprValue)<1)
                     : (!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0])))
                   }>Add</Btn>
               )}

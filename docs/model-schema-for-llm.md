@@ -671,23 +671,23 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 |-------|--------|---------|
 | `ARRIVE` | `ARRIVE(EntityType, QueueName)` | Creates an entity of type `EntityType` and places it in `QueueName`. |
 | `RELEASE` | `RELEASE(ServerType, QueueName)` | **Intermediate stage only.** Releases a server of type `ServerType`, moves served entity to `QueueName` for the next stage. Sets entity status to `"waiting"`. **Do NOT follow with `COMPLETE()` in the same effect — use `COMPLETE()` alone for terminal events.** Do not use for a COSEIZE-scheduled B-event — see `RELEASE_COSEIZED` below. |
-| `COSEIZE` | `COSEIZE(QueueName, Type1, Type2, ...)` | Atomically seizes one server of each listed type for the same entity. Requires `idle(<Type>).count > 0` for every listed type in the C-event condition. See §"COSEIZE — Multi-resource start". |
-| `RELEASE_COSEIZED` | `RELEASE_COSEIZED([Type1, Type2, ...], QueueName)` | Releases all listed co-seized servers atomically for the context entity and moves it to `QueueName` for the next stage (queue argument optional; omit to use a routing table instead). The **only** correct way to release co-seized resources without ending the entity's lifecycle — never stack separate `RELEASE(Type)` calls for co-seized types. |
+| `COSEIZE` | `COSEIZE(QueueName, Type1[:N1], Type2[:N2], ...)` | Atomically seizes one server of each listed type for the same entity — or N servers of a type via the optional `:N` quantity suffix (default 1), e.g. `COSEIZE(Q, Nurse:2, Doctor)` for 2 Nurses + 1 Doctor. Requires `idle(<Type>).count >= N` for every listed type in the C-event condition. A type may appear as only one arg — request more via `Type:N`, not by repeating the arg. See §"COSEIZE — Multi-resource start". |
+| `RELEASE_COSEIZED` | `RELEASE_COSEIZED([Type1, Type2, ...], QueueName)` | Releases **all** currently-claimed servers of each listed type atomically for the context entity and moves it to `QueueName` for the next stage (queue argument optional; omit to use a routing table instead) — quantity-agnostic: if a type was seized with `Type:N`, all N are released, however many. The **only** correct way to release co-seized resources without ending the entity's lifecycle — never stack separate `RELEASE(Type)` calls for co-seized types. There is no partial-release syntax (e.g. releasing only 1 of 2 seized Nurses) — not supported, permanently. |
 | `COMPLETE` | `COMPLETE()` | Marks current entity as served and removes it from the system. Also releases the server automatically — no preceding `RELEASE()` needed. For a COSEIZE-scheduled B-event, this releases **all** co-seized servers. Use this alone as the terminal effect on the final service B-event. |
 | `RENEGE` | `RENEGE(ctx)` | Marks current entity as reneged (abandoned). Always use `ctx` as the argument. |
 | `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch entity, sends each member to `QueueName`. `QueueName` must reference a defined queue (V23). Every UNBATCH should be paired with a corresponding BATCH that created the batch entity being unbatched. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id`. `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
-| `PREEMPT` | `PREEMPT(ServerType)` | Interrupts in-progress service; displaced entity re-queues with remaining service time. |
-| `FAIL` | `FAIL(ServerType)` | Marks servers of this type as failed; interrupts in-progress service. Pair with a scheduled `REPAIR` B-event. |
-| `REPAIR` | `REPAIR(ServerType)` | Restores failed servers to idle; triggers a C-scan for waiting entities. |
-| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2; `QueueName` must reference a defined queue. |
+| `PREEMPT` | `PREEMPT(ServerType[, Criterion])` | Interrupts in-progress service; displaced entity re-queues with remaining service time. Optional Criterion selects which busy server to interrupt when more than one is busy: `PRIORITY(attrName)` (lowest value targeted), `LONGEST`/`SHORTEST` (by elapsed service time). Omitted or unrecognized criterion picks the first busy server (today's behavior). |
+| `FAIL` | `FAIL(ServerType[, N])` | Marks up to N servers of this type as failed; interrupts in-progress service on any that must be preempted. Prefers idle servers first — busy ones are only touched once idle capacity runs out. Omitted or non-positive N means "all" servers of the type. Pair with a scheduled `REPAIR` B-event. |
+| `REPAIR` | `REPAIR(ServerType[, N])` | Restores up to N failed servers of this type to idle, oldest-failure-first; triggers a C-scan for waiting entities. Omitted or non-positive N means "all". |
+| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2; `QueueName` must reference a defined queue.Records the family lineage `JOIN` later consumes — for a fork/join, route the parent to the rendezvous queue in the same effect array (see the SPLIT → JOIN pattern in §12.1). |
 | `SET` | `SET(varName, expression)` | Sets a state variable to an arithmetic expression. Supports `Entity.attrName`, state variables, `clock`, +−×÷, `min`/`max`/`abs`/`round`/`floor`/`ceil`. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to the result of an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost` and the entity's `__cost` attribute. |
 | `CANCEL` | `CANCEL(EventName)` | Removes the pending FEL entry named `EventName` that was scheduled for the **current context entity only** (never a global cancel-all). `EventName` must match a real B-Event or C-Event `name` in the model. No-op with a log message if nothing matches. Typical use: race a timeout against normal completion, then cancel the loser — e.g. `["CANCEL(TimeoutCheck)", "COMPLETE()"]`. See TOP LLM MISTAKES #22. |
 | `ROUND_ROBIN` | `ROUND_ROBIN(StateVar, N)` | Advances `StateVar` through a `0..N-1` rotation (wraps back to 0 after N-1). `N` must be a positive integer literal. Pair with a `routing[]` table whose branches compare `StateVar` to each literal index (`== 0`, `== 1`, ...) to cycle entities across N destination queues. There is no modulo operator elsewhere in expressions — this is the only way to build a rotation. |
 
-> ⚠ **SET_ATTR ordering — V44:** `SET_ATTR` requires a context entity established by a preceding `ARRIVE`, `ASSIGN`, `COSEIZE`, `SEIZE`, `BATCH`, or `SPLIT` macro in the same effect array. A `SET_ATTR` appearing before any such macro is silently skipped at runtime.
+> ⚠ **SET_ATTR ordering — V44:** `SET_ATTR` requires a context entity established by a preceding `ARRIVE`, `ASSIGN`, `COSEIZE`, `SEIZE`, `BATCH`, `SPLIT`, or `JOIN` macro in the same effect array. A `SET_ATTR` appearing before any such macro is silently skipped at runtime.
 > 
 > ✓ `["ARRIVE(Patient, Queue)", "SET_ATTR(severity, 3)"]` — ARRIVE first establishes context, SET_ATTR follows  
 > ✗ `["SET_ATTR(severity, 3)", "ARRIVE(Patient, Queue)"]` — SET_ATTR fires before context exists, silently skipped  
@@ -914,6 +914,22 @@ When a task requires multiple resource types simultaneously (e.g. a surgery need
 }
 ```
 
+**Quantity variant** — seize N servers of one type in the same atomic call via the
+optional `:N` suffix (default 1). "2 Nurses + 1 Doctor" for a triage team:
+
+```jsonc
+{
+  "id": "c_triage",
+  "name": "Triage Team",
+  "priority": 1,
+  "condition": "queue(TriageQueue).length > 0 AND idle(Nurse).count >= 2 AND idle(Doctor).count > 0",
+  "effect": ["COSEIZE(TriageQueue, Nurse:2, Doctor)"],
+  "cSchedules": [
+    { "eventId": "b_triage_done", "dist": "Fixed", "distParams": { "value": "15" }, "useEntityCtx": true }
+  ]
+}
+```
+
 If the entity needs to **continue** after the co-seized resources are released (e.g. move on to recovery), use `RELEASE_COSEIZED` instead of `COMPLETE()`:
 
 ```jsonc
@@ -936,7 +952,9 @@ The target queue argument is optional — omit it (`RELEASE_COSEIZED([Surgeon, A
 - **Do NOT** issue separate single `RELEASE(Surgeon)` + `RELEASE(Anesthetist)` calls for co-seized types on the same B-event — each resolves against the same cached primary-server context, so only the first call actually releases anything and the rest silently leave that resource stuck busy forever. The model validator flags this pattern (V38c).
 - The `RELEASE_COSEIZED([...])` type list must exactly match (or be a subset of) the types in the scheduling C-event's `COSEIZE(...)` call, or the release will fail at runtime (validator rule V38d catches mismatches ahead of time).
 - Spell it **`RELEASE_COSEIZED`** — with the trailing "D". `RELEASE_COSEIZE(...)` (missing it) is not a macro; it silently no-ops at runtime instead of raising an error, so this typo can go unnoticed until you see servers never releasing (validator rule V38e catches it ahead of time).
-- The condition MUST check `idle(<Type>).count > 0` for **every** server type — otherwise Phase C will waste passes on COSEIZE attempts that always fail.
+- The condition MUST check `idle(<Type>).count >= N` for **every** server type when using `Type:N` quantity syntax (not just `> 0`) — otherwise Phase C will waste passes on COSEIZE attempts that always fail for lack of enough idle servers.
+- A server type must appear as only **one** arg — request more than one via `Type:N` (e.g. `Nurse:2`), never by repeating the arg (`COSEIZE(Q, Nurse, Nurse)`); the latter fails at runtime with "duplicate server type" and is flagged at design time (validator rule V38f).
+- `RELEASE_COSEIZED` is quantity-agnostic: it releases **every** server of a listed type currently claimed by the entity, regardless of how many were seized. There is no partial-release syntax — releasing only some of the N units seized for a type is not supported.
 - `cSchedules[].useEntityCtx` MUST be `true` so the B-event knows which entity and servers to release.
 - The B-event's `scheduledTime` should be a high placeholder (e.g. `"9999"`) since it is only fired via the `cSchedules` entry, not by the clock.
 - `"schedules": []` on the completion B-event — it has no self-scheduling; the C-event drives it.
@@ -997,8 +1015,8 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `ASSIGN` (consumable-gated) | `ASSIGN(QueueName, ServerType, ContainerId:amount)` | Optional trailing `ContainerId:amount` clause gates the assignment on a declared container (§8) having a level ≥ `amount`. The server claim and the container deduction happen **atomically** — if either the server or the container check fails, neither is committed (no partial seizure). `ContainerId` must match a declared container `id` (V27); `amount` accepts the same literal/state-variable/expression forms as `DRAIN`. Combine with a skill clause by putting the container clause last: `ASSIGN(QueueName, ServerType, "Skill", ContainerId:amount)`. Use for "this activity also consumes a physical/consumable resource" (a test kit, a dose, a part) in addition to seizing staff/equipment. |
 | `DELAY` | `DELAY(QueueName)` | Holds the front entity from `QueueName` for the duration sampled by the `cSchedules` entry, **without seizing any server**. Use for resource-free waits (cooling period, mandatory hold, recovery, paperwork delay). `DELAY` must be the entire effect — never combine with `ASSIGN`/`RELEASE` in the same C-event. The completion B-event needs `"useEntityCtx": true` to know which entity to route, and may use `COMPLETE()` or routing-table exit, same as a normal service completion. `QueueName` must reference a defined queue (V47). See §6.2. |
 | `BATCH` | `BATCH(QueueName, N)` | Accumulates N entities from `QueueName` into a parent batch entity. N ≥ 2 (V22). `QueueName` must reference a defined queue. |
-| `COSEIZE` | `COSEIZE(QueueName, Srv1, Srv2, ...)` | Atomically seizes one entity and multiple server types simultaneously. Fails cleanly if any server is unavailable. All server type names must reference defined server entity types. |
-| `COSEIZE` (skilled) | `COSEIZE(QueueName, Doctor[Surgery], Nurse[Triage])` | Per-type bracket syntax: each server type may be followed by `[Skill]` in brackets to require that skill for that role. Only idle servers whose `skills[]` contains the specified skill are considered for that position. The skill name must be a valid entry in the model's top-level `skills` registry (V-SKILL-2). Any server type without brackets defaults to unskilled matching (same as the base COSEIZE). |
+| `COSEIZE` | `COSEIZE(QueueName, Srv1[:N1], Srv2[:N2], ...)` | Atomically seizes one entity and multiple server types simultaneously, optionally N of a type via the `:N` quantity suffix (default 1). Fails cleanly if any type's idle count is below its requested N. All server type names must reference defined server entity types. |
+| `COSEIZE` (skilled) | `COSEIZE(QueueName, Doctor[Surgery], Nurse[Triage])` | Per-type bracket syntax: each server type may be followed by `[Skill]` in brackets to require that skill for that role. Only idle servers whose `skills[]` contains the specified skill are considered for that position. The skill name must be a valid entry in the model's top-level `skills` registry (V-SKILL-2). Any server type without brackets defaults to unskilled matching (same as the base COSEIZE). Composes with quantity as `Type[Skill]:N`, e.g. `Doctor[Surgery]:2`. |
 | `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each of `QueueA` and `QueueB` into a combined batch in `TargetQueue`. All queue names must reference defined queues. `TypeA` and `TypeB` must match defined customer entity type names. The resulting batch entity's attrs are `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — on any attribute name collision, `QueueB`'s value overwrites `QueueA`'s. Order the two source queues deliberately when both define an attribute with the same name. |
 | `MATCH` (compatibility predicate) | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue, "Entity.bloodType == Other.bloodType")` | Optional 6th argument: a quoted predicate evaluated against both candidates — `Entity.<attr>` refers to the `QueueA` candidate being tested, `Other.<attr>` refers to the `QueueB` candidate. When present, scans both queues for the first compatible pair (front-to-back on `QueueA`, then `QueueB`) instead of always taking the front of each — use for blood-type/skill-requirement-style compatibility matching. No compatible pair found → no-op, same as an empty queue. A malformed predicate is caught and treated as no-match rather than crashing the run, but is flagged at design time (V66). |
 | `SET` | `SET(variableName, expression)` | Sets a state variable to an arithmetic expression. |
@@ -1007,10 +1025,11 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `RENEGE_OLDEST` | `RENEGE_OLDEST(CustomerType)` | Removes the oldest entity of the given type from its queue. `CustomerType` must exactly match a defined customer entity type name (case-sensitive). Used for max-queue-length policies or timeout eviction. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id` (V27). `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
 | `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not) (V27). `amount` accepts the same literal/state-variable/expression forms as `FILL`. |
-| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2. `QueueName` must reference a defined queue. |
+| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2. `QueueName` must reference a defined queue.Pair with `JOIN(Queue, Target)` for fork/join (see below). |
 | `CANCEL` | `CANCEL(EventName)` | Removes the pending FEL entry named `EventName` scheduled for the **current context entity only**. See the B-Event macro table above and TOP LLM MISTAKES #22 for full semantics — identical behavior in C-events. |
 | `ROUND_ROBIN` | `ROUND_ROBIN(StateVar, N)` | Advances `StateVar` through a `0..N-1` rotation. See the B-Event macro table above for full semantics — identical behavior in C-events. |
-| `FINISH` | `FINISH(ServerType)` | Ends the in-progress service of the entity currently held by the first busy server of `ServerType` — **right now**, not at a scheduled/sampled time. For "activity of unknown duration": pair with a C-event condition that determines when service should end (e.g. a state variable crossing a threshold), instead of a `cSchedules` delay. Targets the server directly (like `PREEMPT`) rather than via a preceding macro's context, so it works as the sole effect of its own C-event. No busy server of that type → logs and no-ops. |
+| `FINISH` | `FINISH(ServerType[, Criterion])` | Ends the in-progress service of the entity currently held by a busy server of `ServerType` — **right now**, not at a scheduled/sampled time. When more than one server of that type is busy, an optional Criterion selects which one: `PRIORITY(attrName)` (targets the lowest-valued entity), `LONGEST`/`SHORTEST` (by elapsed service time). Omitted or unrecognized criterion targets the first busy server (today's behavior when no Criterion is given). For "activity of unknown duration": pair with a C-event condition that determines when service should end (e.g. a state variable crossing a threshold), instead of a `cSchedules` delay. Targets the server directly (like `PREEMPT`) rather than via a preceding macro's context, so it works as the sole effect of its own C-event. No busy server of that type → logs and no-ops. |
+| `JOIN` | `JOIN(QueueName, TargetQueue)` — both args required | Fork/join rendezvous, the consumer of `SPLIT`'s lineage. Holds split-family members (the parent + its clones) as they arrive in `QueueName`; once the family is complete, merges them into one surviving entity routed to `TargetQueue` (standard capacity/balk semantics apply there). Completeness is **lenient**: members that went terminal (done/reneged) or vanished from the system (balk/overflow) count as "never coming", so a lost branch degrades the join instead of deadlocking it (the log and `survivor.joined.lostMemberIds` record the loss). The **original parent survives** when present — keeping its `arrivalTime`, `attrs`, and stage history, so sojourn KPIs span the whole fork-join; if the parent was lost en route, the earliest member to reach the rendezvous survives. Merged members are terminated with `endedBy: "JOIN"` and deep-copied onto `survivor.joined.children`, so branch histories stay inspectable in results. Non-split entities waiting in `QueueName` are never touched. Single-level families only — do not re-`SPLIT` a clone. Condition: `queue(QueueName).length > 0` (incomplete-family firings are engine-level no-ops, so this does not spin Phase C). See the fork/join pattern in §12.1. |
 
 ### 6.2 Resource-Free Activities (`DELAY`)
 
@@ -1393,7 +1412,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V35 | `warmupPeriod` must be strictly less than `maxSimTime` |
 | V36 | `mtbfDist` and `mttrDist` are only valid on entity types with `role: "server"` |
 | V37 | When either `mtbfDist` or `mttrDist` is set on a server entity type, **both** must be present with valid distribution parameters |
-| V45 | Every declared queue must appear as a routing destination (ARRIVE, RELEASE 2-arg, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination`). A queue not reachable by any of these is a disconnected fragment. Only enforced when at least one queue is explicitly named in routing (avoids false positives on single-arg `ARRIVE` models). |
+| V45 | Every declared queue must appear as a routing destination (ARRIVE, RELEASE 2-arg, RELEASE_COSEIZED 2-arg, MATCH target, SPLIT target, JOIN target (arg 2), `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination`). A queue not reachable by any of these is a disconnected fragment. Only enforced when at least one queue is explicitly named in routing (avoids false positives on single-arg `ARRIVE` models). |
 | V46 | `overflowDestination` must not form a cycle (A → B → A). Overflow chains are followed recursively at runtime, so a cycle would otherwise loop; it is instead caught at design time. |
 | V47 | `DELAY(QueueName)` must reference a defined queue (blocking error). A C-event whose effect contains `DELAY` should also set `"useEntityCtx": true` on its `cSchedules` entry, or its completion B-event will not know which entity to route (warning). Its `cSchedules` entry's `dist` must not be `"ServerAttr"` — `DELAY` claims no server, so this always falls back to a fixed delay of `1` (warning). Its completion B-event's effect must not be a *bare* `ARRIVE(...)` with nothing else — `ARRIVE` never resolves the delayed entity, leaving it stuck in `"serving"` forever; `ARRIVE` combined with `COMPLETE()`/`RELEASE()`/a routing table is fine (blocking error). |
 | V41 | `SET_ATTR(attrName, ...)` targets an attribute that is declared with `mutable: false`. Attempting to set an immutable attribute at runtime is a blocking error. |
@@ -1437,6 +1456,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V38c | A COSEIZE-scheduled B-event stacks two or more separate `RELEASE(Type)` calls for co-seized types — only the first actually releases anything. Use `RELEASE_COSEIZED([...])` or `COMPLETE()` instead. |
 | V38d | A `RELEASE_COSEIZED([...])` type list includes a type that isn't part of the scheduling C-event's `COSEIZE(...)` types — will fail at runtime with "no claimed ... server". |
 | V38e | A B-event effect calls `RELEASE_COSEIZE(...)` — missing the trailing "D". This is not a registered macro; it silently no-ops as an "Unknown effect" at runtime, so the co-seized servers are never released and the entity never routes onward. Use `RELEASE_COSEIZED([...])`. |
+| V38f | A C-event's `COSEIZE(...)` effect lists the same server type as more than one arg. This fails at runtime with "duplicate server type" — request more than one via `Type:N` (e.g. `Nurse:2`) instead of repeating the arg. |
 | V40 | `SET_ATTR(attrName, ...)` targets an attribute that isn't declared on any entity class — likely a typo. The engine still applies the effect. |
 | V42 | A queue uses `discipline: "SPT"` but the customer entity type reaching it has no `serviceTime`/`processingTime` attribute — SPT can't rank entities and falls back to arrival order. |
 | V43 | A queue uses `discipline: "EDD"` but the customer entity type reaching it has no `dueDate` attribute — EDD can't rank entities and falls back to arrival order. |
@@ -1455,7 +1475,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V-SKILL-7 | An entity-side `Categorical` attribute feeding `ASSIGN(Q, ServerType, Entity.attrName)` has a required value with no server instance — neither type-level `skills[]` nor any `skillProfiles[].skills` — that covers it. Entities requiring that value will queue indefinitely with no server ever able to serve them. Warning-only code. |
 | V-SKILL-2 | (ANY variant) `ASSIGN(Q, ANY, "Skill")` references a skill that no registered server type actually has (neither type-level `skills[]` nor any `skillProfiles[].skills`, across every server type). The cross-type pool is guaranteed empty and the effect will never match. Emitted with the same code as the blocking V-SKILL-2 rule above — severity is distinguished by which list it appears in. |
 | V62 | A server entity type is literally named `ANY` (case-insensitive) — this collides with the reserved `ASSIGN(..., ANY, ...)` cross-type-pooling sentinel and makes any `ANY`-based ASSIGN in the model ambiguous. Rename the server type. |
-| V68 | An entity type's `requiredSequence` has a routing edge (traced through ASSIGN/DELAY/COSEIZE/BATCH/MATCH sources and RELEASE/routing-table/ARRIVE/MATCH/SPLIT destinations, including C-event → scheduled B-event links via `cSchedules`) whose destination queue is an **earlier** stage than its source queue. Likely a routing-table typo or a copy-paste mistake — but also matches an intentional rework/retry loop, so this is a warning, not a blocking error, and can be ignored when the backward routing is deliberate. |
+| V68 | An entity type's `requiredSequence` has a routing edge (traced through ASSIGN/DELAY/COSEIZE/BATCH/JOIN/MATCH sources and RELEASE/routing-table/ARRIVE/MATCH/SPLIT/JOIN destinations, including C-event → scheduled B-event links via `cSchedules`) whose destination queue is an **earlier** stage than its source queue. Likely a routing-table typo or a copy-paste mistake — but also matches an intentional rework/retry loop, so this is a warning, not a blocking error, and can be ignored when the backward routing is deliberate. |
 | V70 | A `Distance`-typed schedule references a `(from, to)` pair not present in `distances[]` (falls back to a duration of 0 at run time), or a `speedAttr` not declared as a numeric attribute on any entity type matching `speedSource` (always falls back to 0). Both are warnings, not blocking errors, since the model may still be under construction. |
 | V-SLOT-1 | `DELAY(QueueName, N)` capacity must be a positive integer. |
 | V-CAL-1 | Calendar conditions (`isWeekday`, `isWeekend`, `hourOfDay`, `dayOfWeek`) are used but the model has no `epoch` set. Calendar variables will return defaults (isWeekday=true, hourOfDay=0). Set a Real-world start date in the Time & Schedules tab. |
@@ -1677,6 +1697,29 @@ For multi-stage models, use `RELEASE(ServerType, NextQueueName)` at the end of s
 - Stage 1 completion B-event: `"effect": ["RELEASE(Nurse, Treatment Queue)"]`
 - Stage 2 C-event: `"condition": "queue(Treatment Queue).length > 0 AND idle(Doctor).count > 0"`, `"effect": ["ASSIGN(Treatment Queue, Doctor)"]`
 - Stage 2 completion B-event: `"effect": ["COMPLETE()"]`
+
+### Fork/join — parallel branches that reconverge (SPLIT → JOIN pattern)
+
+For "send the entity down N parallel branches, continue only when all N are done" (parallel
+diagnostics before a consultant review; components machined in parallel then reassembled):
+
+- Fork B-event (scheduled by the pre-split stage's C-event, `useEntityCtx: true`):
+  `"effect": ["SPLIT(Patient, 3, TestQueue)", "RELEASE(Nurse, SyncQueue)"]` — the clones fan out
+  to the parallel-work queue while the **parent routes to the rendezvous queue** (SPLIT never
+  moves the parent itself; the accompanying `RELEASE`/routing does).
+- Each branch's completion B-event routes its clone to the rendezvous queue:
+  `"effect": ["RELEASE(Lab, SyncQueue)"]`.
+- Join C-event: `"condition": "queue(SyncQueue).length > 0"`,
+  `"effect": ["JOIN(SyncQueue, ReviewQueue)"]` — merges the family into one survivor (the
+  original parent, keeping its arrival time and stages) and routes it to `ReviewQueue`.
+- Post-join stage consumes `ReviewQueue` as normal:
+  `"condition": "queue(ReviewQueue).length > 0 AND idle(Consultant).count > 0"`,
+  `"effect": ["ASSIGN(ReviewQueue, Consultant)"]` → completion `["COMPLETE()"]`.
+
+`TargetQueue` must be a **different** queue from the rendezvous queue — routing the survivor back
+would leave it in front of the JOIN forever. A branch that reneges, balks, or overflows out of the
+system is counted as lost and the join proceeds with the survivors (lenient completeness — no
+deadlock). Do not `SPLIT` a clone again: families are single-level.
 
 ### Airport arrivals with live OpenSky data
 

@@ -81,16 +81,33 @@ supports the feature but no picker can write it. Group B is genuine engine limit
 
 ### Group B — engine-level limits (UI faithfully reflects them)
 
-- **FINISH / PREEMPT take the first busy server** of the type — no victim-selection criterion
-  (e.g. "preempt the lowest-priority in-service entity").
-- **FAIL / REPAIR are all-or-nothing per server type** — no partial `FAIL(Type, N)` for modelling a
-  single machine of a bank breaking down.
-- **COSEIZE seizes exactly one server per type** — quantities like "2 Nurses + 1 Doctor" require
-  duplicate server types, which the macro explicitly rejects.
+- ~~**FINISH / PREEMPT take the first busy server** of the type — no victim-selection criterion
+  (e.g. "preempt the lowest-priority in-service entity").~~ **Closed by Sprint 97** — see
+  `docs/reviews/sprint-97-preempt-finish-victim-selection-plan.md`. `PREEMPT(Type, Criterion)` /
+  `FINISH(Type, Criterion)` accept `PRIORITY(attrName)` (lowest value targeted), `LONGEST`, or
+  `SHORTEST` (by elapsed service time). Omitted or unrecognized criterion keeps today's
+  first-busy-server behavior.
+- ~~**FAIL / REPAIR are all-or-nothing per server type** — no partial `FAIL(Type, N)` for modelling a
+  single machine of a bank breaking down.~~ **Closed by Sprint 96** — see
+  `docs/reviews/sprint-96-fail-repair-quantities-plan.md`. `FAIL(Type, N)` fails up to N servers
+  (idle-preferred, busy only once idle runs out); `REPAIR(Type, N)` repairs up to N failed servers
+  (oldest-failure-first). Omitted N keeps today's "all" behavior.
+- ~~**COSEIZE seizes exactly one server per type** — quantities like "2 Nurses + 1 Doctor" require
+  duplicate server types, which the macro explicitly rejects.~~ **Closed by Sprint 95** — see
+  `docs/reviews/sprint-95-coseize-quantities-plan.md`. `COSEIZE(Q, Nurse:2, Doctor)` now seizes N
+  servers of a type via an optional `:N` quantity suffix, threaded through the engine, validation,
+  the UI composer, and SimPy export. `RELEASE_COSEIZED` releases all N (quantity-agnostic,
+  permanently — no partial release).
 - **MATCH is strictly pairwise** — no k-way assembly; merged attrs let B silently overwrite A.
-- **SPLIT has no JOIN counterpart.** `_splitFrom`/`_splitChildren` lineage is recorded but nothing
-  consumes it — a fork/join pattern (wait for all N clones, then proceed) cannot be modelled.
+- ~~**SPLIT has no JOIN counterpart.** `_splitFrom`/`_splitChildren` lineage is recorded but nothing
+  consumes it — a fork/join pattern (wait for all N clones, then proceed) cannot be modelled.~~
+  **Closed by Sprint 98** — see `docs/reviews/sprint-98-join-plan.md`. `JOIN(Queue, TargetQueue)`
+  (C-event, both args required) holds split-family members arriving in a rendezvous queue until the
+  family is complete, then merges them into one survivor (the original parent when present) routed
+  to TargetQueue. Lenient completeness: lost members (terminal or vanished) degrade the join
+  instead of deadlocking it.
 - **SimPy export**: RENEGE, BATCH, RENEGE_OLDEST, MATCH, FAIL, REPAIR, PREEMPT, RELEASE_COSEIZED
+  (plus FINISH since Sprint 97 and JOIN since Sprint 98)
   export as `# NOT SUPPORTED` TODO blocks (category 2) — documented, but worth surfacing in the UI
   before a user builds a model around them expecting portable export.
 

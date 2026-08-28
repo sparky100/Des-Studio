@@ -12,7 +12,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
 // per-macro usages below for the (large, and macro-specific) set of fields
@@ -641,17 +641,22 @@ export const MACROS = [
     },
   },
 
-  // ── FINISH(ServerType) ─────────────────────────────────────────────────────
+  // ── FINISH(ServerType[, Criterion]) ────────────────────────────────────────
   // Ends the in-progress service of the entity currently held by a busy server of
   // ServerType, right now — for "activity of unknown duration" C-events where a
   // condition (not a sampled/scheduled B-event delay) determines when service ends.
   // Targets the server directly (like PREEMPT) rather than via felRef/getLastCustId,
   // since a bare C-event effect has no B-event context to inherit those from.
+  // Optional Criterion selects which busy server's entity to finish when more than
+  // one is busy: PRIORITY(attrName) (lowest value wins), LONGEST/SHORTEST (by
+  // elapsed service time). Omitted or unrecognized criterion picks the first busy
+  // server in filter order — today's behavior, unchanged.
   {
     name:    "FINISH",
-    pattern: /^FINISH\(([^,)]+)\)$/i,
+    pattern: /^FINISH\(([^,)]+)(?:\s*,\s*(.+))?\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
+      const criterion = match[2] ? match[2].trim() : null;
       const { entities, msgs, setLastCustId, setLastSrvId } = ctx;
       const key = normName(sType);
 
@@ -663,7 +668,8 @@ export const MACROS = [
         return;
       }
 
-      const srv = busyServers[0];
+      const srv = selectVictimServer(busyServers, criterion, entities, ctx.index,
+        (warning) => msgs.push(`FINISH(${sType}, ${criterion}): ${warning}`));
       const cust = findEntityById(ctx.index, entities, srv.currentCustId);
       if (!cust) {
         msgs.push(`FINISH(${sType}): server #${srv.id} has no customer`);
@@ -677,7 +683,8 @@ export const MACROS = [
       finishServiceForPair(cust, srv, ctx, { endedBy: "FINISH" });
       setLastCustId(cust.id);
       setLastSrvId(srv.id);
-      msgs.push(`FINISH(${sType}): #${cust.id} service ended early by server #${srv.id}`);
+      const criterionNote = criterion ? ` [by ${criterion}]` : '';
+      msgs.push(`FINISH(${sType}): #${cust.id} service ended early by server #${srv.id}${criterionNote}`);
     },
   },
 
@@ -743,11 +750,21 @@ export const MACROS = [
   // cached primary-server context id and silently leak the other resources), this
   // resolves each named type independently against whatever this customer actually
   // has claimed, and releases all of them or none.
+  //
+  // Quantity-agnostic by design: if COSEIZE seized N servers of a type (Type:N,
+  // see COSEIZE below), this releases ALL N of them — every server of that type
+  // currently claimed by the customer, however many were seized. There is no
+  // partial-release syntax (release only some of the N units) — that is a
+  // permanent scope boundary, not a "not yet". Type tokens are normalized
+  // (stray "[Skill]"/":N" stripped) since the release side never needs a skill
+  // or quantity — it just means "every server of this type I'm holding."
   {
     name:    "RELEASE_COSEIZED",
     pattern: /^RELEASE_COSEIZED\(\s*\[([^\]]+)\]\s*(?:,\s*([^,)]+))?\)$/i,
     apply(match, ctx) {
-      const typeList     = match[1].split(",").map(s => s.trim()).filter(Boolean);
+      const typeList     = match[1].split(",")
+        .map(s => s.trim().replace(/\[[^\]]*\]/, "").replace(/:\s*\d+$/, "").trim())
+        .filter(Boolean);
       const targetQueue  = match[2]?.trim() || null;
       const typeListLabel = typeList.join(", ");
       const { entities, clock, getLastCustId, felRef, msgs } = ctx;
@@ -761,17 +778,17 @@ export const MACROS = [
 
       const claimedServers = [];
       for (const t of typeList) {
-        const srv = entities.find((/** @type {any} */ e) =>
+        const matches = entities.filter((/** @type {any} */ e) =>
           e.role === "server" &&
           e.currentCustId === cust.id &&
           e.type.trim().toLowerCase() === t.toLowerCase() &&
           (e.status === "busy" || e.status === "serving")
         );
-        if (!srv) {
+        if (matches.length === 0) {
           msgs.push(`RELEASE_COSEIZED([${typeListLabel}]): no claimed ${t} server for customer #${cust.id} — check it matches the scheduling COSEIZE(...) types`);
           return;
         }
-        claimedServers.push(srv);
+        claimedServers.push(...matches);
       }
 
       if (!cust.stages) cust.stages = [];
@@ -1069,13 +1086,18 @@ export const MACROS = [
     },
   },
 
-  // ── PREEMPT(ServerType) ────────────────────────────────────────────────────
-  // Interrupts a busy server, re-queues the current customer with remaining service
+  // ── PREEMPT(ServerType[, Criterion]) ────────────────────────────────────────
+  // Interrupts a busy server, re-queues the current customer with remaining service.
+  // Optional Criterion selects which busy server to interrupt when more than one is
+  // busy: PRIORITY(attrName) (lowest value wins), LONGEST/SHORTEST (by elapsed
+  // service time). Omitted or unrecognized criterion picks the first busy server in
+  // filter order — today's behavior, unchanged.
   {
     name:    "PREEMPT",
-    pattern: /^PREEMPT\(([^,)]+)\)$/i,
+    pattern: /^PREEMPT\(([^,)]+)(?:\s*,\s*(.+))?\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
+      const criterion = match[2] ? match[2].trim() : null;
       const { entities, clock, helpers, msgs, _arbitration } = ctx;
       const key = normName(sType);
 
@@ -1088,7 +1110,8 @@ export const MACROS = [
         return;
       }
 
-      const srv = busyServers[0];
+      const srv = selectVictimServer(busyServers, criterion, entities, ctx.index,
+        (warning) => msgs.push(`PREEMPT(${sType}, ${criterion}): ${warning}`));
       const custId = srv.currentCustId;
       const cust = findEntityById(ctx.index, entities, custId);
 
@@ -1109,26 +1132,41 @@ export const MACROS = [
         });
       }
 
+      const criterionNote = criterion ? ` [by ${criterion}]` : '';
       msgs.push(
         `PREEMPT: server #${srv.id} (${sType}) interrupted #${cust.id} ` +
-        `[remaining ${remainingService.toFixed(3)} t] → re-queued`
+        `[remaining ${remainingService.toFixed(3)} t] → re-queued${criterionNote}`
       );
     },
   },
 
-  // ── FAIL(ServerType) ───────────────────────────────────────────────────────
-  // Sets matching servers to failed state; busy servers' customers re-queued
+  // ── FAIL(ServerType[, N]) ───────────────────────────────────────────────────
+  // Sets matching servers to failed state; busy servers' customers re-queued.
+  // Optional N (default: all): fail at most N servers of the type. Selection
+  // prefers idle servers first, then busy/serving ones only once idle
+  // capacity is exhausted — least disruptive by default (a modeller writing
+  // "take 1 Scanner down for maintenance" expects an idle unit, not an
+  // interrupted scan, whenever one is available). An omitted or non-positive
+  // N means "all", identical to today's behavior.
   {
     name:    "FAIL",
-    pattern: /^FAIL\(([^,)]+)\)$/i,
+    pattern: /^FAIL\(([^,)]+)(?:\s*,\s*(\d+))?\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
+      const requestedN = match[2] ? parseInt(match[2], 10) : null;
       const { entities, clock, helpers, msgs } = ctx;
       const key = normName(sType);
 
-      const servers = entities.filter((/** @type {any} */ e) =>
-        e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving" || e.status === "idle")
+      const idleServers = entities.filter((/** @type {any} */ e) =>
+        e.role === "server" && normName(e.type) === key && e.status === "idle"
       );
+      const busyServers = entities.filter((/** @type {any} */ e) =>
+        e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving")
+      );
+
+      const servers = (requestedN != null && requestedN > 0)
+        ? [...idleServers, ...busyServers].slice(0, requestedN)
+        : [...idleServers, ...busyServers];
 
       let failedCount = 0;
       for (const srv of servers) {
@@ -1152,31 +1190,42 @@ export const MACROS = [
       if (failedCount === 0) {
         msgs.push(`FAIL(${sType}): no matching servers found`);
       } else {
-        msgs.push(`FAIL: ${failedCount} ${sType} server(s) set to failed`);
+        const shortfall = requestedN != null && requestedN > 0 && failedCount < requestedN
+          ? ` (requested ${requestedN}, only ${failedCount} available)` : '';
+        msgs.push(`FAIL: ${failedCount} ${sType} server(s) set to failed${shortfall}`);
       }
     },
   },
 
-  // ── REPAIR(ServerType) ─────────────────────────────────────────────────────
-  // Sets failed servers back to idle
+  // ── REPAIR(ServerType[, N]) ─────────────────────────────────────────────────
+  // Sets failed servers back to idle. Optional N (default: all): repair at
+  // most N failed servers of the type, oldest failure first (by _failedAt) —
+  // like a maintenance queue clearing its longest-outstanding tickets first.
+  // An omitted or non-positive N means "all", identical to today's behavior.
   {
     name:    "REPAIR",
-    pattern: /^REPAIR\(([^,)]+)\)$/i,
+    pattern: /^REPAIR\(([^,)]+)(?:\s*,\s*(\d+))?\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
+      const requestedN = match[2] ? parseInt(match[2], 10) : null;
       const { entities, clock, msgs } = ctx;
       const key = normName(sType);
 
-      const failedServers = entities.filter((/** @type {any} */ e) =>
+      const allFailed = entities.filter((/** @type {any} */ e) =>
         e.role === "server" && normName(e.type) === key && e.status === "failed"
       );
+      const failedServers = (requestedN != null && requestedN > 0)
+        ? [...allFailed].sort((/** @type {any} */ a, /** @type {any} */ b) => (a._failedAt ?? 0) - (b._failedAt ?? 0)).slice(0, requestedN)
+        : allFailed;
 
       const repairedCount = repairServers(failedServers, clock);
 
       if (repairedCount === 0) {
         msgs.push(`REPAIR(${sType}): no failed servers found`);
       } else {
-        msgs.push(`REPAIR: ${repairedCount} ${sType} server(s) restored to idle`);
+        const shortfall = requestedN != null && requestedN > 0 && repairedCount < requestedN
+          ? ` (requested ${requestedN}, only ${repairedCount} failed)` : '';
+        msgs.push(`REPAIR: ${repairedCount} ${sType} server(s) restored to idle${shortfall}`);
       }
     },
   },
@@ -1239,9 +1288,148 @@ export const MACROS = [
     },
   },
 
-  // ── COSEIZE(Queue, ServerType1[Skill1], ServerType2[Skill2][, ...]) ────────
+  // ── JOIN(QueueName, TargetQueue) — fork/join rendezvous for SPLIT families ─
+  // The consumer of SPLIT's lineage: holds split-family members (the original
+  // parent plus its clones) as they arrive in QueueName, and once a family is
+  // complete, merges it back into one surviving entity routed to TargetQueue.
+  //
+  // Completeness is lenient: a family is complete once every member that can
+  // still arrive is waiting here — members that went terminal (done/reneged)
+  // or vanished from the system (balk/overflow splice) along their branch are
+  // counted as "never coming", so one lost clone degrades the join instead of
+  // deadlocking it. The ORIGINAL parent survives when present (preserving its
+  // arrivalTime and stage history, so sojourn spans the whole fork-join);
+  // otherwise the earliest member to reach the rendezvous survives. Merged
+  // members are terminated MATCH-style (visible in results with
+  // endedBy: "JOIN") and snapshotted onto survivor.joined.children so branch
+  // histories stay inspectable. Non-split entities waiting in QueueName are
+  // never touched. Single-level families only — do not re-SPLIT a clone.
+  {
+    name:    "JOIN",
+    pattern: /^JOIN\(([^,)]+)\s*,\s*([^,)]+)\)$/i,
+    apply(match, ctx) {
+      const queueName   = match[1].trim();
+      const targetQueue = match[2].trim();
+      const { entities, model, clock, msgs, setLastCustId } = ctx;
+
+      const qDef = (model.queues || []).find(
+        (/** @type {any} */ q) => q.name?.trim().toLowerCase() === queueName.trim().toLowerCase()
+      );
+      if (!qDef) {
+        msgs.push(`JOIN(${queueName},${targetQueue}): queue not found`);
+        ctx.markNoOp?.();
+        return;
+      }
+      const discipline = qDef.discipline || 'FIFO';
+      const waiting = listWaiting(queueName, discipline, entities, null, true, false, ctx.index);
+
+      // Group arrived family members by family root. Entities without split
+      // lineage — and survivors of a previous join (e.joined) — pass through.
+      /** @type {Map<any, any[]>} */
+      const arrivedByRoot = new Map();
+      for (const e of waiting) {
+        if (e.joined) continue;
+        const rootId = e._splitFrom ?? (e._splitParent ? e.id : null);
+        if (rootId == null) continue;
+        if (!arrivedByRoot.has(rootId)) arrivedByRoot.set(rootId, []);
+        arrivedByRoot.get(rootId).push(e);
+      }
+      // JOIN's triggering condition (queue non-empty) stays true while a
+      // family is still assembling, so do-nothing passes are the common case
+      // — mark them so Phase C doesn't restart on a firing that changed
+      // nothing (see applyEffect's no-op protocol).
+      if (arrivedByRoot.size === 0) {
+        ctx.markNoOp?.();
+        return; // nothing join-relevant waiting — silent
+      }
+
+      const TERMINAL = new Set(["done", "reneged"]);
+      const arrivedIds = new Set(waiting.map((/** @type {any} */ e) => e.id));
+      let mergedFamilies = 0;
+
+      for (const [rootId, arrived] of arrivedByRoot) {
+        // Pending = live family members that haven't reached the rendezvous
+        // yet. Scanning entities[] (rather than trusting only the parent's
+        // _splitChildren ledger) keeps this correct even when the parent was
+        // lost or pruned: clones are discoverable via _splitFrom alone.
+        const pending = entities.filter((/** @type {any} */ e) =>
+          !TERMINAL.has(e.status) &&
+          !arrivedIds.has(e.id) &&
+          (e.id === rootId ? e._splitParent === true : e._splitFrom === rootId)
+        );
+        if (pending.length > 0) continue; // family incomplete — keep waiting, no log spam
+
+        // Lost members = expected (parent + its recorded clones — SPLIT only
+        // records clones that actually joined at birth) minus those that arrived.
+        const parentEntity = arrived.find((/** @type {any} */ e) => e.id === rootId)
+          ?? findEntityById(ctx.index, entities, rootId);
+        const expectedIds = new Set([rootId, ...(parentEntity?._splitChildren || [])]);
+        arrived.forEach((/** @type {any} */ e) => expectedIds.add(e.id));
+        const lostIds = [...expectedIds].filter(id => !arrived.some((/** @type {any} */ a) => a.id === id));
+
+        // Survivor: the original parent when it made it here; otherwise the
+        // earliest member to reach the rendezvous (lastStageStart is set when
+        // a branch completion routes the member here; arrivalTime fallback).
+        const survivor = arrived.find((/** @type {any} */ e) => e.id === rootId)
+          ?? [...arrived].sort((/** @type {any} */ a, /** @type {any} */ b) =>
+            (a.lastStageStart ?? a.arrivalTime ?? 0) - (b.lastStageStart ?? b.arrivalTime ?? 0))[0];
+
+        const mergedSnapshots = [];
+        for (const member of arrived) {
+          if (member === survivor) continue;
+          if (!member.stages) member.stages = [];
+          member.stages.push(buildStageRecord(member, null, clock));
+          mergedSnapshots.push({
+            ...member,
+            attrs: { ...(member.attrs || {}) },
+            stages: member.stages.map((/** @type {any} */ s) => ({ ...s })),
+          });
+          clearWaitingState(member, ctx.index);
+          member.status = "done";
+          member.completionTime = clock;
+          setOutcome(member, {
+            status: "completed",
+            routeId: "macro:JOIN",
+            routeLabel: `Joined into #${survivor.id}`,
+            endedBy: "JOIN",
+            endedAt: clock,
+          });
+          member._joinedInto = survivor.id;
+        }
+
+        if (!survivor.stages) survivor.stages = [];
+        survivor.stages.push(buildStageRecord(survivor, null, clock));
+        survivor.lastStageStart = clock;
+        clearWaitingState(survivor, ctx.index);
+        survivor.joined = { at: clock, children: mergedSnapshots, lostMemberIds: lostIds };
+        const joinedOk = attemptQueueJoin(survivor, targetQueue, clock, ctx);
+        setLastCustId(survivor.id);
+
+        const lostNote = lostIds.length
+          ? `, ${lostIds.length} lost en route: ${lostIds.map(id => `#${id}`).join(', ')}`
+          : '';
+        msgs.push(
+          `JOIN: family #${rootId} → #${survivor.id} continues ` +
+          `[${mergedSnapshots.length} member(s) merged${lostNote}] → "${targetQueue}"` +
+          `${joinedOk ? '' : ' (blocked/balked at target)'}`
+        );
+        mergedFamilies++;
+      }
+
+      if (mergedFamilies === 0) ctx.markNoOp?.(); // every family still assembling
+    },
+  },
+
+  // ── COSEIZE(Queue, ServerType1[Skill1]:N1, ServerType2[Skill2]:N2[, ...]) ──
   // Seizes one customer and multiple server types simultaneously.
   // Optional per-type bracket skill: Doctor[Surgery] filters idle pool by skill.
+  // Optional trailing :N quantity (default 1, e.g. Nurse:2) claims N idle
+  // servers of that type in the same atomic seize — "2 Nurses + 1 Doctor" is
+  // COSEIZE(Q, Nurse:2, Doctor). A type may still appear as only one arg;
+  // request more via :N, not by repeating the arg (see the duplicate-type
+  // rejection below). Availability is checked for every listed type before
+  // any server is claimed (check-all-before-claim-any), so a shortfall on one
+  // type leaves every other type's servers untouched.
   {
     name:    "COSEIZE",
     pattern: /^COSEIZE\(([^,)]+)\s*,\s*(.+)\)$/i,
@@ -1250,19 +1438,18 @@ export const MACROS = [
       const rawArgs = match[2].split(",").map(s => s.trim());
       const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
 
-      // Parse each argument: "Type[Skill]" or just "Type"
+      // Parse each argument: "Type", "Type[Skill]", "Type:N", or "Type[Skill]:N"
       const serverDefs = rawArgs.map(arg => {
-        const bracketMatch = arg.match(/^([^\[]+)\[([^\]]+)\]$/);
-        if (bracketMatch) {
-          return { type: bracketMatch[1].trim(), skill: bracketMatch[2].trim() };
-        }
-        return { type: arg, skill: null };
+        const m = arg.match(/^([^\[:]+?)\s*(?:\[\s*([^\]]+?)\s*\])?\s*(?::\s*(\d+))?$/);
+        if (!m) return { type: arg, skill: null, qty: 1 };
+        const rawQty = m[3] ? parseInt(m[3], 10) : 1;
+        return { type: m[1].trim(), skill: m[2] ? m[2].trim() : null, qty: rawQty > 0 ? rawQty : 1 };
       });
 
       const dupType = serverDefs.find((t, i) => serverDefs.some((d, j) => j !== i && d.type === t.type));
       if (dupType) {
         const typeList = serverDefs.map(d => d.skill ? `${d.type}[${d.skill}]` : d.type).join(', ');
-        msgs.push(`COSEIZE(${queueName}, ${typeList}): duplicate server type "${dupType.type}" — each server type must appear once; COSEIZE seizes one server per listed type, not one per occurrence`);
+        msgs.push(`COSEIZE(${queueName}, ${typeList}): duplicate server type "${dupType.type}" — each server type must appear once; request more than one via "Type:N" (e.g. ${dupType.type}:2), not by repeating the arg`);
         return;
       }
 
@@ -1276,41 +1463,51 @@ export const MACROS = [
         return;
       }
 
-      /** @type {Record<string, any>} */
+      // Check every type has at least `qty` idle matches before claiming
+      // anything — a shortfall on any single type must leave every type's
+      // servers untouched (all-or-nothing).
+      /** @type {Record<string, any[]>} */
       const idleServersByType = {};
       for (const def of serverDefs) {
         const idle = helpers.idleOf(def.type) || [];
         const matched = def.skill
           ? idle.filter((/** @type {any} */ s) => helpers.hasSkillType(s.type, def.skill) || (Array.isArray(s.skills) && s.skills.includes(def.skill)))
           : idle;
-        if (matched.length === 0) {
+        if (matched.length < def.qty) {
           const typeLabel = def.skill ? `${def.type}[${def.skill}]` : def.type;
-          msgs.push(`COSEIZE(${queueName}, ...): no idle ${typeLabel}`);
+          msgs.push(`COSEIZE(${queueName}, ...): only ${matched.length} idle ${typeLabel} (need ${def.qty})`);
           return;
         }
-        idleServersByType[def.type] = matched[0];
+        idleServersByType[def.type] = matched.slice(0, def.qty);
+      }
+
+      // Flatten to one ordered list of individual server units across all
+      // types×qty, preserving arg order and each type's idle-pool order.
+      const claimUnits = [];
+      for (const def of serverDefs) {
+        for (const srv of idleServersByType[def.type]) {
+          claimUnits.push({ type: def.type, skill: def.skill, srv });
+        }
       }
 
       // Claim all servers atomically — first uses claimServerForEntity (sets customer to serving),
-      // subsequent servers get auxiliary claims without re-checking customer status.
-      const serverEntries = Object.entries(idleServersByType);
-      const primarySrv = serverEntries[0][1];
-      const primarySkill = (serverDefs.find(d => d.type === serverEntries[0][0]) || serverDefs[0]).skill;
-      if (!claimServerForEntity(cust, primarySrv, clock, ctx.index, ctx, primarySkill)) {
-        msgs.push(`COSEIZE: claim failed for ${serverEntries[0][0]} #${primarySrv.id}`);
+      // every other unit (same type or different) gets an auxiliary claim without re-checking
+      // customer status.
+      const primary = claimUnits[0];
+      if (!claimServerForEntity(cust, primary.srv, clock, ctx.index, ctx, primary.skill)) {
+        msgs.push(`COSEIZE: claim failed for ${primary.type} #${primary.srv.id}`);
         return;
       }
 
-      for (let i = 1; i < serverEntries.length; i++) {
-        const [sType, srv] = serverEntries[i];
-        const auxSkill = (serverDefs.find(d => d.type === sType) || serverDefs[i]).skill;
+      for (let i = 1; i < claimUnits.length; i++) {
+        const { srv, skill } = claimUnits[i];
         if (srv._starvationStart != null) {
           srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
           delete srv._starvationStart;
         }
         srv.status = "busy";
         srv._busyStart = clock;
-        srv._currentSkill = auxSkill;
+        srv._currentSkill = skill;
         srv.currentCustId = cust.id;
         srv.resourceClaim = {
           customerId: cust.id,
@@ -1325,14 +1522,10 @@ export const MACROS = [
       cust.lastQueue = queueName;
       cust.ceventName = ctx.ceventName;
       setLastCustId(cust.id);
-      const srvIds = Object.values(idleServersByType).map(s => s.id);
-      setLastSrvId(srvIds[0]);
+      setLastSrvId(primary.srv.id);
 
-      const serverDesc = Object.entries(idleServersByType)
-        .map(([type, srv]) => {
-          const def = serverDefs.find(d => d.type === type);
-          return def?.skill ? `#${srv.id} (${type}[${def.skill}])` : `#${srv.id} (${type})`;
-        })
+      const serverDesc = claimUnits
+        .map(u => u.skill ? `#${u.srv.id} (${u.type}[${u.skill}])` : `#${u.srv.id} (${u.type})`)
         .join(', ');
       msgs.push(
         `#${cust.id} → serving by ${serverDesc} ` +

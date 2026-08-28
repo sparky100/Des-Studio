@@ -64,8 +64,8 @@ is replaced with commented `# TODO` stubs you must complete manually.
 | `BATCH` | Accumulate N entities from a store before processing |
 | `RENEGE_OLDEST` | Remove the oldest entity from `store.items` |
 | `MATCH` | Pair entities from two stores |
-| `FAIL` | Set `resource._capacity = 0` to simulate breakdown |
-| `REPAIR` | Restore capacity after a FAIL |
+| `FAIL` | Reduce `resource._capacity` by N (or set to 0 for "all" — no N given) to simulate breakdown |
+| `REPAIR` | Restore capacity by N (or to original for "all" — no N given) after a FAIL |
 | `PREEMPT` | Switch resource to `simpy.PreemptiveResource` |
 | `RELEASE_COSEIZED` | Release each co-seized resource's `simpy.Request` individually |
 
@@ -190,6 +190,24 @@ finally:
         try: _req.resource.release(_req)
         except: pass
 ```
+
+**Quantity (`Type:N`):** `COSEIZE(Queue, Nurse:2, Doctor)` requests N units against
+the *same* resource variable for that type — not N separate resources — still
+combined into one `simpy.AllOf` so the whole set is acquired atomically:
+
+```python
+_req0 = Doctor_resource.request()
+_req1 = Nurse_resource.request()
+_req2 = Nurse_resource.request()
+yield simpy.AllOf(env, [_req0, _req1, _req2])
+...
+    stats.resource_busy["Doctor"] = stats.resource_busy.get("Doctor", 0.0) + _svc_t
+    stats.resource_busy["Nurse"]  = stats.resource_busy.get("Nurse",  0.0) + 2 * _svc_t
+```
+
+Note `resource_busy` scales by the quantity — 2 co-seized Nurses for duration D is
+`2 * D` nurse-busy-seconds, so utilisation (`resource_busy / (warmup × capacity)`)
+stays accurate for a quantity-seized type.
 
 ---
 

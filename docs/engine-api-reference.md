@@ -338,17 +338,18 @@ rng(); // → number in [0, 1)
 | `RELEASE(Server[, Queue])` | Release server without completing; re-queue entity if Queue given |
 | `RENEGE(ctx)` | Remove context entity from queue (abandonment) |
 | `RENEGE_OLDEST(Queue)` | Remove oldest waiting entity from Queue |
-| `PREEMPT(Server)` | Interrupt mid-service; entity re-queues with remaining service |
-| `FAIL(Server)` | Mark Server as failed; interrupt any in-progress service |
-| `REPAIR(Server)` | Restore failed Server to idle; trigger C-scan |
-| `FINISH(Server)` | End the in-progress service of whichever entity a busy Server is currently serving, right now — for condition-triggered completion ("activity of unknown duration") instead of a scheduled delay. No busy server of that type → no-op. |
-| `SPLIT(Type, N, Queue)` | Clone context entity N-1 times; place clones in Queue. Requires exactly 3 args — a 2-arg `SPLIT(N, Queue)` is invalid and silently does nothing. Trigger from a one-shot context (a cSchedule-fired B-event), never a recurring C-event condition on the entity's own queue: SPLIT doesn't change the context entity's status, so a condition that stays true refires it unboundedly. |
+| `PREEMPT(Server[, Criterion])` | Interrupt mid-service; entity re-queues with remaining service. Criterion (`PRIORITY(attr)`/`LONGEST`/`SHORTEST`) selects which busy server when more than one qualifies; default: first busy server |
+| `FAIL(Server[, N])` | Mark up to N Server units as failed (idle-preferred; default: all); interrupt any in-progress service that must be preempted |
+| `REPAIR(Server[, N])` | Restore up to N failed Server units to idle, oldest-failure-first (default: all); trigger C-scan |
+| `FINISH(Server[, Criterion])` | End the in-progress service of whichever entity a busy Server is currently serving, right now — for condition-triggered completion ("activity of unknown duration") instead of a scheduled delay. Criterion (`PRIORITY(attr)`/`LONGEST`/`SHORTEST`) selects which busy server when more than one qualifies; default: first busy server. No busy server of that type → no-op. |
+| `SPLIT(Type, N, Queue)` | Clone context entity N-1 times; place clones in Queue. Requires exactly 3 args — a 2-arg `SPLIT(N, Queue)` is invalid and silently does nothing. Trigger from a one-shot context (a cSchedule-fired B-event), never a recurring C-event condition on the entity's own queue: SPLIT doesn't change the context entity's status, so a condition that stays true refires it unboundedly. Records `_splitFrom`/`_splitChildren` lineage — pair with `JOIN` for fork/join. |
+| `JOIN(Queue, TargetQueue)` | Fork/join rendezvous for SPLIT families (C-event; both args required). Holds family members arriving in Queue until the family is complete, then merges them into one survivor routed to TargetQueue. Lenient completeness: terminal (done/reneged) or vanished (balk/overflow) members count as lost and the join proceeds. The original parent survives when present (keeps arrivalTime/attrs/stages — sojourn spans the fork-join); else the earliest-arrived member. Merged clones end with `endedBy: "JOIN"`, snapshotted onto `survivor.joined.children` (+ `lostMemberIds`). Non-split entities in Queue are never touched; single-level families only. Condition `queue(Queue).length > 0` is safe: incomplete-family firings are effect-level no-ops (no Phase C restart). |
 | `BATCH(Queue[, Size\|Entity.attr])` | Accumulate N entities from Queue into one batch entity |
 | `UNBATCH(Queue)` | Release batch members back as individual entities |
 | `MATCH(TypeA, QueueA, TypeB, QueueB, Target)` | Pair one entity from each queue into a batch. Merged attrs = `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — QueueB's value wins on any name collision with QueueA. |
 | `MATCH(TypeA, QueueA, TypeB, QueueB, Target, "predicate")` | Same, but scans both queues for the first pair satisfying the quoted predicate instead of always taking the front of each. `Entity.<attr>` = the QueueA candidate, `Other.<attr>` = the QueueB candidate. No compatible pair → no-op. |
-| `COSEIZE(Queue, Srv1[, Srv2, ...])` | Atomically seize one customer and multiple server types |
-| `RELEASE_COSEIZED([Srv1, Srv2, ...][, Queue])` | Atomically release all servers claimed by a COSEIZE for the context entity; re-queue to Queue if given. Never stack separate `RELEASE(Srv)` calls per co-seized type — use this instead. |
+| `COSEIZE(Queue, Srv1[Skill1][:N1][, Srv2[Skill2][:N2], ...])` | Atomically seize one customer and multiple server types, optionally N of a type via `:N` (default 1) |
+| `RELEASE_COSEIZED([Srv1, Srv2, ...][, Queue])` | Atomically release **all** servers claimed by a COSEIZE for the context entity (quantity-agnostic — releases every unit of a listed type, however many were seized); re-queue to Queue if given. Never stack separate `RELEASE(Srv)` calls per co-seized type — use this instead. |
 | `SET(varName, expr)` | Set state variable to arithmetic expression result |
 | `SET_ATTR(attr, expr)` | Set context entity attribute to expression result |
 | `COST(expr)` | Accumulate expression result to `summary.totalCost` |

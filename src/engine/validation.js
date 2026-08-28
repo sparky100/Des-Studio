@@ -553,10 +553,32 @@ export function validateModel(model) {
     const cText = effectText(c.effect);
     const m = cText.match(/COSEIZE\s*\(([^)]+)\)/i);
     if (!m) return;
+    // Strip both the optional per-type skill bracket ("Doctor[Surgery]") and
+    // the optional trailing quantity suffix ("Nurse:2", Sprint 95) so the
+    // comparison sets below are built from bare type names either way.
     const types = m[1].split(",").map(s => s.trim()).filter(Boolean).slice(1)
-      .map(s => s.replace(/\[[^\]]*\]/, '').trim())
+      .map(s => s.replace(/\[[^\]]*\]/, '').replace(/:\s*\d+$/, '').trim())
       .filter(Boolean);
     if (types.length === 0) return;
+
+    // V38f: COSEIZE listing the same server type as more than one arg fails at
+    // runtime ("duplicate server type") — surface it at authoring time too,
+    // mirroring the engine's own rejection (Sprint 95). Requesting more than
+    // one of a type is Type:N, not a repeated arg.
+    const seenTypes = new Set();
+    const dupType = types.find(t => {
+      const key = t.toLowerCase();
+      if (seenTypes.has(key)) return true;
+      seenTypes.add(key);
+      return false;
+    });
+    if (dupType) {
+      warn('V38f',
+        `C-Event '${c.name || c.id}' calls COSEIZE(...) listing server type "${dupType}" more than once — COSEIZE seizes one server per listed type; request more than one via "Type:N" (e.g. ${dupType}:2), not by repeating the arg. This will fail at runtime with "duplicate server type".`,
+        'cevents',
+        { eventIds: [c.id] });
+    }
+
     (c.cSchedules || []).forEach((/** @type {any} */ cs) => {
       if (!cs.eventId) return;
       const existing = coseizeTypesByBEventId.get(cs.eventId) || new Set();
@@ -592,7 +614,13 @@ export function validateModel(model) {
     parts.forEach(p => {
       const rcMatch = p.match(/^RELEASE_COSEIZED\(\s*\[([^\]]+)\]/i);
       if (!rcMatch) return;
-      const listedTypes = rcMatch[1].split(",").map(s => s.trim()).filter(Boolean);
+      // RELEASE_COSEIZED is quantity-agnostic (Sprint 95: releases all
+      // claimed servers of a type regardless of how many were seized) — its
+      // type list never carries "[Skill]"/":N", but strip defensively in
+      // case a user pasted seize-side syntax here by mistake.
+      const listedTypes = rcMatch[1].split(",")
+        .map(s => s.trim().replace(/\[[^\]]*\]/, '').replace(/:\s*\d+$/, '').trim())
+        .filter(Boolean);
       const mismatched = listedTypes.filter(t => !coseizeTypes.has(t.toLowerCase()));
       if (mismatched.length > 0) {
         warn('V38d',
@@ -1154,7 +1182,7 @@ export function validateModel(model) {
     const immutableNames = new Set(
       allAttrDefs.filter(a => a.mutable === false).map(a => (a.name || '').trim()).filter(Boolean)
     );
-    const CTX_MACRO_RE = /(?:ARRIVE|ASSIGN|SEIZE|COSEIZE|BATCH|SPLIT)\s*\(/i;
+    const CTX_MACRO_RE = /(?:ARRIVE|ASSIGN|SEIZE|COSEIZE|BATCH|SPLIT|JOIN)\s*\(/i;
 
     const checkEffects = (/** @type {any} */ events, /** @type {any} */ tab) => {
       events.forEach((/** @type {any} */ ev) => {
@@ -1232,6 +1260,9 @@ export function validateModel(model) {
     // both route into a queue named in their final argument — same as ARRIVE/RELEASE.
     const MATCH_QUEUE_G = /MATCH\s*\([^,)]+,\s*[^,)]+,\s*[^,)]+,\s*[^,)]+,\s*([^)]+)\)/gi;
     const SPLIT_QUEUE_G = /SPLIT\s*\([^,)]+,\s*\d+\s*,\s*([^)]+)\)/gi;
+    // JOIN(RendezvousQueue, TargetQueue) routes the merged survivor into its
+    // second argument — a queue fed only by JOIN is reachable.
+    const JOIN_QUEUE_G = /JOIN\s*\([^,)]+,\s*([^)]+)\)/gi;
 
     const collectFromEffect = (/** @type {any} */ text) => {
       for (const m of text.matchAll(ARRIVE_QUEUE_G))  reachableNames.add(m[1].trim().toLowerCase());
@@ -1239,6 +1270,7 @@ export function validateModel(model) {
       for (const m of text.matchAll(RELEASE_COSEIZED_QUEUE_G)) reachableNames.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(MATCH_QUEUE_G))   reachableNames.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(SPLIT_QUEUE_G))   reachableNames.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(JOIN_QUEUE_G))    reachableNames.add(m[1].trim().toLowerCase());
     };
 
     bEvents.forEach(b => {
@@ -1280,7 +1312,7 @@ export function validateModel(model) {
   // intentionally revisit an earlier stage are a legitimate DES pattern, so
   // this must never block a run — it's a nudge to double-check, not a rule.
   {
-    const SOURCE_QUEUE_G  = /\b(?:ASSIGN|DELAY|COSEIZE|BATCH)\s*\(\s*([^,)]+)/gi;
+    const SOURCE_QUEUE_G  = /\b(?:ASSIGN|DELAY|COSEIZE|BATCH|JOIN)\s*\(\s*([^,)]+)/gi;
     const MATCH_SOURCES_G = /\bMATCH\s*\(\s*[^,)]+,\s*([^,)]+)\s*,\s*[^,)]+,\s*([^,)]+)\s*,/gi;
     const QUEUE_TOKEN_G   = /\bqueue\(\s*([^)]+?)\s*\)/gi;
     const ARRIVE_QUEUE_G2  = /ARRIVE\s*\([^,)]+,\s*([^)]+)\)/gi;
@@ -1288,6 +1320,7 @@ export function validateModel(model) {
     const RELEASE_COSEIZED_QUEUE_G2 = /RELEASE_COSEIZED\s*\(\s*\[[^\]]+\]\s*,\s*([^)]+)\)/gi;
     const MATCH_QUEUE_G2 = /MATCH\s*\([^,)]+,\s*[^,)]+,\s*[^,)]+,\s*[^,)]+,\s*([^)]+)\)/gi;
     const SPLIT_QUEUE_G2 = /SPLIT\s*\([^,)]+,\s*\d+\s*,\s*([^)]+)\)/gi;
+    const JOIN_QUEUE_G2 = /JOIN\s*\([^,)]+,\s*([^)]+)\)/gi;
 
     const extractSources = (/** @type {any} */ ev) => {
       const names = new Set();
@@ -1306,6 +1339,7 @@ export function validateModel(model) {
       for (const m of text.matchAll(RELEASE_COSEIZED_QUEUE_G2)) names.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(MATCH_QUEUE_G2))   names.add(m[1].trim().toLowerCase());
       for (const m of text.matchAll(SPLIT_QUEUE_G2))   names.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(JOIN_QUEUE_G2))    names.add(m[1].trim().toLowerCase());
       (ev.routing || []).forEach((/** @type {any} */ r) => r.queueName && names.add(r.queueName.toLowerCase()));
       (ev.probabilisticRouting || []).forEach((/** @type {any} */ r) => r.queueName && names.add(r.queueName.toLowerCase()));
       if (ev.defaultQueueName) names.add(ev.defaultQueueName.toLowerCase());
@@ -1592,7 +1626,12 @@ export function validateModel(model) {
         if (!inner) return;
         const args = inner[1].split(',').map(a => a.trim());
         for (let i = 1; i < args.length; i++) {
-          const bracketMatch = args[i].match(/^([^\[]+)\[([^\]]+)\]$/);
+          // Strip a trailing quantity suffix ("Doctor[Surgery]:2", Sprint 95)
+          // before the bracket match — the bracket regex anchors on "]$" and
+          // would otherwise fail to match at all on a quantified arg,
+          // silently skipping skill validation for it.
+          const argNoQty = args[i].replace(/:\s*\d+$/, '').trim();
+          const bracketMatch = argNoQty.match(/^([^\[]+)\[([^\]]+)\]$/);
           if (bracketMatch) {
             const sType = bracketMatch[1].trim();
             const skill = bracketMatch[2].trim();

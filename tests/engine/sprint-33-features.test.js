@@ -339,9 +339,11 @@ describe('COSEIZE macro', () => {
     const engine = buildEngine(model, 42, 0, 10);
     const result = engine.runAll();
 
-    // Should have warning about no idle MissingServer
+    // Should have warning about insufficient idle MissingServer (Sprint 95:
+    // wording carries a quantity now — "only N idle Type (need M)" — since
+    // the same check now also gates Type:N quantity seizes)
     const warnings = result.log.filter(entry =>
-      entry.message && entry.message.includes('no idle MissingServer')
+      entry.message && entry.message.includes('idle MissingServer') && entry.message.includes('need 1')
     );
     expect(warnings.length).toBeGreaterThan(0);
   });

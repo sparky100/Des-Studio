@@ -787,7 +787,7 @@ The following must be added to `CLAUDE.md` before Sprint 1 begins. Copy this sec
 - allowedValues is only valid for string valueType
 
 ### Action Vocabulary — Open Set (as of Sprint 33+)
-- The currently implemented macros are: ARRIVE, SEIZE/ASSIGN, COMPLETE, DELAY, RENEGE, BATCH, UNBATCH, RENEGE_OLDEST, FILL, DRAIN, SET, SET_ATTR, COST, PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, RELEASE_COSEIZED, MATCH
+- The currently implemented macros are: ARRIVE, SEIZE/ASSIGN, COMPLETE, DELAY, RENEGE, BATCH, UNBATCH, RENEGE_OLDEST, FILL, DRAIN, SET, SET_ATTR, COST, PREEMPT, FAIL, REPAIR, SPLIT, JOIN, COSEIZE, RELEASE_COSEIZED, MATCH
 - SEIZE and ASSIGN are engine synonyms for the resource-claiming action (C-Event phase)
 - BATCH is a C-Event only macro; UNBATCH is a B-Event only macro
 - FILL and DRAIN operate on container levels; containers must be declared in containerTypes
@@ -897,10 +897,11 @@ The complete macro set implemented in the engine. This is the authoritative list
 | RENEGE | B-Event | 1 | Removes entity from queue after patience timeout; routes to Sink |
 | BATCH | C-Event | 12 | Accumulates N entities per queue discipline into a parent batch entity |
 | UNBATCH | B-Event | 12 | Restores children from a parent batch to a target queue |
-| PREEMPT | B-Event | 32 | Interrupts busy server; re-queues displaced entity with remaining service time |
-| FAIL | B-Event | 32 | Sets matching servers to failed status |
-| REPAIR | B-Event | 32 | Restores failed servers to idle |
-| SPLIT | C/B-Event | 33 | `SPLIT(EntityType, N, Queue)` — exactly 3 args. Creates N-1 clones of the context entity and routes them to Queue; records `_splitParent`/`_splitChildren`. Trigger from a one-shot context only (e.g. a cSchedule-fired B-event) — a recurring C-event condition on the same entity/queue will refire unboundedly since SPLIT doesn't change the context entity's status. |
+| PREEMPT | B-Event | 32 | `PREEMPT(ServerType[, Criterion])` — interrupts a busy server; re-queues displaced entity with remaining service time. Criterion (`PRIORITY(attr)`/`LONGEST`/`SHORTEST`) selects which busy server when more than one qualifies (default: first busy server) |
+| FAIL | B-Event | 32 | `FAIL(ServerType[, N])` — sets up to N matching servers to failed status, idle-preferred (default: all) |
+| REPAIR | B-Event | 32 | `REPAIR(ServerType[, N])` — restores up to N failed servers to idle, oldest-failure-first (default: all) |
+| SPLIT | C/B-Event | 33 | `SPLIT(EntityType, N, Queue)` — exactly 3 args. Creates N-1 clones of the context entity and routes them to Queue; records `_splitParent`/`_splitChildren` — the lineage JOIN (Sprint 98) consumes for fork/join. Trigger from a one-shot context only (e.g. a cSchedule-fired B-event) — a recurring C-event condition on the same entity/queue will refire unboundedly since SPLIT doesn't change the context entity's status. |
+| JOIN | C-Event | 98 | `JOIN(Queue, TargetQueue)` — both args required. Fork/join rendezvous: holds SPLIT-family members arriving in Queue until the family is complete, then merges them into one survivor routed to TargetQueue. Lenient completeness (terminal or vanished members count as lost — no deadlock); the original parent survives when present, keeping its arrivalTime/stages so sojourn spans the whole fork-join; merged clones end `endedBy: "JOIN"` with snapshots on `survivor.joined.children`. Non-split entities are never touched; single-level families only. Safe on a recurring `queue(Queue).length > 0` condition — incomplete-family firings are effect-level no-ops (no Phase C restart). |
 | COSEIZE | C-Event | 33 | Atomically seizes multiple server types simultaneously |
 | RELEASE_COSEIZED | B-Event | post-33 | `RELEASE_COSEIZED([Type1, Type2, ...], Queue?)` — atomically releases all servers claimed by a COSEIZE for the context entity and routes/re-queues it. The correct multi-resource counterpart to RELEASE; never stack separate RELEASE(Type) calls for co-seized types, since each resolves against the same cached primary-server context and only the first actually releases anything. Use COMPLETE() instead if the entity's lifecycle should end here (it also releases all co-seized servers). PREEMPT/FAIL on a co-seized resource likewise release the other co-seized resources automatically. |
 | MATCH | C-Event | 33 | `MATCH(TypeA, QueueA, TypeB, QueueB, Target)` — pairs one entity from each queue into a batch entity in Target. Merged attrs = `{...entityFromQueueA.attrs, ...entityFromQueueB.attrs}` — QueueB's value overwrites QueueA's on any name collision. |
