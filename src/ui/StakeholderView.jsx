@@ -23,6 +23,7 @@ import { SummaryCardGrid } from "./results/ResultsWorkspace.jsx";
 import { fetchModelSchedules, buildSchedulesMap } from "../db/models.js";
 import { Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { StakeholderRunCanvas } from "./StakeholderRunCanvas.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
@@ -34,6 +35,8 @@ export function StakeholderView({ model, plan = "free", isAdmin = false, tierPol
   const [progress, setProgress] = useState(null);
   const [runError, setRunError] = useState(null);
   const [outcome, setOutcome] = useState(null); // { batch, reps }
+  const [watching, setWatching] = useState(false); // showing StakeholderRunCanvas instead of settings
+  const [watchModel, setWatchModel] = useState(null); // the patched model snapshot being watched
   const cancelRef = useRef(null);
 
   const { resolved } = resolveExposedParams(model);
@@ -87,6 +90,13 @@ export function StakeholderView({ model, plan = "free", isAdmin = false, tierPol
     return v === undefined || v === "" ? p.currentValue : Number(v);
   };
 
+  const buildPatchedModel = () => {
+    const deltas = resolved
+      .map(p => ({ paramConfig: p, value: clampExposedValue(p, effectiveValue(p)) }))
+      .filter(d => Number.isFinite(d.value) && d.value !== d.paramConfig.currentValue);
+    return deltas.length ? applySweepValues(model, deltas) : model;
+  };
+
   const handleRun = () => {
     if (running || blocked || schedulesState.status !== "ready") return;
     setRunError(null);
@@ -94,10 +104,7 @@ export function StakeholderView({ model, plan = "free", isAdmin = false, tierPol
     setProgress(null);
     setRunning(true);
 
-    const deltas = resolved
-      .map(p => ({ paramConfig: p, value: clampExposedValue(p, effectiveValue(p)) }))
-      .filter(d => Number.isFinite(d.value) && d.value !== d.paramConfig.currentValue);
-    const patched = deltas.length ? applySweepValues(model, deltas) : model;
+    const patched = buildPatchedModel();
 
     const handle = runReplications({
       model: patched,
@@ -130,6 +137,12 @@ export function StakeholderView({ model, plan = "free", isAdmin = false, tierPol
     cancelRef.current = handle;
   };
 
+  const handleWatch = () => {
+    if (blocked || schedulesState.status !== "ready") return;
+    setWatchModel(buildPatchedModel());
+    setWatching(true);
+  };
+
   const panelStyle = { background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16 };
 
   return (
@@ -154,6 +167,18 @@ export function StakeholderView({ model, plan = "free", isAdmin = false, tierPol
             This model can't be run right now — it has a problem only its owner can fix. Let them know, and try again once it's updated.
           </div>
         </div>
+      ) : watching ? (
+        <StakeholderRunCanvas
+          model={watchModel}
+          schedulesMap={schedulesState.map}
+          warmupPeriod={warmupPeriod}
+          maxSimTime={maxSimTime}
+          terminationMode={terminationMode}
+          terminationCondition={terminationCondition}
+          seed={experimentDefaults.seed ?? 0}
+          admission={admission}
+          onClose={() => setWatching(false)}
+        />
       ) : (
         <>
           <div style={panelStyle}>
@@ -209,6 +234,9 @@ export function StakeholderView({ model, plan = "free", isAdmin = false, tierPol
                 {running ? "Running…" : outcome ? "Run again" : "Run the simulation"}
               </Btn>
               {running && <Btn small variant="ghost" onClick={() => cancelRef.current?.cancel?.()}>Cancel</Btn>}
+              <Btn variant="ghost" disabled={schedulesState.status !== "ready"} onClick={handleWatch}>
+                ▶ Watch it run
+              </Btn>
               <div style={{ fontSize: 11, color: C.muted, fontFamily: SANS, lineHeight: 1.5 }}>
                 Runs the simulation {admission.replications} time{admission.replications === 1 ? "" : "s"} with different random variations and averages the results.
               </div>
