@@ -99,9 +99,15 @@ supports the feature but no picker can write it. Group B is genuine engine limit
   the UI composer, and SimPy export. `RELEASE_COSEIZED` releases all N (quantity-agnostic,
   permanently — no partial release).
 - **MATCH is strictly pairwise** — no k-way assembly; merged attrs let B silently overwrite A.
-- **SPLIT has no JOIN counterpart.** `_splitFrom`/`_splitChildren` lineage is recorded but nothing
-  consumes it — a fork/join pattern (wait for all N clones, then proceed) cannot be modelled.
+- ~~**SPLIT has no JOIN counterpart.** `_splitFrom`/`_splitChildren` lineage is recorded but nothing
+  consumes it — a fork/join pattern (wait for all N clones, then proceed) cannot be modelled.~~
+  **Closed by Sprint 98** — see `docs/reviews/sprint-98-join-plan.md`. `JOIN(Queue, TargetQueue)`
+  (C-event, both args required) holds split-family members arriving in a rendezvous queue until the
+  family is complete, then merges them into one survivor (the original parent when present) routed
+  to TargetQueue. Lenient completeness: lost members (terminal or vanished) degrade the join
+  instead of deadlocking it.
 - **SimPy export**: RENEGE, BATCH, RENEGE_OLDEST, MATCH, FAIL, REPAIR, PREEMPT, RELEASE_COSEIZED
+  (plus FINISH since Sprint 97 and JOIN since Sprint 98)
   export as `# NOT SUPPORTED` TODO blocks (category 2) — documented, but worth surfacing in the UI
   before a user builds a model around them expecting portable export.
 

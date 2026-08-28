@@ -20,7 +20,7 @@
     "engineeringSpec": {
       "threePhaseMethod": "simmodlr implements Pidd's Three-Phase Method. Phase A: Advance clock to next event time. Phase B: Fire all B-Events at that time. Phase C: Scan C-Events in priority order, firing any whose condition is true, then restart scan from top. This ensures priority ordering and avoids priority inversion.",
       "modelSchema": "Model JSON has: entityTypes[], stateVariables[], bEvents[], cEvents[], queues[], graph{}, experimentDefaults{}, epoch (optional), userSettings (optional). All sections are arrays except graph and experimentDefaults. Each section has specific required fields validated before running.",
-      "macros": "B-Event macros: ARRIVE(type,queue), COMPLETE(), ASSIGN(queue,server), RELEASE(server,nextQueue), RENEGE(ctx), UNBATCH(queue), PREEMPT(server[,criterion]), FAIL(server[,N]), REPAIR(server[,N]), SPLIT(type,N,queue), SET(var,expr), SET_ATTR(attr,expr), COST(expr), FILL(container,amt). C-Event macros: ASSIGN(queue,server), BATCH(queue,N), COSEIZE(queue,srv1[:N],srv2[:N]...), MATCH(typeA,queueA,typeB,queueB,target), SET(var,expr), SET_ATTR(attr,expr), COST(expr), RENEGE_OLDEST(type), DRAIN(container,amt), FINISH(server[,criterion]). Criterion for PREEMPT/FINISH: PRIORITY(attr), LONGEST, or SHORTEST.",
+      "macros": "B-Event macros: ARRIVE(type,queue), COMPLETE(), ASSIGN(queue,server), RELEASE(server,nextQueue), RENEGE(ctx), UNBATCH(queue), PREEMPT(server[,criterion]), FAIL(server[,N]), REPAIR(server[,N]), SPLIT(type,N,queue), SET(var,expr), SET_ATTR(attr,expr), COST(expr), FILL(container,amt). C-Event macros: ASSIGN(queue,server), BATCH(queue,N), COSEIZE(queue,srv1[:N],srv2[:N]...), MATCH(typeA,queueA,typeB,queueB,target), SET(var,expr), SET_ATTR(attr,expr), COST(expr), RENEGE_OLDEST(type), DRAIN(container,amt), FINISH(server[,criterion]), JOIN(queue,targetQueue). Criterion for PREEMPT/FINISH: PRIORITY(attr), LONGEST, or SHORTEST. JOIN merges a SPLIT family once complete (lenient: lost members skipped); parent survives, routed to targetQueue.",
       "distributions": "Distribution schema: {dist:\"Exponential\",distParams:{mean:\"5\"}} or {dist:\"Triangular\",distParams:{min:\"3\",mode:\"7\",max:\"15\"}}. All distParams values must be non-empty strings. For arrivals, Exponential(mean) where mean=1/rate. For service, Fixed(value) for deterministic, Triangular for expert estimates, Exponential for random service.",
       "validation": "Validation rules: V1: Entity names unique. V2: Attribute names unique within entity. V3: defaultValue matches valueType. V4: PRIORITY queue requires priority attribute. V5: Distribution params valid. V6: No stale B-Event references. V7: Activity nodes have 1 in, 1 out edge. V8: At least one Source and one Sink. V9: No undefined variables in conditions. V10: No namespace collisions (Resource, Queue)."
     },
@@ -51,7 +51,8 @@
         "COST",
         "RENEGE_OLDEST",
         "DRAIN",
-        "FINISH"
+        "FINISH",
+        "JOIN"
       ],
       "distributions": [
         "exponential",

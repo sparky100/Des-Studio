@@ -680,7 +680,7 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | `PREEMPT` | `PREEMPT(ServerType[, Criterion])` | Interrupts in-progress service; displaced entity re-queues with remaining service time. Optional Criterion selects which busy server to interrupt when more than one is busy: `PRIORITY(attrName)` (lowest value targeted), `LONGEST`/`SHORTEST` (by elapsed service time). Omitted or unrecognized criterion picks the first busy server (today's behavior). |
 | `FAIL` | `FAIL(ServerType[, N])` | Marks up to N servers of this type as failed; interrupts in-progress service on any that must be preempted. Prefers idle servers first — busy ones are only touched once idle capacity runs out. Omitted or non-positive N means "all" servers of the type. Pair with a scheduled `REPAIR` B-event. |
 | `REPAIR` | `REPAIR(ServerType[, N])` | Restores up to N failed servers of this type to idle, oldest-failure-first; triggers a C-scan for waiting entities. Omitted or non-positive N means "all". |
-| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2; `QueueName` must reference a defined queue. |
+| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2; `QueueName` must reference a defined queue.Records the family lineage `JOIN` later consumes — for a fork/join, route the parent to the rendezvous queue in the same effect array (see the SPLIT → JOIN pattern in §12.1). |
 | `SET` | `SET(varName, expression)` | Sets a state variable to an arithmetic expression. Supports `Entity.attrName`, state variables, `clock`, +−×÷, `min`/`max`/`abs`/`round`/`floor`/`ceil`. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to the result of an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost` and the entity's `__cost` attribute. |
@@ -1025,10 +1025,11 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `RENEGE_OLDEST` | `RENEGE_OLDEST(CustomerType)` | Removes the oldest entity of the given type from its queue. `CustomerType` must exactly match a defined customer entity type name (case-sensitive). Used for max-queue-length policies or timeout eviction. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id` (V27). `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
 | `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not) (V27). `amount` accepts the same literal/state-variable/expression forms as `FILL`. |
-| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2. `QueueName` must reference a defined queue. |
+| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2. `QueueName` must reference a defined queue.Pair with `JOIN(Queue, Target)` for fork/join (see below). |
 | `CANCEL` | `CANCEL(EventName)` | Removes the pending FEL entry named `EventName` scheduled for the **current context entity only**. See the B-Event macro table above and TOP LLM MISTAKES #22 for full semantics — identical behavior in C-events. |
 | `ROUND_ROBIN` | `ROUND_ROBIN(StateVar, N)` | Advances `StateVar` through a `0..N-1` rotation. See the B-Event macro table above for full semantics — identical behavior in C-events. |
 | `FINISH` | `FINISH(ServerType[, Criterion])` | Ends the in-progress service of the entity currently held by a busy server of `ServerType` — **right now**, not at a scheduled/sampled time. When more than one server of that type is busy, an optional Criterion selects which one: `PRIORITY(attrName)` (targets the lowest-valued entity), `LONGEST`/`SHORTEST` (by elapsed service time). Omitted or unrecognized criterion targets the first busy server (today's behavior when no Criterion is given). For "activity of unknown duration": pair with a C-event condition that determines when service should end (e.g. a state variable crossing a threshold), instead of a `cSchedules` delay. Targets the server directly (like `PREEMPT`) rather than via a preceding macro's context, so it works as the sole effect of its own C-event. No busy server of that type → logs and no-ops. |
+| `JOIN` | `JOIN(QueueName, TargetQueue)` — both args required | Fork/join rendezvous, the consumer of `SPLIT`'s lineage. Holds split-family members (the parent + its clones) as they arrive in `QueueName`; once the family is complete, merges them into one surviving entity routed to `TargetQueue` (standard capacity/balk semantics apply there). Completeness is **lenient**: members that went terminal (done/reneged) or vanished from the system (balk/overflow) count as "never coming", so a lost branch degrades the join instead of deadlocking it (the log and `survivor.joined.lostMemberIds` record the loss). The **original parent survives** when present — keeping its `arrivalTime`, `attrs`, and stage history, so sojourn KPIs span the whole fork-join; if the parent was lost en route, the earliest member to reach the rendezvous survives. Merged members are terminated with `endedBy: "JOIN"` and deep-copied onto `survivor.joined.children`, so branch histories stay inspectable in results. Non-split entities waiting in `QueueName` are never touched. Single-level families only — do not re-`SPLIT` a clone. Condition: `queue(QueueName).length > 0` (incomplete-family firings are engine-level no-ops, so this does not spin Phase C). See the fork/join pattern in §12.1. |
 
 ### 6.2 Resource-Free Activities (`DELAY`)
 
@@ -1411,7 +1412,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V35 | `warmupPeriod` must be strictly less than `maxSimTime` |
 | V36 | `mtbfDist` and `mttrDist` are only valid on entity types with `role: "server"` |
 | V37 | When either `mtbfDist` or `mttrDist` is set on a server entity type, **both** must be present with valid distribution parameters |
-| V45 | Every declared queue must appear as a routing destination (ARRIVE, RELEASE 2-arg, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination`). A queue not reachable by any of these is a disconnected fragment. Only enforced when at least one queue is explicitly named in routing (avoids false positives on single-arg `ARRIVE` models). |
+| V45 | Every declared queue must appear as a routing destination (ARRIVE, RELEASE 2-arg, RELEASE_COSEIZED 2-arg, MATCH target, SPLIT target, JOIN target (arg 2), `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination`). A queue not reachable by any of these is a disconnected fragment. Only enforced when at least one queue is explicitly named in routing (avoids false positives on single-arg `ARRIVE` models). |
 | V46 | `overflowDestination` must not form a cycle (A → B → A). Overflow chains are followed recursively at runtime, so a cycle would otherwise loop; it is instead caught at design time. |
 | V47 | `DELAY(QueueName)` must reference a defined queue (blocking error). A C-event whose effect contains `DELAY` should also set `"useEntityCtx": true` on its `cSchedules` entry, or its completion B-event will not know which entity to route (warning). Its `cSchedules` entry's `dist` must not be `"ServerAttr"` — `DELAY` claims no server, so this always falls back to a fixed delay of `1` (warning). Its completion B-event's effect must not be a *bare* `ARRIVE(...)` with nothing else — `ARRIVE` never resolves the delayed entity, leaving it stuck in `"serving"` forever; `ARRIVE` combined with `COMPLETE()`/`RELEASE()`/a routing table is fine (blocking error). |
 | V41 | `SET_ATTR(attrName, ...)` targets an attribute that is declared with `mutable: false`. Attempting to set an immutable attribute at runtime is a blocking error. |
@@ -1474,7 +1475,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V-SKILL-7 | An entity-side `Categorical` attribute feeding `ASSIGN(Q, ServerType, Entity.attrName)` has a required value with no server instance — neither type-level `skills[]` nor any `skillProfiles[].skills` — that covers it. Entities requiring that value will queue indefinitely with no server ever able to serve them. Warning-only code. |
 | V-SKILL-2 | (ANY variant) `ASSIGN(Q, ANY, "Skill")` references a skill that no registered server type actually has (neither type-level `skills[]` nor any `skillProfiles[].skills`, across every server type). The cross-type pool is guaranteed empty and the effect will never match. Emitted with the same code as the blocking V-SKILL-2 rule above — severity is distinguished by which list it appears in. |
 | V62 | A server entity type is literally named `ANY` (case-insensitive) — this collides with the reserved `ASSIGN(..., ANY, ...)` cross-type-pooling sentinel and makes any `ANY`-based ASSIGN in the model ambiguous. Rename the server type. |
-| V68 | An entity type's `requiredSequence` has a routing edge (traced through ASSIGN/DELAY/COSEIZE/BATCH/MATCH sources and RELEASE/routing-table/ARRIVE/MATCH/SPLIT destinations, including C-event → scheduled B-event links via `cSchedules`) whose destination queue is an **earlier** stage than its source queue. Likely a routing-table typo or a copy-paste mistake — but also matches an intentional rework/retry loop, so this is a warning, not a blocking error, and can be ignored when the backward routing is deliberate. |
+| V68 | An entity type's `requiredSequence` has a routing edge (traced through ASSIGN/DELAY/COSEIZE/BATCH/JOIN/MATCH sources and RELEASE/routing-table/ARRIVE/MATCH/SPLIT/JOIN destinations, including C-event → scheduled B-event links via `cSchedules`) whose destination queue is an **earlier** stage than its source queue. Likely a routing-table typo or a copy-paste mistake — but also matches an intentional rework/retry loop, so this is a warning, not a blocking error, and can be ignored when the backward routing is deliberate. |
 | V70 | A `Distance`-typed schedule references a `(from, to)` pair not present in `distances[]` (falls back to a duration of 0 at run time), or a `speedAttr` not declared as a numeric attribute on any entity type matching `speedSource` (always falls back to 0). Both are warnings, not blocking errors, since the model may still be under construction. |
 | V-SLOT-1 | `DELAY(QueueName, N)` capacity must be a positive integer. |
 | V-CAL-1 | Calendar conditions (`isWeekday`, `isWeekend`, `hourOfDay`, `dayOfWeek`) are used but the model has no `epoch` set. Calendar variables will return defaults (isWeekday=true, hourOfDay=0). Set a Real-world start date in the Time & Schedules tab. |
@@ -1696,6 +1697,29 @@ For multi-stage models, use `RELEASE(ServerType, NextQueueName)` at the end of s
 - Stage 1 completion B-event: `"effect": ["RELEASE(Nurse, Treatment Queue)"]`
 - Stage 2 C-event: `"condition": "queue(Treatment Queue).length > 0 AND idle(Doctor).count > 0"`, `"effect": ["ASSIGN(Treatment Queue, Doctor)"]`
 - Stage 2 completion B-event: `"effect": ["COMPLETE()"]`
+
+### Fork/join — parallel branches that reconverge (SPLIT → JOIN pattern)
+
+For "send the entity down N parallel branches, continue only when all N are done" (parallel
+diagnostics before a consultant review; components machined in parallel then reassembled):
+
+- Fork B-event (scheduled by the pre-split stage's C-event, `useEntityCtx: true`):
+  `"effect": ["SPLIT(Patient, 3, TestQueue)", "RELEASE(Nurse, SyncQueue)"]` — the clones fan out
+  to the parallel-work queue while the **parent routes to the rendezvous queue** (SPLIT never
+  moves the parent itself; the accompanying `RELEASE`/routing does).
+- Each branch's completion B-event routes its clone to the rendezvous queue:
+  `"effect": ["RELEASE(Lab, SyncQueue)"]`.
+- Join C-event: `"condition": "queue(SyncQueue).length > 0"`,
+  `"effect": ["JOIN(SyncQueue, ReviewQueue)"]` — merges the family into one survivor (the
+  original parent, keeping its arrival time and stages) and routes it to `ReviewQueue`.
+- Post-join stage consumes `ReviewQueue` as normal:
+  `"condition": "queue(ReviewQueue).length > 0 AND idle(Consultant).count > 0"`,
+  `"effect": ["ASSIGN(ReviewQueue, Consultant)"]` → completion `["COMPLETE()"]`.
+
+`TargetQueue` must be a **different** queue from the rendezvous queue — routing the survivor back
+would leave it in front of the JOIN forever. A branch that reneges, balks, or overflows out of the
+system is counted as lost and the join proceeds with the survivors (lenient completeness — no
+deadlock). Do not `SPLIT` a clone again: families are single-level.
 
 ### Airport arrivals with live OpenSky data
 

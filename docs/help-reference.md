@@ -122,7 +122,7 @@ Performance targets. Defined in `goals[]` array.
 
 All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
-**Entering effects in the UI (Effect picker):** Effects are added from a structured picker, never free text. The picker has a type-ahead search box to filter the option list. Quantity-bearing macros (BATCH, SPLIT, DRAIN, FILL, FAIL, REPAIR) are entered via a composer — pick the operand from a dropdown and type the quantity into a validated number field (no preset quantity lists); FAIL/REPAIR also keep an enumerated "all servers" quick pick alongside the composer. COSEIZE has its own composer for picking any number of server types, each with an optional skill and an optional quantity (seize 2 of one type + 1 of another in the same call). MATCH and COSEIZE stop enumerating ready-made combinations above 50 options and fall back to their composers.
+**Entering effects in the UI (Effect picker):** Effects are added from a structured picker, never free text. The picker has a type-ahead search box to filter the option list. Quantity-bearing macros (BATCH, SPLIT, DRAIN, FILL, FAIL, REPAIR) are entered via a composer — pick the operand from a dropdown and type the quantity into a validated number field (no preset quantity lists); FAIL/REPAIR also keep an enumerated "all servers" quick pick alongside the composer. COSEIZE has its own composer for picking any number of server types, each with an optional skill and an optional quantity (seize 2 of one type + 1 of another in the same call). JOIN has a two-dropdown composer (rendezvous queue → "then route to" target; the target must differ from the rendezvous queue). MATCH and COSEIZE stop enumerating ready-made combinations above 50 options and fall back to their composers.
 
 ### Flow Control Macros
 
@@ -160,7 +160,8 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 | Macro | Syntax | Purpose | Side Effects | Common Mistakes |
 |-------|--------|---------|--------------|-----------------|
-| SPLIT | `SPLIT(EntityType, N, QueueName)` | Creates N-1 clones of context entity | N-1 new entities added to entity pool | Omitting QueueName |
+| SPLIT | `SPLIT(EntityType, N, QueueName)` | Creates N-1 clones of context entity; records the family lineage JOIN later consumes — pair with `JOIN(Queue, Target)` for fork/join | N-1 new entities added to entity pool | Omitting QueueName; forgetting to route the parent to the rendezvous queue (e.g. `["SPLIT(...)", "RELEASE(Server, SyncQueue)"]`) when a JOIN waits downstream |
+| JOIN | `JOIN(QueueName, TargetQueue)` (both required) | Fork/join rendezvous: holds SPLIT-family members arriving in QueueName until the family is complete, then merges them into one survivor routed to TargetQueue. Completeness is lenient — members that went terminal (done/reneged) or vanished (balk/overflow) count as "never coming", so a lost branch degrades the join instead of deadlocking it. The ORIGINAL parent survives when present (keeping its arrivalTime and stage history, so sojourn spans the whole fork-join); otherwise the earliest-arrived member does | Merged members terminated with `endedBy: "JOIN"` and snapshotted onto `survivor.joined.children` (+ `lostMemberIds`); survivor queue-joins TargetQueue with standard capacity/balk semantics | Routing the survivor back into the rendezvous queue (use a distinct TargetQueue); re-SPLITting a clone — single-level families only; expecting it to consume non-split entities (they are never touched) |
 | BATCH | `BATCH(QueueName, N)` or `BATCH(QueueName, Entity.attrName)` | Collects N entities into single batch entity | N-1 originals marked done; one batch replaces them | Using N < 2 |
 | UNBATCH | `UNBATCH(QueueName)` | Splits batch entity back into constituents | Batch marked done; original entities restored | Using on non-batch entity |
 | MATCH | `MATCH(TypeA, QueueA, TypeB, QueueB, QueueName)` | Pairs one entity from each queue into combined batch | Originals marked with _matchedInto; merged attrs = `{...A.attrs, ...B.attrs}` — QueueB overwrites QueueA on name collision | Queues must both have eligible entities; relying on attribute overwrite order without naming attrs distinctly |
@@ -1118,7 +1119,7 @@ Exports any model as a runnable Python SimPy script, or runs it directly in the 
 
 **Category 1 supported macros:** `ARRIVE`, `ASSIGN`, `COSEIZE`, `COMPLETE`, `RELEASE`, `FILL`, `DRAIN`, `SPLIT`, `SET`, `SET_ATTR`, `COST`, `UNBATCH`.
 
-**Category 2 macros (stubs generated):** `RENEGE`, `BATCH`, `RENEGE_OLDEST`, `MATCH`, `FAIL`, `REPAIR`, `PREEMPT`, `FINISH`, `RELEASE_COSEIZED`. Note: all of these are fully implemented in the JS Three-Phase engine — they appear as stubs only because their Python translation is non-trivial to auto-generate.
+**Category 2 macros (stubs generated):** `RENEGE`, `BATCH`, `RENEGE_OLDEST`, `MATCH`, `FAIL`, `REPAIR`, `PREEMPT`, `FINISH`, `RELEASE_COSEIZED`, `JOIN`. Note: all of these are fully implemented in the JS Three-Phase engine — they appear as stubs only because their Python translation is non-trivial to auto-generate.
 
 ### Run in Browser
 
