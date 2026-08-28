@@ -1116,6 +1116,7 @@ These are the minimum test requirements before a sprint can be declared done. Co
 - Do not write tests for the visual appearance of components (pixel dimensions, exact colours). Test presence, absence, and user-reachable behaviour.
 - Do not write tests that require a running dev server. All tests are offline.
 - Do not test the Three-Phase engine through the UI. Engine correctness is tested at the engine layer. UI tests mock `buildEngine()`.
+  - **The one sanctioned exception:** `tests/ui/execute/run-flow-integration.test.jsx` deliberately runs the REAL engine through the real `ExecutePanel` and renders the real result through the real `ResultsWorkspace`. It exists because with the engine mocked in every UI test and the UI absent from every engine test, the seam between them — the arguments Execute passes to `buildEngine()`, and the result-object shape the results surfaces consume — was asserted nowhere; a mis-wired argument or a reshaped result would have passed the entire suite. (The 2026-08 coverage review that added it also found the then-current sample M/M/1 fixture had served 0 customers for an unknown period without any test noticing — exactly this blind spot.) Keep that file's model tiny, its seed fixed, and its runtime in the fast tier; do not add further engine-through-UI tests without amending this rule, and do not "fix" a failure in that file by mocking the engine back out — a failure there means the seam itself broke.
 
 ---
 
