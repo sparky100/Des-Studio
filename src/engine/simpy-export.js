@@ -707,6 +707,7 @@ class Stats:
         // still combined into a single simpy.AllOf so the whole set (correct
         // total request count) is acquired atomically, mirroring the
         // engine's own check-all-before-claim-any.
+        /** @type {string[]} */
         const reqUnits = [];
         coseizeDefs.forEach((/** @type {any} */ d) => {
           const resVar = safeId(d.type) + '_resource';

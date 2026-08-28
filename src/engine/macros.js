@@ -1331,8 +1331,9 @@ export const MACROS = [
         if (e.joined) continue;
         const rootId = e._splitFrom ?? (e._splitParent ? e.id : null);
         if (rootId == null) continue;
-        if (!arrivedByRoot.has(rootId)) arrivedByRoot.set(rootId, []);
-        arrivedByRoot.get(rootId).push(e);
+        let family = arrivedByRoot.get(rootId);
+        if (!family) { family = []; arrivedByRoot.set(rootId, family); }
+        family.push(e);
       }
       // JOIN's triggering condition (queue non-empty) stays true while a
       // family is still assembling, so do-nothing passes are the common case
