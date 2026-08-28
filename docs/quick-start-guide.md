@@ -10,8 +10,8 @@
 |---|---|
 | **Entity** | The "things" moving through your system — a customer, a job, a patient. Each belongs to an *entity class* you define, with whatever attributes you need (priority, type, size). |
 | **Queue** | Where entities wait. Disciplines include first-in/first-out, last-in, priority, shortest job first, earliest due date, or any attribute you choose. |
-| **B-Event** | A scheduled, time-triggered event. Arrivals and completions are B-Events. |
-| **C-Event** | A conditional event that fires whenever its condition becomes true — typically "a server is idle AND the queue is non-empty." |
+| **Bound Event** | A scheduled, time-triggered event. Arrivals and completions are Bound Events. |
+| **Conditional Event** | A conditional event that fires whenever its condition becomes true — typically "a server is idle AND the queue is non-empty." |
 | **Resource** | A server or piece of equipment that entities seize during processing. Can be configured with optional failure/repair cycles (MTBF/MTTR) — each unit fails independently by default. |
 
 ---

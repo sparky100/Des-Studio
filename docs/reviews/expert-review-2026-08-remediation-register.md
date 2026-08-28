@@ -303,4 +303,16 @@ Verified: lint/typecheck/build clean; full `tests/ui/execute/` + `param-browser-
 
 ---
 
+## 15. Status — B-/C-Event display terminology renamed (2026-08-27, same branch): "Bound Events" / "Conditional Events"
+
+Closing a long-running language-complexity debate: the "B-Events"/"C-Events" jargon is now displayed as the three-phase method's actual full names — **Bound Events** and **Conditional Events** — with the classic abbreviations kept as a one-line gloss. User-scoped deliberately narrow: display text only. The data model (`bEvents`/`cEvents` in model_json, `bEventId` refs, exports, engine, macros, component names) is untouched — zero schema risk.
+
+| Piece | Notes |
+|---|---|
+| UI | Define sub-tab labels (the `TABS` map, which also feeds Model Health issue-row prefixes via `tabLabel()`), the two editor page headings + subtitles (each subtitle now nods to "the 'B'/'C' in classic three-phase DES"), the "+ Add" buttons on those pages, and the Model Health count tiles. Deeper surfaces (tooltips, canvas guard messages, Execute Bottom Panel — which already reads "B-EVENTS (BOUND)" — AI prompt labels, HelpAssistant questions) deliberately keep the B-/C- shorthand for now; the new subtitles anchor the abbreviation |
+| Docs | Living UI-describing docs renamed with a gloss at the natural anchor points (User Guide phase table keeps its "B —"/"C —" prefixes; glossary rows say "Also called a 'B-Event'…"; help-reference headings read "Bound Events (B-Events)"): User Guide, help-reference, Product Spec, quick-start, Template Models Guide, RealTime Integration Guide, simpy-export, engine-architecture-and-validation, patterns/*. Untouched by design: all dated/historical docs (ADRs, reviews/, analysis/, archived/, sprint guides), schema/interface docs (`engine-api-reference`, `Engineering_Spec`, `addition1_entity_model`, Build Plan changelog), and `model-schema-for-llm.md` (LLM grounding for the *unchanged* schema, incl. literal CSV header tokens) |
+| Tests | 4 matcher updates (`model-health.test.jsx` tab-button regexes, `c-event-editor.test.jsx` Add-button) — no loosened matchers, no new tests needed |
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*

@@ -121,10 +121,10 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
         <div>
-          <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>C-Events</div>
-          <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Conditional events evaluated in Phase C</div>
+          <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Conditional Events</div>
+          <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Events that fire whenever their condition becomes true (the "C" in classic three-phase DES)</div>
         </div>
-        <Btn variant="primary" onClick={add}>+ Add C-Event</Btn>
+        <Btn variant="primary" onClick={add}>+ Add Conditional Event</Btn>
       </div>
       <SectionFilterTabs sections={sections} activeIds={activeSectionIds} onToggle={setActiveSectionIds}/>
       {events.length>1&&(

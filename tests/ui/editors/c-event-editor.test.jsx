@@ -99,7 +99,7 @@ describe('CEventEditor — priority field', () => {
         queues={[]}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: /Add C-Event/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add Conditional Event/i }));
     const newList = handleChange.mock.calls[0][0];
     expect(newList).toHaveLength(2);
     expect(newList[1].priority).toBe(2);

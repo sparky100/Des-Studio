@@ -15,7 +15,7 @@ Doctor (server, count=3)
     - name: Specialist   skills: [Surgery]   count: 1   priority: 10
     - name: Generalist   skills: [Surgery]   count: 2   priority: 1
 
-C-event:
+Conditional event:
   effect: ASSIGN(Queue, Doctor, "Surgery")
 ```
 
@@ -29,18 +29,18 @@ Use the reserved token `ANY` in the server-type position to pool idle servers ac
 effect: ASSIGN(Queue, ANY, "Billing")
 ```
 
-This replaces the old workaround of one C-event per server type racing on priority. Combine with `SkillProfile.priority` to prefer one type's servers over another's within the pool.
+This replaces the old workaround of one Conditional event per server type racing on priority. Combine with `SkillProfile.priority` to prefer one type's servers over another's within the pool.
 
 **Gotcha:** `ANY` only makes sense with a skill argument — `ASSIGN(Queue, ANY, "Skill")` — since without a skill filter there's no way to know which servers are eligible to pool. Don't name a real server type `ANY`; validation will warn about the collision.
 
 ## Round-robin routing
 
-`ROUND_ROBIN(StateVar, N)` advances `StateVar` through `0, 1, ..., N-1, 0, 1, ...` each time it fires. Pair it with a `routing[]` table (or conditional-routing C-event) that compares the state variable to each literal index:
+`ROUND_ROBIN(StateVar, N)` advances `StateVar` through `0, 1, ..., N-1, 0, 1, ...` each time it fires. Pair it with a `routing[]` table (or conditional-routing Conditional event) that compares the state variable to each literal index:
 
 ```
 State variable: rrIndex (initialValue: -1)
 
-B-event "Done" (fires on RELEASE, no target queue):
+Bound event "Done" (fires on RELEASE, no target queue):
   effect: RELEASE(Server); ROUND_ROBIN(rrIndex, 3)
   routing:
     - condition: { variable: rrIndex, operator: "==", value: 0 } → QueueA

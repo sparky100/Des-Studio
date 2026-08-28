@@ -79,6 +79,15 @@ describe('first-run onboarding', () => {
     expect(validateModel(sample).errors).toEqual([]);
     const engine = buildEngine(sample, 42, 0, 25);
     const result = engine.runAll();
+    // Assert entities are actually SERVED, not just that they arrived. This
+    // test previously checked only `total > 0`, which stayed green while a
+    // queue-routing mismatch (bare ARRIVE(Customer) vs a queue declared as
+    // "Customer") left the sample's server permanently idle: arrivals piled
+    // into an undeclared "CustomerQueue" that the Seize condition never
+    // examined, so a "sample M/M/1" served nobody. A queueing model that
+    // serves no one is not runnable in any meaningful sense.
     expect(result.summary.total).toBeGreaterThan(0);
+    expect(result.summary.served).toBeGreaterThan(0);
+    expect(result.summary.servedRatio).toBeGreaterThan(0.5);
   });
 });

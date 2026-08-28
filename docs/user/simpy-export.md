@@ -86,8 +86,8 @@ The generated script contains these sections, in order:
 | State variables | Module-level Python variables from the model's Model Data tab |
 | Entity dataclasses | One `@dataclass` per customer entity type, with `arrival_time`, `sojourn_time`, `service_start_time` |
 | Statistics collector | `Stats` class tracking `served`, `reneged`, `total_cost`, `resource_busy` |
-| Arrival processes | One generator per B-event with `ARRIVE` |
-| Service processes | One monitor + service generator pair per C-event with `ASSIGN` or `COSEIZE` |
+| Arrival processes | One generator per Bound event with `ARRIVE` |
+| Service processes | One monitor + service generator pair per Conditional event with `ASSIGN` or `COSEIZE` |
 | Shift schedules | One process per server entity type with a shift schedule |
 | TODO stubs | Annotated stubs for unimplemented macros (Category 2 only) |
 | `run_replication(seed)` | Wires everything together; returns a metrics dict (see below) |

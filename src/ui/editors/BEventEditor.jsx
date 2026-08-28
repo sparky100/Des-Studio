@@ -68,10 +68,10 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
         <div>
-          <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>B-Events</div>
-          <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Timed events scheduled at specific simulation times</div>
+          <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Bound Events</div>
+          <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Timed events scheduled at specific simulation times (the "B" in classic three-phase DES)</div>
         </div>
-        <Btn variant="primary" onClick={add}>+ Add B-Event</Btn>
+        <Btn variant="primary" onClick={add}>+ Add Bound Event</Btn>
       </div>
       <SectionFilterTabs sections={sections} activeIds={activeSectionIds} onToggle={setActiveSectionIds}/>
       {events.length>1&&(
