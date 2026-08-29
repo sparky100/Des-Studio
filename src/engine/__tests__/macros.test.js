@@ -488,6 +488,80 @@ describe('RELEASE(ServerType)', () => {
     expect(customer.status).toBe('serving');
     expect(server.status).toBe('busy');
   });
+
+  test('does not act on a different customer who has legitimately claimed the server since this event was scheduled (stale PREEMPT context)', () => {
+    // custA is the ORIGINAL context customer this RELEASE event was scheduled
+    // for — it was preempted earlier and is back to "waiting" (its own pending
+    // completion/release event was never cancelled by PREEMPT). The server has
+    // since been legitimately reassigned to custB, who is mid-service right now.
+    const custA = {
+      id: 1, type: 'Customer', role: 'customer', status: 'waiting',
+      arrivalTime: 0, stages: [], queue: 'Repair Queue',
+    };
+    const custB = {
+      id: 3, type: 'Customer', role: 'customer', status: 'serving',
+      arrivalTime: 5, serviceStart: 8, stages: [],
+    };
+    const srv = { id: 2, type: 'Server', role: 'server', status: 'busy', currentCustId: 3, stages: [] };
+    const entities = [custA, custB, srv];
+
+    // felRef carries the STALE context: bound to custA/srv at the time custA's
+    // service was originally scheduled, before the preemption reassigned srv.
+    const ctx = makeCtx(entities, {}, baseModel, 20,
+      { _contextCustId: custA.id, _contextSrvId: srv.id });
+    const { msgs } = applyEffect('RELEASE(Server, Stage2 Queue)', ctx);
+
+    // custB — the legitimate current occupant — must be completely untouched.
+    expect(custB.status).toBe('serving');
+    expect(custB.stages.length).toBe(0);
+    expect(custB.serviceStart).toBe(8);
+    expect(srv.status).toBe('busy');
+    expect(srv.currentCustId).toBe(3);
+
+    // custA — the stale context customer — is left exactly as it was, not
+    // further mutated (still "waiting", not re-released a second time).
+    expect(custA.status).toBe('waiting');
+    expect(custA.stages.length).toBe(0);
+
+    expect(msgs.some(m => m.includes('RELEASE(Server) skipped') && m.includes('#1') && m.includes('waiting'))).toBe(true);
+  });
+
+  test('falls back to any busy server of the type when no context customer is available', () => {
+    const customer = { id: 1, type: 'Customer', role: 'customer', status: 'serving', arrivalTime: 2, serviceStart: 5, stages: [] };
+    const server   = { id: 2, type: 'Server', role: 'server', status: 'busy', currentCustId: 1, stages: [] };
+    const entities = [customer, server];
+
+    // No felRef at all — mirrors a cSchedule that never set useEntityCtx.
+    const ctx = makeCtx(entities, {}, baseModel, 10, null);
+    applyEffect('RELEASE(Server)', ctx);
+
+    expect(server.status).toBe('idle');
+    expect(customer.status).toBe('waiting');
+    expect(customer.stages.length).toBe(1);
+  });
+
+  test('falls through to a type-scoped, custId-matched lookup when the cached context server id points at the wrong type (COSEIZE mismatch)', () => {
+    const customer = { id: 1, type: 'Customer', role: 'customer', status: 'serving', arrivalTime: 0, serviceStart: 5, stages: [] };
+    // Context server id points at a co-seized "Kit" server — the wrong type for
+    // this RELEASE(Staff, ...) call.
+    const kitServer   = { id: 2, type: 'Kit',   role: 'server', status: 'busy', currentCustId: 1, stages: [] };
+    // The customer's actual "Staff" claim, which this call should find instead.
+    const staffServer = { id: 3, type: 'Staff', role: 'server', status: 'busy', currentCustId: 1, stages: [] };
+    const entities = [customer, kitServer, staffServer];
+
+    const ctx = makeCtx(entities, {}, baseModel, 10,
+      { _contextCustId: customer.id, _contextSrvId: kitServer.id });
+    applyEffect('RELEASE(Staff, Stage2 Queue)', ctx);
+
+    expect(staffServer.status).toBe('idle');
+    expect(staffServer.currentCustId).toBeUndefined();
+    // The wrongly-typed cached server must be left alone.
+    expect(kitServer.status).toBe('busy');
+    expect(kitServer.currentCustId).toBe(1);
+    expect(customer.status).toBe('waiting');
+    expect(customer.stages.length).toBe(1);
+    expect(customer.stages[0].serverType).toBe('Staff');
+  });
 });
 
 // ── RENEGE ────────────────────────────────────────────────────────────────────
