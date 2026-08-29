@@ -10,12 +10,14 @@ import { AdapterRegistry } from "../../engine/adapters/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun, fetchModelSchedules, buildSchedulesMap } from "../../db/models.js";
+import { saveSimulationRun, fetchUserSettings, saveUserSettings, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun } from "../../db/models.js";
+import { useRunHistory } from "./hooks/useRunHistory.js";
+import { useModelSchedules } from "./hooks/useModelSchedules.js";
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
 import { callLLMOnce } from "../../llm/apiClient.js";
 import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
-import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
+import { saveLocalRun } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { ChartDataChoiceDialog } from "./ChartDataChoiceDialog.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
@@ -345,9 +347,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [readinessExpanded, setReadinessExpanded] = useState(false);
   const [showRunSetup, setShowRunSetup] = useState(false);
   const [showEstimate, setShowEstimate] = useState(null);
-  const [savedRunHistory, setSavedRunHistory] = useState([]);
-  const [runHistoryStatus, setRunHistoryStatus] = useState("idle");
-  const [runHistoryError, setRunHistoryError] = useState("");
+  const { savedRunHistory, runHistoryStatus, runHistoryError, refreshRunHistory } = useRunHistory(modelId, userId);
   const [sweepOpen, setSweepOpen] = useState(false);
   const [sweepParams, setSweepParams] = useState([]);
   const [sweepSelectedParam, setSweepSelectedParam] = useState(null);
@@ -397,11 +397,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [modelCheckerOpen, setModelCheckerOpen] = useState(false);
 
   // ── ADR-016: Schedule selection ──────────────────────────────────────────────
-  // modelSchedules: all schedules for this model (fetched on mount when modelId is set)
-  // selectedScheduleId: the schedule to use for the next run (null = use inline rows / default)
-  const [modelSchedules, setModelSchedules] = useState([]);
-  const [selectedScheduleId, setSelectedScheduleId] = useState(null);
-  const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const { modelSchedules, selectedScheduleId, setSelectedScheduleId, schedulesLoading, activeSchedulesMap } = useModelSchedules(modelId, userId, schedulesVersion);
 
   const sweepRunnerRef = useRef(null);
   const runSeedRef = useRef(seed);
@@ -480,42 +476,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setRunOverrides([]);
   }, [modelId]);
 
-  // Fetch model_schedules when modelId changes (ADR-016)
-  useEffect(() => {
-    if (!modelId || !userId) {
-      setModelSchedules([]);
-      setSelectedScheduleId(null);
-      return;
-    }
-    setSchedulesLoading(true);
-    fetchModelSchedules(modelId)
-      .then(schedules => {
-        setModelSchedules(schedules);
-        // Pre-select the default schedule if one exists
-        const defaultSched = schedules.find(s => s.isDefault);
-        setSelectedScheduleId(defaultSched?.id ?? (schedules[0]?.id ?? null));
-      })
-      .catch(err => {
-        console.warn('[ExecutePanel] Failed to load model schedules:', err?.message || err);
-        setModelSchedules([]);
-        setSelectedScheduleId(null);
-      })
-      .finally(() => setSchedulesLoading(false));
-  }, [modelId, userId, schedulesVersion]);
-
-  const reloadSchedules = useCallback(() => {
-    if (!modelId || !userId) return;
-    setSchedulesLoading(true);
-    fetchModelSchedules(modelId)
-      .then(schedules => {
-        setModelSchedules(schedules);
-        const defaultSched = schedules.find(s => s.isDefault);
-        setSelectedScheduleId(defaultSched?.id ?? (schedules[0]?.id ?? null));
-      })
-      .catch(err => console.warn('[ExecutePanel] reload schedules failed:', err?.message || err))
-      .finally(() => setSchedulesLoading(false));
-  }, [modelId, userId]);
-
   const persistExperimentDefaults = useCallback((patch) => {
     if (!onExperimentDefaultsChange) return;
     onExperimentDefaultsChange({
@@ -571,21 +531,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (!effectiveOverrides.length) return model;
     return applySweepValues(model, effectiveOverrides);
   }, [model, effectiveOverrides]);
-
-  // Build schedulesMap for the selected schedule (ADR-016).
-  // Passed to buildEngine via options.schedulesMap so resolveInlineSchedules()
-  // can populate bEvent.schedules[].rows[] before the FEL is initialised.
-  // Defined before complexityEstimate so the estimator can count timetable rows.
-  const activeSchedulesMap = useMemo(() => {
-    if (modelSchedules.length === 0) return {};
-    // Use the explicitly selected schedule, or fall back to the default so that
-    // the complexity estimator and engine both work without a manual selection.
-    const resolvedId = selectedScheduleId ?? modelSchedules.find(s => s.isDefault)?.id;
-    if (!resolvedId) return {};
-    const active = modelSchedules.filter(s => s.id === resolvedId);
-    return buildSchedulesMap(active);
-  }, [modelSchedules, selectedScheduleId]);
-
 
   const complexityEstimate = useMemo(() => estimateRunComplexity(model, {
     terminationMode,
@@ -706,24 +651,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setAutoRunning(false);
     }
   }, []);
-
-  const refreshRunHistory = useCallback(async () => {
-    if (!modelId) return [];
-    setRunHistoryStatus("loading");
-    setRunHistoryError("");
-    const fetcher = userId ? fetchRunHistory : fetchLocalRunHistory;
-    try {
-      const rows = await fetcher(modelId);
-      setSavedRunHistory(rows || []);
-      setRunHistoryStatus("loaded");
-      return rows || [];
-    } catch (error) {
-      setSavedRunHistory([]);
-      setRunHistoryError(error?.message || "could not load run history");
-      setRunHistoryStatus("error");
-      return [];
-    }
-  }, [modelId, userId]);
 
   // Store LLM-generated narrative and model description in the run record.
   // Called after a run saves successfully — fire-and-forget, never blocks the UI.
@@ -1351,20 +1278,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       return next;
     });
   }, [saveExecuteSetting]);
-
-  useEffect(() => {
-    if (!modelId) return;
-    let cancelled = false;
-    refreshRunHistory()
-      .then(rows => {
-        if (cancelled) return;
-        setSavedRunHistory(rows || []);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [modelId, refreshRunHistory]);
 
   // F28.1: load experiments when tab is opened
   useEffect(() => {
