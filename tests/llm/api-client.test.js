@@ -93,6 +93,32 @@ describe("LLM API client", () => {
     expect(onError.mock.calls[0][0].message).toMatch(/incomplete or invalid model JSON/i);
   });
 
+  it("treats a plain-text reply with no JSON braces at all as an implicit clarifying question, not an error", async () => {
+    // A model that drifts into prose instead of the required envelope (e.g. asking
+    // a follow-up question in markdown) should surface as a normal clarify turn,
+    // not the generic "invalid model JSON" error — that message is misleading when
+    // nothing was ever an attempted JSON payload.
+    const onComplete = vi.fn();
+    const onError = vi.fn();
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        content: [{ text: "**For the repair customers**, do they wait in-shop or drop off the bike?" }],
+      }),
+    });
+
+    await callModelBuilder("system", [{ role: "user", content: "Build a bike shop" }], onComplete, onError);
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "clarify",
+        questions: "**For the repair customers**, do they wait in-shop or drop off the bike?",
+        proposedModel: null,
+      }),
+    );
+  });
+
   it("extracts model builder JSON from code fences with surrounding text", async () => {
     const onComplete = vi.fn();
     global.fetch.mockResolvedValueOnce({

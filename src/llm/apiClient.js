@@ -160,6 +160,15 @@ function parseModelBuilderJson(text) {
   try {
     return tryExtractJson(raw);
   } catch (error) {
+    // A response with no { or [ anywhere was never an attempted JSON payload —
+    // most often the model drifted into a plain-text clarifying question despite
+    // the system prompt requiring the JSON envelope. Treat it as an implicit
+    // "clarify" rather than surfacing a "broken JSON" error for text that was
+    // never JSON to begin with; a genuinely truncated/malformed model (which
+    // does contain a brace) still falls through to the error below.
+    if (!raw.includes("{") && !raw.includes("[")) {
+      return { intent: "clarify", questions: raw, summary: null, proposedModel: null, explanation: null, suggestions: null };
+    }
     const friendly = new Error("AI returned incomplete or invalid model JSON. Please ask it to produce a smaller model proposal, or answer one more clarifying question first.");
     friendly.cause = error;
     friendly.rawResponse = raw;
