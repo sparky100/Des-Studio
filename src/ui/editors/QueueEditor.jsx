@@ -3,10 +3,11 @@ import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker, SectionPanel } f
 import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { disciplineBase, disciplineAttr } from "../shared/utils.js";
+import { normTypeName } from "../shared/tokens.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
-const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[], errorFilter=null, onClearErrorFilter, onChange}) => {
+const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter, onChange}) => {
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -242,6 +243,17 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
                   const updBc=(patch)=>upd(i,'balkCondition',{...bc,...patch});
                   const balkVars=[
                     ...queues.map(oq=>({label:`Queue.${oq.name}.length`,value:`Queue.${oq.name}.length`})),
+                    ...entityTypes.filter(e=>e.role==='server').flatMap(e=>{
+                      const name=normTypeName(e.name);
+                      return [
+                        {label:`idle(${name}).count`,value:`idle(${name}).count`},
+                        {label:`busy(${name}).count`,value:`busy(${name}).count`},
+                      ];
+                    }),
+                    ...containerTypes.filter(ct=>ct.id).flatMap(ct=>([
+                      {label:`container(${ct.id}).level`,value:`container(${ct.id}).level`},
+                      {label:`container(${ct.id}).capacity`,value:`container(${ct.id}).capacity`},
+                    ])),
                     ...stateVariables.filter(sv=>sv.name).map(sv=>({label:sv.name,value:sv.name})),
                   ];
                   const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 6px'};
