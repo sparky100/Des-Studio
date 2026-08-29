@@ -363,13 +363,12 @@ describe('ConditionBuilder — state-variable token matching (state.<name> vs ba
     expect(screen.getByDisplayValue(/totalServed/i)).toBeInTheDocument();
     expect(screen.queryByDisplayValue(/Number waiting in MainQueue/i)).not.toBeInTheDocument();
 
-    // The mount effect normalizes the stored `state.` prefix to the dropdown's own
-    // recognized (bare) form and persists that — but the resulting predicate must
-    // still reference the state variable, never the queue.
-    expect(handleChange).toHaveBeenCalledTimes(1);
-    const persisted = handleChange.mock.calls[0][0];
-    expect(persisted.variable).toBe('totalServed');
-    expect(persisted.variable).not.toBe('queue(MainQueue).length');
+    // The mount effect resolves the stored `state.` prefix to the dropdown's own
+    // recognized (bare) form for display purposes — but that dialect equivalence is
+    // intentional recognition, not a repair, so it must NOT be silently persisted via
+    // onChange (that was itself a reported bug: viewing/expanding a condition with a
+    // state.<name> clause spuriously marked the model as having unsaved changes).
+    expect(handleChange).not.toHaveBeenCalled();
   });
 
   it('a multi-clause condition resolves its state.<name> clause correctly, not as a duplicate of clause 1', () => {
@@ -384,12 +383,13 @@ describe('ConditionBuilder — state-variable token matching (state.<name> vs ba
       />
     );
 
-    const persisted = handleChange.mock.calls.at(-1)[0];
-    expect(persisted.clauses).toHaveLength(2);
-    expect(persisted.clauses[0].variable).toBe('queue(MainQueue).length');
-    expect(persisted.clauses[1].variable).toBe('totalServed');
     // The reported bug: clause 2 silently became a byte-for-byte duplicate of clause 1.
-    expect(persisted.clauses[1].variable).not.toBe(persisted.clauses[0].variable);
+    // Check this via the rendered token dropdowns rather than onChange, since both
+    // clauses already resolve to a real token here and neither needs repairing — see
+    // the previous test for why that means onChange correctly does not fire at all.
+    expect(screen.getByDisplayValue(/Number waiting in MainQueue/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue(/totalServed/i)).toBeInTheDocument();
+    expect(handleChange).not.toHaveBeenCalled();
   });
 
   it('a bare state-variable name (the already-working form) is unaffected by the fix', () => {
