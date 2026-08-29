@@ -80,7 +80,8 @@ function DesNode({ data, selected }) {
             width: data.runFootprint.width,
             height: data.runFootprint.height,
             boxSizing: "border-box",
-            border: `1.5px dashed ${runOverlap ? C.amber : `${color}55`}`,
+            background: runOverlap ? `${C.amber}1a` : `${color}14`,
+            border: `2px dashed ${runOverlap ? C.amber : `${color}bb`}`,
             borderRadius: 6,
             pointerEvents: "none",
           }}
