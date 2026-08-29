@@ -375,4 +375,23 @@ Verified per PR: lint `--quiet` + typecheck clean, targeted suites green (execut
 
 ---
 
+## 19. Status — Journey-test tranche: AI Model Builder through the real parser (2026-08-29, same branch)
+
+The "stuck assistant" bug (§ PR #501) exposed a systematic gap: 3,468 tests missed it because **no test crossed the seam it lived in** — the panel tests mocked `apiClient` (a module we own), so the real parse step never ran alongside the real panel, and no test drove more than one conversational turn. It was the fourth journey-shaped bug of the week (animation-across-cycles, collaborator add-navigate-return, ToastProvider mount tree): the suite was strong on units and single renders, blind to stateful multi-step flows.
+
+This tranche adds the missing layer:
+
+| Piece | Notes |
+|---|---|
+| `tests/__helpers__/llmFetchHarness.js` | Fetch-level harness: mocks ONLY global `fetch` (the true network boundary) so raw LLM text flows through the real `parseModelBuilderJson`/`tryExtractJson` into the real component. Each scripted response serves both `streamModelBuilder` (text() fallback) and `callModelBuilder` (json() → content[].text) from one queue; fetching past the queue throws — an over-budget fetch is a finding. Also exports `expectLlmTurnsEnveloped`, the PR #501 wire-contract invariant (every assistant turn replayed to the LLM must be the strict JSON envelope) |
+| `tests/__helpers__/llmModelBuilderResponses.js` | Golden corpus of raw LLM response shapes, seeded with the two **verbatim incident responses** (248-char and 407-char markdown-prose clarifying questions) plus compliant/fenced/`<json>`-tagged/prose-preamble envelopes, truncated JSON, empty, and a fixture deliberately documenting the known boundary of the no-braces heuristic (prose containing a stray brace still errors today). Convention stated in the header: every production incident appends its raw response |
+| `tests/llm/model-builder-response-corpus.test.js` | Runs every corpus entry through the real parser via public `callModelBuilder` (10 cases) |
+| `tests/ui/editors/ai-model-builder-journeys.test.jsx` | Six scripted multi-turn conversations, no `apiClient` mock: happy path (clarify→confirm→build) with the envelope invariant asserted on every replayed request; **the reported incident** (prose drift renders as chat, is replayed enveloped, conversation completes); truncated JSON shows the error + raw response and the next send still works; missing-`proposedModel` retry; validation-error retry; empty response. Fetch budgets asserted exactly |
+
+**Meta-verified**: with PR #501's no-braces fallback temporarily disabled, exactly the three incident-guarding tests fail (both corpus incident entries + the prose-drift journey) and nothing else — i.e. this tranche would have caught the original bug before release.
+
+Deferred, recorded as follow-ups: extracting the panel's `callAndProcess` conversation logic into a pure, property-testable reducer (the durable fix — same C-11 lesson: logic buried in a component is logic you can't exhaustively test); recorded live-model eval conversations as a separate non-CI Vitest project.
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*
