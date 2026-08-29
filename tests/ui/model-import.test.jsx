@@ -230,13 +230,13 @@ describe('model JSON import', () => {
     );
   }, 10000);
 
-  it('opens directly in the AI workspace when Model assistant is chosen', async () => {
+  it('asks for a name, then opens directly in the AI workspace when Model assistant is chosen', async () => {
     const user = userEvent.setup();
     mockFetchModels.mockReset();
     mockFetchModels.mockResolvedValueOnce([]).mockResolvedValue([
       {
         ...createdModel,
-        name: 'Untitled model (10:00 AM)',
+        name: 'Triage flow',
         description: '',
       },
     ]);
@@ -247,8 +247,12 @@ describe('model JSON import', () => {
     const newModelDialog = screen.getByRole('dialog', { name: /new model/i });
     await user.click(within(newModelDialog).getByText('Model assistant').closest('button'));
 
+    expect(screen.getByRole('dialog', { name: /name your model/i })).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), 'Triage flow');
+    await user.click(screen.getByText(/Continue/i));
+
     await waitFor(() => expect(mockSaveModel).toHaveBeenCalledWith(
-      expect.objectContaining({ name: expect.stringMatching(/^Untitled model/) }),
+      expect.objectContaining({ name: 'Triage flow' }),
       'user-1'
     ));
   }, 10000);

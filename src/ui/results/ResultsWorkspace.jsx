@@ -157,7 +157,7 @@ function MetricStrip({ items }) {
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(104px, 1fr))", gap: 6 }}>
       {items.map(item => (
         <div key={item.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "6px 8px" }}>
-          <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700, marginBottom: 2, lineHeight: 1.4 }}>
             {item.label.toUpperCase()}
           </div>
           <div style={{ fontSize: 11, color: item.color || C.text, fontFamily: FONT, fontWeight: 700 }}>
@@ -185,14 +185,14 @@ function StatCards({ items }) {
           padding: "5px 6px",
           textAlign: "center",
         }}>
-          <div style={{ fontSize: 8, fontWeight: 700, color: item.color || C.muted, fontFamily: FONT, letterSpacing: 1, marginBottom: 2 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: item.color || C.muted, fontFamily: FONT, letterSpacing: 1, marginBottom: 2, lineHeight: 1.4 }}>
             {item.label.toUpperCase()}
           </div>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.text, fontFamily: FONT, lineHeight: 1.2 }}>
             {item.value}
           </div>
           {item.desc && (
-            <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, marginTop: 1 }}>{item.desc}</div>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, marginTop: 1, lineHeight: 1.4 }}>{item.desc}</div>
           )}
         </div>
       ))}
@@ -949,9 +949,9 @@ function WaitHistogram({ dist, color }) {
           { label: "p99", value: dist.p99, color: C.red, desc: "99th %ile" },
         ].map(s => (
           <div key={s.label} style={{ background: C.bg, border: `1px solid ${s.color}44`, borderRadius: 5, padding: "6px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, fontWeight: 700, color: s.color, fontFamily: FONT, letterSpacing: 1, marginBottom: 2 }}>{s.label.toUpperCase()}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: s.color, fontFamily: FONT, letterSpacing: 1, marginBottom: 2, lineHeight: 1.4 }}>{s.label.toUpperCase()}</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>{typeof s.value === "number" ? (s.decimal ? s.value.toFixed(1) : Math.round(s.value)) : s.value}</div>
-            <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT }}>{s.desc}</div>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.4 }}>{s.desc}</div>
           </div>
         ))}
       </div>
@@ -1475,22 +1475,22 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, pe
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <div style={{ background: `${sec.color}18`, border: `1px solid ${sec.color}44`, borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
-                <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>VISITED</span>
+                <span style={{ fontFamily: FONT, fontSize: 11, color: C.muted, letterSpacing: 0.8, fontWeight: 700, lineHeight: 1.4 }}>VISITED</span>
                 <span style={{ fontFamily: FONT, fontSize: 12, color: C.text, fontWeight: 700 }}>{fmtCount(stats.count)}</span>
               </div>
               <div style={{ background: `${sec.color}18`, border: `1px solid ${sec.color}44`, borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
-                <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>AVG TIME IN SECTION</span>
+                <span style={{ fontFamily: FONT, fontSize: 11, color: C.muted, letterSpacing: 0.8, fontWeight: 700, lineHeight: 1.4 }}>AVG TIME IN SECTION</span>
                 <span style={{ fontFamily: FONT, fontSize: 12, color: C.text, fontWeight: 700 }}>{fmtT(stats.avgSojourn)}</span>
               </div>
               {terminalCount > 0 && (
                 <div style={{ background: `${C.accent}18`, border: `1px solid ${C.accent}44`, borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>DONE</span>
+                  <span style={{ fontFamily: FONT, fontSize: 11, color: C.muted, letterSpacing: 0.8, fontWeight: 700, lineHeight: 1.4 }}>DONE</span>
                   <span style={{ fontFamily: FONT, fontSize: 12, color: C.accent, fontWeight: 700 }}>{fmtCount(terminalCount)}</span>
                 </div>
               )}
               {incompleteCount > 0 && (
                 <div style={{ background: `${C.amber}18`, border: `1px solid ${C.amber}44`, borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>IN SYST.</span>
+                  <span style={{ fontFamily: FONT, fontSize: 11, color: C.muted, letterSpacing: 0.8, fontWeight: 700, lineHeight: 1.4 }}>IN SYST.</span>
                   <span style={{ fontFamily: FONT, fontSize: 12, color: C.amber, fontWeight: 700 }}>{fmtCount(incompleteCount)}</span>
                 </div>
               )}
@@ -1509,12 +1509,12 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, pe
                   <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
                     <thead>
                       <tr>
-                        <th style={{ textAlign: "left", color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, borderBottom: `1px solid ${C.border}` }}>Queue</th>
+                        <th style={{ textAlign: "left", color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Queue</th>
                         {["Mean", "P50", "P95"].map(h => (
-                          <th key={h} style={{ textAlign: "right", width: 48, minWidth: 48, color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                          <th key={h} style={{ textAlign: "right", width: 48, minWidth: 48, color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>{h}</th>
                         ))}
                         {showRejectionCols && ["Balked", "Blocked"].map(h => (
-                          <th key={h} style={{ textAlign: "right", width: 48, minWidth: 48, color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                          <th key={h} style={{ textAlign: "right", width: 48, minWidth: 48, color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -1549,7 +1549,7 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, pe
         const maxCount = visibleRows[0].count;
         return (
           <div style={{ marginTop: 4 }}>
-            <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>ENTITY PATHWAYS ACROSS SECTIONS</div>
+            <div style={{ fontFamily: FONT, fontSize: 11, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: 6, lineHeight: 1.4 }}>ENTITY PATHWAYS ACROSS SECTIONS</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
               {visibleRows.map(({ key, count }) => {
                 const rawParts = key.split("→");

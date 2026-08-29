@@ -931,7 +931,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   );
   const runCountValue = model.statsLoading || model.statsError ? "—" : model.stats?.runs ?? 0;
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100dvh",minHeight:"100vh",background:C.bg}}>
+    <div style={{display:"flex",flexDirection:"column",height:"100dvh",background:C.bg}}>
       {!executeRunning && (
       <>
       <ModelDetailHeader
@@ -988,7 +988,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           message="This tab could not render. Try opening the tab again."
         >
         {tab==="ai"&&(
-          <div style={{height:"calc(100vh - 220px)", minHeight: 0, display:"flex", flexDirection:"column", overflow:"hidden"}}>
+          <div style={{height:"100%", minHeight: 0, display:"flex", flexDirection:"column", overflow:"hidden"}}>
           {renderAuthoringShell(
             <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel} onSaveModel={saveGeneratedModel} initialDraft={describePrompt}/>
           )}
