@@ -321,6 +321,101 @@ describe('CEventEditor — expanding a state.<name> condition must not mark the 
   });
 });
 
+describe('CEventEditor — collapsed condition summary for object-form conditions', () => {
+  // Every persisted condition is stored in compound/leaf object form —
+  // normalizeModelConditions (src/model/conditionFormat.js) runs on every
+  // model load via db/models.js's norm(), converting a string condition to
+  // {operator, clauses: [...]} (or a single leaf {variable, operator, value})
+  // unconditionally. A `typeof ev.condition === 'string'` check therefore
+  // only ever matches a condition freshly typed in the current session — any
+  // condition on any saved-and-reloaded model shows "no condition" on the
+  // collapsed row regardless of whether it has real clauses. This is the
+  // root-level bug underneath the state.<name> case covered above (that one
+  // is just the most common way a condition ends up in object form).
+
+  it('shows real text for a single-leaf object condition, not "no condition"', () => {
+    // Kept short and under the 30-char truncation threshold so the assertion
+    // is about object-form rendering, not truncation (tested separately).
+    const events = [{
+      id: 'c1', name: 'Serve Hire Customer', priority: 1,
+      condition: { variable: 'level', operator: '>', value: 0 },
+      effect: '', cSchedules: [], description: '',
+    }];
+    render(
+      <CEventEditor
+        events={events}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+      />
+    );
+    expect(screen.getByText('level > 0')).toBeInTheDocument();
+    expect(screen.queryByText('no condition')).not.toBeInTheDocument();
+  });
+
+  it('shows real text for a compound AND/OR object condition, not "no condition"', () => {
+    const events = [{
+      id: 'c1', name: 'Serve Hire Customer', priority: 1,
+      condition: {
+        operator: 'AND',
+        clauses: [
+          { variable: 'a', operator: '>', value: 0 },
+          { variable: 'b', operator: '>', value: 0 },
+        ],
+      },
+      effect: '', cSchedules: [], description: '',
+    }];
+    render(
+      <CEventEditor
+        events={events}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+      />
+    );
+    expect(screen.getByText('a > 0 AND b > 0')).toBeInTheDocument();
+    expect(screen.queryByText('no condition')).not.toBeInTheDocument();
+  });
+
+  it('truncates a long object condition to 30 characters, same as the string-condition path did', () => {
+    const events = [{
+      id: 'c1', name: 'Serve Hire Customer', priority: 1,
+      condition: { variable: 'container(BikesAvailable).level', operator: '>', value: 0 },
+      effect: '', cSchedules: [], description: '',
+    }];
+    render(
+      <CEventEditor
+        events={events}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+      />
+    );
+    expect(screen.getByText('container(BikesAvailable).le…')).toBeInTheDocument();
+  });
+
+  it('still shows "no condition" when there genuinely is none', () => {
+    const events = [{ id: 'c1', name: 'Untriggered', priority: 1, condition: '', effect: '', cSchedules: [], description: '' }];
+    render(
+      <CEventEditor
+        events={events}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+      />
+    );
+    expect(screen.getByText('no condition')).toBeInTheDocument();
+  });
+});
+
 describe('CEventEditor — follow-on B-event labels', () => {
   it('uses service language for queue-based ASSIGN options', () => {
     render(

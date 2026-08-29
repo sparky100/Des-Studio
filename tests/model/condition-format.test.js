@@ -11,6 +11,7 @@ import {
   hasConditionDefinition,
   isMeaningfulRoutingBranch,
   extractQueueNamesFromCondition,
+  conditionLabel,
 } from "../../src/model/conditionFormat.js";
 
 describe("conditionFormat", () => {
@@ -177,5 +178,46 @@ describe("extractQueueNamesFromCondition", () => {
   it("returns [] for conditions with no queue reference", () => {
     expect(extractQueueNamesFromCondition("clock > 5")).toEqual([]);
     expect(extractQueueNamesFromCondition(null)).toEqual([]);
+  });
+});
+
+describe("conditionLabel", () => {
+  it("returns a string condition verbatim", () => {
+    expect(conditionLabel("queue(Main Queue).length > 0")).toBe("queue(Main Queue).length > 0");
+  });
+
+  it("renders a single leaf object condition", () => {
+    expect(conditionLabel({ variable: "container(Bikes).level", operator: ">", value: 0 }))
+      .toBe("container(Bikes).level > 0");
+  });
+
+  it("renders a compound AND condition, joining clause labels", () => {
+    expect(conditionLabel({
+      operator: "AND",
+      clauses: [
+        { variable: "queue(Main Queue).length", operator: ">", value: 0 },
+        { variable: "idle(Clerk).count", operator: ">", value: 0 },
+      ],
+    })).toBe("queue(Main Queue).length > 0 AND idle(Clerk).count > 0");
+  });
+
+  it("renders a compound OR condition", () => {
+    expect(conditionLabel({
+      operator: "OR",
+      clauses: [
+        { variable: "a", operator: "==", value: 1 },
+        { variable: "b", operator: "==", value: 2 },
+      ],
+    })).toBe("a == 1 OR b == 2");
+  });
+
+  it("strips the Entity./entity. prefix from a leaf's variable", () => {
+    expect(conditionLabel({ variable: "Entity.severity", operator: "==", value: 1 })).toBe("severity == 1");
+  });
+
+  it("falls back to \"condition\" for null/empty input", () => {
+    expect(conditionLabel(null)).toBe("condition");
+    expect(conditionLabel(undefined)).toBe("condition");
+    expect(conditionLabel({})).toBe("condition");
   });
 });

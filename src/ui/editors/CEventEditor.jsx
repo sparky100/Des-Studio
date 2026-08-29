@@ -6,6 +6,7 @@ import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 import { EffectPicker, assignOptions, displayEventName, SectionFilterTabs, filterBySection, reorderCEventByPriority } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { summarizeBEventEffect } from "../../model/effectSummary.js";
+import { conditionLabel } from "../../model/conditionFormat.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
@@ -161,8 +162,13 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         const i=events.findIndex(e=>e.id===ev.id);
         if(i===-1)return null;
         const isExpanded=effectiveExpanded.has(ev.id);
-        const condSummary=typeof ev.condition==='string'&&ev.condition.trim()
-          ?(ev.condition.length>30?ev.condition.slice(0,28)+"…":ev.condition)
+        // Every persisted condition is stored in compound/leaf object form
+        // (normalizeModelConditions runs on every model load), so a
+        // typeof==='string' check only ever matches a condition freshly
+        // typed this session — conditionLabel handles both shapes.
+        const condLabel=ev.condition?conditionLabel(ev.condition):null;
+        const condSummary=condLabel&&condLabel!=='condition'
+          ?(condLabel.length>30?condLabel.slice(0,28)+"…":condLabel)
           :"no condition";
         const rowEffectArr=Array.isArray(ev.effect)?ev.effect.filter(Boolean):(ev.effect?ev.effect.split(';').map(s=>s.trim()).filter(Boolean):[]);
         const rowIsDelay=rowEffectArr.some(e=>typeof e==='string'&&/^DELAY\(/i.test(e));

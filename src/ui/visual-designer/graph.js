@@ -5,7 +5,7 @@
 
 import dagre from "@dagrejs/dagre";
 import { clean, effectText, macroCalls } from "../../model/macroParser.js";
-import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
+import { extractQueueNamesFromCondition, conditionLabel } from "../../model/conditionFormat.js";
 // Pure constants module (imports only dagre) — safe to share with Draw per
 // ADR-020: no Execute *components* cross into the designer.
 import { EXEC_CARD_WIDTH, EXEC_NODE_HEIGHT, EXEC_DEFAULT_HEIGHT } from "../execute/executeLayout.js";
@@ -118,23 +118,9 @@ function withLayout(nodes, edges, graph = {}) {
   });
 }
 
-export function conditionLabel(c, depth = 0) {
-  if (!c) return "condition";
-  if (typeof c === "string") return c;
-  if (typeof c !== "object") return "condition";
-  if ((c.operator === "AND" || c.operator === "OR") && Array.isArray(c.clauses) && depth === 0) {
-    const parts = c.clauses.map(cl => conditionLabel(cl, 1)).filter(p => p !== "condition");
-    return parts.length ? parts.join(` ${c.operator} `) : "condition";
-  }
-  const rawVar  = clean(c.variable || "");
-  // Strip "Entity." / "entity." prefix so "Entity.severity" → "severity"
-  const variable = rawVar.replace(/^entity\./i, "");
-  const op       = clean(c.operator || c.op || "");
-  const value    = c.value;
-  return variable && op && value !== undefined ? `${variable} ${op} ${value}`
-       : variable && value !== undefined       ? `${variable} = ${value}`
-       : "condition";
-}
+// Re-exported from conditionFormat.js — the Define editor's collapsed
+// C-Event summary uses the same function, so the two can't drift apart.
+export { conditionLabel };
 
 export function deriveGraphFromModel(model = {}) {
   const bEvents = model.bEvents || [];

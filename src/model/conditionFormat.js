@@ -1,3 +1,5 @@
+import { clean } from "./macroParser.js";
+
 function parseScalarValue(raw) {
   const text = String(raw ?? "").trim();
   if (text === "true") return true;
@@ -24,6 +26,36 @@ function isLogicalCondition(condition) {
 
 function isLeafCondition(condition) {
   return !!condition && typeof condition === "object" && !Array.isArray(condition) && !isLogicalCondition(condition);
+}
+
+// Renders a condition — string, leaf object {variable, operator, value}, or
+// compound {operator: "AND"|"OR", clauses: [...]} — as a single readable
+// line. Every persisted condition is stored in the compound/leaf object form
+// (normalizeModelConditions runs on every model load), so any UI that shows
+// a condition summary needs this, not a `typeof condition === "string"`
+// check — that check is only ever true for a condition freshly typed in the
+// current session, never for one round-tripped through a save/reload.
+// depth>0 (used internally for a compound's own clauses) intentionally does
+// not recurse into a further-nested compound — a nested clause degrades to
+// the "condition" fallback rather than a full label. Shared by the Draw
+// canvas (routing-branch edge labels) and the Define editor (collapsed
+// C-Event row summary) so the two can't drift apart.
+export function conditionLabel(condition, depth = 0) {
+  if (!condition) return "condition";
+  if (typeof condition === "string") return condition;
+  if (typeof condition !== "object") return "condition";
+  if ((condition.operator === "AND" || condition.operator === "OR") && Array.isArray(condition.clauses) && depth === 0) {
+    const parts = condition.clauses.map(cl => conditionLabel(cl, 1)).filter(p => p !== "condition");
+    return parts.length ? parts.join(` ${condition.operator} `) : "condition";
+  }
+  const rawVar   = clean(condition.variable || "");
+  // Strip "Entity." / "entity." prefix so "Entity.severity" → "severity"
+  const variable = rawVar.replace(/^entity\./i, "");
+  const op       = clean(condition.operator || condition.op || "");
+  const value    = condition.value;
+  return variable && op && value !== undefined ? `${variable} ${op} ${value}`
+       : variable && value !== undefined       ? `${variable} = ${value}`
+       : "condition";
 }
 
 export function buildConditionString(rows = []) {
