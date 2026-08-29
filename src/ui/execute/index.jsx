@@ -10,7 +10,7 @@ import { AdapterRegistry } from "../../engine/adapters/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun, fetchModelSchedules, buildSchedulesMap } from "../../db/models.js";
+import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun, fetchModelSchedules, buildSchedulesMap } from "../../db/models.js";
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
 import { callLLMOnce } from "../../llm/apiClient.js";
 import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
@@ -29,7 +29,6 @@ import { enumerateSweepableParams, applySweepValues, generate2DSweepValues } fro
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
-import { qrSvg } from "../share/qr.js";
 import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
@@ -437,18 +436,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
   const [selectedNodeDetail, setSelectedNodeDetail] = useState(null);
   const [selectedEntityId, setSelectedEntityId] = useState(null);
-  const [shareLinks, setShareLinks] = useState([]);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [shareConfig, setShareConfig] = useState(() => ({
-    title: "",
-    pinnedWidgets: ["summary", "queues", "resources", "charts"],
-    expiresIn: "never",
-  }));
-  const [shareSaving, setShareSaving] = useState(false);
-  const [justCreatedLink, setJustCreatedLink] = useState(null);
-  const [shareLinksLoading, setShareLinksLoading] = useState(false);
-  const [qrToken, setQrToken] = useState(null);
-  const qrRef = useRef(null);
   const [latestRunId, setLatestRunId] = useState(null);
   const [showExportPopover, setShowExportPopover] = useState(false);
 
@@ -1562,54 +1549,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }), [latestRunId, effectiveRunLabel, seed]);
 
 
-  const loadShareLinks = useCallback(async () => {
-    if (!modelId) return;
-    setShareLinksLoading(true);
-    try {
-      const links = await listShareLinks(modelId);
-      setShareLinks(links);
-    } catch { setShareLinks([]); }
-    finally { setShareLinksLoading(false); }
-  }, [modelId]);
-
-  const handleCreateShareLink = useCallback(async () => {
-    if (!userId || !results || !latestRunId) return;
-    setShareSaving(true);
-    try {
-      const expiresAt =
-        shareConfig.expiresIn === "24h"  ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() :
-        shareConfig.expiresIn === "7d"   ? new Date(Date.now() + 7  * 24 * 60 * 60 * 1000).toISOString() :
-        shareConfig.expiresIn === "30d"  ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() :
-        null;
-      const result = await createShareLink(latestRunId, userId, { ...shareConfig, expiresAt });
-      setJustCreatedLink(result);
-      await loadShareLinks();
-    } catch (e) {
-      setSaveStatus({ state: "error", message: `Share link failed: ${e.message}` });
-    } finally { setShareSaving(false); }
-  }, [userId, results, latestRunId, shareConfig, loadShareLinks]);
-
-  const handleRevokeShareLink = useCallback(async (id) => {
-    if (!userId) return;
-    try {
-      await revokeShareLink(id, userId);
-      await loadShareLinks();
-    } catch (e) {
-      setSaveStatus({ state: "error", message: `Revoke failed: ${e.message}` });
-    }
-  }, [userId, loadShareLinks]);
-
-  const toggleWidget = useCallback((key) => {
-    setShareConfig(prev => ({
-      ...prev,
-      pinnedWidgets: prev.pinnedWidgets.includes(key)
-        ? prev.pinnedWidgets.filter(w => w !== key)
-        : [...prev.pinnedWidgets, key],
-    }));
-  }, []);
-
-  const canShare = userId && results && latestRunId && !shareSaving;
-
   const handleRunSweep = useCallback(() => {
     if (hasAdmissionErrors) return;
     if (sweepMode === "1d" && !sweepSelectedParam) return;
@@ -1710,22 +1649,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const handleCancelSweep = useCallback(() => {
     sweepRunnerRef.current?.cancel();
   }, []);
-
-  const baseUrl = window.location.origin + window.location.pathname.replace(/\/+$/, "");
-  const copyToClipboard = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setSaveStatus({ state: 'success', message: '✓ Copied to clipboard!' });
-    } catch {
-      setSaveStatus({ state: 'error', message: 'Failed to copy to clipboard.' });
-    }
-  };
-
-  useEffect(() => {
-    if (qrRef.current && qrToken) {
-      qrRef.current.innerHTML = qrSvg(`${baseUrl}/#share/${qrToken}`, 180);
-    }
-  }, [qrToken, baseUrl]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -3391,131 +3314,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         return <VisualView snap={currentSnap} model={model} summary={results?.summary} />;
       })()}
         </>
-      )}
-      {/* Share Modal */}
-      {showShareModal && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
-          onClick={() => { setShowShareModal(false); setQrToken(null); }}>
-          <div role="dialog" aria-modal="true" aria-labelledby="share-modal-title"
-            onClick={e => e.stopPropagation()}
-            style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, width: 520, maxWidth: "95vw", maxHeight: "90vh", overflowY: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h2 id="share-modal-title" style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: FONT }}>Share Results</h2>
-              <button type="button" aria-label="Close share dialog" onClick={() => { setShowShareModal(false); setQrToken(null); }}
-                style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", fontFamily: FONT, padding: "0 4px" }}>✕</button>
-            </div>
-
-            {/* Widget picker */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>VISIBLE WIDGETS</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {[
-                  { key: "summary", label: "Summary KPIs" },
-                  { key: "queues", label: "Queue table" },
-                  { key: "resources", label: "Server table" },
-                  { key: "charts", label: "Charts & histograms" },
-                ].map(w => (
-                  <label key={w.key} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11, color: shareConfig.pinnedWidgets.includes(w.key) ? C.accent : C.muted, fontFamily: FONT }}>
-                    <input type="checkbox" checked={shareConfig.pinnedWidgets.includes(w.key)} onChange={() => toggleWidget(w.key)} style={{ accentColor: C.accent }} />
-                    {w.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Create link */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>CREATE SHARE LINK</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  aria-label="Share title"
-                  placeholder="Optional title..."
-                  value={shareConfig.title}
-                  onChange={e => setShareConfig(prev => ({ ...prev, title: e.target.value }))}
-                  style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 10px" }}
-                />
-                <select
-                  aria-label="Link expiry"
-                  value={shareConfig.expiresIn}
-                  onChange={e => setShareConfig(prev => ({ ...prev, expiresIn: e.target.value }))}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", cursor: "pointer" }}>
-                  <option value="never">No expiry</option>
-                  <option value="24h">24 hours</option>
-                  <option value="7d">7 days</option>
-                  <option value="30d">30 days</option>
-                </select>
-                <Btn variant="primary" onClick={handleCreateShareLink} disabled={shareSaving}>
-                  {shareSaving ? "Creating..." : "Create Link"}
-                </Btn>
-              </div>
-            </div>
-
-            {/* Existing links */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>ACTIVE LINKS</div>
-                {shareLinksLoading && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Loading...</span>}
-              </div>
-              {shareLinks.length === 0 && !shareLinksLoading && (
-                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>No share links yet.</div>
-              )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {shareLinks.filter(l => l.isActive).map(link => {
-                  const url = `${baseUrl}/#share/${link.token}`;
-                  const expiryLabel = link.expiresAt
-                    ? `Expires ${new Date(link.expiresAt).toLocaleDateString()}`
-                    : "No expiry";
-                  const viewLabel = link.viewCount > 0
-                    ? `${link.viewCount} view${link.viewCount !== 1 ? "s" : ""}${link.lastViewedAt ? ` · last ${new Date(link.lastViewedAt).toLocaleDateString()}` : ""}`
-                    : "Not yet viewed";
-                  return (
-                    <div key={link.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "8px 10px" }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 11, color: C.text, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{link.token.slice(0, 8)}…</div>
-                        <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{new Date(link.createdAt).toLocaleString()} · {expiryLabel}</div>
-                        <div style={{ fontSize: 9, color: link.viewCount > 0 ? C.accent : C.muted, fontFamily: FONT }}>{viewLabel}</div>
-                      </div>
-                      {justCreatedLink?.token === link.token && (
-                        <span style={{ fontSize: 9, color: C.green, fontFamily: FONT, fontWeight: 700 }}>NEW</span>
-                      )}
-                      <button type="button" onClick={() => copyToClipboard(url)}
-                        title="Copy link"
-                        style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "4px 8px", cursor: "pointer" }}>
-                        Copy
-                      </button>
-                      <button type="button" onClick={() => setQrToken(qrToken === link.token ? null : link.token)}
-                        title="Show QR code"
-                        style={{ background: "none", border: `1px solid ${qrToken === link.token ? C.accent : C.border}`, borderRadius: 4, color: qrToken === link.token ? C.accent : C.muted, fontFamily: FONT, fontSize: 10, padding: "4px 8px", cursor: "pointer" }}>
-                        QR
-                      </button>
-                      <button type="button" onClick={() => handleRevokeShareLink(link.id)}
-                        title="Revoke share link"
-                        style={{ background: "none", border: `1px solid ${C.red}44`, borderRadius: 4, color: C.red, fontFamily: FONT, fontSize: 10, padding: "4px 8px", cursor: "pointer" }}>
-                        Revoke
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* QR code */}
-            {qrToken && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: 12 }}>
-                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>QR CODE</div>
-                <div ref={qrRef}
-                  style={{ width: 180, height: 180, background: "#fff", borderRadius: 6, padding: 8 }} />
-                <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, textAlign: "center", wordBreak: "break-all" }}>
-                  {`${baseUrl}/#share/${qrToken}`}
-                </div>
-                <button type="button" onClick={() => copyToClipboard(`${baseUrl}/#share/${qrToken}`)}
-                  style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.accent, fontFamily: FONT, fontSize: 10, padding: "5px 16px", cursor: "pointer", fontWeight: 600 }}>
-                  Copy URL
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
       )}
 
       <ChartDataChoiceDialog
