@@ -143,6 +143,11 @@ describe('JOIN — fork/join happy path (full SPLIT → branches → JOIN round 
       expect(clone.status).toBe("done");
       expect(clone.outcome?.endedBy).toBe("JOIN");
       expect(clone.outcome?.routeId).toBe("macro:JOIN");
+      // Label names the merge destination (stable across every JOIN completion),
+      // not the per-instance survivor id — outcomes aggregate by routeId across
+      // an entire run, so an id-bearing label would misrepresent the aggregate
+      // with one arbitrary survivor's id (e.g. "Joined into #257").
+      expect(clone.outcome?.routeLabel).toBe("Joined into ReviewQueue");
       expect(clone._joinedInto).toBe(parent.id);
     }
 

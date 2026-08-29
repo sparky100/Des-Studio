@@ -1391,7 +1391,14 @@ export const MACROS = [
           setOutcome(member, {
             status: "completed",
             routeId: "macro:JOIN",
-            routeLabel: `Joined into #${survivor.id}`,
+            // A stable, model-level label (the merge destination), not the
+            // per-instance survivor id — outcomes are aggregated by routeId
+            // across every JOIN completion, and only the first occurrence's
+            // routeLabel is kept (see engine/index.js's outcomes builder), so
+            // an id-bearing label would show one arbitrary merge's entity id
+            // as if it represented the whole aggregate. Mirrors MATCH's
+            // `Matched into ${targetQueue}` label below.
+            routeLabel: `Joined into ${targetQueue}`,
             endedBy: "JOIN",
             endedAt: clock,
           });
