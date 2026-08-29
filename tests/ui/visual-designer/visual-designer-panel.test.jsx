@@ -233,6 +233,36 @@ describe('Visual Designer shell', () => {
     expect(screen.getAllByRole('button', { name: /^save$/i }).length).toBeGreaterThanOrEqual(1);
   });
 
+  it('keeps a Draw layout change as "Unsaved layout changes" after switching to another Define tab, instead of promoting it to a full "Unsaved changes" state', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue({});
+
+    render(
+      <ModelDetail
+        modelId="model-visual"
+        modelData={twoStageModel}
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        overrides={{ isOwner: true, canEdit: true, userId: 'user-1', onSave }}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /^design$/i }));
+    await screen.findByLabelText('Visual Designer');
+    await user.click(screen.getByRole('button', { name: /add queue/i }));
+    expect(screen.getAllByText(/Unsaved layout changes/)).toHaveLength(1);
+
+    // Leaving Draw for another Define sub-tab must not upgrade a layout-only
+    // pending change into the heavier "genuine edit" dirty state — that was
+    // reported as the banner reappearing on an unrelated tab even though
+    // nothing there was ever edited.
+    await user.click(screen.getByRole('button', { name: /^define$/i }));
+    await user.click(screen.getByRole('button', { name: /conditional events/i }));
+    expect(screen.getAllByText(/Unsaved layout changes/)).toHaveLength(1);
+    expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /discard/i })).not.toBeInTheDocument();
+  });
+
   it('auto-links a newly added queue from the currently selected source when the connection is valid', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue({});

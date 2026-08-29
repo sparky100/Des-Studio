@@ -102,31 +102,62 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
 
   const [rows, setRows] = useState(()=>parseConditionStr(value, tokens));
   const tokenSignature = useMemo(() => tokens.map(t => t.value).join('\u001f'), [tokens]);
-  const lastPropValue = useRef(value || '');
+  // A sentinel (never `===` to any real prop value, including '') so the
+  // very first effect run always takes the `externalChanged` branch below —
+  // that branch is the one that can tell a real repair apart from harmless
+  // reshaping (see comment below), which matters because mount is exactly
+  // when a persisted condition most needs that check.
+  const lastPropValue = useRef();
+  if (lastPropValue.current === undefined) lastPropValue.current = Symbol('unset');
   const lastTokenSignature = useRef(null);
 
   // Keep local rows aligned with the canonical condition string and token list.
   // If an old persisted token no longer exists, the visible fallback is written
   // back through onChange so validation and the editor do not diverge.
+  //
+  // `predicateToRows`/`rowsToPredicate` can only represent a flat, single-level
+  // condition — a genuinely nested one (e.g. `(A AND B) OR C`, which the engine
+  // fully supports) always comes back reshaped after a round-trip even when
+  // nothing needs repairing. Comparing the raw incoming value (or a
+  // previously-repaired `rows`) against that rebuild would treat every render
+  // of an already-nested condition as an edit and write the flattened version
+  // back — including right after a Discard, which restores the same nested
+  // value and re-triggers the same "edit", trapping the user in an
+  // unbreakable unsaved-changes loop. So both branches below gate `onChange`
+  // on whether parsing actually repaired a row (stale token / invalid
+  // operator / missing value) — the one thing this effect is meant to fix —
+  // never on whether the round-trip preserved nesting.
   useEffect(() => {
     const externalValue = value || '';
     const externalChanged = externalValue !== lastPropValue.current;
     const tokensChanged = tokenSignature !== lastTokenSignature.current;
 
     if (externalChanged) {
+      // Compare against a fully unrepaired parse of the incoming value (not
+      // against `rows`, which may already be repaired — e.g. right at mount,
+      // where `rows`'s own initializer already ran this same repair once).
+      const rawRows = predicateToRows(externalValue);
       const parsed = parseConditionStr(externalValue, tokens);
       setRows(prev => sameConditionRows(prev, parsed) ? prev : parsed);
-      const normalized = rowsToCompoundPredicate(parsed);
-      if (normalized && JSON.stringify(externalValue) !== JSON.stringify(normalized)) onChange(normalized);
+      const leavesRepaired = !sameConditionRows(rawRows, parsed);
+      if (leavesRepaired) {
+        const normalized = rowsToCompoundPredicate(parsed);
+        if (normalized) onChange(normalized);
+      }
     } else if (tokensChanged) {
+      // The value itself hasn't changed — only the token list has (e.g. an
+      // unrelated entity-type edit) — so patch the *currently displayed*
+      // rows (which may include a local edit not yet round-tripped through
+      // the parent) rather than re-deriving from the external value.
       const normalizedRows = rows.map(row => ({
         ...row,
         token: tokens.find(t => t.value === row.token) ? row.token : (tokens[0]?.value || ''),
       }));
-      const normalized = rowsToCompoundPredicate(normalizedRows);
-      setRows(prev => sameConditionRows(prev, normalizedRows) ? prev : normalizedRows);
-      if (normalized && JSON.stringify(externalValue) !== JSON.stringify(normalized)) {
-        onChange(normalized);
+      const rowsRepaired = !sameConditionRows(rows, normalizedRows);
+      setRows(prev => rowsRepaired ? normalizedRows : prev);
+      if (rowsRepaired) {
+        const normalized = rowsToCompoundPredicate(normalizedRows);
+        if (normalized) onChange(normalized);
       }
     }
 
