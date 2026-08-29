@@ -577,13 +577,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[modelId]);
 
   useEffect(()=>{
-    if(tab!=="visual"&&visualPending){
-      setDirty(true);
-      setVisualPending(false);
-    }
-  },[tab]);
-
-  useEffect(()=>{
     const onBeforeUnload=(e)=>{
       if(!dirty&&!visualPending)return;
       e.preventDefault();
