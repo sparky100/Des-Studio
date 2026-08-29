@@ -5,6 +5,7 @@ import {
   Controls,
   EdgeLabelRenderer,
   getBezierPath,
+  getSmoothStepPath,
   Handle,
   MarkerType,
   MiniMap,
@@ -19,6 +20,7 @@ import { validateVisualConnection } from "./graph-operations.js";
 import { isActivityRouteEdge } from "./graph.js";
 import { computeAlignmentGuides } from "./alignmentGuides.js";
 import { computeRunOverlaps, nodeRunRect, runFootprintSize } from "./runFootprint.js";
+import { computeLoopRailYById } from "./loopEdgeRouting.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useFitNodeRef } from "../shared/useFitNodeRef.js";
 import { SectionPanelNode } from "./SectionPanelNode.jsx";
@@ -217,13 +219,26 @@ function DesEdge({
   data,
 }) {
   const { C, FONT } = useTheme();
-  const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX, sourceY, sourcePosition,
-    targetX, targetY, targetPosition,
-  });
+  // Rework/loop-back edges get a dedicated horizontal rail below every node
+  // on the canvas (see loopEdgeRouting.js) instead of the default bezier,
+  // which would otherwise bow out and cut across whatever sits between a
+  // downstream Activity and the earlier Queue it loops back to.
+  const loopRailY = data?.loopRailY;
+  const [edgePath, labelX, labelY] = loopRailY != null
+    ? getSmoothStepPath({
+        sourceX, sourceY, sourcePosition,
+        targetX, targetY, targetPosition,
+        centerY: loopRailY,
+        borderRadius: 12,
+      })
+    : getBezierPath({
+        sourceX, sourceY, sourcePosition,
+        targetX, targetY, targetPosition,
+      });
   // For upward edges push label down into the row gap; for downward push up.
-  // Horizontal edges (same Y) keep the label at the geometric midpoint.
-  const yOffset = targetY < sourceY ? 20 : targetY > sourceY ? -20 : 0;
+  // Horizontal edges (same Y) keep the label at the geometric midpoint. Loop
+  // edges already sit correctly on their rail, so no further nudge is needed.
+  const yOffset = loopRailY != null ? 0 : targetY < sourceY ? 20 : targetY > sourceY ? -20 : 0;
   const edgeStyle = selected
     ? { ...style, stroke: C.accent, strokeWidth: (style?.strokeWidth || 1.5) + 1 }
     : style;
@@ -608,6 +623,8 @@ export function FlowDiagramReactFlow({
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
 
+  const loopRailYById = useMemo(() => computeLoopRailYById(graph.nodes, graph.edges), [graph.nodes, graph.edges]);
+
   const edges = useMemo(() => {
     return (graph.edges || []).map(e => {
       // An activity's outgoing route (single-destination or one branch of a
@@ -621,6 +638,7 @@ export function FlowDiagramReactFlow({
         interactionWidth: 20,
         data: {
           onDelete: canEdit && !opensRouteDialog ? onDeleteEdge : null,
+          loopRailY: loopRailYById.get(e.id),
         },
       };
       if (showSections && focusedSectionId != null) {
@@ -638,7 +656,7 @@ export function FlowDiagramReactFlow({
       }
       return flowEdge;
     });
-  }, [graph.edges, C, FONT, showSections, focusedSectionId, nodeById, selectedEdgeId, canEdit, onDeleteEdge]);
+  }, [graph.edges, C, FONT, showSections, focusedSectionId, nodeById, selectedEdgeId, canEdit, onDeleteEdge, loopRailYById]);
 
   const isValidConnection = useCallback(connection => {
     const validation = validateVisualConnection(graph, connection.source, connection.target);

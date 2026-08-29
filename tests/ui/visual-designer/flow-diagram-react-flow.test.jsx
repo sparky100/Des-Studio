@@ -40,6 +40,7 @@ vi.mock('../../../src/ui/shared/xyflow.js', () => ({
   EdgeLabelRenderer: ({ children }) => <div data-testid="edge-label-renderer">{children}</div>,
   BaseEdge: () => <path data-testid="base-edge" />,
   getBezierPath: () => ['M0,0 L1,1', 5, 5],
+  getSmoothStepPath: ({ centerY }) => [`M0,0 L1,${centerY ?? 1}`, 5, centerY ?? 5],
   useReactFlow: () => ({
     fitView: vi.fn(),
     getNode: vi.fn(() => null),
@@ -311,6 +312,22 @@ describe('FlowDiagramReactFlow — run footprint ghosts and overlap badges', () 
   it('shows no overlap badges when overlapNodeIds is empty or absent', () => {
     render(<FlowDiagramReactFlow graph={makeGraph()} canEdit overlapNodeIds={new Set()} />);
     expect(screen.queryByTitle(/Overlaps another object on the Run canvas/i)).not.toBeInTheDocument();
+  });
+});
+
+// A rework/loop-back edge (Activity -> earlier Queue) is routed through a
+// dedicated rail below all nodes (see loopEdgeRouting.js) instead of the
+// default bezier used for every other edge — geometry itself is covered by
+// tests/ui/visual-designer/loop-edge-routing.test.js's pure-function tests,
+// so this stays a light "still renders, still labeled" smoke check.
+describe('FlowDiagramReactFlow — rework/loop-back edge rendering', () => {
+  it('renders a loop edge with its rework label and does not crash', () => {
+    const graph = makeGraph({
+      edges: [{ id: 'loop-1', from: 'activity:activity-1', to: 'queue:queue-1', loop: true, maxLoopCount: 3 }],
+    });
+    const { container } = render(<FlowDiagramReactFlow graph={graph} canEdit />);
+    expect(screen.getByText(/rework \(max 3x\)/i)).toBeInTheDocument();
+    expect(container.querySelector('[data-edge-id="loop-1"]')).toBeInTheDocument();
   });
 });
 
