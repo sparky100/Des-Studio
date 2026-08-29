@@ -52,4 +52,19 @@ export default [
       'react-hooks/exhaustive-deps': 'warn',
     },
   },
+  {
+    // God-component ratchet (expert review C-11). These two files have been
+    // decomposed before and grown back (execute/index.jsx: 2,678 → 2,293
+    // after sprint 55a → 3,540 by 2026-08). The limits below are each file's
+    // size at ratchet time: growth fails CI, shrinking is free. CONTRACT:
+    // never raise a limit — when an extraction lands, lower it to the new
+    // line count in the same PR. New features must not add state here; put
+    // new state in hooks (src/ui/execute/hooks/) or child components.
+    files: ['src/ui/execute/index.jsx'],
+    rules: { 'max-lines': ['error', { max: 3540, skipBlankLines: false, skipComments: false }] },
+  },
+  {
+    files: ['src/ui/ModelDetail.jsx'],
+    rules: { 'max-lines': ['error', { max: 2147, skipBlankLines: false, skipComments: false }] },
+  },
 ];
