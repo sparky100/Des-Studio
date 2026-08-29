@@ -350,4 +350,29 @@ Verified: `npm run typecheck` exits 0; engine test suite green (the `macros.js` 
 
 ---
 
+## 18. Status — God-component decomposition, low-risk tranche (2026-08-29, same branch): C-11 executed as 7 PRs
+
+The C-11 finding's prescribed approach — extract *state clusters*, not JSX; one small green-to-green PR per cluster — finally executed, picking up the never-run sprint-56 hook specs. Guardrail first: an eslint `max-lines` **ratchet** at error severity on both god files (limits = exact current size, lowered in the same PR as every extraction, never raised), so the sprint-55a failure mode (2,678 → 2,293 → back up to 3,540) cannot silently recur. Explicitly deferred, as planned: the sweep cluster (19 hooks), batch-results/readiness view extractions, and the entangled engine core (`initEngine`/`doStep`/`doRunAll`), which needs a `useReducer` design of its own.
+
+**ExecutePanel (`src/ui/execute/index.jsx`): 3,540 → 2,867 lines (−19%), 104 → ~75 hooks.**
+
+| PR | What moved |
+|---|---|
+| Lint ratchet | `eslint.config.js` per-file `max-lines` overrides + the documented ratchet contract |
+| Dead share modal deleted (−202) | The planned `useShareLinks` extraction turned out to have nothing to extract: `setShowShareModal(true)` is called nowhere, so the whole subtree (8 hooks, handlers, QR effect, 125-line modal) was unreachable. The real share-link UI (ModelHistoryTab's per-run buttons) is untouched. `qrSvg` now has no production callers — flagged for reuse-or-removal |
+| `hooks/useRunHistory.js` + `hooks/useModelSchedules.js` (−87) | Sprint-56's first two specs, verbatim; also deleted `reloadSchedules`, a dead callback duplicating the fetch effect |
+| `hooks/useVisualizationSettings.js` (−46) | Animation toggle + KPI slots (persisted per user), speed, canvas selection state |
+| `SavedExperimentsTab.jsx` (−338, −11 hooks) | The 12-hook experiment-CRUD cluster + ~250 JSX lines + four DB calls that lived inline in onClick handlers, now named handlers. Boundary per the ExecuteCanvas convention: `runConfig` snapshot, `renderRunSettings` render prop (shell keeps run-config ownership), one `onLoadExperiment` callback, `formSeed` for the Run tab's "Save as Experiment…". Stays mounted (`display:none`) so list/filter/expansion state survives section switches. `ExperimentRunSettingsFields`/`OverrideChipList` moved to their own files |
+
+**ModelDetail (`src/ui/ModelDetail.jsx`): 2,147 → 1,729 lines (−19%).**
+
+| PR | What moved |
+|---|---|
+| Warm-up (−203) | Deleted the unreachable "Save as scenario baseline" modal + its 3 hooks + handler, and App.jsx's never-read `onSaveAsBaseline`/`onDelete`/`onFork`/`parentModelName` overrides wiring. New `hooks/useModelUndo.js` (stacks + operations; the 4 duplicated snapshot-push sites become one `pushSnapshot()`; `ModelDetailHeader` now takes `canUndo`/`canRedo` booleans, not the raw arrays). New `modelDetailHelpers.js` (8 pure helpers, verbatim; ModelDetail's re-export block kept so existing test imports stay valid) |
+| `AccessTab.jsx` (−215) | Sharing/visibility + copy-link, Export, Collaborators, Business-view curation — owns `collabQuery`/`pendingRoles`/`exposedPickerOpen`; writes go up through `onChangeVisibility` (new named handler, same inline logic), `onPersistAccess`, `setField`, and the two export callbacks |
+
+Verified per PR: lint `--quiet` + typecheck clean, targeted suites green (execute: 24 files/180 tests; ModelDetail-rendering: 10 files/58 tests; visual-designer: 162 tests; Access-tab suites unchanged); full suite before each push. Remaining god-component debt (the deferred Tier-2/3 items above) is the follow-up register item.
+
+---
+
 *Companion documents: `expert-review-2026-08-ux.md`, `expert-review-2026-08-functionality.md`, `expert-review-2026-08-code.md`. Prior art: `docs/ui-ux-review.md` (2026-05-16), `docs/reviews/ui-improvement-programme.md`.*
