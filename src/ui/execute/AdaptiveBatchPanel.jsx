@@ -118,6 +118,21 @@ function getResultPathValue(obj, path) {
   return path.split('.').reduce((cur, key) => cur?.[key], obj);
 }
 
+// The batch-analysis prompt requires the response to open directly with
+// "### Bottlenecks" — the first requested section. Any text before the first
+// "### " heading is a preamble (e.g. a numeric-values verification table the
+// model wrote out despite being told not to) that the user never asked to
+// see, so drop it before rendering. While still streaming, no heading yet
+// just means the model hasn't reached it — hide the in-progress preamble
+// rather than flash it. Once the response is complete, fall back to showing
+// the raw text if no heading ever appeared, so a malformed response doesn't
+// render as blank.
+function stripAnalysisPreamble(text, { fallbackToFull = false } = {}) {
+  const idx = text.indexOf("### ");
+  if (idx !== -1) return text.slice(idx);
+  return fallbackToFull ? text : "";
+}
+
 export function AdaptiveBatchPanel({
   model,
   tier,
@@ -338,7 +353,7 @@ export function AdaptiveBatchPanel({
         signal,
         onToken: token => {
           accumulated += token;
-          setStreamedText(accumulated);
+          setStreamedText(stripAnalysisPreamble(accumulated));
         },
         onComplete: async () => {
           // correctUtilisationFigures is the same deterministic post-processing
@@ -346,9 +361,10 @@ export function AdaptiveBatchPanel({
           // has no structured suggestion.goalImpact field to override instead, so
           // free-text utilisation mentions in the markdown sections above need the
           // same guard (a Goal Status checklist below covers the goal figures).
+          accumulated = stripAnalysisPreamble(accumulated, { fallbackToFull: true });
           const utilMap = buildUtilisationMap(buildKpis(model, combinedResult).resources || []);
           const corrected = Object.keys(utilMap).length ? correctUtilisationFigures(accumulated, utilMap) : accumulated;
-          if (corrected !== accumulated) setStreamedText(corrected);
+          setStreamedText(corrected);
           setPhase("done");
           if (runId && onSaveInsights && corrected) {
             try {
