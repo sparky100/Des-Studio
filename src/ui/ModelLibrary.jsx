@@ -1,14 +1,14 @@
 // ui/ModelLibrary.jsx — Model library: My Models / Templates / Public / Community tabs
 import { useState, useRef, useMemo, useEffect } from "react";
-import { SHADOW, RADIUS, Z, DOMAIN_COLORS } from "./shared/tokens.js";
-import { Tag, Avatar, Btn, Field, Empty } from "./shared/components.jsx";
+import { SHADOW, RADIUS, Z, DOMAIN_COLORS, SANS } from "./shared/tokens.js";
+import { Avatar, Btn, Field, Empty } from "./shared/components.jsx";
 import { TEMPLATES } from "../engine/templates.js";
 import { validateModel } from "../engine/validation.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { WelcomeDialog } from "./WelcomeDialog.jsx";
 import { buildLLMSchemaPromptPack } from "../llm/bundleExport.js";
-import { downloadTextFile } from "./shared/utils.js";
+import { downloadTextFile, relativeTime, fullDate } from "./shared/utils.js";
 
 // --- filter/sort helpers ---
 
@@ -115,17 +115,40 @@ function FilterEmpty({ onClear }) {
 
 // --- ModelCard ---
 
+// Softened sentence-case meta chip — quieter than the uppercase shared Tag, for card metadata.
+const Chip = ({ label, color, title }) => {
+  const { C, FONT } = useTheme();
+  const c = color ?? C.muted;
+  return (
+    <span title={title} style={{ background: c + "14", border: `1px solid ${c}33`, color: c, borderRadius: 8, padding: "2px 8px", fontSize: 11, fontWeight: 600, fontFamily: FONT, lineHeight: 1.4, whiteSpace: "nowrap" }}>
+      {label}
+    </span>
+  );
+};
+
+const CopyIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+);
+
+const TrashIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+);
+
 export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsChange, profiles = [], currentUserId, currentVersion, scenarioCount = 0, isScenario = false }) => {
   const { C, FONT } = useTheme();
   const owner = (profiles || []).find(p => p.id === model.owner_id) || null;
-  const fmtDate = iso => { try { return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { return ''; } };
   const runCount = model.stats?.runs;
   const isOwner = model.owner_id === currentUserId;
   const validation = useMemo(() => validateModel(model), [model]);
   const hasErrors = validation.errors.length > 0;
   const hasWarnings = validation.warnings.length > 0;
-  const healthLabel = hasErrors ? "Validation Errors" : hasWarnings ? "Validation Warnings" : "Ready";
+  const healthLabel = hasErrors ? "Errors" : hasWarnings ? "Warnings" : "Ready";
   const healthColor = hasErrors ? C.red : hasWarnings ? C.amber : C.green;
+  const healthTitle = hasErrors
+    ? `${validation.errors.length} validation error${validation.errors.length !== 1 ? "s" : ""}`
+    : hasWarnings
+      ? `${validation.warnings.length} validation warning${validation.warnings.length !== 1 ? "s" : ""}`
+      : "No validation issues";
   const cardTags = model.tags || [];
   const visibleTags = cardTags.slice(0, 3);
   const overflowCount = cardTags.length - visibleTags.length;
@@ -138,20 +161,19 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsC
       onMouseEnter={e => { e.currentTarget.style.borderRightColor = C.accent; e.currentTarget.style.borderTopColor = C.accent; e.currentTarget.style.borderBottomColor = C.accent; }}
       onMouseLeave={e => { e.currentTarget.style.borderRightColor = C.border; e.currentTarget.style.borderTopColor = C.border; e.currentTarget.style.borderBottomColor = C.border; }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: C.text, fontFamily: FONT, lineHeight: 1.3 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: C.text, fontFamily: FONT, lineHeight: 1.3, flex: 1, minWidth: 0 }}>
           {model.name}
         </div>
-        <div style={{ display: "flex", gap: 5, flexShrink: 0, flexWrap: "wrap" }}>
-          {isOwner && onCopy && <Btn small variant="ghost" onClick={e => { e.stopPropagation(); onCopy(model); }}>Copy</Btn>}
-          {isOwner && onDelete && <Btn small variant="danger" onClick={e => { e.stopPropagation(); onDelete(model); }}>Delete</Btn>}
-          <Tag label={model.visibility} color={model.visibility === "public" ? C.green : C.accent} />
-          {currentVersion > 0 && <Tag label={`V${currentVersion}`} color={C.purple} />}
-          {isScenario && <Tag label="Scenario" color={C.purple} />}
-          {scenarioCount > 0 && <Tag label={`${scenarioCount} scenario${scenarioCount !== 1 ? "s" : ""}`} color={C.purple} />}
+        <div style={{ display: "flex", gap: 5, flexShrink: 0, alignItems: "center" }}>
+          {model.visibility === "public" && <Chip label="Public" color={C.green} />}
+          {isOwner && onCopy && <Btn small variant="ghost" ariaLabel="Copy" title={`Copy ${model.name}`} onClick={e => { e.stopPropagation(); onCopy(model); }}><CopyIcon /></Btn>}
+          {isOwner && onDelete && <Btn small variant="danger" ariaLabel="Delete" title={`Delete ${model.name}`} onClick={e => { e.stopPropagation(); onDelete(model); }}><TrashIcon /></Btn>}
         </div>
       </div>
       {/* model.notes is intentionally excluded here — it's internal-only, surfaced on the Overview tab instead */}
-      <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>{model.description}</div>
+      {model.description && (
+        <div style={{ fontSize: 13, color: C.muted, fontFamily: SANS, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", minWidth: 0 }}>{model.description}</div>
+      )}
       {isOwner && onTagsChange ? (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }} onClick={e => e.stopPropagation()}>
           {cardTags.map(tag => (
@@ -197,18 +219,21 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsC
           )}
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Tag label={healthLabel} color={healthColor} />
-        {model.statsLoading && <Tag label="— runs" color={C.muted} />}
-        {!model.statsLoading && model.statsError && <Tag label="runs —" color={C.muted} />}
-        {!model.statsLoading && !model.statsError && Number.isFinite(runCount) && runCount > 0 && <Tag label={`${runCount} runs`} color={C.green} />}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <Chip label={healthLabel} color={healthColor} title={healthTitle} />
+        {model.statsLoading && <Chip label="— runs" />}
+        {!model.statsLoading && model.statsError && <Chip label="runs —" />}
+        {!model.statsLoading && !model.statsError && Number.isFinite(runCount) && runCount > 0 && <Chip label={`${runCount} runs`} color={C.green} />}
+        {currentVersion > 0 && <Chip label={`V${currentVersion}`} color={C.purple} />}
+        {isScenario && <Chip label="Scenario" color={C.purple} />}
+        {scenarioCount > 0 && <Chip label={`${scenarioCount} scenario${scenarioCount !== 1 ? "s" : ""}`} color={C.purple} />}
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
           {owner && <Avatar u={owner} size={22} />}
           <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>{owner?.full_name}</span>
         </div>
-        <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>{fmtDate(model.updatedAt)}</span>
+        <span title={fullDate(model.updatedAt)} style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>{relativeTime(model.updatedAt)}</span>
       </div>
     </div>
   );
@@ -630,7 +655,7 @@ export function ModelLibrary({
                       {t.templateMeta?.scenarioType && (
                         <div style={{ fontSize: 11, color: C.accent, fontWeight: 600, lineHeight: 1.2 }}>{t.templateMeta.scenarioType}</div>
                       )}
-                      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.description}</div>
+                      <div style={{ fontSize: 13, color: C.muted, fontFamily: SANS, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.description}</div>
                       {t.templateMeta?.keyMacros?.length > 0 && (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: "auto", paddingTop: 4 }}>
                           {t.templateMeta.keyMacros.map(m => <span key={m} style={{ fontSize: 9, color: C.muted, background: C.border + "66", borderRadius: 3, padding: "1px 5px", fontFamily: "monospace" }}>{m}</span>)}

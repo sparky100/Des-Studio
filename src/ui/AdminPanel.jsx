@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Fragment } from "react";
 import { Btn, Tag, SH, InfoBox, SectionPanel } from "./shared/components.jsx";
 import { SPACE, RADIUS } from "./shared/tokens.js";
 import { useViewport } from "./shared/hooks.js";
+import { relativeTime, fullDate } from "./shared/utils.js";
 import { getPlatformConfig, setPlatformConfig, updateUserRole,
          suspendUser, unsuspendUser, logAdminAction, fetchAuditLog,
          fetchAdminUserStats, fetchPlatformStats, fetchSignupCounts,
@@ -27,27 +28,6 @@ const LLM_MODELS = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function relativeTime(isoDate) {
-
-  if (!isoDate) return "Never";
-  const diff = Date.now() - new Date(isoDate).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(months / 12)}y ago`;
-}
-
-function fullDate(isoDate) {
-  if (!isoDate) return "";
-  return new Date(isoDate).toLocaleString();
-}
 
 function sortUsers(users, col, dir) {
   const mul = dir === "asc" ? 1 : -1;
