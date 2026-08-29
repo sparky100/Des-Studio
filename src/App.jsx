@@ -14,7 +14,7 @@ import { fetchModels, fetchProfiles,
          fetchUserSettings,
          getPlatformConfig,
          updateModelTags }              from "./db/models.js";
-import { saveLocalModel, deleteLocalModel } from "./db/local.js";
+import { saveLocalModel } from "./db/local.js";
 import { GOOGLE_FONT_URL } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
 import { ModalShell }                      from "./ui/shared/ModalShell.jsx";
@@ -492,16 +492,6 @@ export default function App({ onThemeChange }){
     }
   },[uid,loadData]);
 
-  const handleSaveAsBaseline = useCallback(async (sourceModelId, newName, parentModelId) => {
-    if(!uid)return;
-    try{
-      await forkModel(sourceModelId,uid,newName,{parentModelId});
-      await loadData();
-      // Stay on the parent model so the Scenarios section immediately shows the new child.
-    }catch(e){
-      setActionError(e.message);
-    }
-  },[uid,loadData]);
 
   if(loading && !session)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:C.muted,fontFamily:FONT,fontSize:13}}>
@@ -652,14 +642,8 @@ export default function App({ onThemeChange }){
               onSave: isLocal
                 ? async (m) => saveLocalModel(m)
                 : async (m) => { const saved = await saveModel(m, uid); await loadData(); return saved; },
-              onDelete: isLocal
-                ? async (id) => { deleteLocalModel(id); setOpenId(null); setLocalModel(null); }
-                : async (id) => { await deleteModel(id, uid); },
               onSetVisibility: (id, vis) => setVisibility(id, vis, uid),
               onSetAccess: (id, acc) => setAccess(id, acc, uid),
-              onFork: session ? confirmFork : undefined,
-              onSaveAsBaseline: session && isOwner ? handleSaveAsBaseline : undefined,
-              parentModelName: parentModel?.name || null,
               parentModel: parentModel || null,
               childScenarios,
               onOpenScenario: (scenario) => {

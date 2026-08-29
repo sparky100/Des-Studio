@@ -3,7 +3,7 @@
 import { Tag, Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
-export function ModelDetailHeader({ model, canEdit, dirty, visualPending, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion }) {
+export function ModelDetailHeader({ model, canEdit, dirty, visualPending, saving, canUndo, canRedo, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion }) {
   const { C, FONT } = useTheme();
   return (
     <div style={{
@@ -24,13 +24,13 @@ export function ModelDetailHeader({ model, canEdit, dirty, visualPending, saving
         <Tag label={`V${currentVersion}`} color={C.purple} />
       )}
       {canEdit && (
-        <Btn small variant="ghost" onClick={onUndo} disabled={!past.length}
+        <Btn small variant="ghost" onClick={onUndo} disabled={!canUndo}
           title="Undo the last model edit (Ctrl+Z)" ariaLabel="Undo last model edit">
           ↩ Undo
         </Btn>
       )}
       {canEdit && (
-        <Btn small variant="ghost" onClick={onRedo} disabled={!future.length}
+        <Btn small variant="ghost" onClick={onRedo} disabled={!canRedo}
           title="Redo the last undone model edit (Ctrl+Shift+Z)" ariaLabel="Redo last model edit">
           ↪ Redo
         </Btn>
