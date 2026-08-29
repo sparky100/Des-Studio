@@ -879,6 +879,42 @@ describe("AiGeneratedModelPanel", () => {
     });
   });
 
+  describe("conversation history replayed to the LLM", () => {
+    it("replays its own past clarify turn as the strict JSON envelope, not bare prose, while the chat bubble still shows plain text", async () => {
+      // The system prompt requires every assistant reply to be the JSON envelope.
+      // If the app echoes its own past clarify turn back as plain text, the model's
+      // own conversation history contradicts that instruction and reinforces drift
+      // into prose (the root cause behind stray "invalid model JSON" errors).
+      mockCallModelBuilder
+        .mockResolvedValueOnce({ intent: "clarify", questions: "How many servers do you need?", proposedModel: null, suggestions: [] })
+        .mockResolvedValueOnce({ intent: "clarify", questions: "And how do customers arrive?", proposedModel: null, suggestions: [] });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Build something" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByText(/How many servers/i)).toBeInTheDocument());
+
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "3 servers" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(mockCallModelBuilder).toHaveBeenCalledTimes(2));
+
+      // Still shown to the user as a plain-text chat bubble.
+      expect(screen.getByText(/How many servers/i)).toBeInTheDocument();
+
+      // But replayed to the model as the proper envelope for its own prior turn.
+      const secondCallMessages = mockCallModelBuilder.mock.calls[1][1];
+      const priorAssistantTurn = secondCallMessages.find(
+        m => m.role === "assistant" && m.content.includes("How many servers")
+      );
+      expect(priorAssistantTurn).toBeDefined();
+      expect(JSON.parse(priorAssistantTurn.content)).toEqual(
+        expect.objectContaining({ intent: "clarify", questions: "How many servers do you need?" })
+      );
+    });
+  });
+
   it("normalizes Schedule distribution distParams preserving times array and jitterParams", async () => {
     const handleApply = vi.fn();
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {

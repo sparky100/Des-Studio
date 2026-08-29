@@ -311,6 +311,18 @@ function stripTrailingQuestion(text = "") {
   return String(text).replace(/[.!]?\s*[\w\s,'-]+(Does this|Is this|Sound right|Shall I|Should I|Would you like|Does that|Can I|May I)[^?]*\?+\s*$/i, "").trim();
 }
 
+// Turns pushed into `history` for chat-bubble display carry plain text — but the
+// system prompt requires every assistant reply to be the strict JSON envelope, and
+// `history` doubles as the conversation replayed back to the LLM. Replaying the
+// model's own past turns as bare prose contradicts that instruction and reinforces
+// exactly the drift into plain-text replies this is meant to prevent (see
+// parseModelBuilderJson's no-braces fallback in apiClient.js). `wireContent`, when
+// present, is what actually gets sent for that turn; the chat bubble always shows
+// the plain `content`.
+function toWireMessage(turn) {
+  return { role: turn.role, content: turn.wireContent ?? turn.content };
+}
+
 function chooseFirstQuestion(description = "") {
   const text = String(description || "").toLowerCase();
   const mentionsResource = /\b(clerk|server|doctor|nurse|agent|staff|machine|bay|room|operator|teller|worker|resource|capacity)\b/.test(text);
@@ -749,7 +761,11 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     }
 
     if (response.intent === "clarify") {
-      newTurns.push({ role: "assistant", content: questionText });
+      newTurns.push({
+        role: "assistant",
+        content: questionText,
+        wireContent: JSON.stringify({ intent: "clarify", questions: questionText, proposedModel: null }),
+      });
     } else if (!response.proposedModel) {
       // Retries above were exhausted without a model — surface this as a real error
       // rather than a success-sounding chat bubble, so the user isn't left thinking
@@ -785,7 +801,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     setLoading(true);
 
     const messages = [
-      ...nextHistory.slice(-30),
+      ...nextHistory.slice(-30).map(toWireMessage),
       {
         role: "user",
         content: buildModelBuilderUserMessage(text, model),
@@ -809,7 +825,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
 
     const messages = [
       ...savedConfirm.messages,
-      { role: "assistant", content: savedConfirm.explanation },
+      { role: "assistant", content: JSON.stringify({ intent: "confirm", summary: savedConfirm.explanation, proposedModel: null }) },
       { role: "user", content: buildModelBuilderUserMessage(yesMessage, model) },
     ];
 
