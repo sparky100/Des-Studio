@@ -185,6 +185,134 @@ describe("AiGeneratedModelPanel", () => {
       });
   });
 
+  it("preserves a genuinely nested OR/AND condition instead of flattening it to one AND", async () => {
+    // Regression guard: normalizeCEventCondition used to round-trip every
+    // ASSIGN-effect C-event's condition through a legacy string with no
+    // grouping/parens, silently collapsing `(A AND B) OR C` into `A AND B
+    // AND C` before the user ever saw the diff.
+    const handleApply = vi.fn();
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      const response = {
+        intent: "build",
+        questions: null,
+        explanation: "Built a model.",
+        proposedModel: {
+          ...model,
+          entityTypes: [
+            { id: "cust", name: "Customer", role: "customer", attrDefs: [] },
+            { id: "clerk", name: "Clerk", role: "server", count: 2, attrDefs: [] },
+          ],
+          queues: [{ id: "main", name: "Main Queue", discipline: "FIFO" }],
+          cEvents: [{
+            id: "start",
+            name: "Start Service",
+            priority: 1,
+            condition: {
+              operator: "OR",
+              clauses: [
+                {
+                  operator: "AND",
+                  clauses: [
+                    { variable: "Queue.Main Queue.length", operator: ">", value: 0 },
+                    { variable: "Resource.Clerk.idleCount", operator: ">", value: 0 },
+                  ],
+                },
+                { variable: "clock", operator: ">", value: 100 },
+              ],
+            },
+            cSchedules: [],
+          }],
+        },
+      };
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
+
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A post office" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    await screen.findByLabelText(/model proposal preview/i);
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
+
+    expect(handleApply).toHaveBeenCalledOnce();
+    // The top-level OR and nested AND must survive exactly — only the leaf
+    // variable names are token-converted.
+    expect(handleApply.mock.calls[0][0].cEvents[0].condition)
+      .toEqual({
+        operator: "OR",
+        clauses: [
+          {
+            operator: "AND",
+            clauses: [
+              { variable: "queue(Main Queue).length", operator: ">", value: 0 },
+              { variable: "idle(Clerk).count", operator: ">", value: 0 },
+            ],
+          },
+          { variable: "clock", operator: ">", value: 100 },
+        ],
+      });
+  });
+
+  it("ANDs a missing queue/idle clause onto a nested condition instead of flattening it", async () => {
+    const handleApply = vi.fn();
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      const response = {
+        intent: "build",
+        questions: null,
+        explanation: "Built a model.",
+        proposedModel: {
+          ...model,
+          entityTypes: [
+            { id: "cust", name: "Customer", role: "customer", attrDefs: [] },
+            { id: "clerk", name: "Clerk", role: "server", count: 2, attrDefs: [] },
+          ],
+          queues: [{ id: "main", name: "Main Queue", discipline: "FIFO" }],
+          cEvents: [{
+            id: "start",
+            name: "Start Service",
+            priority: 1,
+            effect: "ASSIGN(Main Queue, Clerk)",
+            // hasQueue true, hasIdle false — no idle(...)count clause anywhere.
+            condition: {
+              operator: "OR",
+              clauses: [
+                { variable: "Queue.Main Queue.length", operator: ">", value: 0 },
+                { variable: "clock", operator: ">", value: 100 },
+              ],
+            },
+            cSchedules: [],
+          }],
+        },
+      };
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
+
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A post office" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    await screen.findByLabelText(/model proposal preview/i);
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
+
+    expect(handleApply).toHaveBeenCalledOnce();
+    expect(handleApply.mock.calls[0][0].cEvents[0].condition)
+      .toEqual({
+        operator: "AND",
+        clauses: [
+          {
+            operator: "OR",
+            clauses: [
+              { variable: "queue(Main Queue).length", operator: ">", value: 0 },
+              { variable: "clock", operator: ">", value: 100 },
+            ],
+          },
+          { variable: "idle(Clerk).count", operator: ">", value: 0 },
+        ],
+      });
+  });
+
   it("normalizes AI timing answers into schedule and service-time distributions", async () => {
     const handleApply = vi.fn();
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {

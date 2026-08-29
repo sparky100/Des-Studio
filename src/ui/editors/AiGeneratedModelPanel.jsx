@@ -6,7 +6,7 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 import { useViewport } from "../shared/hooks.js";
 import { ModelDiffPreview } from "./ModelDiffPreview.jsx";
 import { validateModel } from "../../engine/validation.js";
-import { predicateToLegacyString, rowsToPredicate, parseConditionString } from "../../model/conditionFormat.js";
+import { predicateToLegacyString, rowsToPredicate, parseConditionString, mapConditionVariables, variableToLegacyToken } from "../../model/conditionFormat.js";
 
 const DIST_NAMES = {
   fixed: "Fixed",
@@ -273,34 +273,33 @@ function normalizeCEventCondition(condition, effect) {
 
   const hasQueue = /queue\([^)]+\)\.length\s*(?:>|>=|!=)/i.test(text);
   const hasIdle = /idle\([^)]+\)\.count\s*(?:>|>=|!=)/i.test(text);
-  const queueClause = `queue(${parts.queueOrCustomer}).length > 0`;
-  const idleClause = `idle(${parts.server}).count > 0`;
 
-  const nextText = hasQueue && hasIdle
-    ? text
-    : hasQueue
-      ? `${text} AND ${idleClause}`
-      : hasIdle
-        ? `${queueClause} AND ${text}`
-        : `${queueClause} AND ${idleClause}`;
+  // Normalize any AI-generated variable dialect ("Queue.X.length",
+  // "Resource.X.idleCount") to the engine's canonical queue()/idle() token
+  // form WITHOUT flattening the condition's structure — mapConditionVariables
+  // recurses into nested AND/OR trees and only rewrites each leaf's variable
+  // name. A legacy-string round-trip (stringify -> reparse) used to be used
+  // here instead, but that format has no grouping/parens, so it silently
+  // collapsed a genuinely nested condition like `(A AND B) OR C` into a flat
+  // `A AND B AND C` on every AI response — before the user ever saw the diff.
+  const normalized = mapConditionVariables(condition, variableToLegacyToken);
+  if (hasQueue && hasIdle) return normalized;
 
-  return rowsToPredicate(parseConditionString(nextText));
+  const queueClause = { variable: `queue(${parts.queueOrCustomer}).length`, operator: ">", value: 0 };
+  const idleClause = { variable: `idle(${parts.server}).count`, operator: ">", value: 0 };
+  const missing = [...(hasQueue ? [] : [queueClause]), ...(hasIdle ? [] : [idleClause])];
+
+  // Nothing to preserve — build fresh from just the required clause(s).
+  if (!normalized) return missing.length === 1 ? missing[0] : { operator: "AND", clauses: missing };
+
+  // AND the missing clause(s) onto the existing condition as siblings,
+  // rather than destroying its structure to add them.
+  return { operator: "AND", clauses: [normalized, ...missing] };
 }
 
 function formatConditionValue(value) {
   if (typeof value === "string" && /\s/.test(value)) return `"${value.replace(/"/g, '\\"')}"`;
   return String(value ?? "");
-}
-
-function predicateVariableToToken(variable = "") {
-  const text = String(variable || "").trim();
-  const queueMatch = text.match(/^Queue\.([^.]+)\.(length|count|size)$/i);
-  if (queueMatch) return `queue(${queueMatch[1]}).length`;
-  const idleMatch = text.match(/^Resource\.([^.]+)\.(idle|idleCount|available|availableCount)$/i);
-  if (idleMatch) return `idle(${idleMatch[1]}).count`;
-  const busyMatch = text.match(/^Resource\.([^.]+)\.(busy|busyCount)$/i);
-  if (busyMatch) return `busy(${busyMatch[1]}).count`;
-  return text;
 }
 
 function conditionToLegacyString(condition) {
