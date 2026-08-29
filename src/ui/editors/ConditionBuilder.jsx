@@ -13,14 +13,31 @@ const defaultConditionValueForType = (valueType) => {
 
 const rowsToCompoundPredicate = rowsToPredicate;
 
+// A state variable's condition token may be stored with the documented `state.<name>`
+// prefix (docs/model-schema-for-llm.md) or as a bare name — both are valid, independently
+// engine-evaluable forms (src/engine/conditions.js resolveVariable handles both) — so a
+// stored `state.repairsInProgress` must still match the dropdown's bare-name
+// `repairsInProgress` entry rather than being treated as unrecognized.
+const findMatchingToken = (rawToken, tokens) => {
+  const bare = String(rawToken || '').replace(/^state\./, '');
+  return tokens.find(token => token.value === rawToken) || tokens.find(token => token.value === bare);
+};
+
 const parseConditionStr = (value, tokens) => {
   const baseRows = predicateToRows(value);
   return baseRows.map(row => {
-    const knownToken = tokens.find(token => token.value === row.token);
+    const knownToken = findMatchingToken(row.token, tokens);
     return {
       ...row,
       id: row.id || `r${crypto.randomUUID()}`,
-      token: knownToken ? row.token : (tokens[0]?.value || ''),
+      // Matched (possibly via the state.<name>/bare-name equivalence above): normalize
+      // to the dropdown's own recognized form so the rendered <select> actually
+      // highlights it — row.token alone (the old behavior) only worked when the match
+      // was already an exact string match. Genuinely unmatched (e.g. a queue that was
+      // renamed/deleted since the condition was saved) still falls back to tokens[0] —
+      // an intentional, tested recovery (C8) for stale references with no real match at
+      // all, distinct from the state.<name> case fixed above, which now has one.
+      token: knownToken ? knownToken.value : (tokens[0]?.value || ''),
       operator: ['>=','<=','==','!=','>','<'].includes(row.operator) ? row.operator : '>',
       value: row.value || defaultConditionValueForType(knownToken?.valueType || tokens[0]?.valueType || 'number'),
     };
@@ -149,10 +166,10 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
       // unrelated entity-type edit) — so patch the *currently displayed*
       // rows (which may include a local edit not yet round-tripped through
       // the parent) rather than re-deriving from the external value.
-      const normalizedRows = rows.map(row => ({
-        ...row,
-        token: tokens.find(t => t.value === row.token) ? row.token : (tokens[0]?.value || ''),
-      }));
+      const normalizedRows = rows.map(row => {
+        const knownToken = findMatchingToken(row.token, tokens);
+        return { ...row, token: knownToken ? knownToken.value : (tokens[0]?.value || '') };
+      });
       const rowsRepaired = !sameConditionRows(rows, normalizedRows);
       setRows(prev => rowsRepaired ? normalizedRows : prev);
       if (rowsRepaired) {
