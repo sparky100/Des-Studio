@@ -25,6 +25,7 @@ export {
   Controls,
   EdgeLabelRenderer,
   getBezierPath,
+  getSmoothStepPath,
   Handle,
   MarkerType,
   MiniMap,
