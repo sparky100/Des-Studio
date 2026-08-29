@@ -30,7 +30,25 @@
 // conditions are a redundant early exit in that case, not additional logic.
 // buildResult() is the exact same function runAll() itself calls to build
 // its return value.
-export async function runToCompletionYielding(engine, yieldEveryCycles = 500) {
+//
+// yieldEveryCycles default: previously 500. Profiling
+// refugee-displacement-corridor (the scenario that actually trips this)
+// found individual engine.step() calls costing up to ~1.5s and 500-cycle
+// buckets up to ~3s even on an idle, unloaded machine — and this recurred
+// in CI as the exact "Timeout calling onTaskUpdate" error the comment above
+// describes, meaning real CI contention (shared runners, two heavy soak
+// forks competing for CPU under vite.config.js's maxForks: 2) pushes
+// individual 500-cycle gaps well past the 60s heartbeat window. Yielding
+// every cycle instead bounds the worst-case gap to one step's own cost
+// (~1.5s observed) — the one thing that genuinely can't be interrupted —
+// rather than to N steps' cumulative cost, which scales with CI load in a
+// way this test has no control over. Verified the overhead is immaterial:
+// timed refugee-displacement-corridor (~54k cycles) at yieldEveryCycles=1
+// vs. the old 500 back to back on the same machine, several times each —
+// both land in the same ~110-145s band, run to run, with no consistent gap
+// between them; whatever per-yield cost setImmediate scheduling adds is
+// smaller than this machine's own run-to-run variance.
+export async function runToCompletionYielding(engine, yieldEveryCycles = 1) {
   let cycles = 0;
   while (true) {
     const r = engine.step({ captureSnap: false });

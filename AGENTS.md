@@ -1847,6 +1847,18 @@ The general lesson for anyone touching `vite.config.js`'s `test` block: **pool-l
 
 ---
 
+### 22.1d Vitest Worker-Heartbeat Timeout Recurred Under Real CI Contention
+
+**Issue:** `main`'s "Simulation soak" job started intermittently failing with exit code 1 while every single test still passed (e.g. "Test Files 8 passed (8), Tests 54 passed (54), Errors 1 error"). The one error: `[vitest-worker]: Timeout calling "onTaskUpdate"` — the exact class of failure `tests/engine/__helpers__/runToCompletionYielding.js`'s own header comment already documents at length (Vitest's hard, non-configurable 60s worker↔main heartbeat, tripped by `refugee-displacement-corridor` running near-synchronously for ~70-75s).
+
+**Root cause:** that helper already yields every `yieldEveryCycles` (default 500) engine cycles specifically to dodge this, and it usually works — but 500 cycles between yields still leaves gaps of up to ~3s even on an idle machine (profiled directly: individual `engine.step()` calls up to ~1.5s, 500-cycle buckets up to ~3s). Under real CI contention — several of §22.1b's `test.projects` commits landed as a rapid-fire tranche of five pushes in ~12 minutes, each triggering its own concurrent GitHub Actions run competing for the same shared-runner CPU — that ~3s gap scales up with load in a way the test has no control over, and periodically exceeds the 60s window. The failure is load-dependent, not deterministic: most runs on the same code passed.
+
+**Fix:** `yieldEveryCycles` default lowered from 500 to 1 — yield after every single engine step. This bounds the worst-case gap to one step's own cost (the one thing that genuinely can't be interrupted), rather than to N steps' cumulative cost, which is the part that scales with contention. Verified the overhead is immaterial: timed the ~54k-cycle scenario at both values, several runs each, back to back on the same machine — both land in the same ~110-145s band with no consistent gap between them, i.e. whatever per-yield cost `setImmediate` scheduling adds is smaller than this machine's own run-to-run variance.
+
+**Status:** Resolved 2026-08-29.
+
+---
+
 ### 22.2 Vite Import Analysis Fails on UTF-8 Multi-Byte Characters (Em Dashes) in `.js` Test Files
 
 **Issue:** A `.js` test file containing em dash characters (U+2014) inside string literals caused Vite's import analysis to fail with: `Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.`
