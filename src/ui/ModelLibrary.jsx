@@ -158,7 +158,7 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsC
             <span key={tag} role="button" tabIndex={0} aria-label={`Remove tag ${tag}`} title="Click to remove tag"
               onClick={e => { e.stopPropagation(); onTagsChange(model, cardTags.filter(t => t !== tag)); }}
               onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onTagsChange(model, cardTags.filter(t => t !== tag)); } }}
-              style={{ padding: "2px 8px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontFamily: FONT, fontSize: 10, cursor: "pointer", lineHeight: 1.4 }}>
+              style={{ padding: "2px 8px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontFamily: FONT, fontSize: 11, cursor: "pointer", lineHeight: 1.4 }}>
               {tag} ×
             </span>
           ))}
@@ -178,7 +178,7 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsC
                 if (result?.ok !== false) inputEl.value = "";
               }
             }}
-            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 8px", width: 56 }}
+            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontFamily: FONT, fontSize: 11, padding: "2px 8px", width: 56 }}
           />
         </div>
       ) : visibleTags.length > 0 && (
@@ -186,14 +186,14 @@ export const ModelCard = ({ model, onOpen, onDelete, onCopy, onTagClick, onTagsC
           {visibleTags.map(tag => (
             <button key={tag} type="button" aria-label={`Filter by tag ${tag}`}
               onClick={e => { e.stopPropagation(); onTagClick?.(tag); }}
-              style={{ padding: "2px 8px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontFamily: FONT, fontSize: 10, cursor: onTagClick ? "pointer" : "default", lineHeight: 1.4 }}
+              style={{ padding: "2px 8px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontFamily: FONT, fontSize: 11, cursor: onTagClick ? "pointer" : "default", lineHeight: 1.4 }}
               onMouseEnter={e => { if (onTagClick) { e.currentTarget.style.borderColor = C.accent; e.currentTarget.style.color = C.accent; } }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.muted; }}>
               {tag}
             </button>
           ))}
           {overflowCount > 0 && (
-            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>+{overflowCount} more</span>
+            <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.4 }}>+{overflowCount} more</span>
           )}
         </div>
       )}
@@ -231,6 +231,7 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
     return false;
   };
   const startDesign = async () => { if (!requireName()) return; setSaving(true); try { await onStartDesign?.(name.trim(), ""); } finally { setSaving(false); } onClose(); };
+  const startDescribe = async () => { if (!requireName()) return; setSaving(true); try { await onUseAi?.(name.trim(), ""); } finally { setSaving(false); } onClose(); };
   const triggerImport = () => { fileInputRef.current?.click(); };
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -248,9 +249,9 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
     );
   };
   const useTemplate = () => { onUseTemplate?.("", ""); onClose(); };
-  const useAi = async () => { if (saving) return; setSaving(true); try { await onUseAi?.("", ""); } finally { setSaving(false); } onClose(); };
   const goPaste = () => { setMode("paste"); };
   const goDraw = () => { setMode("draw"); };
+  const goDescribe = () => { setMode("describe"); };
   const inputStyle = { width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "8px 10px", boxSizing: "border-box" };
   const optionBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 10, textAlign: "left", color: "inherit", fontFamily: FONT };
   const iconBox = { width: 30, height: 30, background: C.border + "44", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
@@ -261,13 +262,32 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
         <div role="dialog" aria-modal="true" aria-labelledby="draw-model-title" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 28, width: 520, maxWidth: "95vw", fontFamily: FONT, display: "flex", flexDirection: "column", gap: 16 }}>
           <div id="draw-model-title" style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Name your model</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>NAME *</label>
+            <label style={{ fontSize: 11, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>NAME *</label>
             <input ref={nameInputRef} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Queue with Reneging" autoFocus style={inputStyle} onKeyDown={e => { if (e.key === "Enter") startDesign(); }} />
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
             <Btn variant="ghost" onClick={() => setMode("choose")}>Back</Btn>
             <Btn variant="primary" disabled={saving} onClick={startDesign}>
               {saving ? "Starting…" : "Start Drawing"}
+            </Btn>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (mode === "describe") {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
+        <div role="dialog" aria-modal="true" aria-labelledby="describe-model-title" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 28, width: 520, maxWidth: "95vw", fontFamily: FONT, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div id="describe-model-title" style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Name your model</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 11, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>NAME *</label>
+            <input ref={nameInputRef} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Queue with Reneging" autoFocus style={inputStyle} onKeyDown={e => { if (e.key === "Enter") startDescribe(); }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <Btn variant="ghost" onClick={() => setMode("choose")}>Back</Btn>
+            <Btn variant="primary" disabled={saving} onClick={startDescribe}>
+              {saving ? "Starting…" : "Continue"}
             </Btn>
           </div>
         </div>
@@ -299,8 +319,8 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
     <div style={{ position: "fixed", inset: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
       <div role="dialog" aria-modal="true" aria-labelledby="new-model-title" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 28, width: 520, maxWidth: "95vw", fontFamily: FONT, display: "flex", flexDirection: "column", gap: 18, maxHeight: "90vh", overflowY: "auto" }}>
         <div id="new-model-title" style={{ fontSize: 16, fontWeight: 700, color: C.text }}>New Model</div>
-        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>START WITH</div>
-        <button type="button" onClick={useAi} style={{ background: C.bg, border: `2px solid ${C.accent}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12, textAlign: "left", color: "inherit", fontFamily: FONT, width: "100%" }}>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>START WITH</div>
+        <button type="button" onClick={goDescribe} style={{ background: C.bg, border: `2px solid ${C.accent}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12, textAlign: "left", color: "inherit", fontFamily: FONT, width: "100%" }}>
           <div style={{ width: 36, height: 36, background: C.accent + "22", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063A2 2 0 0 0 14.063 15.5l-1.582 6.135a.5.5 0 0 1-.962 0z"/></svg>
           </div>
@@ -309,7 +329,7 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
               <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Model assistant</div>
               <div style={{ fontSize: 10, color: C.accent, background: C.accent + "18", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>Recommended</div>
             </div>
-            <div style={{ fontSize: 10, color: C.muted }}>Helps the model assistant start to build your model</div>
+            <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.4 }}>Helps the model assistant start to build your model — you'll name it next</div>
           </div>
         </button>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -319,7 +339,7 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
             </div>
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Draw</div>
-              <div style={{ fontSize: 10, color: C.muted }}>Build from a blank canvas — you'll name it next</div>
+              <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.4 }}>Build from a blank canvas — you'll name it next</div>
             </div>
           </button>
           <button type="button" onClick={useTemplate} style={optionBtn}>
@@ -328,13 +348,13 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
             </div>
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Use a template</div>
-              <div style={{ fontSize: 10, color: C.muted }}>Start from a pre-built scenario</div>
+              <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.4 }}>Start from a pre-built scenario</div>
             </div>
           </button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ flex: 1, height: 1, background: C.border }} />
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1 }}>OR IMPORT</div>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, letterSpacing: 1 }}>OR IMPORT</div>
           <div style={{ flex: 1, height: 1, background: C.border }} />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -342,14 +362,14 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Import a file</div>
-              <div style={{ fontSize: 10, color: C.muted }}>Upload a .json model — keeps its name</div>
+              <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.4 }}>Upload a .json model — keeps its name</div>
             </div>
           </button>
           <button type="button" onClick={goPaste} style={importBtn}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Paste model</div>
-              <div style={{ fontSize: 10, color: C.muted }}>JSON from clipboard — keeps its name</div>
+              <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.4 }}>JSON from clipboard — keeps its name</div>
             </div>
           </button>
         </div>

@@ -247,7 +247,7 @@ export function ModelTabBar({
   return (
     <>
       {/* Mode selector bar */}
-      <div aria-label={isCompactLayout ? "Mobile model workflow" : "Model workflow modes"} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, padding: "8px 16px", borderBottom: `1px solid ${C.border}`, background: C.bg, flexShrink: 0 }}>
+      <div aria-label={isCompactLayout ? "Mobile model workflow" : "Model workflow modes"} style={{ display: "flex", alignItems: "center", flexWrap: "nowrap", overflowX: "auto", WebkitOverflowScrolling: "touch", gap: 6, padding: "8px 16px", borderBottom: `1px solid ${C.border}`, background: C.bg, flexShrink: 0 }}>
         {DISPLAY_MODES.map(mode => {
           const selected = activeMode.id === mode.id;
           const modeCounts = mode.tabs.filter(t => t !== "validate").reduce((acc, tabId) => {
@@ -296,7 +296,7 @@ export function ModelTabBar({
           );
         })}
         {onToggleAiSidebar && (
-          <>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <div style={{ width: 1, background: C.border, margin: "6px 4px", alignSelf: "stretch" }} />
             <button
               type="button"
@@ -315,7 +315,7 @@ export function ModelTabBar({
               <span aria-hidden="true">✨</span>
               Simulation Assistant
             </button>
-          </>
+          </div>
         )}
       </div>
 

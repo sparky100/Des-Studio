@@ -66,12 +66,44 @@ describe('NewModelModal', () => {
     expect(onUseTemplate).toHaveBeenCalledWith('', '');
   });
 
-  it('calls onUseAi immediately with no name prompt', async () => {
+  it('reveals a name step only after Model assistant is clicked', async () => {
+    const user = userEvent.setup();
+    render(<NewModelModal {...noop()} />);
+    expect(screen.queryByPlaceholderText(/e\.g\. Queue with Reneging/i)).not.toBeInTheDocument();
+    await user.click(screen.getByText(/^Model assistant$/i).closest('button'));
+    expect(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i)).toBeInTheDocument();
+    expect(screen.getByText(/Continue/i)).toBeInTheDocument();
+  });
+
+  it('does not call onUseAi when the name step is submitted empty', async () => {
     const user = userEvent.setup();
     const onUseAi = vi.fn();
     render(<NewModelModal {...noop()} onUseAi={onUseAi} />);
     await user.click(screen.getByText(/^Model assistant$/i).closest('button'));
-    expect(onUseAi).toHaveBeenCalledWith('', '');
+    await user.click(screen.getByText(/Continue/i));
+    expect(onUseAi).not.toHaveBeenCalled();
+  });
+
+  it('shows a toast asking for a name when Continue is clicked without one', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <NewModelModal {...noop()} />
+      </ToastProvider>
+    );
+    await user.click(screen.getByText(/^Model assistant$/i).closest('button'));
+    await user.click(screen.getByText(/Continue/i));
+    expect(await screen.findByText(/enter a model name/i)).toBeInTheDocument();
+  });
+
+  it('calls onUseAi with the typed name once submitted', async () => {
+    const user = userEvent.setup();
+    const onUseAi = vi.fn();
+    render(<NewModelModal {...noop()} onUseAi={onUseAi} />);
+    await user.click(screen.getByText(/^Model assistant$/i).closest('button'));
+    await user.type(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), 'Test Model');
+    await user.click(screen.getByText(/Continue/i));
+    expect(onUseAi).toHaveBeenCalledWith('Test Model', '');
   });
 
   it('switches to paste mode immediately with no name prompt', async () => {

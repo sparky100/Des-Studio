@@ -964,9 +964,10 @@ export const AiAssistantPanel = ({
                 color: entry.role === "user" ? C.accent : C.text,
                 fontFamily: FONT,
                 fontWeight: 700,
-                fontSize: 10,
+                fontSize: 11,
                 letterSpacing: 1,
                 marginBottom: 4,
+                lineHeight: 1.4,
               }}>
                 {entry.role === "user" ? "YOU" : "AI"}
               </div>
@@ -1098,8 +1099,8 @@ export const AiAssistantPanel = ({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{panelTitle}</div>
-          {(sidebar || mobileFullscreen) && !focusedAction && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{panelSubtitle}</div>}
-          {!embedded && !overlay && !sidebar && !mobileFullscreen && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{panelSubtitle}</div>}
+          {(sidebar || mobileFullscreen) && !focusedAction && <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.4 }}>{panelSubtitle}</div>}
+          {!embedded && !overlay && !sidebar && !mobileFullscreen && <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.4 }}>{panelSubtitle}</div>}
         </div>
         {(overlay || sidebar || mobileFullscreen || (!embedded && onClose)) && onClose && (
           <button
@@ -1148,7 +1149,7 @@ export const AiAssistantPanel = ({
         if (!chips.length) return null;
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>QUICK START</label>
+            <label style={{ fontSize: 11, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>QUICK START</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
               {chips.map(chip => (
                 <button
@@ -1177,7 +1178,7 @@ export const AiAssistantPanel = ({
               <Btn small variant="ghost" onClick={onOpenOptimise}>{"\u26A1"} Optimise</Btn>
             </div>
           )}
-          <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+          <label style={{ fontSize: 11, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
             ASK ABOUT THIS MODEL
           </label>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
