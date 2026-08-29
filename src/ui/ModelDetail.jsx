@@ -1,6 +1,5 @@
 // ui/ModelDetail.jsx
 import { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
-import pkg from '../../package.json';
 import { RADIUS, Z, alpha } from "./shared/tokens.js";
 import { csvEscape, downloadTextFile, downloadJsonFile, buildRunHistoryExportPayload, buildRunHistoryCsv } from "./shared/utils.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
@@ -36,7 +35,7 @@ import { ModelTabBar }       from "./ModelTabBar.jsx";
 import { SaveBanner }        from "./SaveBanner.jsx";
 import { VersionHistoryPanel } from "./VersionHistoryPanel.jsx";
 import { ScenariosSection } from "./ScenariosSection.jsx";
-import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, getRunResultsJson, buildSchedulesMap, saveSimulationRun, saveAiInsights } from "../db/models.js";
+import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, buildSchedulesMap, saveSimulationRun, saveAiInsights } from "../db/models.js";
 import { generateReport, sanitizeFilename, buildModelDefinitionHtml } from "../reports/index.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
@@ -48,9 +47,10 @@ import { ParamBrowserPanel }                from "./shared/ParamBrowserPanel.jsx
 import { AdaptiveBatchPanel }               from "./execute/AdaptiveBatchPanel.jsx";
 import { normalizeModelConditions }         from "../model/conditionFormat.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { useModelUndo } from "./hooks/useModelUndo.js";
+import { slugifyModelName, modelJsonFromModel, buildModelExportPayload, hydrateResultsFromHistoryRow, isStarterBlankModel, valuesEqual } from "./modelDetailHelpers.js";
 import { useConfirm } from "./shared/useConfirm.jsx";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "distances", "goals", "graph", "experimentDefaults"];
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
 const AuthoringWorkflowShell = ({ mode, children }) => (
@@ -89,144 +89,6 @@ const TabErrors = ({ tabId, validation, onErrorClick = null }) => {
     </div>
   );
 };
-
-function slugifyModelName(name = "") {
-  return (name || "untitled")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "untitled";
-}
-
-function modelJsonFromModel(model = {}) {
-  const json = MODEL_JSON_KEYS.reduce((acc, key) => {
-    if (key === "graph") {
-      return model.graph && typeof model.graph === "object" && !Array.isArray(model.graph)
-        ? { ...acc, graph: model.graph }
-        : acc;
-    }
-    if (key === "experimentDefaults") {
-      return model.experimentDefaults && typeof model.experimentDefaults === "object" && !Array.isArray(model.experimentDefaults)
-        ? { ...acc, experimentDefaults: model.experimentDefaults }
-        : acc;
-    }
-    return {
-      ...acc,
-      [key]: Array.isArray(model[key]) ? model[key] : [],
-    };
-  }, { schemaVersion: model.schemaVersion ?? 1 });
-  // Preserve live-data and time fields in exported JSON
-  if (model.timeUnit)                  json.timeUnit    = model.timeUnit;
-  if (model.epoch)                     json.epoch       = model.epoch;
-  if (model.dataSources?.length)       json.dataSources = model.dataSources;
-  if (model.sections?.length)          json.sections    = model.sections;
-  if (model.exposedParams?.length)     json.exposedParams = model.exposedParams;
-  return json;
-}
-
-// buildModelExportPayload — creates a self-contained JSON export of the model.
-// Per ADR-016: if the model has bEvents with scheduleRef + empty rows[], we
-// re-inline the schedule rows so the exported file is portable and does not
-// require access to the model_schedules table.
-// schedules: array of model_schedules rows (from fetchModelSchedules)
-function buildModelExportPayload(model, exportedAt = new Date().toISOString(), schedules = []) {
-  // Re-inline schedule rows into bEvents for portability
-  const inlinedModel = inlineSchedulesForExport(model, schedules);
-  const payload = {
-    name: inlinedModel.name || "Untitled model",
-    model_json: modelJsonFromModel(inlinedModel),
-    exportedAt,
-    appVersion: pkg.version,
-  };
-  if (inlinedModel.description) payload.description = inlinedModel.description;
-  return payload;
-}
-
-// inlineSchedulesForExport — merges model_schedules rows back into bEvent.schedules[].rows[]
-// so the exported JSON is self-contained (no scheduleRef dependency).
-// This is the inverse of extractInlineSchedule() (ADR-016).
-function inlineSchedulesForExport(model, schedules = []) {
-  if (!schedules || schedules.length === 0) return model;
-  // Build a lookup: scheduleId → scheduleJson entries
-  const scheduleEntries = {};
-  for (const sched of schedules) {
-    for (const entry of sched.scheduleJson || []) {
-      scheduleEntries[sched.id] = scheduleEntries[sched.id] || {};
-      scheduleEntries[sched.id][entry.eventId] = entry.rows ?? [];
-    }
-  }
-  if (Object.keys(scheduleEntries).length === 0) return model;
-  return {
-    ...model,
-    bEvents: (model.bEvents || []).map(be => ({
-      ...be,
-      schedules: (be.schedules || []).map(s => {
-        if (!s.scheduleRef) return s;
-        const entryMap = scheduleEntries[s.scheduleRef];
-        if (!entryMap) return s;
-        const rows = entryMap[s.eventId ?? be.id] ?? entryMap[be.id] ?? [];
-        // Re-inline: populate rows and remove scheduleRef for portability
-        const { scheduleRef: _removed, ...rest } = s;
-        return { ...rest, rows };
-      }),
-    })),
-  };
-}
-
-
-
-function preferMetricValue(primary, fallback) {
-  if (fallback == null) return primary ?? null;
-  if (primary == null) return fallback;
-  if (primary === 0 && fallback !== 0) return fallback;
-  return primary;
-}
-
-// results_json is no longer part of the run-history list query (it's fetched
-// lazily per-row, on demand) — fetch it here unless the row already carries it.
-async function hydrateResultsFromHistoryRow(row) {
-  if (!row?.id) return null;
-  const json = row.results_json ?? await getRunResultsJson(row.id);
-  if (!json || typeof json !== "object") return null;
-  const summary = json.summary || {};
-  const nextSummary = {
-    ...summary,
-    total: preferMetricValue(summary.total, row.total_arrived) ?? 0,
-    served: preferMetricValue(summary.served, row.total_served) ?? 0,
-    reneged: preferMetricValue(summary.reneged, row.total_reneged) ?? 0,
-    avgWait: preferMetricValue(summary.avgWait, row.avg_wait_time),
-    avgSvc: preferMetricValue(summary.avgSvc, row.avg_service_time),
-  };
-  return {
-    ...json,
-    summary: nextSummary,
-    runLabel: json.runLabel || row.run_label || null,
-  };
-}
-
-function isStarterBlankModel(model = {}) {
-  const current = model && typeof model === "object" ? model : {};
-  return !(current.entityTypes || []).length &&
-    !(current.stateVariables || []).length &&
-    !(current.bEvents || []).length &&
-    !(current.cEvents || []).length &&
-    !(current.queues || []).length &&
-    !(current.goals || []).length;
-}
-
-function valuesEqual(a, b) {
-  if (Object.is(a, b)) return true;
-  if (typeof a !== typeof b) return false;
-  if (a == null || b == null) return false;
-  if (typeof a === "object") {
-    try {
-      return JSON.stringify(a) === JSON.stringify(b);
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
 
 // ── Data Sources Editor ──────────────────────────────────────────────────────
 
@@ -439,8 +301,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [discardConfirm,setDiscardConfirm]=useState(false);
   const [saveSeq,setSaveSeq]=useState(0);
   const [discardKey,setDiscardKey]=useState(0);
-  const [past,setPast]=useState([]);    // undo stack — model snapshots, capped at 20
-  const [future,setFuture]=useState([]); // redo stack
+  const { pushSnapshot, undo: undoSnapshot, redo: redoSnapshot, reset: resetUndo, canUndo, canRedo } = useModelUndo(model, setModel);
   const [historyRows,setHistoryRows]=useState([]);
   const [historyLoading,setHistoryLoading]=useState(false);
   const [historyError,setHistoryError]=useState("");
@@ -485,9 +346,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [showMoreTabs,setShowMoreTabs]=useState(false);
   const [currentVersion,setCurrentVersion]=useState(null);
   const [currentVersionId,setCurrentVersionId]=useState(null);
-  const [showBaselineModal,setShowBaselineModal]=useState(false);
-  const [baselineName,setBaselineName]=useState("");
-  const [baselineSaving,setBaselineSaving]=useState(false);
   const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname.replace(/\/+$/, "") : "";
   const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
   const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
@@ -525,21 +383,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     setWholeModel(restored);
   };
 
-  const handleSaveAsBaseline = async () => {
-    if (!overrides.onSaveAsBaseline || !baselineName.trim()) return;
-    setBaselineSaving(true);
-    try {
-      await overrides.onSaveAsBaseline(modelId, baselineName.trim(), modelId);
-      setShowBaselineModal(false);
-      setBaselineName("");
-      toast.success("Scenario baseline created");
-    } catch (e) {
-      toast.error(e?.message || "Could not create baseline");
-    } finally {
-      setBaselineSaving(false);
-    }
-  };
-
   useEffect(() => {
     if (modelData?.stats && modelData.stats.runs !== model?.stats?.runs) {
       setModel(m => ({
@@ -571,15 +414,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
 
   const setField=(f,v)=>{
     if (valuesEqual(model?.[f], v)) return;
-    setPast(p=>[...p.slice(-19),model]); // push snapshot before change, cap at 20
-    setFuture([]);                        // new edit clears redo stack
+    pushSnapshot();
     setModel(m=>({...m,[f]:v}));
     setDirty(true);
   };
   const setWholeModel=(nextModel)=>{
     if (valuesEqual(model, nextModel)) return;
-    setPast(p=>[...p.slice(-19),model]);
-    setFuture([]);
+    pushSnapshot();
     setModel(normalizeModelConditions(nextModel));
     if(tab==="visual"){
       setVisualPending(true);
@@ -607,16 +448,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   });
   const applyGeneratedModel=(nextModel)=>{
     const merged=mergeGeneratedModel(model,nextModel);
-    setPast(p=>[...p.slice(-19),model]);
-    setFuture([]);
+    pushSnapshot();
     setModel(merged);
     setDirty(true);
     return merged;
   };
   const saveGeneratedModel=async(nextModel)=>{
     const merged=mergeGeneratedModel(model,nextModel);
-    setPast(p=>[...p.slice(-19),model]);
-    setFuture([]);
+    pushSnapshot();
     setModel(merged);
     setSaving(true);
     try{
@@ -652,22 +491,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         toast.error(err?.message||"Could not update collaborator access");
       });
   };
-  const undo=()=>{
-    if(!past.length)return;
-    const prev=past[past.length-1];
-    setFuture(f=>[model,...f.slice(0,19)]);
-    setPast(p=>p.slice(0,-1));
-    setModel(prev);
-    setDirty(true);
-  };
-  const redo=()=>{
-    if(!future.length)return;
-    const next=future[0];
-    setPast(p=>[...p.slice(-19),model]);
-    setFuture(f=>f.slice(1));
-    setModel(next);
-    setDirty(true);
-  };
+  const undo=()=>{ if(undoSnapshot()) setDirty(true); };
+  const redo=()=>{ if(redoSnapshot()) setDirty(true); };
 
   // Ref keeps keyboard handler current without re-registering on every render
   const _ur=useRef({undo,redo,save:null});
@@ -735,8 +560,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     }));
     setDirty(false);
     setVisualPending(false);
-    setPast([]);
-    setFuture([]);
+    resetUndo();
     setDiscardKey(k=>k+1);
   };
 
@@ -1111,7 +935,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       <>
       <ModelDetailHeader
         model={model} canEdit={canEdit} dirty={dirty} visualPending={visualPending} saving={saving}
-        past={past} future={future} currentVersion={currentVersion}
+        canUndo={canUndo} canRedo={canRedo} currentVersion={currentVersion}
         onBack={handleBack} onUndo={undo} onRedo={redo} onSave={save} onDiscard={discard}
         onHelpOpen={overrides.onHelpOpen}
       />
@@ -2010,33 +1834,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             currentModel={model}
             onRestoreVersion={handleRestoreVersion}
           />
-        )}
-        {showBaselineModal&&(
-          <div style={{position:"fixed",inset:0,background:C.overlay,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200,padding:16}}>
-            <div role="dialog" aria-modal="true" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:12,padding:24,width:"min(440px,100%)",fontFamily:FONT,display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{fontSize:15,fontWeight:700,color:C.text}}>Save as scenario baseline</div>
-              <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>
-                Creates a new private model forked from this one, with a link back to the original.
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                <label style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>NAME FOR NEW SCENARIO</label>
-                <input
-                  autoFocus
-                  value={baselineName}
-                  onChange={e=>setBaselineName(e.target.value)}
-                  onKeyDown={e=>{if(e.key==="Enter")handleSaveAsBaseline();if(e.key==="Escape"){setShowBaselineModal(false);setBaselineName("");}}}
-                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px"}}
-                  placeholder="e.g. High-demand scenario"
-                />
-              </div>
-              <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-                <Btn variant="ghost" onClick={()=>{setShowBaselineModal(false);setBaselineName("");}}>Cancel</Btn>
-                <Btn variant="primary" disabled={!baselineName.trim()||baselineSaving} onClick={handleSaveAsBaseline}>
-                  {baselineSaving?"Creating…":"Create"}
-                </Btn>
-              </div>
-            </div>
-          </div>
         )}
         </ErrorBoundary>
       </div>

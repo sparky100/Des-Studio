@@ -65,6 +65,6 @@ export default [
   },
   {
     files: ['src/ui/ModelDetail.jsx'],
-    rules: { 'max-lines': ['error', { max: 2147, skipBlankLines: false, skipComments: false }] },
+    rules: { 'max-lines': ['error', { max: 1944, skipBlankLines: false, skipComments: false }] },
   },
 ];
