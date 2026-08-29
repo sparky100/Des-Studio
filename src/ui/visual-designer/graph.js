@@ -48,6 +48,18 @@ function edgeId(from, to, suffix = "") {
   return `edge:${from}->${to}${suffix ? `:${suffix}` : ""}`;
 }
 
+// COMPLETE/FINISH end an entity's service normally; RENEGE/RENEGE_OLDEST end it
+// via abandonment (finishServiceForPair is the shared engine implementation for
+// COMPLETE/FINISH). Centralized here so bEvents.forEach's sink creation and the
+// cSchedules terminal-edge derivation below can't drift on which macros count
+// as "exit" vs "reneging".
+function isCompletionOrRenegeMacro(macro) {
+  return macro === "COMPLETE" || macro === "RENEGE" || macro === "FINISH" || macro === "RENEGE_OLDEST";
+}
+function isRenegeMacro(macro) {
+  return macro === "RENEGE" || macro === "RENEGE_OLDEST";
+}
+
 function layoutById(graph = {}) {
   return new Map((graph.nodes || []).map(node => [node.id, node]));
 }
@@ -202,7 +214,7 @@ export function deriveGraphFromModel(model = {}) {
       }
     });
 
-    if (calls.some(call => call.macro === "COMPLETE" || call.macro === "RENEGE")) {
+    if (calls.some(call => isCompletionOrRenegeMacro(call.macro))) {
       const id = nodeId(VISUAL_NODE_TYPES.SINK, event.id || event.name);
       sinkNodeByBEventId.set(event.id, id);
       nodes.push({
@@ -210,7 +222,7 @@ export function deriveGraphFromModel(model = {}) {
         type: VISUAL_NODE_TYPES.SINK,
         refId: event.id || null,
         label: event.name || "Exit",
-        sublabel: calls.some(call => call.macro === "RENEGE") ? "Reneging exit" : "Completion exit",
+        sublabel: calls.some(call => isRenegeMacro(call.macro)) ? "Reneging exit" : "Completion exit",
       });
     }
   });
@@ -221,10 +233,19 @@ export function deriveGraphFromModel(model = {}) {
     const isDelay = effectCalls.some(c => c.macro === "DELAY");
     const queueRefs = [
       ...extractQueueNamesFromCondition(event.condition),
-      // Both ASSIGN(Queue, Server) and DELAY(Queue) carry the source queue as args[0]
+      // ASSIGN/DELAY/JOIN/COSEIZE/BATCH all carry their source queue as args[0].
+      // JOIN and BATCH previously only picked up an incoming edge "by accident"
+      // when the condition text happened to repeat the same queue name — a
+      // condition that omits it silently dropped the edge.
       ...effectCalls
-        .filter(call => call.macro === "ASSIGN" || call.macro === "DELAY")
+        .filter(call => ["ASSIGN", "DELAY", "JOIN", "COSEIZE", "BATCH"].includes(call.macro))
         .map(call => call.args[0])
+        .filter(queueName => queueName && queueByName.has(norm(queueName))),
+      // MATCH consumes from two source queues at args[1] and args[3] — args[0]/
+      // args[2] are entity type names, not queues.
+      ...effectCalls
+        .filter(call => call.macro === "MATCH")
+        .flatMap(call => [call.args[1], call.args[3]])
         .filter(queueName => queueName && queueByName.has(norm(queueName))),
     ];
     const uniqueQueueRefs = [...new Set(queueRefs.map(clean).filter(Boolean))];
@@ -254,6 +275,22 @@ export function deriveGraphFromModel(model = {}) {
       const queueNodeId = queueNodeByName.get(norm(queueName));
       if (queueNodeId) edges.push({ id: edgeId(queueNodeId, id), from: queueNodeId, to: id, source: "condition" });
     });
+
+    // JOIN(SourceQueue, TargetQueue) and MATCH(..., TargetQueue[, predicate]) live
+    // on the C-event's OWN effect — their outgoing "merged destination" edge has
+    // to be derived here, next to the incoming queueRefs above.
+    effectCalls
+      .filter(call => call.macro === "JOIN" || call.macro === "MATCH")
+      .forEach(call => {
+        const targetQueue = call.macro === "JOIN" ? call.args[1] : call.args[4];
+        const targetQueueId = targetQueue && queueNodeByName.get(norm(targetQueue));
+        if (targetQueueId) {
+          edges.push({
+            id: edgeId(id, targetQueueId, call.macro === "JOIN" ? "join" : "match"),
+            from: id, to: targetQueueId, source: "routing",
+          });
+        }
+      });
 
     (event.cSchedules || []).forEach(schedule => {
       const bEvent = bEventById.get(schedule.eventId);
@@ -300,6 +337,10 @@ export function deriveGraphFromModel(model = {}) {
             if (bEvent.defaultQueueName) {
               const defQueueId = queueNodeByName.get(norm(bEvent.defaultQueueName));
               if (defQueueId) edges.push({ id: edgeId(id, defQueueId, `${schedule.eventId}-${index}-default`), from: id, to: defQueueId, source: "routing", label: "fallback" });
+            } else if (bEvent.defaultQueueName === null) {
+              // Explicit "exit system" default (F10.1) — mirrors the DELAY-completion path below.
+              const sinkId = getExitSinkId();
+              edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}-default`), from: id, to: sinkId, source: "terminal", label: "default" });
             }
 
           // Probabilistic routing table (F10.2)
@@ -333,7 +374,7 @@ export function deriveGraphFromModel(model = {}) {
             }
           }
         }
-        if (call.macro === "COMPLETE" || call.macro === "RENEGE") {
+        if (isCompletionOrRenegeMacro(call.macro)) {
           // When the BEvent has a RELEASE macro, add the terminal edge here
           // because the DELAY/no-RELEASE section below won't run.
           // When the BEvent has no RELEASE, the DELAY section handles this
@@ -350,6 +391,22 @@ export function deriveGraphFromModel(model = {}) {
           if (!routingHandlesExit) {
             const sinkId = sinkNodeByBEventId.get(bEvent.id);
             if (sinkId) edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}`), from: id, to: sinkId, source: "terminal" });
+          }
+        }
+        // SPLIT(EntityType, N, TargetQueue): destination for the *cloned* entities only.
+        if (call.macro === "SPLIT") {
+          const targetQueue = call.args[2];
+          const targetQueueId = targetQueue && queueNodeByName.get(norm(targetQueue));
+          if (targetQueueId) {
+            edges.push({ id: edgeId(id, targetQueueId, `${schedule.eventId}-${index}-split`), from: id, to: targetQueueId, source: "routing" });
+          }
+        }
+        // UNBATCH(TargetQueue): destination for each restored child entity.
+        if (call.macro === "UNBATCH") {
+          const targetQueue = call.args[0];
+          const targetQueueId = targetQueue && queueNodeByName.get(norm(targetQueue));
+          if (targetQueueId) {
+            edges.push({ id: edgeId(id, targetQueueId, `${schedule.eventId}-${index}-unbatch`), from: id, to: targetQueueId, source: "routing" });
           }
         }
       });
@@ -441,38 +498,52 @@ export function deriveGraphFromModel(model = {}) {
   const nodeTypeById = new Map(dedupedNodes.map(n => [n.id, n.type]));
 
   // ── Back-edge auto-detection (F12.6) ───────────────────────────────────────
-  // An Activity → Queue edge is a back-edge if there's already a path
-  // from that Queue to that Activity through other edges.
-  function pathExists(edgeList, from, to, excludeIdx) {
-    const adj = new Map();
-    edgeList.forEach((e, idx) => {
-      if (idx === excludeIdx) return;
-      if (!adj.has(e.from)) adj.set(e.from, []);
-      adj.get(e.from).push(e.to);
-    });
-    const seen = new Set();
-    const stack = [from];
-    while (stack.length) {
-      const current = stack.pop();
-      if (current === to) return true;
-      if (seen.has(current)) continue;
-      seen.add(current);
-      (adj.get(current) || []).forEach(next => stack.push(next));
+  // DFS with white/gray/black node coloring (CLRS-style back-edge detection).
+  // An edge to a GRAY node — an ancestor still on the current DFS stack — is a
+  // genuine back edge that closes a cycle back to that ancestor. An edge to a
+  // BLACK node (already fully explored, NOT an ancestor) is a cross/forward
+  // edge: it can look identical to a back edge in isolation, but it does not
+  // close a cycle, so it must never be marked. A naive "does a reverse path
+  // exist" check can't distinguish these: it would evaluate each Activity→Queue
+  // edge in isolation, so any cycle ANYWHERE in the graph would cause every
+  // edge lying on that cycle to be marked — not just the one edge that
+  // actually closes it — and a converging DAG (e.g. two activities feeding one
+  // downstream queue) could be falsely flagged if an unrelated cycle existed
+  // elsewhere in the model.
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = new Map(dedupedNodes.map(n => [n.id, WHITE]));
+  const adjacency = new Map();
+  dedupedEdges.forEach(edge => {
+    if (!adjacency.has(edge.from)) adjacency.set(edge.from, []);
+    adjacency.get(edge.from).push(edge);
+  });
+
+  function visit(nodeId) {
+    color.set(nodeId, GRAY);
+    for (const edge of adjacency.get(nodeId) || []) {
+      const targetColor = color.get(edge.to);
+      if (targetColor === GRAY) {
+        // Genuine back edge. Only Activity→Queue edges (excluding overflow)
+        // are eligible for the loop:true treatment.
+        if (nodeTypeById.get(edge.from) === VISUAL_NODE_TYPES.ACTIVITY &&
+            nodeTypeById.get(edge.to) === VISUAL_NODE_TYPES.QUEUE &&
+            edge.source !== "overflow") {
+          edge.loop = true;
+          edge.maxLoopCount = 3;
+          edge.exitQueueName = null;
+        }
+        continue; // never re-descend into a node still on the stack
+      }
+      if (targetColor === WHITE) visit(edge.to);
+      // BLACK → cross/forward edge, already fully explored: never marked.
     }
-    return false;
+    color.set(nodeId, BLACK);
   }
 
-  dedupedEdges.forEach((edge, idx) => {
-    if (nodeTypeById.get(edge.from) === VISUAL_NODE_TYPES.ACTIVITY &&
-        nodeTypeById.get(edge.to) === VISUAL_NODE_TYPES.QUEUE &&
-        !edge.loop &&
-        edge.source !== "overflow") {
-      if (pathExists(dedupedEdges, edge.to, edge.from, idx)) {
-        edge.loop = true;
-        edge.maxLoopCount = 3;
-        edge.exitQueueName = null;
-      }
-    }
+  // Deterministic root order = dedupedNodes array order. Restarting the DFS
+  // from every still-WHITE node covers disconnected components/multiple roots.
+  dedupedNodes.forEach(node => {
+    if (color.get(node.id) === WHITE) visit(node.id);
   });
 
   const layoutedNodes = withLayout(dedupedNodes, dedupedEdges, graph);

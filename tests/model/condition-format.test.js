@@ -10,6 +10,7 @@ import {
   normalizeModelConditions,
   hasConditionDefinition,
   isMeaningfulRoutingBranch,
+  extractQueueNamesFromCondition,
 } from "../../src/model/conditionFormat.js";
 
 describe("conditionFormat", () => {
@@ -152,5 +153,29 @@ describe("hasConditionDefinition / isMeaningfulRoutingBranch", () => {
     expect(isMeaningfulRoutingBranch({ condition: { variable: "clock", operator: ">", value: 0 } })).toBe(true);
     expect(isMeaningfulRoutingBranch({ condition: null })).toBe(false);
     expect(isMeaningfulRoutingBranch(null)).toBe(false);
+  });
+});
+
+describe("extractQueueNamesFromCondition", () => {
+  it("extracts a queue name from the current queue(Name) dialect in a string condition", () => {
+    expect(extractQueueNamesFromCondition("queue(Main Queue).length > 0")).toEqual(["Main Queue"]);
+  });
+
+  it("extracts a queue name from the legacy Queue.Name.length dialect in a string condition", () => {
+    expect(extractQueueNamesFromCondition("Queue.SurgeryQueue.length > 0")).toEqual(["SurgeryQueue"]);
+  });
+
+  it("merges both dialects when a compound string condition mixes them", () => {
+    expect(extractQueueNamesFromCondition("queue(A).length > 0 AND Queue.B.length > 0")).toEqual(["A", "B"]);
+  });
+
+  it("still extracts the legacy dialect from a leaf/object condition (pre-existing branch, unchanged)", () => {
+    expect(extractQueueNamesFromCondition({ variable: "Queue.SurgeryQueue.length", operator: ">", value: 0 }))
+      .toEqual(["SurgeryQueue"]);
+  });
+
+  it("returns [] for conditions with no queue reference", () => {
+    expect(extractQueueNamesFromCondition("clock > 5")).toEqual([]);
+    expect(extractQueueNamesFromCondition(null)).toEqual([]);
   });
 });
