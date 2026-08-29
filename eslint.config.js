@@ -61,7 +61,7 @@ export default [
     // line count in the same PR. New features must not add state here; put
     // new state in hooks (src/ui/execute/hooks/) or child components.
     files: ['src/ui/execute/index.jsx'],
-    rules: { 'max-lines': ['error', { max: 3338, skipBlankLines: false, skipComments: false }] },
+    rules: { 'max-lines': ['error', { max: 3251, skipBlankLines: false, skipComments: false }] },
   },
   {
     files: ['src/ui/ModelDetail.jsx'],
