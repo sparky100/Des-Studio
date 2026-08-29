@@ -535,7 +535,8 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 ))}
               </SectionPanel>
 
-              <Field label="Description" value={ev.description} onChange={v=>upd(i,"description",v)} placeholder="When and why this event fires"/>
+              <input value={ev.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
+                style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",width:"100%",boxSizing:"border-box"}}/>
             </>}
           </div>
         );

@@ -521,7 +521,6 @@ B-events are scheduled future occurrences — arrivals and service completions.
 {
   "id": "b_arrive",
   "name": "Patient Arrives",
-  "description": "Patient arrival generator",
   "scheduledTime": "0",
   "effect": ["ARRIVE(Patient, Triage Queue)"],
   "schedules": [
@@ -661,7 +660,6 @@ The companion CSV is returned in the `companionCsv` field of the response envelo
 - `balkCondition`/`balkProbability` are **not** B-event fields — they belong on the Queue object (see §3 Queues) and are checked on every join attempt, not just at arrival.
 - `routing[].condition` should be a **predicate object** `{ "variable", "operator", "value" }`; a string shorthand is accepted and parsed into this form at save time, but a string that fails to parse is blocked by CHK-012. See §5 Conditional Routing Table.
 - `defaultQueueName` (optional): fallback queue used when no routing condition matches. Must reference a valid queue name. Required when using `routing` without a guaranteed catch-all condition.
-- `description` (optional string): a short (≤1 sentence) human-readable note on what this event represents or when/why it fires. RECOMMENDED on every B-event you generate — it's the only thing that distinguishes near-identical events (e.g. two RELEASE events with different routing) for a human reviewing the model later, especially in larger models. This is qualitative context, not a quantitative parameter — populating it never conflicts with the rule against inventing unstated numeric values.
 
 ### Effect Macros for B-Events
 
@@ -869,7 +867,6 @@ C-events fire whenever their condition becomes true. They represent service star
 {
   "id": "c_triage",
   "name": "Triage",
-  "description": "Seizes an idle Nurse for the next waiting patient",
   "priority": 1,
   "condition": "queue(Triage Queue).length > 0 AND idle(Nurse).count > 0",
   "effect": ["ASSIGN(Triage Queue, Nurse)"],
@@ -971,7 +968,6 @@ The target queue argument is optional — omit it (`RELEASE_COSEIZED([Surgeon, A
 - `effect` must use `ASSIGN` for single-resource service start, or `COSEIZE` for multi-resource (see example above).
 - `cSchedules[].eventId` must reference a valid B-event `id`.
 - `cSchedules[].useEntityCtx`: **must be `true`** for service completion events so the engine associates the scheduled B-event with the specific entity being served. Omitting it means the B-event fires with no entity context and `COMPLETE()`/`RELEASE()` will not know which entity to remove.
-- `description` (optional string): a short (≤1 sentence) human-readable note on what this event represents or when/why it fires. RECOMMENDED on every C-event you generate — it's the only thing that distinguishes near-identical events (e.g. two RELEASE events with different routing) for a human reviewing the model later, especially in larger models. This is qualitative context, not a quantitative parameter — populating it never conflicts with the rule against inventing unstated numeric values.
 
 ### Attribute-conditional `cSchedules` — the `when` field
 
