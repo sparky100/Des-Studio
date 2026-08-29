@@ -329,3 +329,106 @@ describe('EntityFilterBuilder — entity attribute filtering', () => {
     expect(handleChange).toHaveBeenCalledWith(null);
   });
 });
+
+describe('ConditionBuilder — state-variable token matching (state.<name> vs bare name)', () => {
+  // A state variable's condition token may be stored as the documented `state.<name>`
+  // form or as a bare name (src/engine/conditions.js resolveVariable evaluates both
+  // correctly at runtime) — the builder's dropdown must recognize both instead of
+  // silently substituting an unrelated token when the exact-string match fails.
+  const mockEntityTypes = [];
+  const mockStateVariables = [
+    { id: 'sv1', name: 'totalServed', valueType: 'number', initialValue: '0' },
+  ];
+  // Queue tokens are built first in ConditionBuilder's token list, so
+  // "Number waiting in MainQueue" is always tokens[0] — the exact fallback the
+  // pre-fix bug substituted in for any unrecognized token.
+  const mockQueues = [
+    { id: 'q1', name: 'MainQueue', discipline: 'FIFO' },
+  ];
+
+  it('a state.<name>-prefixed clause resolves to the state variable, not the first queue token', () => {
+    const handleChange = vi.fn();
+    render(
+      <ConditionBuilder
+        value="state.totalServed > 0"
+        onChange={handleChange}
+        entityTypes={mockEntityTypes}
+        stateVariables={mockStateVariables}
+        queues={mockQueues}
+      />
+    );
+
+    // The token select must display the state-variable option, never the queue token
+    // it used to silently fall back to.
+    expect(screen.getByDisplayValue(/totalServed/i)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue(/Number waiting in MainQueue/i)).not.toBeInTheDocument();
+
+    // The mount effect normalizes the stored `state.` prefix to the dropdown's own
+    // recognized (bare) form and persists that — but the resulting predicate must
+    // still reference the state variable, never the queue.
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    const persisted = handleChange.mock.calls[0][0];
+    expect(persisted.variable).toBe('totalServed');
+    expect(persisted.variable).not.toBe('queue(MainQueue).length');
+  });
+
+  it('a multi-clause condition resolves its state.<name> clause correctly, not as a duplicate of clause 1', () => {
+    const handleChange = vi.fn();
+    render(
+      <ConditionBuilder
+        value="queue(MainQueue).length > 0 AND state.totalServed > 0"
+        onChange={handleChange}
+        entityTypes={mockEntityTypes}
+        stateVariables={mockStateVariables}
+        queues={mockQueues}
+      />
+    );
+
+    const persisted = handleChange.mock.calls.at(-1)[0];
+    expect(persisted.clauses).toHaveLength(2);
+    expect(persisted.clauses[0].variable).toBe('queue(MainQueue).length');
+    expect(persisted.clauses[1].variable).toBe('totalServed');
+    // The reported bug: clause 2 silently became a byte-for-byte duplicate of clause 1.
+    expect(persisted.clauses[1].variable).not.toBe(persisted.clauses[0].variable);
+  });
+
+  it('a bare state-variable name (the already-working form) is unaffected by the fix', () => {
+    const handleChange = vi.fn();
+    render(
+      <ConditionBuilder
+        value="totalServed > 0"
+        onChange={handleChange}
+        entityTypes={mockEntityTypes}
+        stateVariables={mockStateVariables}
+        queues={mockQueues}
+      />
+    );
+
+    expect(screen.getByDisplayValue(/totalServed/i)).toBeInTheDocument();
+    // Already in the dropdown's own recognized form — nothing to repair, so the
+    // mount effect must not fire a spurious write.
+    expect(handleChange).not.toHaveBeenCalled();
+  });
+
+  it('a genuinely unrecognized token (e.g. a renamed/deleted queue) keeps the existing C8 stale-token fallback', () => {
+    // Distinct from the state.<name> case above: there is no real match to find here
+    // (not even loosely), so the pre-existing, separately-tested (C8) "fall back to the
+    // first available token and auto-repair" recovery still applies unchanged — this
+    // fix only adds a second, targeted match for state variables; it does not touch
+    // what happens when no match exists at all.
+    const handleChange = vi.fn();
+    render(
+      <ConditionBuilder
+        value="queue(DeletedQueue).length > 0"
+        onChange={handleChange}
+        entityTypes={mockEntityTypes}
+        stateVariables={mockStateVariables}
+        queues={mockQueues}
+      />
+    );
+
+    expect(screen.getByDisplayValue(/Number waiting in MainQueue/i)).toBeInTheDocument();
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    expect(handleChange.mock.calls[0][0].variable).toBe('queue(MainQueue).length');
+  });
+});
