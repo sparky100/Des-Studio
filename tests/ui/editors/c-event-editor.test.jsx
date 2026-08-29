@@ -286,6 +286,41 @@ describe('CEventEditor — ConditionBuilder token list staleness (C8)', () => {
   });
 });
 
+describe('CEventEditor — expanding a state.<name> condition must not mark the model dirty', () => {
+  it('does not call onChange purely from expanding a row, and the collapsed summary still shows the real condition afterward', () => {
+    // Reported bug: ConditionBuilder's mount effect misclassified the
+    // state.<name> ↔ <name> dialect normalization (see ConditionBuilder.jsx's
+    // findMatchingToken) as a repair, firing onChange on mere expand/view —
+    // which both marked the model dirty for no reason and, since the rewrite
+    // converts the condition from a string to an object, made the collapsed
+    // summary (which only recognizes string conditions) show "no condition"
+    // even though the condition was fully populated.
+    const handleChange = vi.fn();
+    const events = [
+      { id: 'c1', name: 'Preempt Repair', priority: 1, condition: 'state.repairsInProgress > 0', effect: '', cSchedules: [], description: '' },
+    ];
+    render(
+      <CEventEditor
+        events={events}
+        onChange={handleChange}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[{ id: 'sv1', name: 'repairsInProgress' }]}
+        queues={[]}
+      />
+    );
+
+    // Collapsed summary shows the real condition text, not "no condition".
+    expect(screen.getByText('state.repairsInProgress > 0')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    expect(handleChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Collapse/i }));
+    expect(screen.getByText('state.repairsInProgress > 0')).toBeInTheDocument();
+  });
+});
+
 describe('CEventEditor — follow-on B-event labels', () => {
   it('uses service language for queue-based ASSIGN options', () => {
     render(

@@ -55,6 +55,47 @@ describe("ConditionBuilder — auto-repair effect must not treat flattening as a
     expect(JSON.stringify(repaired)).not.toContain("Deleted Queue");
   });
 
+  it("does not call onChange for a string condition whose state.<name> clause resolves to a known state variable (dialect normalization is not a repair)", () => {
+    // Matches the real reported bug: a persisted condition string using the
+    // documented `state.<name>` dialect for a state-variable clause. The
+    // dropdown's own token for that variable is always the bare `<name>` form
+    // (see stateVarTokens in ConditionBuilder's useMemo) — recognizing that
+    // equivalence and rewriting to the bare form is intentional, not a repair,
+    // and must not fire onChange on mere mount/view.
+    const conditionStr = "queue(Triage Queue).length > 0 AND state.repairsInProgress > 0";
+    const onChange = renderBuilder({
+      value: conditionStr,
+      stateVariables: [{ id: "sv1", name: "repairsInProgress" }],
+    });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("does not call onChange for a compound-object condition whose leaf variable uses the state.<name> dialect", () => {
+    const conditionObj = {
+      operator: "AND",
+      clauses: [
+        { variable: TOKEN_A, operator: ">", value: 0 },
+        { variable: "state.repairsInProgress", operator: ">", value: 0 },
+      ],
+    };
+    const onChange = renderBuilder({
+      value: conditionObj,
+      stateVariables: [{ id: "sv1", name: "repairsInProgress" }],
+    });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("still calls onChange to repair a state.<name> clause whose variable no longer exists", () => {
+    const conditionStr = "state.deletedVar > 0";
+    const onChange = renderBuilder({
+      value: conditionStr,
+      stateVariables: [{ id: "sv1", name: "repairsInProgress" }],
+    });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const repaired = onChange.mock.calls[0][0];
+    expect(JSON.stringify(repaired)).not.toContain("deletedVar");
+  });
+
   it("does not call onChange when the token list changes but every row's token still exists", () => {
     const flat = { operator: "AND", clauses: [
       { variable: TOKEN_A, operator: ">", value: 0 },

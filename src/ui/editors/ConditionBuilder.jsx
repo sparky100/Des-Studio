@@ -156,7 +156,13 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
       const rawRows = predicateToRows(externalValue);
       const parsed = parseConditionStr(externalValue, tokens);
       setRows(prev => sameConditionRows(prev, parsed) ? prev : parsed);
-      const leavesRepaired = !sameConditionRows(rawRows, parsed);
+      // The state.<name> ↔ <name> dialect equivalence (see findMatchingToken
+      // above) is intentional recognition, not a repair worth writing back —
+      // compare against each raw row's bare token so only a genuine repair
+      // (an unrecognized/stale token falling back to tokens[0], an invalid
+      // operator, or a defaulted value) trips onChange here.
+      const bareRawRows = rawRows.map(row => ({ ...row, token: row.token.replace(/^state\./i, "") }));
+      const leavesRepaired = !sameConditionRows(bareRawRows, parsed);
       if (leavesRepaired) {
         const normalized = rowsToCompoundPredicate(parsed);
         if (normalized) onChange(normalized);
