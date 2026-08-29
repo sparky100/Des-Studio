@@ -128,7 +128,12 @@ export function parseConditionString(condition = "") {
 export function extractQueueNamesFromCondition(condition) {
   if (!condition) return [];
   if (typeof condition === "string") {
-    return [...condition.matchAll(/queue\(([^)]+)\)/gi)].map(m => m[1].trim());
+    // Current dialect: queue(Name).length. Legacy (pre-migration) dialect:
+    // Queue.Name.length — the object/leaf branch below already recognizes this
+    // form; an un-migrated string condition needs the same fallback.
+    const current = [...condition.matchAll(/queue\(([^)]+)\)/gi)].map(m => m[1].trim());
+    const legacy = [...condition.matchAll(/\bQueue\.([^.]+)\./gi)].map(m => m[1].trim());
+    return [...current, ...legacy];
   }
   if (typeof condition !== "object" || Array.isArray(condition)) return [];
   if (Array.isArray(condition.clauses)) {

@@ -402,3 +402,287 @@ describe("deriveGraphFromModel — container nodes", () => {
     expect(graph.nodes.some(node => node.type === "container")).toBe(false);
   });
 });
+
+describe("deriveGraphFromModel — JOIN/SPLIT/MATCH/UNBATCH/COSEIZE/BATCH edges", () => {
+  it("derives incoming and outgoing edges for a JOIN(Source, Target) C-event effect", () => {
+    const model = {
+      queues: [
+        { id: "source-q", name: "Source Queue", customerType: "Item", discipline: "FIFO" },
+        { id: "target-q", name: "Target Queue", customerType: "Item", discipline: "FIFO" },
+      ],
+      bEvents: [],
+      cEvents: [{
+        id: "join-op", name: "Join Items", priority: 1,
+        condition: "queue(Source Queue).length > 0",
+        effect: "JOIN(Source Queue, Target Queue)",
+        cSchedules: [],
+      }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const edgePairs = graph.edges.map(e => `${e.from}->${e.to}`);
+    expect(edgePairs).toContain("queue:source-q->activity:join-op");
+    expect(edgePairs).toContain("activity:join-op->queue:target-q");
+    expect(graph.edges.find(e => e.from === "activity:join-op" && e.to === "queue:target-q").source).toBe("routing");
+  });
+
+  it("derives an outgoing edge for a SPLIT(...) call inside a cSchedule-linked bEvent effect", () => {
+    const model = {
+      queues: [
+        { id: "intake-q", name: "IntakeQueue", customerType: "BulkOrder", discipline: "FIFO" },
+        { id: "pick-q", name: "PickQueue", customerType: "Item", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "intake-done", name: "Intake Split", scheduledTime: "9999",
+          effect: ["SPLIT(Item, 4, PickQueue)", "COMPLETE()"], schedules: [] },
+      ],
+      cEvents: [{
+        id: "intake", name: "Intake Order", priority: 1,
+        condition: "queue(IntakeQueue).length > 0",
+        effect: "ASSIGN(IntakeQueue, Clerk)",
+        cSchedules: [{ eventId: "intake-done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+      }],
+    };
+    const graph = deriveGraphFromModel(model);
+    expect(graph.edges.map(e => `${e.from}->${e.to}`)).toContain("activity:intake->queue:pick-q");
+  });
+
+  it("derives incoming edges from both source queues and one outgoing edge for a MATCH C-event effect", () => {
+    const model = {
+      queues: [
+        { id: "order-q", name: "OrderQueue", customerType: "Order", discipline: "FIFO" },
+        { id: "item-q", name: "ItemQueue", customerType: "Item", discipline: "FIFO" },
+        { id: "fulfillment-q", name: "FulfillmentQueue", customerType: "Order", discipline: "FIFO" },
+      ],
+      bEvents: [],
+      cEvents: [{
+        id: "match-op", name: "Match Order with Item", priority: 1,
+        condition: "queue(OrderQueue).length > 0 AND queue(ItemQueue).length > 0",
+        effect: "MATCH(Order, OrderQueue, Item, ItemQueue, FulfillmentQueue)",
+        cSchedules: [],
+      }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const edgePairs = graph.edges.map(e => `${e.from}->${e.to}`);
+    expect(edgePairs).toContain("queue:order-q->activity:match-op");
+    expect(edgePairs).toContain("queue:item-q->activity:match-op");
+    expect(edgePairs).toContain("activity:match-op->queue:fulfillment-q");
+  });
+
+  it("derives an outgoing edge for an UNBATCH(...) call inside a cSchedule-linked bEvent effect", () => {
+    const model = {
+      queues: [
+        { id: "batch-q", name: "BatchQueue", customerType: "Part", discipline: "FIFO" },
+        { id: "restored-q", name: "RestoredQueue", customerType: "Part", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "unbatch-done", name: "Unbatch", scheduledTime: "9999", effect: "UNBATCH(RestoredQueue)", schedules: [] },
+      ],
+      cEvents: [{
+        id: "unbatch-op", name: "Unbatch Op", priority: 1,
+        condition: "queue(BatchQueue).length > 0",
+        effect: "DELAY(BatchQueue)",
+        cSchedules: [{ eventId: "unbatch-done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+      }],
+    };
+    const graph = deriveGraphFromModel(model);
+    expect(graph.edges.map(e => `${e.from}->${e.to}`)).toContain("activity:unbatch-op->queue:restored-q");
+  });
+
+  it("treats a FINISH-only bEvent like COMPLETE for sink creation and sublabel", () => {
+    const model = {
+      queues: [{ id: "q", name: "Queue", customerType: "Customer", discipline: "FIFO" }],
+      bEvents: [{ id: "finish-done", name: "Finish", scheduledTime: "9999", effect: "FINISH(Server)", schedules: [] }],
+      cEvents: [{
+        id: "svc", name: "Serve", priority: 1,
+        condition: "queue(Queue).length > 0 AND idle(Server).count > 0",
+        effect: "ASSIGN(Queue, Server)",
+        cSchedules: [{ eventId: "finish-done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+      }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const sink = graph.nodes.find(n => n.id === "sink:finish-done");
+    expect(sink.sublabel).toBe("Completion exit");
+    expect(graph.edges.map(e => `${e.from}->${e.to}`)).toContain("activity:svc->sink:finish-done");
+  });
+
+  it("derives a terminal edge and a reneging-exit sublabel for RENEGE_OLDEST combined with RELEASE in the same bEvent effect", () => {
+    const model = {
+      queues: [{ id: "q", name: "Queue", customerType: "Customer", discipline: "FIFO" }],
+      bEvents: [{
+        id: "release-and-renege", name: "Release And Renege Oldest", scheduledTime: "9999",
+        effect: ["RELEASE(Server, Queue)", "RENEGE_OLDEST(Customer)"], schedules: [],
+      }],
+      cEvents: [{
+        id: "svc", name: "Serve", priority: 1,
+        condition: "queue(Queue).length > 0 AND idle(Server).count > 0",
+        effect: "ASSIGN(Queue, Server)",
+        cSchedules: [{ eventId: "release-and-renege", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+      }],
+    };
+    const graph = deriveGraphFromModel(model);
+    expect(graph.edges.map(e => `${e.from}->${e.to}`)).toContain("activity:svc->sink:release-and-renege");
+    expect(graph.nodes.find(n => n.id === "sink:release-and-renege").sublabel).toBe("Reneging exit");
+  });
+
+  it("derives an incoming edge for a COSEIZE source queue even when the condition text doesn't repeat the queue name", () => {
+    const model = {
+      queues: [{ id: "surgery-q", name: "SurgeryQueue", customerType: "Patient", discipline: "FIFO" }],
+      bEvents: [],
+      cEvents: [{
+        id: "surgery", name: "Perform Surgery", priority: 1,
+        condition: "idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0", // no "SurgeryQueue" mention
+        effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+        cSchedules: [],
+      }],
+    };
+    const graph = deriveGraphFromModel(model);
+    expect(graph.edges.map(e => `${e.from}->${e.to}`)).toContain("queue:surgery-q->activity:surgery");
+  });
+
+  it("derives an incoming edge for a BATCH source queue independent of condition text", () => {
+    const model = {
+      queues: [{ id: "parts-q", name: "Parts", customerType: "Part", discipline: "FIFO" }],
+      bEvents: [],
+      cEvents: [{
+        id: "batch-op", name: "Batch Parts", priority: 1,
+        condition: { variable: "clock", operator: ">", value: 0 }, // no queue reference at all
+        effect: "BATCH(Parts, 3)",
+        cSchedules: [],
+      }],
+    };
+    const graph = deriveGraphFromModel(model);
+    expect(graph.edges.map(e => `${e.from}->${e.to}`)).toContain("queue:parts-q->activity:batch-op");
+  });
+
+  it("derives a fallback exit edge when a RELEASE routing table's defaultQueueName is explicitly null", () => {
+    const model = {
+      ...twoStageModel,
+      bEvents: twoStageModel.bEvents.map(event =>
+        event.id === "triage-complete"
+          ? {
+              ...event,
+              effect: "RELEASE(Triage Nurse)",
+              routing: [{ condition: { variable: "Entity.outcome", operator: "==", value: "ICU" }, queueName: "Consultant Queue" }],
+              defaultQueueName: null,
+            }
+          : event
+      ),
+    };
+    const graph = deriveGraphFromModel(model);
+    const edge = graph.edges.find(e => e.from === "activity:start-triage" && e.label === "default");
+    expect(edge).toBeDefined();
+    expect(edge.source).toBe("terminal");
+    expect(edge.to).toBe("sink:exit-triage-complete");
+  });
+});
+
+describe("deriveGraphFromModel — back-edge detection (F12.6)", () => {
+  it("marks zero edges loop:true for a fork/join diamond (two independent activities feeding the same downstream queue)", () => {
+    const model = {
+      queues: [
+        { id: "repair-q", name: "Repair Queue", customerType: "Customer", discipline: "FIFO" },
+        { id: "away-q", name: "Customer Away Queue", customerType: "Customer", discipline: "FIFO" },
+        { id: "pickup-q", name: "Pickup Rendezvous Queue", customerType: "Customer", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "repair-complete", name: "Repair Complete", scheduledTime: "9999",
+          effect: "RELEASE(RepairTech, Pickup Rendezvous Queue)", schedules: [] },
+        { id: "timeaway-complete", name: "Time Away Complete", scheduledTime: "9999",
+          effect: "", schedules: [],
+          probabilisticRouting: [{ probability: 1, queueName: "Pickup Rendezvous Queue" }] },
+      ],
+      cEvents: [
+        { id: "repair", name: "Repair", priority: 1,
+          condition: "queue(Repair Queue).length > 0 AND idle(RepairTech).count > 0",
+          effect: "ASSIGN(Repair Queue, RepairTech)",
+          cSchedules: [{ eventId: "repair-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+        { id: "timeaway", name: "Time Away", priority: 2,
+          condition: "queue(Customer Away Queue).length > 0",
+          effect: "DELAY(Customer Away Queue)",
+          cSchedules: [{ eventId: "timeaway-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+      ],
+    };
+    const graph = deriveGraphFromModel(model);
+    const edgePairs = graph.edges.map(e => `${e.from}->${e.to}`);
+    expect(edgePairs).toContain("activity:repair->queue:pickup-q");
+    expect(edgePairs).toContain("activity:timeaway->queue:pickup-q");
+    expect(graph.edges.filter(e => e.loop)).toHaveLength(0);
+  });
+
+  it("marks exactly the one true back edge in a genuine two-stage rework cycle, not the forward edges", () => {
+    const model = {
+      queues: [
+        { id: "q-a", name: "Queue A", customerType: "Patient", discipline: "FIFO" },
+        { id: "q-b", name: "Queue B", customerType: "Patient", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "b1-complete", name: "B1 Complete", scheduledTime: "9999", effect: "RELEASE(Server1, Queue B)", schedules: [] },
+        { id: "b2-complete", name: "B2 Complete", scheduledTime: "9999", effect: "RELEASE(Server2, Queue A)", schedules: [] },
+      ],
+      cEvents: [
+        { id: "activity1", name: "Activity 1", priority: 1,
+          condition: "queue(Queue A).length > 0 AND idle(Server1).count > 0",
+          effect: "ASSIGN(Queue A, Server1)",
+          cSchedules: [{ eventId: "b1-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+        { id: "activity2", name: "Activity 2", priority: 2,
+          condition: "queue(Queue B).length > 0 AND idle(Server2).count > 0",
+          effect: "ASSIGN(Queue B, Server2)",
+          cSchedules: [{ eventId: "b2-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+      ],
+    };
+    const graph = deriveGraphFromModel(model);
+    const loopEdges = graph.edges.filter(e => e.loop);
+    expect(loopEdges).toHaveLength(1);
+    expect(loopEdges[0]).toEqual(expect.objectContaining({
+      from: "activity:activity2", to: "queue:q-a", maxLoopCount: 3, exitQueueName: null,
+    }));
+    expect(graph.edges.find(e => e.from === "queue:q-a" && e.to === "activity:activity1").loop).toBeFalsy();
+    expect(graph.edges.find(e => e.from === "activity:activity1" && e.to === "queue:q-b").loop).toBeFalsy();
+    expect(graph.edges.find(e => e.from === "queue:q-b" && e.to === "activity:activity2").loop).toBeFalsy();
+  });
+
+  it("does not mark a diamond's join edges even when an unrelated cycle exists elsewhere in the same model", () => {
+    const model = {
+      queues: [
+        { id: "repair-q", name: "Repair Queue", customerType: "Customer", discipline: "FIFO" },
+        { id: "away-q", name: "Customer Away Queue", customerType: "Customer", discipline: "FIFO" },
+        { id: "pickup-q", name: "Pickup Rendezvous Queue", customerType: "Customer", discipline: "FIFO" },
+        { id: "q-a", name: "Queue A", customerType: "Patient", discipline: "FIFO" },
+        { id: "q-b", name: "Queue B", customerType: "Patient", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "repair-complete", name: "Repair Complete", scheduledTime: "9999",
+          effect: "RELEASE(RepairTech, Pickup Rendezvous Queue)", schedules: [] },
+        { id: "timeaway-complete", name: "Time Away Complete", scheduledTime: "9999",
+          effect: "", schedules: [],
+          probabilisticRouting: [{ probability: 1, queueName: "Pickup Rendezvous Queue" }] },
+        { id: "b1-complete", name: "B1 Complete", scheduledTime: "9999", effect: "RELEASE(Server1, Queue B)", schedules: [] },
+        { id: "b2-complete", name: "B2 Complete", scheduledTime: "9999", effect: "RELEASE(Server2, Queue A)", schedules: [] },
+      ],
+      cEvents: [
+        { id: "repair", name: "Repair", priority: 1,
+          condition: "queue(Repair Queue).length > 0 AND idle(RepairTech).count > 0",
+          effect: "ASSIGN(Repair Queue, RepairTech)",
+          cSchedules: [{ eventId: "repair-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+        { id: "timeaway", name: "Time Away", priority: 2,
+          condition: "queue(Customer Away Queue).length > 0",
+          effect: "DELAY(Customer Away Queue)",
+          cSchedules: [{ eventId: "timeaway-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+        { id: "activity1", name: "Activity 1", priority: 3,
+          condition: "queue(Queue A).length > 0 AND idle(Server1).count > 0",
+          effect: "ASSIGN(Queue A, Server1)",
+          cSchedules: [{ eventId: "b1-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+        { id: "activity2", name: "Activity 2", priority: 4,
+          condition: "queue(Queue B).length > 0 AND idle(Server2).count > 0",
+          effect: "ASSIGN(Queue B, Server2)",
+          cSchedules: [{ eventId: "b2-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+      ],
+    };
+    const graph = deriveGraphFromModel(model);
+    const loopEdges = graph.edges.filter(e => e.loop);
+    expect(loopEdges).toHaveLength(1);
+    expect(loopEdges[0]).toEqual(expect.objectContaining({ from: "activity:activity2", to: "queue:q-a" }));
+    expect(graph.edges.find(e => e.from === "activity:repair" && e.to === "queue:pickup-q").loop).toBeFalsy();
+    expect(graph.edges.find(e => e.from === "activity:timeaway" && e.to === "queue:pickup-q").loop).toBeFalsy();
+  });
+});
