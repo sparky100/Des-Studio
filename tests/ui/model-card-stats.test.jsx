@@ -32,6 +32,13 @@ describe('ModelCard run stats', () => {
     expect(screen.getByText('runs —')).toBeInTheDocument();
   });
 
+  it('exposes icon-only Copy and Delete actions to the owner by accessible name', () => {
+    render(<ModelCard model={baseModel} profiles={profiles} currentUserId="user-1" onOpen={vi.fn()} onCopy={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+  });
+
   it('does not show a separate server resource summary tag', () => {
     render(<ModelCard model={{
       ...baseModel,

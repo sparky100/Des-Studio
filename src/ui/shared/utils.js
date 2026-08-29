@@ -122,3 +122,27 @@ export function slugifyResultName(name = "model") {
 export function timestampForFilename(date = new Date()) {
   return date.toISOString().replace(/[:.]/g, "-");
 }
+
+/**
+ * Human-friendly relative timestamp ("2d ago"). Pair with fullDate() in a
+ * title attribute so the absolute date stays discoverable on hover.
+ */
+export function relativeTime(isoDate) {
+  if (!isoDate) return "Never";
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
+export function fullDate(isoDate) {
+  if (!isoDate) return "";
+  return new Date(isoDate).toLocaleString();
+}

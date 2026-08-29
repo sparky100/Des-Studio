@@ -43,6 +43,10 @@ export const C = {
 
 export const FONT = "'JetBrains Mono','Fira Code',monospace";
 
+// Prose font for descriptions/notes — the "friendlier font treatment" already used on the
+// Overview tab and editors (duplicated there as local consts; new code should import this).
+export const SANS = "Inter,'Segoe UI',Arial,sans-serif";
+
 export const GOOGLE_FONT_URL =
   "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap";
 
