@@ -699,24 +699,64 @@ export const MACROS = [
       const { entities, clock, getLastCustId, getLastSrvId, felRef, msgs } = ctx;
       const custId = felRef?._contextCustId ?? getLastCustId();
       const srvId  = felRef?._contextSrvId  ?? getLastSrvId();
-      const srvById = findEntityById(ctx.index, entities, srvId);
-      // Only trust the cached context server id if its type actually matches this
-      // RELEASE(...) call's own type argument — otherwise (e.g. a COSEIZE B-event
-      // whose context id points at a different co-seized type) fall through to a
-      // type-scoped lookup among the servers actually claimed by this customer.
-      const srvByIdIsMatch = srvById && srvById.role === "server" &&
-        srvById.type.trim().toLowerCase() === srvType.trim().toLowerCase();
-      const srv    = srvByIdIsMatch
-        ? srvById
-        : entities.find((/** @type {any} */ e) =>
-            e.role === "server" &&
-            e.type.trim().toLowerCase() === srvType.trim().toLowerCase() &&
-            e.status === "busy" &&
-            (custId == null || e.currentCustId === custId)
-          );
-      const cust   = srv
-        ? (findEntityById(ctx.index, entities, srv.currentCustId) || findEntityById(ctx.index, entities, custId))
-        : findEntityById(ctx.index, entities, custId);
+
+      let srv, cust;
+
+      if (custId != null) {
+        // A specific customer context is known — this event was scheduled bound to
+        // one particular customer's service completion. Resolve THAT customer
+        // directly and confirm they are still actually being served before ever
+        // looking at a server. Neither PREEMPT nor FAIL cancels a preempted
+        // customer's own pending completion/release FEL entry (CANCEL(EventName)
+        // is the opt-in way to do that) — so without this guard, a stale event
+        // surviving a preemption that already re-queued this customer would fall
+        // through to whichever OTHER customer the shared server has since picked
+        // up, and misapply itself to them instead.
+        cust = findEntityById(ctx.index, entities, custId);
+        if (!cust) {
+          msgs.push(`RELEASE(${srvType}) skipped — context customer #${custId} not found`);
+          return;
+        }
+        if (cust.status !== "serving") {
+          msgs.push(`RELEASE(${srvType}) skipped — #${cust.id} is ${cust.status}, not serving`);
+          return;
+        }
+
+        const srvById = findEntityById(ctx.index, entities, srvId);
+        // Trust the cached context server id only if its type matches this
+        // RELEASE(...) call's own type argument AND it is still actually claiming
+        // THIS customer right now — otherwise (a COSEIZE B-event whose context id
+        // points at a different co-seized type, or the same physical server having
+        // moved on to a different customer since this event was scheduled) fall
+        // through to a type-scoped lookup among the servers this specific
+        // customer currently has claimed.
+        const srvByIdIsMatch = srvById && srvById.role === "server" &&
+          srvById.type.trim().toLowerCase() === srvType.trim().toLowerCase() &&
+          srvById.currentCustId === custId;
+        srv = srvByIdIsMatch
+          ? srvById
+          : entities.find((/** @type {any} */ e) =>
+              e.role === "server" &&
+              e.type.trim().toLowerCase() === srvType.trim().toLowerCase() &&
+              e.status === "busy" &&
+              e.currentCustId === custId
+            );
+      } else {
+        // No context customer known (e.g. a cSchedule without useEntityCtx, or a
+        // bare condition-driven C-event effect) — preserved exactly as before: any
+        // busy server of the given type, then resolve its customer from it.
+        const srvById = findEntityById(ctx.index, entities, srvId);
+        const srvByIdIsMatch = srvById && srvById.role === "server" &&
+          srvById.type.trim().toLowerCase() === srvType.trim().toLowerCase();
+        srv  = srvByIdIsMatch
+          ? srvById
+          : entities.find((/** @type {any} */ e) =>
+              e.role === "server" &&
+              e.type.trim().toLowerCase() === srvType.trim().toLowerCase() &&
+              e.status === "busy"
+            );
+        cust = srv ? findEntityById(ctx.index, entities, srv.currentCustId) : null;
+      }
 
       if (srv && cust) {
         if (!claimMatchesPair(cust, srv)) {

@@ -371,6 +371,94 @@ describe('Shift-capacity busy-server retirement after completion', () => {
   });
 });
 
+// ── H6: RELEASE does not misapply a stale event to a different customer ────
+// Root-caused correctness bug — RELEASE previously resolved "which customer
+// to act on" via srv.currentCustId ("whoever this server is serving right
+// now") instead of the event's own bound context (_contextCustId, captured
+// at scheduling time). PREEMPT interrupts a service and re-queues the
+// customer but never cancels that customer's own pending completion event
+// (CANCEL(EventName) is the opt-in way to do that manually) — so if the same
+// server later serves a different, unrelated customer before the stale
+// event's original fire time, the stale event misapplied itself to whoever
+// currently occupied the server. Same class of defect H3 above fixed for
+// COMPLETE(), for RELEASE(...) instead.
+
+describe('H6 — RELEASE does not misapply a stale event to a different customer', () => {
+  test('a preempted RepairJob\'s stale Stage-1 RELEASE does not touch an OtherJob later assigned the same server', () => {
+    const model = {
+      entityTypes: [
+        { id: 'R', name: 'RepairJob', role: 'customer', attrDefs: [] },
+        { id: 'O', name: 'OtherJob',  role: 'customer', attrDefs: [] },
+        { id: 'S', name: 'Server',    role: 'server',   count: '1', attrDefs: [] },
+      ],
+      queues: [
+        { id: 'q1', name: 'Repair Queue', customerType: 'RepairJob', discipline: 'FIFO' },
+        { id: 'q2', name: 'Other Queue',  customerType: 'OtherJob',  discipline: 'FIFO' },
+        { id: 'q3', name: 'Stage2 Queue', customerType: 'RepairJob', discipline: 'FIFO' },
+      ],
+      stateVariables: [],
+      bEvents: [
+        { id: 'arriveRepair', name: 'RepairJob Arrives', scheduledTime: '0',
+          effect: 'ARRIVE(RepairJob, Repair Queue)', schedules: [] },
+        { id: 'arriveOther', name: 'OtherJob Arrives', scheduledTime: '1',
+          effect: 'ARRIVE(OtherJob, Other Queue)', schedules: [] },
+        { id: 'emergencyPreempt', name: 'Emergency Preempt', scheduledTime: '3',
+          effect: 'PREEMPT(Server)', schedules: [] },
+        // Stage-1 completion for RepairJob — scheduled at t=0 for 20 units, so it
+        // is still pending (bound to RepairJob's original context) when it fires,
+        // well before OtherJob's own real completion at t=28.
+        { id: 'releaseStage1', name: 'Stage 1 Release', scheduledTime: '9999',
+          effect: 'RELEASE(Server, Stage2 Queue)', schedules: [] },
+        { id: 'completeOther', name: 'Other Complete', scheduledTime: '9999',
+          effect: 'COMPLETE()', schedules: [] },
+      ],
+      cEvents: [
+        // Lower priority value fires first: once PREEMPT frees Server at t=3,
+        // OtherJob (already waiting since t=1) claims it before RepairJob's
+        // re-queued instance can reclaim it — reproducing "server later
+        // reassigned to serve a different, unrelated customer".
+        { id: 'assignOther', name: 'Assign Server to Other', priority: 1,
+          condition: 'queue(Other Queue).length > 0 AND idle(Server).count > 0',
+          effect: 'ASSIGN(Other Queue, Server)',
+          cSchedules: [{ eventId: 'completeOther', dist: 'fixed', distParams: { value: '25' }, useEntityCtx: true }] },
+        { id: 'assignRepair', name: 'Assign Server to Repair', priority: 2,
+          condition: 'queue(Repair Queue).length > 0 AND idle(Server).count > 0',
+          effect: 'ASSIGN(Repair Queue, Server)',
+          cSchedules: [{ eventId: 'releaseStage1', dist: 'fixed', distParams: { value: '20' }, useEntityCtx: true }] },
+      ],
+    };
+
+    // Timeline: RepairJob claims Server at t=0 (releaseStage1 due at t=20,
+    // bound to RepairJob's context). OtherJob arrives at t=1 and waits.
+    // PREEMPT(Server) fires at t=3, re-queueing RepairJob and freeing Server;
+    // OtherJob claims it immediately (assignOther has priority over
+    // assignRepair), so RepairJob stays waiting. At t=20 the STALE
+    // releaseStage1 event fires while OtherJob is still mid-service (real
+    // completion due at t=28) — it must be skipped, not misapplied to OtherJob.
+    const engine = buildEngine(model, 42, 0, 22);
+    const result = engine.runAll();
+
+    const repairJob = result.entitySummary.find(e => e.type === 'RepairJob');
+    const otherJob  = result.entitySummary.find(e => e.type === 'OtherJob');
+
+    // OtherJob must still be mid-service — untouched by the stale event.
+    expect(otherJob.status).toBe('serving');
+    expect(otherJob.stages ?? []).toHaveLength(0);
+
+    // RepairJob is left waiting (as it was after the preempt), not further
+    // mutated by an event that was never bound to it having "completed".
+    expect(repairJob.status).toBe('waiting');
+
+    const skipLog = result.log.filter(e => e.message?.includes('RELEASE(Server) skipped'));
+    expect(skipLog.length).toBeGreaterThan(0);
+
+    // The bug's signature log line must never appear for OtherJob.
+    const buggyReleaseLog = result.log.filter(e =>
+      e.message?.includes(`#${otherJob.id} released`) && e.message?.includes('Stage2 Queue'));
+    expect(buggyReleaseLog.length).toBe(0);
+  });
+});
+
 // ── M1 / Sprint 36: shift-downshift retirement at a different scale (3→1) ───
 
 describe('M1 — Shift-capacity busy-server retirement after completion', () => {
