@@ -6,7 +6,7 @@ import { supabase } from './supabase.js';
  * @param {{ summary: Record<string, number|undefined> }} storedResult
  */
 export function compareResults(newResult, storedResult) {
-  const fields = ['served', 'avgWait', 'avgSvc', 'avgSojourn', 'avgTimeInSystem', 'servedRatio', 'reneged'];
+  const fields = ['served', 'avgWait', 'avgSvc', 'avgSojourn', 'avgTimeInSystem', 'servedRatio', 'reneged', 'balked'];
   return fields.every(f =>
     Math.abs((newResult.summary[f] || 0) - (storedResult.summary[f] || 0)) < 0.0001
   );

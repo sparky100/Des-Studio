@@ -64,4 +64,14 @@ describe('compareResults', () => {
     const different = { ...summary, avgWait: 5.01 };
     expect(compareResults({ summary: different }, { summary })).toBe(false);
   });
+
+  it('treats a differing balked count as a real difference', () => {
+    const balkedSummary = { ...summary, balked: 0 };
+    const different = { ...balkedSummary, balked: 5 };
+    expect(compareResults({ summary: different }, { summary: balkedSummary })).toBe(false);
+  });
+
+  it('missing balked on both sides defaults to 0 and does not falsely differ', () => {
+    expect(compareResults({ summary }, { summary })).toBe(true);
+  });
 });

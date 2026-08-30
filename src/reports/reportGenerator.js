@@ -561,6 +561,7 @@ function buildExecutiveSummary(model, results, recommendations, aggStats = {}, m
   const kpis = [
     { lbl: `${entityName}s served`,        val: formatInt(resolveValue('served',      summary, aggStats)) },
     { lbl: 'Reneged / abandoned',           val: formatInt(resolveValue('reneged',     summary, aggStats)) },
+    { lbl: 'Balked (left without joining)', val: formatInt(resolveValue('balked',      summary, aggStats)) },
     { lbl: `Avg wait time (${unit})`,       val: formatN(resolveValue('avgWait',      summary, aggStats)) },
     { lbl: `Avg service time (${unit})`,    val: formatN(resolveValue('avgSvc',       summary, aggStats)) },
     { lbl: `Avg total time (${unit})`,      val: formatN(resolveValue('avgSojourn',   summary, aggStats)) },
@@ -717,6 +718,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
   const metricRows = [
     [`${entityName}s completed service`,                              formatInt(resolveValue('served',      summary, aggStats))],
     [`${entityName}s reneged (abandoned)`,                           formatInt(resolveValue('reneged',     summary, aggStats))],
+    [`${entityName}s balked (left without joining)`,                 formatInt(resolveValue('balked',      summary, aggStats))],
     [`Average waiting time (${unit})`,                               formatN(resolveValue('avgWait',      summary, aggStats))],
     [`Average service time (${unit})`,                               formatN(resolveValue('avgSvc',       summary, aggStats))],
     [`Average total time in system (${unit})`,                            formatN(resolveValue('avgSojourn',   summary, aggStats))],
@@ -1144,6 +1146,7 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     ['Service completion rate',                    formatPct(resolveValue('servedRatio', summary, aggregateStats)) ?? '—'],
     [`${entityName}s served${multiRep ? ' (avg per run)' : ''}`,  `${formatInt(resolveValue('served',  summary, aggregateStats)) ?? '—'}`],
     [`${entityName}s reneged${multiRep ? ' (avg per run)' : ''}`, `${formatInt(resolveValue('reneged', summary, aggregateStats)) ?? '—'}`],
+    [`${entityName}s balked${multiRep ? ' (avg per run)' : ''}`,  `${formatInt(resolveValue('balked', summary, aggregateStats)) ?? '—'}`],
   ].filter(r => r[1] && !r[1].startsWith('—'));
   const costVal = resolveValue('totalCost', summary, aggregateStats);
   if (costVal != null && Number.isFinite(Number(costVal))) {

@@ -340,7 +340,9 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
   const totalArrived = Number(summary.total ?? summary.arrived ?? summary.totalArrived ?? 0);
   const served = Number(summary.served ?? 0);
   const reneged = Number(summary.reneged ?? summary.totalReneged ?? 0);
+  const balked = Number(summary.balked ?? 0);
   const leftRate = totalArrived > 0 ? (reneged / totalArrived) * 100 : null;
+  const balkRate = totalArrived > 0 ? (balked / totalArrived) * 100 : null;
 
   // For count metrics, compute the per-run average when running multi-rep (integer).
   const avgPerRun = (total) =>
@@ -407,6 +409,14 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
       ciPath: reneged > 0 ? "summary.reneged" : null,
       color: reneged > 0 ? C.reneged : C.green,
     },
+    ...(balked > 0 ? [{
+      label: "Balked",
+      value: isMultiRep
+        ? formatMetricValue(resolveCount(balked, "summary.balked"), 0)
+        : (balkRate == null ? "—" : `${formatNumber(balkRate, 1)}%`),
+      ciPath: "summary.balked",
+      color: C.balked,
+    }] : []),
     {
       label: "Completion rate",
       value: servedRatioDisplay != null ? `${servedRatioDisplay}%` : "—",
@@ -549,7 +559,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
             {outcomeEntries.map(outcome => {
               const outcomeAvg = isMultiRep ? avgPerRun(outcome.count) : null;
               const displayCount = outcomeAvg ?? outcome.count;
-              const outcomeColor = outcome.status === "reneged" ? C.reneged : C.served;
+              const outcomeColor = outcome.status === "reneged" ? C.reneged : outcome.status === "balked" ? C.balked : C.served;
               const hasWait    = Number.isFinite(outcome.avgWait)    && outcome.avgWait    > 0;
               const hasSojourn = Number.isFinite(outcome.avgSojourn) && outcome.avgSojourn > 0;
               return (

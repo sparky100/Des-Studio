@@ -7,7 +7,7 @@ import { downloadWorkbook } from "../shared/workbook.js";
 export { downloadTextFile };
 
 export const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
-export const CI_METRICS = ["summary.total", "summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.avgTimeInSystem", "summary.served", "summary.reneged", "summary.servedRatio", "summary.totalCost", "summary.costPerServed"];
+export const CI_METRICS = ["summary.total", "summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.avgTimeInSystem", "summary.served", "summary.reneged", "summary.balked", "summary.servedRatio", "summary.totalCost", "summary.costPerServed"];
 export const METRIC_LABELS = {
   "summary.total": "Arrived",
   "summary.avgWait": "Avg wait",
@@ -16,6 +16,7 @@ export const METRIC_LABELS = {
   "summary.avgTimeInSystem": "Avg time in system",
   "summary.served": "Served",
   "summary.reneged": "Reneged",
+  "summary.balked": "Balked",
   "summary.servedRatio": "Completion rate",
   "summary.totalCost": "Total cost",
   "summary.costPerServed": "Cost / served",
@@ -23,7 +24,7 @@ export const METRIC_LABELS = {
 
 export const fmt = (value, digits = 0) => Number.isFinite(value) ? value.toFixed(digits) : "—";
 
-export const COUNT_METRICS = new Set(["summary.total", "summary.served", "summary.reneged"]);
+export const COUNT_METRICS = new Set(["summary.total", "summary.served", "summary.reneged", "summary.balked"]);
 
 export const fmtMetric = (metric, value) => {
   if (!Number.isFinite(value)) return "—";
@@ -190,6 +191,7 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
   const total = summaries.reduce((sum, summary) => sum + (summary.total || 0), 0);
   const served = summaries.reduce((sum, summary) => sum + (summary.served || 0), 0);
   const reneged = summaries.reduce((sum, summary) => sum + (summary.reneged || 0), 0);
+  const balked = summaries.reduce((sum, summary) => sum + (summary.balked || 0), 0);
   const finalTime = Math.max(...replicationPayloads.map(payload => payload.result?.finalTime || 0), 0);
 
   const lastResult = replicationPayloads.filter(Boolean).pop()?.result;
@@ -480,6 +482,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       total,
       served,
       reneged,
+      balked,
       phaseCTruncated,
       cycleLimitReached,
       servedRatio: served > 0 && total > 0 ? +(served / total).toFixed(4) : null,
@@ -605,7 +608,7 @@ export function buildResultsExportPayload({
 }
 
 export function buildResultsCsv({ results, replicationResults = [], aggregateStats = {}, config = {} } = {}) {
-  const rows = [["runLabel", "replicationIndex", "seed", "arrived", "served", "reneged", "completionRate", "avgWait", "avgSvc", "avgSojourn", "avgTimeInSystem", "totalCost", "costPerServed", "finalTime"]];
+  const rows = [["runLabel", "replicationIndex", "seed", "arrived", "served", "reneged", "balked", "completionRate", "avgWait", "avgSvc", "avgSojourn", "avgTimeInSystem", "totalCost", "costPerServed", "finalTime"]];
 
   const resultRows = replicationResults.length
     ? replicationResults.map(payload => ({
@@ -633,6 +636,7 @@ export function buildResultsCsv({ results, replicationResults = [], aggregateSta
       row.summary.total,
       row.summary.served,
       row.summary.reneged,
+      row.summary.balked,
       row.summary.servedRatio != null ? Math.round(row.summary.servedRatio * 100) + "%" : "",
       row.summary.avgWait,
       row.summary.avgSvc,
@@ -681,6 +685,7 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
     ['Total Arrived', summary.total ?? ''],
     ['Served', summary.served ?? ''],
     ['Reneged', summary.reneged ?? ''],
+    ['Balked', summary.balked ?? ''],
     ['Completion Rate', summary.servedRatio != null ? Math.round(summary.servedRatio * 100) + '%' : ''],
     ['Avg Wait', summary.avgWait ?? ''],
     ['Avg Service', summary.avgSvc ?? ''],
@@ -694,7 +699,7 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
   sheets.push({ name: 'Summary', rows: summaryRows, colWidths: [22, 18] });
 
   // Sheet 2: Replications
-  const repRows = [['Replication', 'Seed', 'Arrived', 'Served', 'Reneged', 'Completion Rate', 'Avg Wait', 'Avg Svc', 'Avg Sojourn', 'Avg Time in System', 'Total Cost', 'Cost per Served', 'Final Time']];
+  const repRows = [['Replication', 'Seed', 'Arrived', 'Served', 'Reneged', 'Balked', 'Completion Rate', 'Avg Wait', 'Avg Svc', 'Avg Sojourn', 'Avg Time in System', 'Total Cost', 'Cost per Served', 'Final Time']];
   const resultRows = replicationResults.length
     ? replicationResults.map(p => ({
         idx: p.replicationIndex, seed: p.seed,
@@ -704,7 +709,7 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
     : results ? [{ idx: 0, seed: config.seed ?? '', s: summary, ft: results.finalTime ?? null }] : [];
   for (const r of resultRows) {
     repRows.push([
-      r.idx, r.seed, r.s.total ?? '', r.s.served ?? '', r.s.reneged ?? '',
+      r.idx, r.seed, r.s.total ?? '', r.s.served ?? '', r.s.reneged ?? '', r.s.balked ?? '',
       r.s.servedRatio != null ? Math.round(r.s.servedRatio * 100) + '%' : '',
       r.s.avgWait ?? '', r.s.avgSvc ?? '', r.s.avgSojourn ?? '',
       r.s.avgTimeInSystem ?? '', r.s.totalCost ?? '', r.s.costPerServed ?? '',
@@ -721,7 +726,7 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
       repRows.push([metric, stat.n, stat.mean, stat.lower, stat.upper, stat.halfWidth]);
     }
   }
-  sheets.push({ name: 'Replications', rows: repRows, colWidths: Array(13).fill(14) });
+  sheets.push({ name: 'Replications', rows: repRows, colWidths: Array(14).fill(14) });
 
   // Sheet 3: Entity Journeys (when present)
   const entitySummary = results?.entitySummary;

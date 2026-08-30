@@ -319,6 +319,30 @@ describe("LLM prompt builders", () => {
       expect(payload.kpis.avgWIP).toBe(3.2);
     });
 
+    it("includes balked count and a balkedNote in kpis when non-zero, distinct from renegedNote", () => {
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 20, served: 15, reneged: 2, balked: 3, avgWait: 8.2, avgSvc: 4.1, avgSojourn: 12.3 } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.kpis.balked).toBe(3);
+      expect(payload.kpis.balkedNote).toMatch(/left without joining a queue/);
+      expect(payload.kpis.renegedNote).toMatch(/abandoned the queue/);
+      // The old wording described reneged as covering "balked at a full
+      // queue" — misleading now that balked is its own tracked outcome.
+      expect(payload.kpis.renegedNote).not.toMatch(/balked at a full queue/);
+    });
+
+    it("omits balked and balkedNote from kpis when balked is 0", () => {
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 20, served: 18, reneged: 2, balked: 0, avgWait: 8.2, avgSvc: 4.1, avgSojourn: 12.3 } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.kpis.balked).toBe(0);
+      expect(payload.kpis.balkedNote).toBeUndefined();
+    });
+
     it("includes totalCost and costPerServed in kpis when non-zero", () => {
       const prompt = buildSuggestionPrompt(
         model, {},
@@ -703,6 +727,22 @@ describe("Sprint 46 — AI apply & verify", () => {
       const gaps = buildGoalGaps(model, {}, summary);
       expect(gaps[0].met).toBe(false);
       expect(gaps[0].current).toBeCloseTo(12.3);
+    });
+
+    it("resolves balked goal from aggregateStats", () => {
+      const model = { goals: [{ metric: "summary.balked", operator: "<", target: 10 }] };
+      const stats = { "summary.balked": { mean: 4, n: 5 } };
+      const gaps = buildGoalGaps(model, stats);
+      expect(gaps[0].met).toBe(true);
+      expect(gaps[0].current).toBeCloseTo(4);
+    });
+
+    it("resolves balked goal from single-run summary", () => {
+      const model = { goals: [{ metric: "summary.balked", operator: "<", target: 10 }] };
+      const summary = { balked: 15 };
+      const gaps = buildGoalGaps(model, {}, summary);
+      expect(gaps[0].met).toBe(false);
+      expect(gaps[0].current).toBeCloseTo(15);
     });
 
     it("resolves servedRatio goal from aggregateStats", () => {
