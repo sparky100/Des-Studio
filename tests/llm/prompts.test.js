@@ -884,6 +884,25 @@ Queues are overloaded and throughput is below target.
       expect(result.analysis).not.toContain('"suggestions"');
       expect(result.suggestions).toHaveLength(0);
     });
+
+    it("repairs a missing ': ' between the first key and its value (reported live bug)", () => {
+      // Reproduces a real observed LLM slip: the model emitted `"analysis` immediately
+      // followed by its markdown value, dropping the closing quote + colon + opening
+      // quote that should separate the key from the value. Without a repair, this
+      // fails every JSON.parse attempt and the raw, still-escaped JSON text (literal
+      // \n and all) is shown to the user instead of the parsed narrative.
+      const text = '{ "analysis## What Happened\\n\\nStaff utilisation stands at 62%, comfortably below the 90% goal.\\n\\n## What to Change\\n\\nNo immediate changes are required.", "suggestions": [] }';
+      const result = parseSuggestionResponse(text);
+      expect(result.analysis).toBe("## What Happened\n\nStaff utilisation stands at 62%, comfortably below the 90% goal.\n\n## What to Change\n\nNo immediate changes are required.");
+      expect(result.analysis).not.toContain('"analysis');
+      expect(result.suggestions).toHaveLength(0);
+    });
+
+    it("does not touch a well-formed 'analysis' key (no false-positive rewrite)", () => {
+      const text = '{"analysis":"Everything nominal.","suggestions":[]}';
+      const result = parseSuggestionResponse(text);
+      expect(result.analysis).toBe("Everything nominal.");
+    });
   });
 
   describe("applySuggestionPatch", () => {
@@ -1125,6 +1144,13 @@ describe("Sprint 70 — parsePlanRefinementResponse", () => {
     expect(result.analysis).toBeTruthy();
     expect(result.recommendations).toHaveLength(0);
     expect(result.infeasibleGoals).toHaveLength(0);
+  });
+
+  it("repairs a missing ': ' between the 'analysis' key and its value (same class of bug as parseSuggestionResponse)", () => {
+    const text = '```json\n{ "analysisSchedule looks tight during peak hours.", "recommendations": [], "infeasibleGoals": [] }\n```';
+    const result = parsePlanRefinementResponse(text);
+    expect(result.analysis).toBe("Schedule looks tight during peak hours.");
+    expect(result.analysis).not.toContain('"analysis');
   });
 
   it("feasible field is correctly parsed as boolean on each card", () => {
