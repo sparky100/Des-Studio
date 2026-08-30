@@ -4,6 +4,7 @@
 // throughputPerHour assumes simulation time unit is minutes: rate = served / clock * 60
 import { Handle, Position } from "../shared/xyflow.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { EXEC_CARD_HEIGHT } from "./executeLayout.js";
 
 const fmt = (value, digits = 0) =>
   Number.isFinite(value) && value !== null ? value.toFixed(digits) : "—";
@@ -40,6 +41,8 @@ export function ExecuteSinkNode({ data }) {
   return (
     <div style={{
       width: 160,
+      height: EXEC_CARD_HEIGHT,
+      overflow: "hidden",
       background: C.surface,
       border: `1.5px solid ${SINK_COLOR}44`,
       borderLeft: `4px solid ${SINK_COLOR}`,

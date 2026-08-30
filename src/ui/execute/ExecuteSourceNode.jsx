@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position } from "../shared/xyflow.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { EXEC_CARD_HEIGHT } from "./executeLayout.js";
 
 const PULSE_DURATION_MS = 500;
 
@@ -40,7 +41,8 @@ export function ExecuteSourceNode({ data }) {
   return (
     <div style={{
       width: 160,
-      minHeight: 78,
+      height: EXEC_CARD_HEIGHT,
+      overflow: "hidden",
       background: C.surface,
       border: `1.5px solid ${pulsing ? C.green : `${C.green}44`}`,
       borderLeft: `4px solid ${C.green}`,
