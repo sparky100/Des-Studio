@@ -103,8 +103,8 @@ describe('results export helpers', () => {
   it('builds CSV with the expected replication headers', () => {
     const csv = buildResultsCsv({ results: singleResult, config: { seed: 123 } });
 
-    expect(csv.split('\n')[0]).toBe('runLabel,replicationIndex,seed,arrived,served,reneged,balked,completionRate,avgWait,avgSvc,avgSojourn,avgTimeInSystem,totalCost,costPerServed,finalTime');
-    expect(csv).toContain(',0,123,5,4,1,,,2.5,1.25,3.75,,,,10');
+    expect(csv.split('\n')[0]).toBe('runLabel,replicationIndex,seed,arrived,served,reneged,balked,preempted,completionRate,avgWait,avgSvc,avgSojourn,avgTimeInSystem,totalCost,costPerServed,finalTime');
+    expect(csv).toContain(',0,123,5,4,1,,0,,2.5,1.25,3.75,,,,10');
   });
 
   it('includes one CSV row per completed replication plus aggregates', () => {
@@ -118,8 +118,8 @@ describe('results export helpers', () => {
       },
     });
 
-    expect(csv).toContain(',0,10,,2,0,,,4,2,6,,,,20');
-    expect(csv).toContain(',1,11,,3,1,,,5,3,8,,,,22');
+    expect(csv).toContain(',0,10,,2,0,,0,,4,2,6,,,,20');
+    expect(csv).toContain(',1,11,,3,1,,0,,5,3,8,,,,22');
     expect(csv).toContain('metric,n,mean,lower95,upper95,halfWidth');
     expect(csv).toContain('summary.avgWait,2,4.5,1,8,3.5');
   });
@@ -129,7 +129,24 @@ describe('results export helpers', () => {
       results: { ...singleResult, summary: { ...singleResult.summary, balked: 2 } },
       config: { seed: 123 },
     });
-    expect(csv).toContain(',0,123,5,4,1,2,,2.5,1.25,3.75,,,,10');
+    expect(csv).toContain(',0,123,5,4,1,2,0,,2.5,1.25,3.75,,,,10');
+  });
+
+  it('includes the total preempted count (summed across entity types) when present on summary', () => {
+    const csv = buildResultsCsv({
+      results: {
+        ...singleResult,
+        summary: {
+          ...singleResult.summary,
+          preemptCounts: {
+            RepairJob: { total: 3, byReason: { PREEMPT: 3 } },
+            Patient: { total: 2, byReason: { FAILURE: 2 } },
+          },
+        },
+      },
+      config: { seed: 123 },
+    });
+    expect(csv).toContain(',0,123,5,4,1,,5,,2.5,1.25,3.75,,,,10');
   });
 });
 

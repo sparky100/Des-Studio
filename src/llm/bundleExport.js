@@ -442,6 +442,38 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
   }
 
+  // Activity throughput — how many times each activity actually completed
+  if (kpis.activityCounts && Object.keys(kpis.activityCounts).length) {
+    lines.push('### Activity Throughput');
+    lines.push('');
+    const completionsLabel = isMultiRepBundle ? `Avg completions / run (÷${nReps})` : 'Completions';
+    lines.push(`| Activity | ${completionsLabel} |`);
+    lines.push(`|----------|${'-'.repeat(completionsLabel.length + 2)}|`);
+    const sortedActivities = Object.values(kpis.activityCounts).sort((a, b) => b.count - a.count);
+    for (const entry of sortedActivities) {
+      const display = isMultiRepBundle ? +(entry.count / nReps).toFixed(1) : entry.count;
+      lines.push(`| ${entry.name} | ${display} |`);
+    }
+    lines.push('');
+  }
+
+  // Preemptions — entities interrupted mid-service (PREEMPT/FAIL macros, an
+  // automatic MTBF/MTTR breakdown, or a shift-close capacity reduction).
+  if (kpis.preemptCounts && Object.keys(kpis.preemptCounts).length) {
+    lines.push('### Preemptions');
+    lines.push('');
+    lines.push('Entities whose service was interrupted mid-way — by a PREEMPT macro (bumped for a higher priority), a FAIL macro, an automatic breakdown (FAILURE), or a shift-close capacity reduction (SHIFT_CHANGE).');
+    lines.push('');
+    lines.push('| Entity type | Total | Reason breakdown |');
+    lines.push('|-------------|-------|-------------------|');
+    const sortedPreempts = Object.entries(kpis.preemptCounts).sort(([, a], [, b]) => (b.total || 0) - (a.total || 0));
+    for (const [type, acc] of sortedPreempts) {
+      const breakdown = Object.entries(acc.byReason || {}).filter(([, n]) => n > 0).map(([r, n]) => `${n} ${r}`).join(', ');
+      lines.push(`| ${type} | ${acc.total || 0} | ${breakdown} |`);
+    }
+    lines.push('');
+  }
+
   // Cross-section journey paths — shows how entities flowed between sections
   const sectionJourneys = results?.summary?.journeys;
   if (sectionJourneys && Object.keys(sectionJourneys).length) {

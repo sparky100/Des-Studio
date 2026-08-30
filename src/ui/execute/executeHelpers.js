@@ -337,6 +337,34 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       }]))
     : undefined;
 
+  // Aggregate preemption counts across replications, summed (not averaged) —
+  // same convention as served/reneged/balked above, keyed by entity type.
+  const preemptAcc = {};
+  for (const s of summaries) {
+    if (!s.preemptCounts) continue;
+    for (const [type, acc] of Object.entries(s.preemptCounts)) {
+      if (!preemptAcc[type]) preemptAcc[type] = { total: 0, byReason: {} };
+      preemptAcc[type].total += acc.total || 0;
+      for (const [reason, n] of Object.entries(acc.byReason || {})) {
+        preemptAcc[type].byReason[reason] = (preemptAcc[type].byReason[reason] || 0) + n;
+      }
+    }
+  }
+  const preemptCounts = Object.keys(preemptAcc).length ? preemptAcc : undefined;
+
+  // Aggregate activity throughput (C-event fire counts) across replications,
+  // summed like served/reneged/balked. Labels are static per model, so the
+  // first replication to report an activity's label wins.
+  const activityAcc = {};
+  for (const s of summaries) {
+    if (!s.activityCounts) continue;
+    for (const [id, entry] of Object.entries(s.activityCounts)) {
+      if (!activityAcc[id]) activityAcc[id] = { name: entry.name, count: 0 };
+      activityAcc[id].count += entry.count || 0;
+    }
+  }
+  const activityCounts = Object.keys(activityAcc).length ? activityAcc : undefined;
+
   // Aggregate waitDist across all replications by pooling raw values per queue
   const waitDistAcc = {};
   for (const payload of replicationPayloads) {
@@ -501,6 +529,8 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       outcomes: Object.keys(outcomeAcc).length ? outcomeAcc : undefined,
       perResource,
       containerLevels,
+      preemptCounts,
+      activityCounts,
       sections,
       journeys,
       queueJourneys,
@@ -607,8 +637,16 @@ export function buildResultsExportPayload({
   };
 }
 
+// Sum of preemptCounts[*].total — CSV is one-row-per-replication, so a full
+// per-entity-type breakdown doesn't fit; that detail lives in the XLSX
+// "Preemptions" sheet and the HTML/Markdown reports instead.
+const preemptedTotal = (summary = {}) =>
+  summary.preemptCounts
+    ? Object.values(summary.preemptCounts).reduce((sum, acc) => sum + (acc.total || 0), 0)
+    : 0;
+
 export function buildResultsCsv({ results, replicationResults = [], aggregateStats = {}, config = {} } = {}) {
-  const rows = [["runLabel", "replicationIndex", "seed", "arrived", "served", "reneged", "balked", "completionRate", "avgWait", "avgSvc", "avgSojourn", "avgTimeInSystem", "totalCost", "costPerServed", "finalTime"]];
+  const rows = [["runLabel", "replicationIndex", "seed", "arrived", "served", "reneged", "balked", "preempted", "completionRate", "avgWait", "avgSvc", "avgSojourn", "avgTimeInSystem", "totalCost", "costPerServed", "finalTime"]];
 
   const resultRows = replicationResults.length
     ? replicationResults.map(payload => ({
@@ -637,6 +675,7 @@ export function buildResultsCsv({ results, replicationResults = [], aggregateSta
       row.summary.served,
       row.summary.reneged,
       row.summary.balked,
+      preemptedTotal(row.summary),
       row.summary.servedRatio != null ? Math.round(row.summary.servedRatio * 100) + "%" : "",
       row.summary.avgWait,
       row.summary.avgSvc,
@@ -686,6 +725,7 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
     ['Served', summary.served ?? ''],
     ['Reneged', summary.reneged ?? ''],
     ['Balked', summary.balked ?? ''],
+    ['Preempted', preemptedTotal(summary) || ''],
     ['Completion Rate', summary.servedRatio != null ? Math.round(summary.servedRatio * 100) + '%' : ''],
     ['Avg Wait', summary.avgWait ?? ''],
     ['Avg Service', summary.avgSvc ?? ''],
@@ -699,7 +739,7 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
   sheets.push({ name: 'Summary', rows: summaryRows, colWidths: [22, 18] });
 
   // Sheet 2: Replications
-  const repRows = [['Replication', 'Seed', 'Arrived', 'Served', 'Reneged', 'Balked', 'Completion Rate', 'Avg Wait', 'Avg Svc', 'Avg Sojourn', 'Avg Time in System', 'Total Cost', 'Cost per Served', 'Final Time']];
+  const repRows = [['Replication', 'Seed', 'Arrived', 'Served', 'Reneged', 'Balked', 'Preempted', 'Completion Rate', 'Avg Wait', 'Avg Svc', 'Avg Sojourn', 'Avg Time in System', 'Total Cost', 'Cost per Served', 'Final Time']];
   const resultRows = replicationResults.length
     ? replicationResults.map(p => ({
         idx: p.replicationIndex, seed: p.seed,
@@ -709,7 +749,7 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
     : results ? [{ idx: 0, seed: config.seed ?? '', s: summary, ft: results.finalTime ?? null }] : [];
   for (const r of resultRows) {
     repRows.push([
-      r.idx, r.seed, r.s.total ?? '', r.s.served ?? '', r.s.reneged ?? '', r.s.balked ?? '',
+      r.idx, r.seed, r.s.total ?? '', r.s.served ?? '', r.s.reneged ?? '', r.s.balked ?? '', preemptedTotal(r.s) || '',
       r.s.servedRatio != null ? Math.round(r.s.servedRatio * 100) + '%' : '',
       r.s.avgWait ?? '', r.s.avgSvc ?? '', r.s.avgSojourn ?? '',
       r.s.avgTimeInSystem ?? '', r.s.totalCost ?? '', r.s.costPerServed ?? '',
@@ -726,7 +766,7 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
       repRows.push([metric, stat.n, stat.mean, stat.lower, stat.upper, stat.halfWidth]);
     }
   }
-  sheets.push({ name: 'Replications', rows: repRows, colWidths: Array(14).fill(14) });
+  sheets.push({ name: 'Replications', rows: repRows, colWidths: Array(15).fill(14) });
 
   // Sheet 3: Entity Journeys (when present)
   const entitySummary = results?.entitySummary;
@@ -788,6 +828,33 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
   }
   if (rejectionRows.length > 1) {
     sheets.push({ name: 'Queue Rejections', rows: rejectionRows, colWidths: [18, 10, 10] });
+  }
+
+  // Sheet: Preemptions (entities interrupted mid-service — PREEMPT/FAIL macros,
+  // an automatic MTBF/MTTR breakdown, or a shift-close capacity reduction —
+  // see preemptCustomer()'s `reason` tags in src/engine/entities.js)
+  const preemptCounts = summary.preemptCounts || {};
+  const preemptRows = [['Entity Type', 'Total', 'Reason', 'Count']];
+  for (const [type, acc] of Object.entries(preemptCounts)) {
+    let first = true;
+    for (const [reason, n] of Object.entries(acc.byReason || {})) {
+      if (!n) continue;
+      preemptRows.push([first ? type : '', first ? (acc.total ?? '') : '', reason, n]);
+      first = false;
+    }
+  }
+  if (preemptRows.length > 1) {
+    sheets.push({ name: 'Preemptions', rows: preemptRows, colWidths: [18, 10, 16, 10] });
+  }
+
+  // Sheet: Activity Throughput (how many times each activity/C-event completed)
+  const activityCounts = summary.activityCounts || {};
+  const activityRows = [['Activity', 'Completions']];
+  for (const entry of Object.values(activityCounts)) {
+    activityRows.push([entry.name ?? '', entry.count ?? 0]);
+  }
+  if (activityRows.length > 1) {
+    sheets.push({ name: 'Activity Throughput', rows: activityRows, colWidths: [24, 14] });
   }
 
   // Write to buffer and trigger download

@@ -1213,7 +1213,7 @@ const cycleLog = [];
                 fel = fel.filter(entry =>
                   !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
                 );
-                preemptCustomer(cust, srv, clock, makeCtx());
+                preemptCustomer(cust, srv, clock, makeCtx(), "FAILURE");
               }
             }
             srv.status = "failed";
@@ -1254,7 +1254,7 @@ const cycleLog = [];
                 fel = fel.filter(entry =>
                   !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
                 );
-                preemptCustomer(cust, srv, clock, makeCtx());
+                preemptCustomer(cust, srv, clock, makeCtx(), "FAILURE");
               }
             }
             srv.status = "failed";
@@ -2234,6 +2234,18 @@ const cycleLog = [];
       queueJourneys[path] = (queueJourneys[path] || 0) + 1;
     }
 
+    // Activity throughput: how many times each activity (C-event) actually
+    // completed. _eventCounts already tracks every B/C-event firing (see
+    // fireBEvent/fireCEvent in phases.js) but previously only survived to the
+    // end of a run on the ephemeral `snap`, never in the persisted summary —
+    // scope this view to C-events ("activities"), since that's what's asked
+    // for; B-event/arrival counts already have partial coverage elsewhere.
+    /** @type {Record<string, any>} */
+    const activityCounts = {};
+    for (const ev of runtimeModel.cEvents || []) {
+      if (_eventCounts[ev.id]) activityCounts[ev.id] = { name: ev.name || ev.id, count: _eventCounts[ev.id] };
+    }
+
     return {
       total:             customers.length,
       served:            served.length,
@@ -2265,6 +2277,8 @@ const cycleLog = [];
       perResource:       Object.keys(perResource).length   ? perResource   : undefined,
       perQueue:          Object.keys(_perQueue).length     ? { ..._perQueue } : undefined,
       containerLevels:   Object.keys(containerLevels).length ? containerLevels : undefined,
+      preemptCounts:     Object.keys(state.__preemptCounts || {}).length ? { ...state.__preemptCounts } : undefined,
+      activityCounts:    Object.keys(activityCounts).length ? activityCounts : undefined,
       sections:          Object.keys(sectionStats).length  ? sectionStats  : undefined,
       journeys:          Object.keys(journeys).length      ? journeys      : undefined,
       queueJourneys:     Object.keys(queueJourneys).length ? queueJourneys : undefined,

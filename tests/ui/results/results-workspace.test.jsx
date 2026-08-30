@@ -300,6 +300,55 @@ describe("ResultsWorkspace", () => {
     expect(screen.queryByText("QUEUE REJECTIONS")).not.toBeInTheDocument();
   });
 
+  test("renders an ACTIVITY THROUGHPUT table sorted by completion count when summary.activityCounts is present", () => {
+    const activityResults = {
+      ...results,
+      summary: {
+        activityCounts: {
+          repair: { name: "Repair Job", count: 4 },
+          inspect: { name: "Inspect", count: 12 },
+        },
+      },
+    };
+
+    render(<ResultsWorkspace results={activityResults} model={model} />);
+
+    const heading = screen.getByText("ACTIVITY THROUGHPUT");
+    const table = heading.nextElementSibling.querySelector("table");
+    const rows = within(table).getAllByRole("row").slice(1); // drop header row
+    expect(within(rows[0]).getByText("Inspect")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("12")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Repair Job")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("4")).toBeInTheDocument();
+  });
+
+  test("does not render ACTIVITY THROUGHPUT when summary.activityCounts is absent", () => {
+    render(<ResultsWorkspace results={results} model={model} />);
+    expect(screen.queryByText("ACTIVITY THROUGHPUT")).not.toBeInTheDocument();
+  });
+
+  test("renders an INTERRUPTIONS card per entity type with a reason breakdown when summary.preemptCounts is present — the user's own 'how many times was a RepairJob preempted' case", () => {
+    const preemptResults = {
+      ...results,
+      summary: {
+        preemptCounts: { RepairJob: { total: 4, byReason: { PREEMPT: 3, FAILURE: 1 } } },
+      },
+    };
+
+    render(<ResultsWorkspace results={preemptResults} model={model} />);
+
+    const heading = screen.getByText("INTERRUPTIONS");
+    const card = heading.nextElementSibling;
+    expect(within(card).getByText("REPAIRJOB")).toBeInTheDocument();
+    expect(within(card).getByText("4")).toBeInTheDocument();
+    expect(within(card).getByText("3 preempted · 1 broke down")).toBeInTheDocument();
+  });
+
+  test("does not render INTERRUPTIONS when summary.preemptCounts is absent", () => {
+    render(<ResultsWorkspace results={results} model={model} />);
+    expect(screen.queryByText("INTERRUPTIONS")).not.toBeInTheDocument();
+  });
+
   test("renders a SKILL UTILISATION card per resource type when perResource has skillUtil", () => {
     const skillResults = {
       ...results,

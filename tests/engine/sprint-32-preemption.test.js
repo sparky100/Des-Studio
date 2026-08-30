@@ -114,6 +114,30 @@ describe('G01 — Resource Preemption', () => {
     expect(preemptedCustomer.sojournTime).toBeCloseTo(preemptedCustomer.completionTime - preemptedCustomer.arrivalTime, 4);
   });
 
+  test('PREEMPT increments summary.preemptCounts by entity type and reason', () => {
+    const model = makeHospitalModel();
+    const engine = buildEngine(model, 42, 0, 50);
+    const result = engine.runAll();
+
+    const preemptLog = result.log.filter(e => e.message?.includes('PREEMPT') && e.message?.includes('interrupted'));
+    expect(preemptLog.length).toBeGreaterThan(0);
+    expect(result.summary.preemptCounts).toBeDefined();
+    expect(result.summary.preemptCounts.Patient.total).toBe(preemptLog.length);
+    expect(result.summary.preemptCounts.Patient.byReason.PREEMPT).toBe(preemptLog.length);
+    expect(result.summary.preemptCounts.Patient.byReason.FAIL).toBeUndefined();
+  });
+
+  test('summary.activityCounts reports how many times each activity (C-event) fired', () => {
+    const model = makeHospitalModel();
+    const engine = buildEngine(model, 42, 0, 50);
+    const result = engine.runAll();
+
+    expect(result.summary.activityCounts).toBeDefined();
+    expect(result.summary.activityCounts.assign).toBeDefined();
+    expect(result.summary.activityCounts.assign.name).toBe('Start Service');
+    expect(result.summary.activityCounts.assign.count).toBeGreaterThan(0);
+  });
+
   test('PREEMPT with no busy server logs a message', () => {
     const model = {
       entityTypes: [
@@ -175,6 +199,55 @@ describe('G04 — Resource Breakdowns / Failures', () => {
 
     const failureLog = result.log.filter(e => e.message?.includes('FAILURE'));
     expect(failureLog.length).toBeGreaterThan(0);
+  });
+
+  test('an automatic MTBF/MTTR breakdown is counted under byReason.FAILURE, not PREEMPT', () => {
+    // makeFactoryModel's Machine has an mtbf/mttr, so a mid-service breakdown
+    // interrupts a Part via the same preemptCustomer() choke point as PREEMPT —
+    // but tagged "FAILURE" (automatic), distinct from a modeller's PREEMPT/FAIL
+    // macro (see preemptCustomer's reason param and its 4 call sites).
+    const model = { ...makeFactoryModel() };
+    model.entityTypes = model.entityTypes.map(et =>
+      et.name === 'Machine' ? { ...et, mtbfDistParams: { value: '6' } } : et
+    );
+    const engine = buildEngine(model, 42, 0, 30);
+    const result = engine.runAll();
+
+    expect(result.summary.preemptCounts).toBeDefined();
+    expect(result.summary.preemptCounts.Part.byReason.FAILURE).toBeGreaterThan(0);
+    expect(result.summary.preemptCounts.Part.byReason.PREEMPT).toBeUndefined();
+    expect(result.summary.preemptCounts.Part.total).toBe(result.summary.preemptCounts.Part.byReason.FAILURE);
+  });
+
+  test('the FAIL() macro is counted under byReason.FAIL, distinct from PREEMPT and FAILURE', () => {
+    const model = {
+      entityTypes: [
+        { id: 'Patient', name: 'Patient', role: 'customer', attrDefs: [] },
+        { id: 'Doctor', name: 'Doctor', role: 'server', count: '1', attrDefs: [] },
+      ],
+      queues: [{ id: 'q1', name: 'Waiting Room', customerType: 'Patient', discipline: 'FIFO' }],
+      bEvents: [
+        { id: 'arrival', name: 'Patient Arrives', scheduledTime: '0', effect: 'ARRIVE(Patient, Waiting Room)',
+          schedules: [{ eventId: 'arrival', dist: 'fixed', distParams: { value: '2' } }] },
+        { id: 'complete', name: 'Service Complete', scheduledTime: '9999', effect: 'COMPLETE()', schedules: [] },
+        { id: 'fail', name: 'Manual Fail', scheduledTime: '5', effect: 'FAIL(Doctor)', schedules: [] },
+      ],
+      cEvents: [
+        { id: 'assign', name: 'Start Service', priority: 1,
+          condition: 'queue(Waiting Room).length > 0 AND idle(Doctor).count > 0',
+          effect: 'ASSIGN(Waiting Room, Doctor)',
+          cSchedules: [{ eventId: 'complete', dist: 'fixed', distParams: { value: '10' }, useEntityCtx: true }] },
+      ],
+      stateVariables: [],
+    };
+    const engine = buildEngine(model, 42, 0, 20);
+    const result = engine.runAll();
+
+    const failLog = result.log.filter(e => e.message?.includes('FAIL:') && e.message?.includes('re-queued'));
+    expect(failLog.length).toBeGreaterThan(0);
+    expect(result.summary.preemptCounts.Patient.byReason.FAIL).toBe(failLog.length);
+    expect(result.summary.preemptCounts.Patient.byReason.PREEMPT).toBeUndefined();
+    expect(result.summary.preemptCounts.Patient.byReason.FAILURE).toBeUndefined();
   });
 
   test('the exact customer displaced by a server failure is later re-served to completion', () => {
@@ -264,6 +337,37 @@ describe('G04 — Resource Breakdowns / Failures', () => {
     expect(batchMachine.failureCount).toBeCloseTo((machine1.failureCount + machine2.failureCount) / 2, 4);
     expect(batchMachine.totalDowntime).toBeCloseTo((machine1.totalDowntime + machine2.totalDowntime) / 2, 4);
     expect(batchMachine.availability).toBeCloseTo((machine1.availability + machine2.availability) / 2, 4);
+  });
+
+  test('makeBatchResult sums preemptCounts and activityCounts across replications (sum, not mean)', () => {
+    const model = makeHospitalModel();
+    const result1 = buildEngine(model, 1, 0, 50).runAll();
+    const result2 = buildEngine(model, 2, 0, 50).runAll();
+
+    const p1 = result1.summary.preemptCounts.Patient.total;
+    const p2 = result2.summary.preemptCounts.Patient.total;
+    const a1 = result1.summary.activityCounts.assign.count;
+    const a2 = result2.summary.activityCounts.assign.count;
+    expect(p1).toBeGreaterThan(0);
+    expect(a1).toBeGreaterThan(0);
+
+    const batch = makeBatchResult([{ result: result1 }, { result: result2 }], {}, 50, 0);
+    expect(batch.summary.preemptCounts.Patient.total).toBe(p1 + p2);
+    expect(batch.summary.preemptCounts.Patient.byReason.PREEMPT).toBe(p1 + p2);
+    expect(batch.summary.activityCounts.assign.count).toBe(a1 + a2);
+    expect(batch.summary.activityCounts.assign.name).toBe('Start Service');
+  });
+
+  test('makeBatchResult omits preemptCounts/activityCounts when no replication reports them', () => {
+    const model = makeFactoryModel();
+    const result = buildEngine(model, 1, 0, 5).runAll(); // too short to trigger a failure
+    const batch = makeBatchResult([{ result }], {}, 5, 0);
+    expect(batch.summary.preemptCounts).toBeUndefined();
+    // activityCounts may legitimately be present (assign fires even without a
+    // failure) — only assert it doesn't throw and stays a plain object if set.
+    if (batch.summary.activityCounts) {
+      expect(typeof batch.summary.activityCounts).toBe('object');
+    }
   });
 
   test('repairServers flushes the pre-failure starvation interval instead of discarding it', () => {
