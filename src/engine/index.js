@@ -897,6 +897,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       clock:    clock || 0,
       served:   state.__served  || 0,
       reneged:  state.__reneged || 0,
+      balked:   state.__balked  || 0,
       entities: entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
       scalars:  Object.fromEntries(
         Object.entries(state).filter(([k]) => !k.startsWith("__"))

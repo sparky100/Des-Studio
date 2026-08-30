@@ -126,19 +126,19 @@ function StageKpisTable({ snap, model }) {
   const outcomes = {};
   for (const entity of entities) {
     if (entity.role === "server") continue;
-    if (entity.status !== "done" && entity.status !== "reneged") continue;
+    if (entity.status !== "done" && entity.status !== "reneged" && entity.status !== "balked") continue;
     const raw = entity.outcome;
     const outcome = raw?.routeId ? raw : {
-      routeId:    entity.status === "reneged" ? "status:reneged" : "status:done",
-      routeLabel: entity.status === "reneged" ? "Reneged" : "Completed",
-      status:     entity.status === "reneged" ? "reneged" : "completed",
+      routeId:    entity.status === "reneged" ? "status:reneged" : entity.status === "balked" ? "status:balked" : "status:done",
+      routeLabel: entity.status === "reneged" ? "Reneged" : entity.status === "balked" ? "Balked" : "Completed",
+      status:     entity.status === "reneged" ? "reneged" : entity.status === "balked" ? "balked" : "completed",
       endedBy:    "status",
     };
     if (!outcomes[outcome.routeId]) {
       outcomes[outcome.routeId] = {
         routeId:    outcome.routeId,
         routeLabel: outcome.routeLabel || outcome.routeId,
-        status:     outcome.status || (entity.status === "reneged" ? "reneged" : "completed"),
+        status:     outcome.status || (entity.status === "reneged" ? "reneged" : entity.status === "balked" ? "balked" : "completed"),
         endedBy:    outcome.endedBy || "unknown",
         count: 0,
         _waitSum: 0, _waitN: 0,
@@ -152,7 +152,7 @@ function StageKpisTable({ snap, model }) {
       outcomes[outcome.routeId]._waitSum += wait;
       outcomes[outcome.routeId]._waitN++;
     }
-    const endT = entity.completionTime ?? entity.renegeTime ?? null;
+    const endT = entity.completionTime ?? entity.renegeTime ?? entity.balkTime ?? null;
     const sojourn = endT != null && entity.arrivalTime != null ? endT - entity.arrivalTime : null;
     if (Number.isFinite(sojourn) && sojourn >= 0) {
       outcomes[outcome.routeId]._sojournSum += sojourn;
@@ -175,11 +175,12 @@ function StageKpisTable({ snap, model }) {
     if (entity.role === "server" || !entity.stages?.length) continue;
     const parts = entity.stages.map(s => s.queueName).filter(Boolean);
     if (!parts.length) continue;
-    const isDone = entity.status === "done" || entity.status === "reneged";
+    const isDone = entity.status === "done" || entity.status === "reneged" || entity.status === "balked";
     let sink;
     if (!isDone)                          sink = "active…";
     else if (entity.outcome?.routeLabel)  sink = entity.outcome.routeLabel;
     else if (entity.status === "reneged") sink = "Reneged";
+    else if (entity.status === "balked")  sink = "Balked";
     else                                  sink = null;
     const path = sink != null ? [...parts, sink].join("→") : parts.join("→");
     queueJourneys[path] = (queueJourneys[path] || 0) + 1;
@@ -204,7 +205,7 @@ function StageKpisTable({ snap, model }) {
     }
     for (const entity of entities) {
       if (entity.role === "server" || !entity.stages?.length) continue;
-      if (entity.status !== "done" && entity.status !== "reneged") continue;
+      if (entity.status !== "done" && entity.status !== "reneged" && entity.status !== "balked") continue;
       for (const sec of modelSections) {
         let sojourn = 0, didVisit = false;
         for (const stage of entity.stages) {
@@ -281,6 +282,7 @@ function StageKpisTable({ snap, model }) {
                     {metricCard("Max wait", fmt(maxWait, 1))}
                     {metricCard("Arrivals", inQueue.length)}
                     {metricCard("Reneged", snap.reneged || 0, C.reneged)}
+                    {metricCard("Balked", snap.balked || 0, C.balked)}
                   </div>
                 </div>
               );
@@ -333,7 +335,7 @@ function StageKpisTable({ snap, model }) {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {outcomeRows.map(outcome => {
-              const outcomeColor = outcome.status === "reneged" ? C.reneged : C.served;
+              const outcomeColor = outcome.status === "reneged" ? C.reneged : outcome.status === "balked" ? C.balked : C.served;
               const hasWait    = Number.isFinite(outcome.avgWait)    && outcome.avgWait    > 0;
               const hasSojourn = Number.isFinite(outcome.avgSojourn) && outcome.avgSojourn > 0;
               return (
@@ -348,7 +350,7 @@ function StageKpisTable({ snap, model }) {
                     {metricCard("Source", outcome.endedBy || "—")}
                   </div>
                   <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
-                    {outcome.status === "reneged" ? "Left before completion." : "Completed on this route."}
+                    {outcome.status === "reneged" ? "Left before completion." : outcome.status === "balked" ? "Left without being served." : "Completed on this route."}
                   </div>
                 </div>
               );
@@ -842,7 +844,7 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
     return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>No snapshot yet.</div>;
   }
   const entities = (snap.entities || [])
-    .filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged");
+    .filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged" && e.status !== "balked");
 
   const displayed = entities.filter(e => {
     if (filterStatus !== "all" && e.status !== filterStatus) return false;

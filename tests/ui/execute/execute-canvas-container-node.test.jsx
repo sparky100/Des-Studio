@@ -85,3 +85,15 @@ describe("ExecuteCanvas — container node live level", () => {
     expect(canvas.getByText("7")).toBeInTheDocument();
   });
 });
+
+describe("ExecuteCanvas — balked KPI slot", () => {
+  test("a 'balked' KPI slot counts balked entities, matching the served/reneged slots' own precedence pattern", () => {
+    const balkedEntities = [
+      { id: 1, role: "customer", type: "Customer", status: "balked" },
+      { id: 2, role: "customer", type: "Customer", status: "balked" },
+    ];
+    render(<ExecuteCanvas model={containerModel} snap={makeSnap({ entities: balkedEntities, balked: 2 })} kpiSlots={["balked"]} />);
+    expect(screen.getByText("BALKED TOTAL")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+  });
+});
