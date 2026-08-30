@@ -47,7 +47,7 @@ describe("detectRoutingEvents — arrival and seize (unchanged behaviour)", () =
     const prevSnap = { entities: [] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "waiting", queue: "Triage Queue" }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
 
     const arrivalEdge = findEdge(graph, e => e.source === "arrival" && e.to === "queue:triage-q");
     expect(events).toEqual([{ edgeId: arrivalEdge.id, entityType: "Patient" }]);
@@ -58,7 +58,7 @@ describe("detectRoutingEvents — arrival and seize (unchanged behaviour)", () =
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "waiting", queue: "Triage Queue" }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue" }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
 
     const conditionEdge = findEdge(graph, e => e.source === "condition" && e.to === "activity:start-triage");
     expect(events).toEqual([{ edgeId: conditionEdge.id, entityType: "Patient" }]);
@@ -72,7 +72,7 @@ describe("detectRoutingEvents — routing hops (the previously-missing case)", (
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue" }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "waiting", queue: "Consultant Queue" }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
 
     const routingEdge = findEdge(graph, e =>
       e.source === "routing" && e.from === "activity:start-triage" && e.to === "queue:consult-q");
@@ -96,7 +96,7 @@ describe("detectRoutingEvents — routing hops (the previously-missing case)", (
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue" }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "waiting", queue: "ICU Queue" }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
 
     const icuEdge = findEdge(graph, e =>
       e.source === "routing" && e.from === "activity:start-triage" && e.to === "queue:icu-q");
@@ -121,7 +121,7 @@ describe("detectRoutingEvents — routing hops (the previously-missing case)", (
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue" }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "waiting", queue: "ICU Queue" }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
 
     const icuEdge = findEdge(graph, e =>
       e.source === "routing" && e.from === "activity:start-triage" && e.to === "queue:icu-q");
@@ -141,7 +141,7 @@ describe("detectRoutingEvents — routing hops (the previously-missing case)", (
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue" }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "done" }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
 
     const exitEdge = findEdge(graph, e => e.source === "terminal" && e.from === "activity:start-triage");
     expect(events).toEqual([{ edgeId: exitEdge.id, entityType: "Patient" }]);
@@ -190,7 +190,7 @@ describe("detectRoutingEvents — completion is scoped to the entity's own activ
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Queue B" }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "done" }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
 
     const terminalB = findEdge(graph, e => e.source === "terminal" && e.from === "activity:serveB");
     const terminalA = findEdge(graph, e => e.source === "terminal" && e.from === "activity:serveA");
@@ -198,20 +198,39 @@ describe("detectRoutingEvents — completion is scoped to the entity's own activ
     expect(terminalB.id).not.toBe(terminalA.id);
   });
 
-  test("an entity reneging directly out of a queue (never entering an activity) animates nothing", () => {
+  test("an entity reneging directly out of a queue (never entering an activity) animates no edge token, but pulses that queue", () => {
     const graph = deriveGraphFromModel(twoStageClinicModel);
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "waiting", queue: "Triage Queue" }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "reneged" }] };
 
-    expect(detectRoutingEvents(prevSnap, currSnap, graph)).toEqual([]);
+    const { events, queuePulses } = detectRoutingEvents(prevSnap, currSnap, graph);
+    expect(events).toEqual([]);
+    expect(queuePulses).toEqual({ "Triage Queue": { status: "reneged", key: 1 } });
   });
 
-  test("an entity balking directly out of a queue (never entering an activity) animates nothing", () => {
+  test("an entity balking directly out of a queue (never entering an activity) animates no edge token, but pulses that queue", () => {
     const graph = deriveGraphFromModel(twoStageClinicModel);
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "waiting", queue: "Triage Queue" }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "balked" }] };
 
-    expect(detectRoutingEvents(prevSnap, currSnap, graph)).toEqual([]);
+    const { events, queuePulses } = detectRoutingEvents(prevSnap, currSnap, graph);
+    expect(events).toEqual([]);
+    expect(queuePulses).toEqual({ "Triage Queue": { status: "balked", key: 1 } });
+  });
+
+  test("a queue pulse picks the highest entity id when more than one entity leaves the same queue in one diff tick", () => {
+    const graph = deriveGraphFromModel(twoStageClinicModel);
+    const prevSnap = { entities: [
+      { id: 1, type: "Patient", role: "customer", status: "waiting", queue: "Triage Queue" },
+      { id: 2, type: "Patient", role: "customer", status: "waiting", queue: "Triage Queue" },
+    ] };
+    const currSnap = { entities: [
+      { id: 1, type: "Patient", role: "customer", status: "balked" },
+      { id: 2, type: "Patient", role: "customer", status: "reneged" },
+    ] };
+
+    const { queuePulses } = detectRoutingEvents(prevSnap, currSnap, graph);
+    expect(queuePulses).toEqual({ "Triage Queue": { status: "reneged", key: 2 } });
   });
 
   test("an entity balking after leaving an activity animates the terminal edge, exactly like done/reneged", () => {
@@ -256,9 +275,57 @@ describe("detectRoutingEvents — completion is scoped to the entity's own activ
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Queue B" }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "balked" }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
+    const terminalB = findEdge(graph, e => e.source === "terminal" && e.from === "activity:serveB");
+    // outcomeStatus lets the caller color this token differently from a
+    // normal (done) completion — see the color-override logic in ExecuteCanvas.
+    expect(events).toEqual([{ edgeId: terminalB.id, entityType: "Patient", outcomeStatus: "balked" }]);
+  });
+
+  test("a done completion has no outcomeStatus (colored by entity type, same as before)", () => {
+    // Same two-chain fixture, status "done" instead of "balked" — confirms
+    // outcomeStatus is only set for reneged/balked, not every terminal fire.
+    const model = {
+      entityTypes: [
+        { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "clerkA", name: "Clerk A", role: "server", count: 1, attrDefs: [] },
+        { id: "clerkB", name: "Clerk B", role: "server", count: 1, attrDefs: [] },
+      ],
+      queues: [
+        { id: "qa", name: "Queue A", customerType: "Patient", discipline: "FIFO" },
+        { id: "qb", name: "Queue B", customerType: "Patient", discipline: "FIFO" },
+      ],
+      stateVariables: [],
+      bEvents: [
+        { id: "arriveA", name: "Arrival A", scheduledTime: "0", effect: "ARRIVE(Patient, Queue A)", schedules: [] },
+        { id: "arriveB", name: "Arrival B", scheduledTime: "0", effect: "ARRIVE(Patient, Queue B)", schedules: [] },
+        { id: "completeA", name: "Complete A", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+        { id: "completeB", name: "Complete B", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+      ],
+      cEvents: [
+        {
+          id: "serveA", name: "Serve A", priority: 1,
+          condition: "queue(Queue A).length > 0 AND idle(Clerk A).count > 0",
+          effect: "ASSIGN(Queue A, Clerk A)",
+          cSchedules: [{ eventId: "completeA", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+        },
+        {
+          id: "serveB", name: "Serve B", priority: 2,
+          condition: "queue(Queue B).length > 0 AND idle(Clerk B).count > 0",
+          effect: "ASSIGN(Queue B, Clerk B)",
+          cSchedules: [{ eventId: "completeB", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+        },
+      ],
+    };
+    const graph = deriveGraphFromModel(model);
+
+    const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Queue B" }] };
+    const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "done" }] };
+
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
     const terminalB = findEdge(graph, e => e.source === "terminal" && e.from === "activity:serveB");
     expect(events).toEqual([{ edgeId: terminalB.id, entityType: "Patient" }]);
+    expect(events[0].outcomeStatus).toBeUndefined();
   });
 });
 
@@ -271,7 +338,7 @@ describe("detectRoutingEvents — same-cycle re-seize (the states a real run act
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue", serviceStart: 2 }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Consultant Queue", serviceStart: 7 }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
 
     const routingEdge = findEdge(graph, e =>
       e.source === "routing" && e.from === "activity:start-triage" && e.to === "queue:consult-q");
@@ -288,7 +355,7 @@ describe("detectRoutingEvents — same-cycle re-seize (the states a real run act
     const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue", serviceStart: 2 }] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue", serviceStart: 9 }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
 
     // No loop edge exists in this fixture, but the re-seize into the same
     // queue's activity must still animate the condition edge.
@@ -300,7 +367,7 @@ describe("detectRoutingEvents — same-cycle re-seize (the states a real run act
   test("an unchanged active entity (still mid-service) animates nothing", () => {
     const graph = deriveGraphFromModel(twoStageClinicModel);
     const entity = { id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue", serviceStart: 2 };
-    expect(detectRoutingEvents({ entities: [entity] }, { entities: [{ ...entity }] }, graph)).toEqual([]);
+    expect(detectRoutingEvents({ entities: [entity] }, { entities: [{ ...entity }] }, graph).events).toEqual([]);
   });
 
   test("a new entity seized in its arrival cycle animates the arrival AND the seize", () => {
@@ -308,7 +375,7 @@ describe("detectRoutingEvents — same-cycle re-seize (the states a real run act
     const prevSnap = { entities: [] };
     const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Triage Queue", serviceStart: 0 }] };
 
-    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const { events } = detectRoutingEvents(prevSnap, currSnap, graph);
 
     const arrivalEdge = findEdge(graph, e => e.source === "arrival" && e.to === "queue:triage-q");
     const seizeEdge = findEdge(graph, e => e.source === "condition" && e.from === "queue:triage-q");
