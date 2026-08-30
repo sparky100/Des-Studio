@@ -82,6 +82,40 @@ describe("CHK-002 No sink for entity type", () => {
     expect(chk[0].nodeName).toBe("Customer");
     expect(chk[0].severity).toBe("error");
   });
+
+  // Regression: a bEvent that only exits entities via a probabilisticRouting/routing
+  // branch with queueName null ("exit the system" — see applyRoute in phases.js)
+  // never contains a literal COMPLETE()/RENEGE() call in its effect string, but is
+  // still a genuine sink. Surfaced by an A&E model whose only literal COMPLETE()
+  // call lived on the (removable) admission/boarding path — once that was dropped,
+  // discharge still worked purely through null-routing, and this check falsely
+  // flagged Patient as having no exit at all.
+  test("does not trigger when entity type only exits via a null-routing branch", () => {
+    const model = {
+      name: "Null-routing exit",
+      entityTypes: [
+        { id: "et1", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "et2", name: "Doctor", role: "server", count: "1", attrDefs: [] },
+      ],
+      queues: [{ id: "q1", name: "ReviewQueue" }],
+      bEvents: [
+        { id: "b_arrive", name: "Arrive", scheduledTime: "0",
+          effect: ["ARRIVE(Patient, ReviewQueue)"], schedules: [] },
+        { id: "b_review_done", name: "Review Done", scheduledTime: "9999",
+          effect: ["RELEASE(Doctor)"], schedules: [],
+          probabilisticRouting: [{ queueName: null, probability: 1 }] },
+      ],
+      cEvents: [
+        { id: "c_review", name: "Review", priority: 1,
+          condition: "queue(ReviewQueue).length > 0 AND idle(Doctor).count > 0",
+          effect: ["ASSIGN(ReviewQueue, Doctor)"],
+          cSchedules: [{ eventId: "b_review_done", dist: "Fixed", distParams: { value: "5" } }] },
+      ],
+      stateVariables: [],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-002")).toHaveLength(0);
+  });
 });
 
 describe("CHK-003 C-event references undefined queue", () => {

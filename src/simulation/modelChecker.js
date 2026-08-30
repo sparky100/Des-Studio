@@ -87,8 +87,17 @@ function buildConsumedQueues(cEvents) {
   return queues;
 }
 
+// A routing/probabilisticRouting branch with queueName null (or "") means "exit
+// the system" (see applyRoute in phases.js — completeEntity runs directly, no
+// COMPLETE() macro call in the effect string) — a bEvent that only exits entities
+// this way, never via a literal COMPLETE()/RENEGE() call, is still a valid sink.
+function hasNullRoutingExit(bEvent) {
+  const branches = [...(bEvent.routing || []), ...(bEvent.probabilisticRouting || [])];
+  return branches.some(branch => branch && !branch.queueName);
+}
+
 function hasAnyExitEffect(bEvents) {
-  return bEvents.some(b => /\b(COMPLETE|RENEGE)\s*\(/i.test(effectString(b)));
+  return bEvents.some(b => /\b(COMPLETE|RENEGE)\s*\(/i.test(effectString(b)) || hasNullRoutingExit(b));
 }
 
 /**
