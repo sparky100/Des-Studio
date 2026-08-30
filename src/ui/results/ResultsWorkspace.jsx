@@ -639,14 +639,18 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
             CONTAINER LEVELS
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          {/* Bounded flex-wrap, not an auto-fit/1fr grid: a model usually has
+              just one or two containers, and a 1fr track stretches a lone card
+              to the full row width — a mostly-empty tile next to the tightly
+              packed multi-item sections elsewhere in this panel. */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
             {containerEntries.map(([id, lvl]) => {
               const capacity = containerCapacities[id];
               const hasCapacity = Number.isFinite(capacity) && capacity > 0;
               const fillRatio = hasCapacity && lvl.final != null ? lvl.final / capacity : null;
               const fillColor = fillRatio == null ? C.accent : fillRatio >= 1 ? C.red : fillRatio >= 0.85 ? C.amber : C.accent;
               return (
-                <div key={id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                <div key={id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, flex: "0 1 260px", minWidth: 220 }}>
                   <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
                     {id.toUpperCase()}
                   </div>
@@ -694,25 +698,23 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
             QUEUE REJECTIONS
           </div>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Queue</th>
-                  <th style={{ textAlign: "right", width: 60, minWidth: 60, color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Balked</th>
-                  <th style={{ textAlign: "right", width: 60, minWidth: 60, color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Blocked</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rejectionEntries.map(([name, counts]) => (
-                  <tr key={name}>
-                    <td style={{ color: C.text, paddingTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</td>
-                    <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 60 }}>{counts.balkCount ? formatMetricValue(isMultiRep ? counts.balkCount / repCount : counts.balkCount, 0) : "—"}</td>
-                    <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 60 }}>{counts.blockingCount ? formatMetricValue(isMultiRep ? counts.blockingCount / repCount : counts.blockingCount, 0) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Card-per-queue + StatCards, matching every other section in this
+              panel (was previously the only section using a bare <table>).
+              Bounded flex-wrap since usually only one or two queues reject. */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {rejectionEntries.map(([name, counts]) => (
+              <div key={name} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, flex: "0 1 260px", minWidth: 220 }}>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {name.toUpperCase()}
+                </div>
+                <StatCards
+                  items={[
+                    { label: "Balked", value: counts.balkCount ? formatMetricValue(isMultiRep ? counts.balkCount / repCount : counts.balkCount, 0) : "—", color: counts.balkCount ? C.balked : undefined },
+                    { label: "Blocked", value: counts.blockingCount ? formatMetricValue(isMultiRep ? counts.blockingCount / repCount : counts.blockingCount, 0) : "—", color: counts.blockingCount ? C.red : undefined },
+                  ]}
+                />
+              </div>
+            ))}
           </div>
         </>
       )}
@@ -740,13 +742,16 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
             INTERRUPTIONS
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          {/* Bounded flex-wrap (see CONTAINER LEVELS above) — usually just one
+              or two preemptable resource types, so a 1fr grid track would
+              stretch a lone card to the full row width. */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
             {preemptEntries.map(p => {
               const reasonParts = Object.entries(p.byReason)
                 .filter(([, n]) => n > 0)
                 .map(([reason, n]) => `${formatMetricValue(isMultiRep ? avgPerRun(n) : n, 0)} ${PREEMPT_REASON_LABEL[reason] || reason.toLowerCase()}`);
               return (
-                <div key={p.type} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                <div key={p.type} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, flex: "0 1 260px", minWidth: 220 }}>
                   <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
                     {p.type.toUpperCase()}
                   </div>

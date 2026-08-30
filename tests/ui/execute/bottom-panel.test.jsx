@@ -193,6 +193,22 @@ describe("BottomPanel — Live Metrics collapsible sections (matching Results ta
     expect(header).toHaveAttribute("aria-expanded", "false");
     expect(document.getElementById("stagekpis-section-bevents")).toHaveStyle({ display: "none" });
   });
+
+  test("sections stack vertically (flex column), not as CSS grid columns, matching the Results tab", () => {
+    // Regression: the outer wrapper used to be a CSS grid
+    // (repeat(auto-fit, minmax(320px, 1fr))), so QUEUES/SERVERS/etc. could sit
+    // side-by-side as grid columns at wide viewport widths — collapsing a
+    // mid-row section then left an awkward gap instead of the sections below
+    // sliding up, unlike the Results tab's SummaryCardGrid (a plain vertical
+    // flex column).
+    render(<BottomPanel log={log} snap={snap} model={model} />);
+    fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
+    const queuesHeader = screen.getByRole("button", { name: /queues/i });
+    // DOM shape: outer stack > panel wrapper (contains header + content) —
+    // the header's grandparent is the outer stack whose layout is under test.
+    const outerStack = queuesHeader.parentElement.parentElement;
+    expect(outerStack).toHaveStyle({ display: "flex", flexDirection: "column" });
+  });
 });
 
 describe("BottomPanel — F9C.11 node-filtered log", () => {

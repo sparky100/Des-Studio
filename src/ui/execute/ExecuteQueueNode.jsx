@@ -1,6 +1,9 @@
 // ui/execute/ExecuteQueueNode.jsx — live Queue node for the Execute canvas
 // Registered as nodeType "queueNode" in ExecuteCanvas.
-// data.liveData shape: { depth, entities, discipline, clock, renegeBalkPulse }
+// data.liveData shape: { depth, entities, discipline, customerType, clock, renegeBalkPulse }
+// customerType is the queue's own design-time configured type (Queue.customerType,
+// optional) — used only to word the depth caption ("N <type>s waiting"), not derived
+// from live entities (a queue can in principle hold more than one type).
 // renegeBalkPulse ({ status, key } | null) is set for one detectRoutingEvents
 // diff tick when an entity reneges/balks straight out of this queue (never
 // entering an activity, so there's no edge to animate a token along instead).
@@ -50,7 +53,7 @@ function DisciplineBadge({ discipline }) {
   );
 }
 
-function DepthBadge({ depth, capacity }) {
+function DepthBadge({ depth, capacity, customerType }) {
   const { C, FONT } = useTheme();
   const color = capacity ? (depth >= capacity ? C.red : depthColor(depth, C)) : depthColor(depth, C);
   return (
@@ -71,42 +74,8 @@ function DepthBadge({ depth, capacity }) {
         {capacity ? `${depth}/${capacity}` : depth}
       </div>
       <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>
-        {capacity ? "capacity" : "waiting"}
+        {capacity ? "capacity" : (customerType ? `${customerType}s waiting` : "waiting")}
       </span>
-    </div>
-  );
-}
-
-// Names the entity type(s) currently waiting — dot color alone (typeColor())
-// plus a hover-only title were the only way to tell types apart before this;
-// a queue is conventionally single-type (Queue.customerType) but that's a UI
-// convention, not an engine-enforced constraint, so this renders one pill per
-// distinct type actually present rather than assuming just one.
-function EntityTypeLabels({ entities }) {
-  const { FONT } = useTheme();
-  const types = [...new Set(entities.map(e => e.type))];
-  if (types.length === 0) return null;
-  return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-      {types.map(type => {
-        const color = typeColor(type);
-        return (
-          <div key={type} style={{
-            background: `${color}18`,
-            border: `1px solid ${color}44`,
-            borderRadius: 3,
-            color,
-            fontFamily: FONT,
-            fontSize: 8,
-            fontWeight: 700,
-            letterSpacing: 0.8,
-            padding: "1px 5px",
-            flexShrink: 0,
-          }}>
-            {type}
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -188,11 +157,12 @@ export function ExecuteQueueNode({ data }) {
     lastClockRef.current = clock;
   }, [live?.clock]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const depth      = live?.depth ?? 0;
-  const capacity   = live?.capacity ?? null;
-  const color      = capacity ? (depth >= capacity ? C.red : depthColor(depth, C)) : depthColor(depth, C);
-  const entities   = live?.entities ?? [];
-  const discipline = live?.discipline ?? null;
+  const depth        = live?.depth ?? 0;
+  const capacity     = live?.capacity ?? null;
+  const color        = capacity ? (depth >= capacity ? C.red : depthColor(depth, C)) : depthColor(depth, C);
+  const entities     = live?.entities ?? [];
+  const discipline   = live?.discipline ?? null;
+  const customerType = live?.customerType ?? null;
   const pulseColor = pulse?.status === "reneged" ? C.reneged : pulse?.status === "balked" ? C.balked : null;
 
   return (
@@ -270,12 +240,11 @@ export function ExecuteQueueNode({ data }) {
       </div>
 
       {live ? (
-        <DepthBadge depth={depth} capacity={capacity} />
+        <DepthBadge depth={depth} capacity={capacity} customerType={customerType} />
       ) : (
         <div style={{ fontSize: 9, color: C.muted }}>—</div>
       )}
 
-      {entities.length > 0 && <EntityTypeLabels entities={entities} />}
       {entities.length > 0 && <EntityDots entities={entities} />}
 
       {history.length >= 2 && (

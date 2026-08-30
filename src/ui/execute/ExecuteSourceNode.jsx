@@ -1,8 +1,9 @@
 // ui/execute/ExecuteSourceNode.jsx — live Source node for the Execute canvas
 // Registered as nodeType "sourceNode" in ExecuteCanvas.
-// data.liveData shape: { nextArrivalTime, interArrivalLabel, arrivalKey, clock }
+// data.liveData shape: { nextArrivalTime, interArrivalLabel, arrivalKey, clock, arrived }
 // arrivalKey is the max entity-id of this source's customer type — strictly
 // increases on each arrival, used to trigger the pulse without needing FEL access.
+// arrived is this source's running total (ARRIVE b-event fire count).
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position } from "../shared/xyflow.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -81,6 +82,16 @@ export function ExecuteSourceNode({ data }) {
       <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: C.text }}>
         {data.label}
       </div>
+
+      {live && (
+        // Total arrived — large, prominent, mirroring ExecuteSinkNode's "served" count.
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 2 }}>
+          <div style={{ fontFamily: FONT, fontSize: 28, fontWeight: 300, color: C.green, lineHeight: 1 }}>
+            {live.arrived ?? 0}
+          </div>
+          <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>arrived</span>
+        </div>
+      )}
 
       {live?.interArrivalLabel && (
         <div style={{ fontSize: 9, color: C.muted }}>
