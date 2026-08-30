@@ -2001,12 +2001,21 @@ const cycleLog = [];
         }
       }
 
-      // Per-shift utilisation bucket (F86.4)
-      const srvLabel = srv._shiftLabel;
-      if (srvLabel) {
+      // Per-shift utilisation bucket (F86.4) — each completed stint's duration is
+      // already attributed to the label active when THAT stint started (see
+      // _shiftBusyTime in releaseServerClaim); only the still-in-progress partial
+      // (if this server is busy right now) needs adding here, against its current
+      // label. Do not use the lifetime `busyTime` total here — that would
+      // re-misattribute every prior stint to just the current label again.
+      const addToBucket = (label, amount) => {
+        if (!label || !amount) return;
         if (!perShiftBuckets[srv.type]) perShiftBuckets[srv.type] = {};
-        if (!perShiftBuckets[srv.type][srvLabel]) perShiftBuckets[srv.type][srvLabel] = { busyTimeSum: 0, completions: 0 };
-        perShiftBuckets[srv.type][srvLabel].busyTimeSum += busyTime;
+        if (!perShiftBuckets[srv.type][label]) perShiftBuckets[srv.type][label] = { busyTimeSum: 0, completions: 0 };
+        perShiftBuckets[srv.type][label].busyTimeSum += amount;
+      };
+      for (const [label, bt] of Object.entries(srv._shiftBusyTime || {})) addToBucket(label, bt);
+      if (srv.status === "busy" && srv._busyStart != null) {
+        addToBucket(srv._shiftLabel, Math.max(0, clock - srv._busyStart));
       }
 
       // Flush active starvation timer if running

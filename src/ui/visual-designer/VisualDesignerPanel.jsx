@@ -985,12 +985,17 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                 )}
                 {(model.entityTypes || []).map((et, i) => {
                   const hasShifts = et.role === "server" && Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0;
+                  // A weekly schedulePattern is a second, separate way to enable shifts (see
+                  // WeeklyPatternEditor.jsx) — this list previously only ever checked the older
+                  // manual shiftSchedule array, so a pattern-scheduled resource showed no shift
+                  // indicator here at all even though shifts were genuinely active.
+                  const hasPattern = et.role === "server" && et.schedulePattern?.type === "weekly";
                   const shiftFirstCap = hasShifts ? parseInt(et.shiftSchedule[0]?.capacity, 10) || 1 : null;
                   const shiftLastCap = hasShifts ? parseInt(et.shiftSchedule[et.shiftSchedule.length - 1]?.capacity, 10) || 1 : null;
                   const shiftSummary = hasShifts ? (shiftFirstCap === shiftLastCap ? shiftFirstCap : `${shiftFirstCap}-${shiftLastCap}`) : null;
                   const isShiftExpanded = expandedShiftIds.has(et.id);
                   const hasFailure = et.role === "server" && !!et.mtbfDist;
-                  const gridCols = et.role === "server" && hasShifts
+                  const gridCols = et.role === "server" && (hasShifts || hasPattern)
                     ? `minmax(0, 1fr) 66px minmax(0, 1fr) 20px ${hasFailure ? "28px " : ""}14px`
                     : et.role === "server"
                       ? `minmax(0, 1fr) 66px 44px ${hasFailure ? "28px " : ""}14px`
@@ -1031,7 +1036,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                         <option value="customer">Entity</option>
                         <option value="server">Server</option>
                       </select>
-                      {et.role === "server" && !hasShifts && (
+                      {et.role === "server" && !hasShifts && !hasPattern && (
                         <input type="number" min="1" value={et.count || "1"} onChange={e => {
                           const next = [...(model.entityTypes || [])];
                           next[i] = { ...next[i], count: parseInt(e.target.value, 10) || "1" };
@@ -1040,6 +1045,16 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                           style={{ width: "100%", boxSizing: "border-box", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 3px", textAlign: "center" }}
                         />
                       )}
+                      {et.role === "server" && hasPattern && (<>
+                        <span title="Weekly recurring schedule pattern is active — edit it in the full entity editor."
+                          style={{ fontSize: 10, color: C.server, fontFamily: FONT, fontWeight: 700, textAlign: "center", background: `${C.server}15`, borderRadius: 3, padding: "2px 4px", whiteSpace: "nowrap" }}>
+                          weekly pattern
+                        </span>
+                        {/* No expand affordance for schedulePattern here (edit it in the full
+                            entity editor) — this empty cell keeps the grid column count aligned
+                            with the shiftSchedule row's chevron slot so later cells don't shift. */}
+                        <span />
+                      </>)}
                       {et.role === "server" && hasShifts && (
                         <span title={`${et.shiftSchedule.length} shift period${et.shiftSchedule.length !== 1 ? "s" : ""} — pool varies from ${shiftFirstCap} to ${shiftLastCap}`}
                           style={{ fontSize: 10, color: C.server, fontFamily: FONT, fontWeight: 700, textAlign: "center", background: `${C.server}15`, borderRadius: 3, padding: "2px 4px", cursor: "pointer", whiteSpace: "nowrap" }}
