@@ -1,7 +1,7 @@
 // ui/execute/ExecuteActivityNode.jsx — live Activity node for the Execute canvas
 // Registered as nodeType "activityNode" in ExecuteCanvas.
 // data.liveData shape: { serverTypeName, capacity, busyCount, activityBusyCount,
-//                        idleCount, utilisation, completionSignal }
+//                        idleCount, utilisation, completionSignal, startSignal }
 // activityBusyCount = servers currently serving THIS activity only.
 // busyCount = ALL servers of this type currently busy (pool-level).
 // completionSignal is this activity's OWN scheduled-follow-on-event fire count
@@ -9,6 +9,9 @@
 // when THIS c-event's own work finishes, not the model-wide snap.served total
 // (which used to make every activity node flash simultaneously whenever any
 // activity anywhere completed a job).
+// startSignal is this c-event's OWN fire count (snap.eventCounts[refId],
+// already live/monotonic per engine/phases.js) — strictly increases only when
+// THIS activity itself starts serving someone, complementing completionSignal.
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position } from "../shared/xyflow.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -145,23 +148,47 @@ export function ExecuteActivityNode({ data }) {
   const { C, FONT } = useTheme();
   const ACTIVITY_COLOR = C.purple;
   const live = data.liveData;
-  const [flashing, setFlashing] = useState(false);
-  const prevSignalRef = useRef(null);
-  const timerRef      = useRef(null);
 
-  // Flash briefly each time snap.served increments (a COMPLETE event fired).
+  // Two independent one-shot pulses, mirroring ExecuteQueueNode's renege/balk
+  // pulse pattern exactly (strictly-increasing signal watched via useEffect,
+  // skip-on-mount, self-expiring). "finish" (existing) fires when this
+  // activity's own scheduled follow-on event fires; "start" (new) fires when
+  // this c-event itself fires (service begins). Distinct colors so the two
+  // are visually distinguishable; finish takes priority on the rare tick both
+  // land together.
+  const [finishFlashing, setFinishFlashing] = useState(false);
+  const [startFlashing, setStartFlashing] = useState(false);
+  const prevSignalRef = useRef(null);
+  const prevStartSignalRef = useRef(null);
+  const timerRef      = useRef(null);
+  const startTimerRef = useRef(null);
+
+  // Flash briefly each time this activity's own completionSignal increments.
   useEffect(() => {
     const signal = live?.completionSignal ?? 0;
     if (prevSignalRef.current !== null && signal > prevSignalRef.current) {
-      setFlashing(true);
+      setFinishFlashing(true);
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setFlashing(false), FLASH_MS);
+      timerRef.current = setTimeout(() => setFinishFlashing(false), FLASH_MS);
     }
     prevSignalRef.current = signal;
   }, [live?.completionSignal]);
 
+  // Flash briefly each time this activity's own startSignal increments (this
+  // c-event itself just fired, starting service for an entity).
+  useEffect(() => {
+    const signal = live?.startSignal ?? 0;
+    if (prevStartSignalRef.current !== null && signal > prevStartSignalRef.current) {
+      setStartFlashing(true);
+      if (startTimerRef.current) clearTimeout(startTimerRef.current);
+      startTimerRef.current = setTimeout(() => setStartFlashing(false), FLASH_MS);
+    }
+    prevStartSignalRef.current = signal;
+  }, [live?.startSignal]);
+
   useEffect(() => () => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    if (startTimerRef.current) clearTimeout(startTimerRef.current);
   }, []);
 
   const capacity           = live?.capacity           ?? 1;
@@ -172,13 +199,32 @@ export function ExecuteActivityNode({ data }) {
   const rows               = live?.perType?.length > 1 ? live.perType : null;
   const skillBreakdown     = live?.skillBreakdown     ?? null;
 
+  // Persistent busy/idle/failed state color (independent of the transient
+  // pulses above) — the convention most DES tools use on a resource/activity
+  // icon: idle=green, busy=amber, blocked/failed=red, shown continuously, not
+  // just as a one-off event flash. Aggregated worst-first across every
+  // resource type for a multi-row COSEIZE activity, not just the first row.
+  const statRows  = rows ?? [{ activityBusyCount, failedCount }];
+  const isFailed  = statRows.some(r => (r.failedCount ?? 0) > 0);
+  const isBusy    = statRows.some(r => (r.activityBusyCount ?? 0) > 0);
+  const stateColor = isFailed ? C.red : isBusy ? C.amber : C.green;
+
+  const pulseColor = finishFlashing ? ACTIVITY_COLOR : startFlashing ? C.cEvent : null;
+  const pulseLabel = finishFlashing ? "done" : startFlashing ? "started" : null;
+
   return (
     <div style={{
       width: 160,
       height: EXEC_CARD_HEIGHT,
       overflow: "hidden",
       background: C.surface,
-      border: `1.5px solid ${flashing ? ACTIVITY_COLOR : `${ACTIVITY_COLOR}44`}`,
+      // Longhand on every edge (not the `border` shorthand) — mixing a
+      // shorthand with the borderLeft longhand on the same element makes
+      // React warn on every rerender that changes either ("conflicting
+      // property"), since it can't tell which one wins.
+      borderTop: `1.5px solid ${pulseColor ?? `${stateColor}44`}`,
+      borderRight: `1.5px solid ${pulseColor ?? `${stateColor}44`}`,
+      borderBottom: `1.5px solid ${pulseColor ?? `${stateColor}44`}`,
       borderLeft: `4px solid ${ACTIVITY_COLOR}`,
       borderRadius: 6,
       color: C.text,
@@ -190,17 +236,30 @@ export function ExecuteActivityNode({ data }) {
       fontSize: 11,
       position: "relative",
       transition: `border-color ${FLASH_MS}ms ease-out, box-shadow ${FLASH_MS}ms ease-out`,
-      boxShadow: flashing ? `0 0 12px ${ACTIVITY_COLOR}44` : "none",
+      boxShadow: pulseColor ? `0 0 12px ${pulseColor}44` : "none",
     }}>
-      {/* Completion flash overlay */}
+      {/* Start/finish flash overlay */}
       <div style={{
         position: "absolute",
         inset: 0,
         borderRadius: 6,
-        background: `${ACTIVITY_COLOR}${flashing ? "14" : "00"}`,
+        background: `${pulseColor ?? "transparent"}${pulseColor ? "14" : ""}`,
         transition: `background ${FLASH_MS}ms ease-out`,
         pointerEvents: "none",
       }} />
+
+      {pulseLabel && (
+        // Mirrors ExecuteQueueNode's renege/balk pulse badge exactly.
+        <div style={{
+          position: "absolute", top: 4, right: 8,
+          background: pulseColor, color: C.bg,
+          borderRadius: 4, padding: "1px 6px",
+          fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase",
+          fontFamily: FONT,
+        }}>
+          {pulseLabel}
+        </div>
+      )}
 
       <Handle
         type="target"

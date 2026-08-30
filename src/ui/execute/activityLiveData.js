@@ -226,6 +226,11 @@ export function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
       suspendedCount: 0,
       utilisation: 0,
       completionSignal: completionSignalFor(scheduledEventIds, snap),
+      // The c-event's OWN fire count (snap.eventCounts[refId] — already live,
+      // monotonically increasing per engine/phases.js:538) — used to flash the
+      // node the instant THIS activity starts serving someone, complementing
+      // completionSignal's "just finished" flash.
+      startSignal: snap.eventCounts?.[refId] || 0,
       servers: [],
       perType: [],
       clock: snap.clock,
@@ -240,6 +245,7 @@ export function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
   return {
     ...first,
     completionSignal: completionSignalFor(meta?.scheduledEventIds, snap),
+    startSignal: snap.eventCounts?.[refId] || 0,
     clock: snap.clock,
     perType,
   };

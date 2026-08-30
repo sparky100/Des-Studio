@@ -200,12 +200,31 @@ describe("deriveActivityLiveData", () => {
     expect(purchaseLive.completionSignal).toBe(5);
   });
 
+  test("startSignal is this c-event's own fire count (snap.eventCounts[refId]), independent of completionSignal", () => {
+    const twoActivityModel = {
+      cEvents: [
+        { id: "ce-hire", name: "Serve Hire Customer", effect: "ASSIGN(Hire Queue, Staff)" },
+        { id: "ce-purchase", name: "Serve Purchase Customer", effect: "ASSIGN(Purchase Queue, Staff)" },
+      ],
+    };
+    const serverTypeIndex = buildServerTypeIndex(twoActivityModel.cEvents, [{ name: "Staff", role: "server", count: "3" }]);
+    // Only "ce-hire" has fired so far (its own c-event id in eventCounts).
+    const snap = makeSnap({ eventCounts: { "ce-hire": 7 } });
+
+    const hireLive = deriveActivityLiveData(snap, "ce-hire", serverTypeIndex, twoActivityModel);
+    const purchaseLive = deriveActivityLiveData(snap, "ce-purchase", serverTypeIndex, twoActivityModel);
+
+    expect(hireLive.startSignal).toBe(7);
+    expect(purchaseLive.startSignal).toBe(0);
+  });
+
   test("returns empty perType and zeroed fields when c-event isn't indexed", () => {
     const snap = makeSnap({ entities: [{ id: 1, type: "Clerk", role: "server", status: "idle" }] });
     const live = deriveActivityLiveData(snap, "ce-unknown", new Map(), model);
     expect(live.perType).toEqual([]);
     expect(live.serverTypeName).toBeNull();
     expect(live.busyCount).toBe(0);
+    expect(live.startSignal).toBe(0);
   });
 
   test("a PREEMPT-only activity resolves to its own target's stats, not a total across every resource type (regression)", () => {
