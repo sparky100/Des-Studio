@@ -1012,7 +1012,7 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
 
 **Dependencies on `src/llm/prompts.js`:** `buildKpis()`, `goalsToPrompt()`, and `buildGoalGaps()` are the canonical field-selection layer. `buildLLMBundle` imports these three functions to avoid diverging from the in-product AI context. These three functions must be exported from `prompts.js` (Sprint 82 task F82.1 adds the `export` keyword to each).
 
-**`truncateWords()` must not be called** inside `buildLLMBundle`. The 2,000-word cap in `prompts.js` is a hosted-API cost/latency optimisation and is inappropriate for file export.
+**`truncateWords()` must not be called** inside `buildLLMBundle`. The word cap in `prompts.js` (`MAX_PROMPT_WORDS`, 20,000 as of the batch-model-data-accuracy fix — see below) is a hosted-API cost/latency optimisation and is inappropriate for file export.
 
 **Bundle sections:**
 
