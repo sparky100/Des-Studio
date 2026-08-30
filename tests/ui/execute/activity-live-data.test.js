@@ -45,6 +45,35 @@ describe("extractServerTypes", () => {
     const effect = "COSEIZE(Queue, Doctor[Surgery]:2, Nurse)";
     expect(extractServerTypes(effect)).toEqual(["Doctor", "Nurse"]);
   });
+
+  // PREEMPT/FAIL/FINISH/REPAIR target a resource without ever ASSIGNing or
+  // COSEIZEing it — without these, a C-event built purely from one of them
+  // (e.g. a "preempt this resource for a higher-priority customer" activity)
+  // fell through to deriveActivityLiveData's no-serverTypes branch, which
+  // shows the total server count across every resource type in the whole
+  // model instead of the one this activity actually concerns.
+  test("PREEMPT returns its target server type, ignoring the optional criterion", () => {
+    expect(extractServerTypes("PREEMPT(Staff, PRIORITY(taskPriority))")).toEqual(["Staff"]);
+    expect(extractServerTypes("PREEMPT(Staff)")).toEqual(["Staff"]);
+  });
+
+  test("FAIL returns its target server type, ignoring the optional count", () => {
+    expect(extractServerTypes("FAIL(Machine, 2)")).toEqual(["Machine"]);
+    expect(extractServerTypes("FAIL(Doctor)")).toEqual(["Doctor"]);
+  });
+
+  test("FINISH returns its target server type, ignoring the optional criterion", () => {
+    expect(extractServerTypes("FINISH(Nurse, LONGEST)")).toEqual(["Nurse"]);
+  });
+
+  test("REPAIR returns its target server type, ignoring the optional count", () => {
+    expect(extractServerTypes("REPAIR(Machine, 1)")).toEqual(["Machine"]);
+  });
+
+  test("a multi-effect PREEMPT (e.g. alongside a SET) still resolves the server type", () => {
+    const effect = ["PREEMPT(Staff, PRIORITY(taskPriority))", "SET(repairsInProgress, repairsInProgress - 1)"];
+    expect(extractServerTypes(effect)).toEqual(["Staff"]);
+  });
 });
 
 describe("buildServerTypeIndex", () => {
@@ -121,6 +150,32 @@ describe("deriveActivityLiveData", () => {
     expect(live.perType).toEqual([]);
     expect(live.serverTypeName).toBeNull();
     expect(live.busyCount).toBe(0);
+  });
+
+  test("a PREEMPT-only activity resolves to its own target's stats, not a total across every resource type (regression)", () => {
+    // Before the PREEMPT/FAIL/FINISH/REPAIR fix in extractServerTypes, this
+    // C-event wasn't indexed at all, so this fell through to the "no
+    // serverTypes" branch: capacity = every server entity in the whole
+    // model (here, 2 Staff + 10 TimeAway = 12), a meaningless number shown
+    // with the same "pool" styling as a real per-resource card.
+    const preemptModel = {
+      cEvents: [{ id: "ce-preempt", name: "Preempt Repair for Hire Customer", effect: "PREEMPT(Staff, PRIORITY(taskPriority))" }],
+    };
+    const serverTypeIndex = buildServerTypeIndex(preemptModel.cEvents, [
+      { name: "Staff", role: "server", count: "2" },
+      { name: "TimeAway", role: "server", count: "10" },
+    ]);
+    const snap = makeSnap({
+      entities: [
+        { id: 1, type: "Staff", role: "server", status: "busy" },
+        { id: 2, type: "Staff", role: "server", status: "idle" },
+        ...Array.from({ length: 10 }, (_, i) => ({ id: 10 + i, type: "TimeAway", role: "server", status: "idle" })),
+      ],
+    });
+    const live = deriveActivityLiveData(snap, "ce-preempt", serverTypeIndex, preemptModel);
+    expect(live.serverTypeName).toBe("Staff");
+    expect(live.capacity).toBe(2);
+    expect(live.busyCount).toBe(1);
   });
 
   test("COSEIZE with per-type [Skill] filters still matches real entities (regression)", () => {
