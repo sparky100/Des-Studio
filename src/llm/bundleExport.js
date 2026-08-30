@@ -496,7 +496,10 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   }
 
   if (kpis.warning_phaseCTruncated) {
-    lines.push('> **Warning:** Phase C truncation occurred — C-Event scan exceeded 500 iterations in a single clock tick. Review C-Event conditions for possible loops.');
+    const countNote = kpis.warning_phaseCTruncatedCount != null && kpis.warning_phaseCTruncatedOfReplications != null
+      ? ` (${kpis.warning_phaseCTruncatedCount} of ${kpis.warning_phaseCTruncatedOfReplications} replications affected)`
+      : '';
+    lines.push(`> **Warning:** This batch or individual run may contain unreliable results${countNote}. The conditional-event logic couldn't resolve within 5,000 passes in a single clock tick — some events that should have fired may not have. Review C-Event conditions for possible loops or a permanently-starved resource.`);
     lines.push('');
   }
   if (kpis.warnings && kpis.warnings.length) {

@@ -491,7 +491,11 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
   });
 }
 
-  const phaseCTruncated = replicationPayloads.some(p => p?.result?.phaseCTruncated || p?.result?.summary?.phaseCTruncated);
+  // Count, not just a boolean — "1 of 20 replications hit the pass limit" and
+  // "11 of 20 did" are very different severities for whether the batch's
+  // aggregate stats (CIs pooled across replications) can still be trusted.
+  const truncatedReplicationCount = replicationPayloads.filter(p => p?.result?.phaseCTruncated || p?.result?.summary?.phaseCTruncated).length;
+  const phaseCTruncated = truncatedReplicationCount > 0;
   const cycleLimitReached = replicationPayloads.some(p => p?.result?.cycleLimitReached || p?.result?.summary?.cycleLimitReached);
 
   return {
@@ -502,6 +506,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
     waitByArrival,
     perQueue,
     phaseCTruncated,
+    truncatedReplicationCount,
     cycleLimitReached,
     runtimeMetrics: {
       replications: replicationPayloads.length,
@@ -512,6 +517,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       reneged,
       balked,
       phaseCTruncated,
+      truncatedReplicationCount,
       cycleLimitReached,
       servedRatio: served > 0 && total > 0 ? +(served / total).toFixed(4) : null,
       numReplications: replicationPayloads.length,

@@ -14,6 +14,7 @@ import { saveSimulationRun, getRun } from "../../db/models.js";
 import { useRunHistory } from "./hooks/useRunHistory.js";
 import { useModelSchedules } from "./hooks/useModelSchedules.js";
 import { useVisualizationSettings } from "./hooks/useVisualizationSettings.js";
+import { usePhaseCTruncationStatus } from "./hooks/usePhaseCTruncationStatus.js";
 import { ExperimentRunSettingsFields } from "./ExperimentRunSettingsFields.jsx";
 import { OverrideChipList } from "./OverrideChipList.jsx";
 import { SavedExperimentsTab } from "./SavedExperimentsTab.jsx";
@@ -201,8 +202,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [autoRunning, setAutoRunning] = useState(false);
   const isRunning = autoRunning || mode === "running" || mode === "stepping";
   const [saveStatus, setSaveStatus] = useState(null);
-  const [phaseCTruncated, setPhaseCTruncated] = useState(false);
-  const [cycleLimitReached, setCycleLimitReached] = useState(false);
+  const {
+    phaseCTruncated, truncatedReplicationCount, totalReplicationCount, cycleLimitReached,
+    reset: resetTruncationStatus, recordSingleResult: recordTruncationResult, recordBatchProgress: recordBatchTruncationProgress,
+  } = usePhaseCTruncationStatus();
   const [lastRunEstimateAccuracy, setLastRunEstimateAccuracy] = useState(null);
   const [results, setResults] = useState(null);
   const [liveWaitDist, setLiveWaitDist] = useState(null);
@@ -493,8 +496,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setAutoRunning(startAutoAfterInitRef.current ? true : false);
     startAutoAfterInitRef.current = false;
     setSaveStatus(null);
-    setPhaseCTruncated(false);
-    setCycleLimitReached(false);
+    resetTruncationStatus(1);
     setResults(null);
     setLatestRunId(null);
     setLiveWaitDist(null);
@@ -565,8 +567,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setCurrentSnap(r.snap);
     logRef.current = nextLog;
     setLog(nextLog);
-    if (r.phaseCTruncated) setPhaseCTruncated(true);
-    if (r.cycleLimitReached) setCycleLimitReached(true);
+    recordTruncationResult(r);
 
     if (!r.done && engineRef.current) {
       const now = Date.now();
@@ -765,8 +766,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     logRef.current = batchInitLog;
     setLog(batchInitLog);
       setSaveStatus(null);
-      setPhaseCTruncated(false);
-      setCycleLimitReached(false);
+      resetTruncationStatus(replications);
       setBatchStatus("running");
       setBatchProgress({ completed: 0, total: replications, running: 0, pending: replications, cancelled: false, workerCount: 0 });
       setReplicationResults([]);
@@ -806,8 +806,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             logRef.current = next;
             return next;
           });
-          if (payload.result?.phaseCTruncated || payload.result?.summary?.phaseCTruncated) setPhaseCTruncated(true);
-          if (payload.result?.cycleLimitReached || payload.result?.summary?.cycleLimitReached) setCycleLimitReached(true);
+          recordBatchTruncationProgress(ordered, payload);
         },
         onComplete: async payloads => {
           try {
@@ -910,8 +909,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setResults(null);
     onResultsReady?.(null);
     setSaveStatus(null);
-    setPhaseCTruncated(false);
-    setCycleLimitReached(false);
+    resetTruncationStatus(1);
     setBatchStatus("idle");
     setBatchProgress(null);
     setReplicationResults([]);
@@ -948,8 +946,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       for (let i = 0; i < 50; i++) {
         if (singleRunCancelRef.current) break;
         const stepResult = engine.step({ captureSnap: false });
-        if (stepResult.phaseCTruncated) setPhaseCTruncated(true);
-        if (stepResult.cycleLimitReached) setCycleLimitReached(true);
+        recordTruncationResult(stepResult);
         if (stepResult.done) {
           completed = true;
           break;
@@ -996,8 +993,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setMode("done");
     setSingleRunStatus(singleRunCancelRef.current ? "cancelled" : "complete");
     setSingleRunProgress(engine.getProgress({ done: true, cancelled: singleRunCancelRef.current }));
-    if (result.phaseCTruncated || result.summary?.phaseCTruncated) setPhaseCTruncated(true);
-    if (result.cycleLimitReached || result.summary?.cycleLimitReached) setCycleLimitReached(true);
+    recordTruncationResult(result);
 
     if (singleRunCancelRef.current) {
       setSaveStatus({ state: 'error', message: 'Run cancelled. Partial results were not saved.' });
@@ -2395,10 +2391,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       {phaseCTruncated && (
         <div style={{ background: C.amber + '18', border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, fontFamily: FONT }}>
-            This run hit the {model.maxCPasses || 5000}-pass limit for conditional-event scans.
+            This batch or individual run may contain unreliable results.
           </div>
           <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, marginTop: 4, opacity: 0.8 }}>
-            A very large number of entities were processed in a single time step, or conditional-event logic is cycling.
+            The conditional-event logic couldn't resolve within {model.maxCPasses || 5000} passes — some events that should have fired may not have.
+            {totalReplicationCount > 1 && ` ${truncatedReplicationCount} of ${totalReplicationCount} replications were affected.`}
           </div>
         </div>
       )}
