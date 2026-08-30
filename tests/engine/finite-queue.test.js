@@ -231,6 +231,66 @@ describe("F11.2 — Balking", () => {
   });
 });
 
+// ── Balked-entity outcome recording (item 4) ──────────────────────────────────
+// A balked/blocked entity now gets a terminal "balked" status + a real outcome
+// record (mirroring RENEGE's shape) instead of being spliced out of the
+// system with no trace at all.
+
+describe("Balked-entity outcome recording", () => {
+  test("summary.balked and summary.total both count instantly-balked entities (previously undercounted entirely)", () => {
+    const m = makeMultiArrivalModel(5, { balkProbability: 1 });
+    m.cEvents = [];
+    const result = buildEngine(m, 1, 0, 5).runAll();
+    expect(result.summary.balked).toBe(5);
+    expect(result.summary.total).toBe(5);
+    expect(result.summary.served).toBe(0);
+  });
+
+  test("a balked entity appears in summary.outcomes with a per-queue routeLabel and endedBy: BALK", () => {
+    const m = makeMultiArrivalModel(3, { balkProbability: 1 });
+    m.cEvents = [];
+    const result = buildEngine(m, 1, 0, 5).runAll();
+    const outcomeEntries = Object.values(result.summary.outcomes || {});
+    expect(outcomeEntries).toHaveLength(1);
+    expect(outcomeEntries[0]).toEqual(expect.objectContaining({
+      routeLabel: 'Balked at "Main Queue"',
+      status: "balked",
+      endedBy: "BALK",
+      count: 3,
+    }));
+  });
+
+  test("a blocked (capacity) entity appears in summary.outcomes with endedBy: BLOCK, distinct from balked", () => {
+    // capacity=1 with no server (cEvents=[]) so all but the first arrival are blocked.
+    const m = makeMultiArrivalModel(3, { queueCapacity: 1 });
+    m.cEvents = [];
+    const result = buildEngine(m, 1, 0, 5).runAll();
+    const blockedOutcome = Object.values(result.summary.outcomes || {}).find(o => o.endedBy === "BLOCK");
+    expect(blockedOutcome).toBeDefined();
+    expect(blockedOutcome.routeLabel).toBe('Blocked at "Main Queue"');
+    expect(blockedOutcome.status).toBe("balked");
+    expect(blockedOutcome.count).toBe(2);
+  });
+
+  test("a balked entity does not inflate WIP/in-system counts", () => {
+    const m = makeMultiArrivalModel(5, { balkProbability: 1 });
+    m.cEvents = [];
+    const result = buildEngine(m, 1, 0, 5).runAll();
+    expect(result.summary.terminatingState.waitingAtEnd).toBe(0);
+    expect(result.summary.terminatingState.servingAtEnd).toBe(0);
+    expect(result.summary.avgWIP).toBe(0);
+  });
+
+  test("a balked entity's status/outcome survive into entitySummary (visible in exports)", () => {
+    const m = makeMultiArrivalModel(1, { balkProbability: 1 });
+    m.cEvents = [];
+    const result = buildEngine(m, 1, 0, 5).runAll();
+    const balkedEntity = result.entitySummary.find(e => e.role === "customer");
+    expect(balkedEntity.status).toBe("balked");
+    expect(balkedEntity.outcome?.endedBy).toBe("BALK");
+  });
+});
+
 // ── F11.3 — Overflow routing ──────────────────────────────────────────────────
 
 describe("F11.3 — Overflow routing", () => {
