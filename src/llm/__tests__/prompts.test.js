@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'vitest';
 import {
   buildModelDescriptionPrompt,
+  buildModelQueryPrompt,
   buildReportRecommendationsPrompt,
   parseReportRecommendations,
   applySuggestionPatch,
@@ -71,6 +72,39 @@ describe('buildModelDescriptionPrompt', () => {
     const result = buildModelDescriptionPrompt({});
     expect(result).toBeDefined();
     expect(Array.isArray(result.messages)).toBe(true);
+  });
+});
+
+describe('buildModelQueryPrompt', () => {
+  // Regression guard: max_tokens was previously 600, too low for a
+  // multi-part ask like "give me an overview of this model's structure —
+  // entities, queues, events, and flow" — Anthropic would hit
+  // stop_reason: max_tokens and cut the reply off mid-sentence. Asserting
+  // just "> 0" (as buildReportRecommendationsPrompt's test does above)
+  // would have let that regress silently, so this pins a real floor.
+  test('gives the model-explanation ask enough room to finish, not just a non-zero budget', () => {
+    const result = buildModelQueryPrompt("Give me an overview of this model's structure — entities, queues, events, and flow.", minimalModel);
+    expect(result.kind).toBe('model_query');
+    expect(result.max_tokens).toBeGreaterThanOrEqual(4000);
+  });
+
+  test('returns a prompt object with a system message and the question as the final user message', () => {
+    const result = buildModelQueryPrompt('What happens if I add a second server?', minimalModel);
+    expect(Array.isArray(result.messages)).toBe(true);
+    expect(result.messages[0].role).toBe('system');
+    const lastMessage = result.messages[result.messages.length - 1];
+    expect(lastMessage.role).toBe('user');
+    expect(lastMessage.content).toContain('What happens if I add a second server?');
+  });
+
+  test('folds prior turns into the message history without dropping max_tokens', () => {
+    const history = [
+      { role: 'user', content: 'How many queues does this model have?' },
+      { role: 'assistant', content: 'This model has one queue.' },
+    ];
+    const result = buildModelQueryPrompt('And how many servers?', minimalModel, history);
+    expect(result.messages.length).toBeGreaterThan(2);
+    expect(result.max_tokens).toBeGreaterThanOrEqual(4000);
   });
 });
 

@@ -271,7 +271,11 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
         ...history.map(m => ({ role: m.role === "error" ? "assistant" : m.role, content: m.content })),
       ];
 
-      const reply = await callDiagnosticsApi(messages, 600);
+      // 600 was too low for an ask like "explain this model's behaviour in
+      // plain English" — Anthropic would hit stop_reason: max_tokens and cut
+      // the reply off mid-sentence. 4000 gives comparable headroom to
+      // buildExplainResultsPrompt's 2400.
+      const reply = await callDiagnosticsApi(messages, 4000);
       setChatMessages(prev => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
       setChatMessages(prev => [...prev, { role: "error", content: `Error: ${err.message}. Tap to retry.` }]);

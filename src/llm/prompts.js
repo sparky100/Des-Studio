@@ -1871,7 +1871,12 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
     { role: 'user', content: userContent },
   ];
 
-  return { kind: 'model_query', messages, max_tokens: 600 };
+  // 600 was too low for a multi-part ask like "give me an overview of this
+  // model's structure — entities, queues, events, and flow": Anthropic would
+  // hit stop_reason: max_tokens and cut the reply off mid-sentence for any
+  // non-trivial model. 4000 gives comparable headroom to
+  // buildExplainResultsPrompt's 2400.
+  return { kind: 'model_query', messages, max_tokens: 4000 };
 }
 
 // ── Explore: adaptive batch analysis with opportunity identification ──────────
