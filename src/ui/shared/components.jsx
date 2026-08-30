@@ -159,6 +159,8 @@ const CommitInput=({
   ariaLabel,
   disabled=false,
   maxLength,
+  multiline=false,
+  rows=3,
   style={},
 })=>{
   const [draft,setDraft]=useState(value||"");
@@ -172,31 +174,34 @@ const CommitInput=({
       setDraft(next);
     }
   };
-  return (
-    <input
-      value={draft}
-      onChange={e=>setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={e=>{
-        if(e.key==="Enter"){
-          e.preventDefault();
-          commit();
-          e.currentTarget.blur();
-        }
-        if(e.key==="Escape"){
-          e.preventDefault();
-          setDraft(value||"");
-          e.currentTarget.blur();
-        }
-      }}
-      aria-label={ariaLabel}
-      placeholder={placeholder}
-      autoFocus={autoFocus}
-      disabled={disabled}
-      maxLength={maxLength}
-      style={style}
-    />
-  );
+  // multiline needs real newlines, so Enter must not commit/blur the way it
+  // does for a single-line field — only Escape-to-cancel and blur-to-commit
+  // carry over; everything else about the commit-on-blur contract is shared.
+  const onKeyDown=e=>{
+    if(!multiline && e.key==="Enter"){
+      e.preventDefault();
+      commit();
+      e.currentTarget.blur();
+    }
+    if(e.key==="Escape"){
+      e.preventDefault();
+      setDraft(value||"");
+      e.currentTarget.blur();
+    }
+  };
+  const sharedProps={
+    value:draft,
+    onChange:e=>setDraft(e.target.value),
+    onBlur:commit,
+    onKeyDown,
+    "aria-label":ariaLabel,
+    placeholder,
+    autoFocus,
+    disabled,
+    maxLength,
+    style,
+  };
+  return multiline ? <textarea rows={rows} {...sharedProps}/> : <input {...sharedProps}/>;
 };
 const SH=({label,color,children})=>{
   const {C,FONT}=useTheme();

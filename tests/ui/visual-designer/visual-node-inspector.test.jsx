@@ -66,6 +66,23 @@ describe('VisualNodeInspector — commit-on-blur (not per-keystroke)', () => {
     expect(onPatchNode).toHaveBeenCalledTimes(1);
     expect(onPatchNode).toHaveBeenCalledWith(queueNode, { name: 'Renamed Queue' });
   });
+
+  it('commits a multi-line description edit only on blur, not per keystroke', async () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const queueNode = findNode(graph, 'queue');
+    const onPatchNode = vi.fn();
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={queueNode.id} canEdit onPatchNode={onPatchNode} />);
+
+    const descriptionField = screen.getByLabelText(/description/i);
+    const user = userEvent.setup();
+    await user.type(descriptionField, 'Line one{enter}Line two');
+    expect(onPatchNode).not.toHaveBeenCalled(); // Enter inserts a newline, it doesn't commit for multiline fields
+
+    fireEvent.blur(descriptionField);
+    expect(onPatchNode).toHaveBeenCalledTimes(1);
+    expect(onPatchNode).toHaveBeenCalledWith(queueNode, { description: 'Line one\nLine two' });
+  });
 });
 
 describe('VisualNodeInspector — queue discipline parity', () => {
@@ -318,8 +335,8 @@ describe('VisualNodeInspector — advanced activity effects', () => {
 // Balking/reneging are edited only in Define (Queues tab) — the Inspector
 // shows a read-only "edit in Define" pointer with the current value (or a
 // "not configured" state) rather than silently omitting them.
-describe('VisualNodeInspector — queue balking/reneging/description pointers', () => {
-  it('shows "not configured" for balking and reneging on a plain queue', () => {
+describe('VisualNodeInspector — queue balking/reneging pointers and inline description', () => {
+  it('shows "not configured" for balking and reneging on a plain queue, and an empty, placeholder-only description', () => {
     const model = makeModel();
     const graph = deriveGraphFromModel(model);
     const queueNode = findNode(graph, 'queue');
@@ -327,7 +344,7 @@ describe('VisualNodeInspector — queue balking/reneging/description pointers', 
 
     expect(screen.getByText(/not configured — all arrivals join/i)).toBeInTheDocument();
     expect(screen.getByText(/not configured — entities never abandon this queue/i)).toBeInTheDocument();
-    expect(screen.getByText('Not set.')).toBeInTheDocument(); // Description
+    expect(screen.getByPlaceholderText('Not set.')).toBeInTheDocument(); // Description textarea, empty
   });
 
   it('summarizes a probability-based balking config', () => {
@@ -369,7 +386,7 @@ describe('VisualNodeInspector — queue balking/reneging/description pointers', 
     expect(screen.getByText(/abandons after exp/i)).toBeInTheDocument();
   });
 
-  it('shows a queue\'s description when set, and names the Queues tab', () => {
+  it('shows a queue\'s description inline, editable', () => {
     const model = makeModel({
       queues: [{ id: 'queue-1', name: 'Queue 1', customerType: 'Customer', discipline: 'FIFO', description: 'Overflow buffer for peak hours.' }],
     });
@@ -378,7 +395,6 @@ describe('VisualNodeInspector — queue balking/reneging/description pointers', 
     render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={queueNode.id} canEdit onPatchNode={vi.fn()} />);
 
     expect(screen.getByText('Overflow buffer for peak hours.')).toBeInTheDocument();
-    expect(screen.getAllByText(/edit in the queues tab/i).length).toBeGreaterThan(0);
   });
 });
 

@@ -239,6 +239,26 @@ describe("visual designer graph operations", () => {
     expect(deriveGraphFromModel(next).edges.map(edge => `${edge.from}->${edge.to}`)).toContain("source:arrival-0->queue:main-q");
   });
 
+  it("writes description onto the underlying queue, source (bEvent), activity (cEvent), and sink (bEvent)", () => {
+    const graph = deriveGraphFromModel(baseModel);
+    const queue = graph.nodes.find(node => node.id === "queue:main-q");
+    const source = graph.nodes.find(node => node.id === "source:arrival-0");
+    const activity = graph.nodes.find(node => node.id === "activity:start-service");
+    const sink = graph.nodes.find(node => node.type === "sink");
+
+    const withQueueDesc = updateVisualNode(baseModel, queue, { description: "Front-of-house waiting line." });
+    expect(withQueueDesc.queues.find(item => item.id === "main-q").description).toBe("Front-of-house waiting line.");
+
+    const withSourceDesc = updateVisualNode(baseModel, source, { description: "Walk-in arrivals." });
+    expect(withSourceDesc.bEvents.find(event => event.id === "arrival").description).toBe("Walk-in arrivals.");
+
+    const withActivityDesc = updateVisualNode(baseModel, activity, { description: "Front desk check-in." });
+    expect(withActivityDesc.cEvents.find(event => event.id === "start-service").description).toBe("Front desk check-in.");
+
+    const withSinkDesc = updateVisualNode(baseModel, sink, { description: "Service complete." });
+    expect(withSinkDesc.bEvents.find(event => event.id === sink.refId?.replace("route-exit:", "")).description).toBe("Service complete.");
+  });
+
   it("updates source inter-arrival and activity service distributions through selected node patches", () => {
     const graph = deriveGraphFromModel(baseModel);
     const source = graph.nodes.find(node => node.id === "source:arrival-0");

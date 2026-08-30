@@ -1736,6 +1736,7 @@ export function updateVisualNode(model, node, patch = {}) {
       const nextEvent = {
         ...event,
         ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.description !== undefined ? { description: patch.description } : {}),
       };
       if (patch.customerType !== undefined || patch.queueName !== undefined) {
         const rewritten = queue ? `ARRIVE(${customer}, ${queue})` : `ARRIVE(${customer})`;
@@ -1763,6 +1764,7 @@ export function updateVisualNode(model, node, patch = {}) {
     next.queues = updateByRef(next.queues, node.refId, queue => ({
       ...queue,
       ...(patch.name             !== undefined ? { name: patch.name }                         : {}),
+      ...(patch.description      !== undefined ? { description: patch.description }           : {}),
       ...(patch.customerType     !== undefined ? { customerType: patch.customerType }         : {}),
       ...(patch.discipline       !== undefined ? { discipline: patch.discipline }             : {}),
       ...(patch.capacity         !== undefined ? { capacity: patch.capacity }                 : {}),
@@ -1777,6 +1779,7 @@ export function updateVisualNode(model, node, patch = {}) {
       const nextEvent = {
         ...event,
         ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.description !== undefined ? { description: patch.description } : {}),
         ...(patch.condition !== undefined ? { condition: patch.condition } : {}),
         ...(patch.entityFilter !== undefined ? { entityFilter: patch.entityFilter } : {}),
       };
@@ -1819,6 +1822,7 @@ export function updateVisualNode(model, node, patch = {}) {
       const nextEvent = {
         ...event,
         ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.description !== undefined ? { description: patch.description } : {}),
       };
       if (patch.terminalMacro !== undefined) {
         // Swap only the terminal call — co-located COST/SET/RELEASE macros survive.
