@@ -1,6 +1,6 @@
 // ui/execute/ExecuteSinkNode.jsx — live Sink node for the Execute canvas
 // Registered as nodeType "sinkNode" in ExecuteCanvas.
-// data.liveData shape: { served, reneged, throughputPerHour, meanSojourn }
+// data.liveData shape: { served, reneged, balked, throughputPerHour, meanSojourn }
 // throughputPerHour assumes simulation time unit is minutes: rate = served / clock * 60
 import { Handle, Position } from "../shared/xyflow.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -33,6 +33,7 @@ export function ExecuteSinkNode({ data }) {
 
   const served    = live?.served   ?? 0;
   const reneged   = live?.reneged  ?? 0;
+  const balked    = live?.balked   ?? 0;
   const tph       = live?.throughputPerHour ?? null;
   const sojourn   = live?.meanSojourn       ?? null;
 
@@ -97,6 +98,11 @@ export function ExecuteSinkNode({ data }) {
               {reneged > 0 && (
                 <span style={{ fontSize: 9, color: C.reneged, fontFamily: FONT, fontWeight: 700 }}>
                   {reneged} reneged
+                </span>
+              )}
+              {balked > 0 && (
+                <span style={{ fontSize: 9, color: C.balked, fontFamily: FONT, fontWeight: 700 }}>
+                  {balked} balked
                 </span>
               )}
             </div>

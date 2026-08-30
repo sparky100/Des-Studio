@@ -1,6 +1,9 @@
 // ui/execute/ExecuteQueueNode.jsx — live Queue node for the Execute canvas
 // Registered as nodeType "queueNode" in ExecuteCanvas.
-// data.liveData shape: { depth, entities, discipline, clock }
+// data.liveData shape: { depth, entities, discipline, clock, renegeBalkPulse }
+// renegeBalkPulse ({ status, key } | null) is set for one detectRoutingEvents
+// diff tick when an entity reneges/balks straight out of this queue (never
+// entering an activity, so there's no edge to animate a token along instead).
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position } from "../shared/xyflow.js";
 import { TOKEN_COLORS } from "../shared/tokens.js";
@@ -9,6 +12,7 @@ import { Sparkline } from "./Sparkline.jsx";
 
 const MAX_DOT_SHOWN = 8;
 const HISTORY_LEN   = 20;
+const PULSE_DURATION_MS = 500;
 
 function depthColor(depth, C) {
   if (depth === 0) return C.green;
@@ -107,6 +111,29 @@ export function ExecuteQueueNode({ data }) {
   const [history, setHistory] = useState([]);
   const lastClockRef = useRef(null);
 
+  // Renege/balk pulse — mirrors ExecuteSourceNode's arrival-pulse detection
+  // exactly (strictly-increasing key watched via useEffect, brief colored
+  // glow). Skips on initial mount so the node doesn't flash when the sim is
+  // loaded mid-run.
+  const [pulse, setPulse] = useState(null); // { status } | null while flashing
+  const prevPulseKeyRef = useRef(null);
+  const pulseTimerRef = useRef(null);
+
+  useEffect(() => {
+    const p = live?.renegeBalkPulse;
+    const key = p?.key ?? null;
+    if (key !== null && prevPulseKeyRef.current !== null && key > prevPulseKeyRef.current) {
+      setPulse({ status: p.status });
+      if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current);
+      pulseTimerRef.current = setTimeout(() => setPulse(null), PULSE_DURATION_MS);
+    }
+    if (key !== null) prevPulseKeyRef.current = key;
+  }, [live?.renegeBalkPulse?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => {
+    if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current);
+  }, []);
+
   useEffect(() => {
     if (live == null) {
       setHistory([]);
@@ -131,12 +158,13 @@ export function ExecuteQueueNode({ data }) {
   const color      = capacity ? (depth >= capacity ? C.red : depthColor(depth, C)) : depthColor(depth, C);
   const entities   = live?.entities ?? [];
   const discipline = live?.discipline ?? null;
+  const pulseColor = pulse?.status === "reneged" ? C.reneged : pulse?.status === "balked" ? C.balked : null;
 
   return (
     <div style={{
       width: 160,
       background: C.surface,
-      border: `1.5px solid ${QUEUE_COLOR}44`,
+      border: `1.5px solid ${pulseColor ?? `${QUEUE_COLOR}44`}`,
       borderLeft: `4px solid ${QUEUE_COLOR}`,
       borderRadius: 6,
       color: C.text,
@@ -147,7 +175,19 @@ export function ExecuteQueueNode({ data }) {
       fontFamily: FONT,
       fontSize: 11,
       position: "relative",
+      transition: `border-color ${PULSE_DURATION_MS}ms ease-out, box-shadow ${PULSE_DURATION_MS}ms ease-out`,
+      boxShadow: pulseColor ? `0 0 14px ${pulseColor}55` : "none",
     }}>
+      {/* Renege/balk flash overlay — mirrors ExecuteSourceNode's arrival flash */}
+      <div style={{
+        position: "absolute",
+        inset: 0,
+        borderRadius: 6,
+        background: `${pulseColor ?? "transparent"}${pulseColor ? "1a" : ""}`,
+        transition: `background ${PULSE_DURATION_MS}ms ease-out`,
+        pointerEvents: "none",
+      }} />
+
       <Handle
         type="target"
         position={Position.Left}
@@ -158,6 +198,18 @@ export function ExecuteQueueNode({ data }) {
         position={Position.Right}
         style={{ width: 8, height: 8, background: QUEUE_COLOR, borderColor: C.bg, pointerEvents: "none" }}
       />
+
+      {pulse && (
+        <div style={{
+          position: "absolute", top: -9, right: 8,
+          background: pulseColor, color: C.bg,
+          borderRadius: 4, padding: "1px 6px",
+          fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase",
+          fontFamily: FONT,
+        }}>
+          {pulse.status}
+        </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 4 }}>
         <div style={{

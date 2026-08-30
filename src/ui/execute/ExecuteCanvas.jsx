@@ -151,9 +151,20 @@ function entityTypeColor(typeName) {
 const MAX_TOKENS_PER_EDGE = 5;
 const TOKEN_TTL_MS = 350;
 
-// Compare consecutive snaps to detect entity routing transitions.
+// Compare consecutive snaps to detect entity routing transitions. Returns
+// { events, queuePulses }: `events` are edge-token spawns (unchanged shape,
+// plus an optional `outcomeStatus` on terminal fires so the caller can color
+// a reneged/balked token differently from a normal completion); `queuePulses`
+// is a { [queueName]: { status, key } } map for the "entity reneged/balked
+// straight out of a queue, no activity involved" case — there's no edge to
+// animate a token along here (it happened while still `waiting`), so this is
+// a separate, queue-local signal instead. `key` is the entity id — strictly
+// increasing per queue, same convention ExecuteSourceNode's `arrivalKey`
+// pulse detection already relies on.
 export function detectRoutingEvents(prevSnap, currSnap, graph) {
   const events = [];
+  /** @type {Record<string, {status: string, key: number}>} */
+  const queuePulses = {};
   const prevById = new Map((prevSnap.entities || []).map(e => [e.id, e]));
   const edges = graph.edges || [];
   const nodes = graph.nodes || [];
@@ -240,13 +251,24 @@ export function detectRoutingEvents(prevSnap, currSnap, graph) {
       // served/delayed) → Activity → Sink edge, scoped to the activity it
       // actually left. No unscoped fallback here — an entity reneging or
       // balking directly out of a queue (never entering an activity) has no
-      // edge to animate and correctly produces no token.
+      // edge to animate; that case is handled below via queuePulses instead.
       const activityIds = activityIdsFedByQueue(prev.lastQueue ?? prev.queue);
       const edge = findEdge(e => e.source === "terminal" && activityIds.includes(e.from));
-      if (edge) events.push({ edgeId: edge.id, entityType: curr.type });
+      if (edge) {
+        const outcomeStatus = curr.status !== "done" ? curr.status : undefined;
+        events.push({ edgeId: edge.id, entityType: curr.type, outcomeStatus });
+      }
+    } else if (prev.status === "waiting" && (curr.status === "reneged" || curr.status === "balked") && prev.queue) {
+      // Entity reneged/balked directly out of a queue, never having entered
+      // an activity — no edge exists to animate a token along (see comment
+      // above), so pulse the Queue node itself instead.
+      const existing = queuePulses[prev.queue];
+      if (!existing || curr.id > existing.key) {
+        queuePulses[prev.queue] = { status: curr.status, key: curr.id };
+      }
     }
   }
-  return events;
+  return { events, queuePulses };
 }
 
 // ── Return a short human-readable label for the inter-arrival distribution of a b-event.
@@ -729,6 +751,9 @@ export function ExecuteCanvas({
 
   // ── Token animation (F9C.6) ─────────────────────────────────────────────
   const [edgeTokens, setEdgeTokens] = useState({});
+  // Per-queue "just reneged/balked, never entered an activity" pulse signal
+  // (see detectRoutingEvents) — threaded into that queue node's liveData below.
+  const [queuePulses, setQueuePulses] = useState({});
   const prevSnapRef = useRef(null);
 
   useEffect(() => {
@@ -738,9 +763,20 @@ export function ExecuteCanvas({
     }
     const prev = prevSnapRef.current;
     if (prev) {
-      const events = detectRoutingEvents(prev, snap, baseGraph);
+      const { events, queuePulses: newPulses } = detectRoutingEvents(prev, snap, baseGraph);
+      if (Object.keys(newPulses).length > 0) {
+        setQueuePulses(current => ({ ...current, ...newPulses }));
+      }
       if (events.length > 0) {
-        const spawned = events.map(ev => ({ id: nextTokenId(), edgeId: ev.edgeId, color: entityTypeColor(ev.entityType) }));
+        const spawned = events.map(ev => ({
+          id: nextTokenId(),
+          edgeId: ev.edgeId,
+          // A reneged/balked terminal token is colored by outcome, not entity
+          // type — distinct from a normal (green-ish, per-type) completion.
+          color: ev.outcomeStatus === "reneged" ? C.reneged
+            : ev.outcomeStatus === "balked" ? C.balked
+            : entityTypeColor(ev.entityType),
+        }));
         setEdgeTokens(prev => {
           const next = { ...prev };
           for (const t of spawned) {
@@ -815,6 +851,7 @@ export function ExecuteCanvas({
             entities: queueEntities,
             discipline: qDef?.discipline ?? null,
             clock: snap.clock,
+            renegeBalkPulse: queuePulses[node.label] ?? null,
           };
         } else if (node.type === "activity") {
           liveData = deriveActivityLiveData(snap, node.refId, serverTypeIndex, model);
@@ -829,9 +866,17 @@ export function ExecuteCanvas({
             : null;
           // Per-sink count from eventCounts (B-Event fire count for COMPLETE/RENEGE)
           const sinkFireCount = node.refId ? (snap.eventCounts?.[node.refId] ?? 0) : 0;
+          // Reneged/balked aren't tied to any one particular sink (a renege
+          // timer or a balk can fire from any queue in the model, unrelated
+          // to which sink an entity would eventually have reached) — shown
+          // as the run's global running total on every sink, same "global
+          // count, shown per node" convention the BottomPanel's per-queue
+          // Reneged/Balked cards already use. (This replaces a previous
+          // `reneged: 0` placeholder that was never actually wired up.)
           liveData = {
             served: sinkFireCount,
-            reneged: 0,
+            reneged: snap.reneged ?? 0,
+            balked: snap.balked ?? 0,
             throughputPerHour,
             meanSojourn,
           };
@@ -893,7 +938,7 @@ export function ExecuteCanvas({
     }
 
     return mapped;
-  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels, matchedNodeIds]);
+  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels, matchedNodeIds, queuePulses]);
 
   const flowEdges = useMemo(() => baseGraph.edges.map(edge => {
     const base = {
