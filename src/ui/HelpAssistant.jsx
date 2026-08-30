@@ -317,7 +317,10 @@ export function HelpAssistant({
 
     let accumulated = '';
     streamNarrative(
-      { kind: 'help-assistant', messages, max_tokens: 800 },
+      // 800 was too low for an open-ended "explain this model" ask — Anthropic
+      // would hit stop_reason: max_tokens and cut the reply off mid-sentence.
+      // 4000 gives comparable headroom to buildExplainResultsPrompt's 2400.
+      { kind: 'help-assistant', messages, max_tokens: 4000 },
       {
         onToken: token => {
           accumulated += token;
