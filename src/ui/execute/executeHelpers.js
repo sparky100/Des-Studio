@@ -222,7 +222,7 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
   for (const s of summaries) {
     if (!s.perResource) continue;
     for (const [type, stats] of Object.entries(s.perResource)) {
-      if (!perResourceAcc[type]) perResourceAcc[type] = { utilSum: 0, calUtilSum: 0, calUtilCount: 0, availSum: 0, failureSum: 0, downtimeSum: 0, count: 0, total: stats.total };
+      if (!perResourceAcc[type]) perResourceAcc[type] = { utilSum: 0, calUtilSum: 0, calUtilCount: 0, availSum: 0, failureSum: 0, downtimeSum: 0, adherenceSum: 0, adherenceCount: 0, count: 0, total: stats.total };
       perResourceAcc[type].utilSum     += stats.utilisation   ?? 0;
       perResourceAcc[type].availSum    += stats.availability  ?? 1;
       perResourceAcc[type].failureSum  += stats.failureCount  ?? 0;
@@ -230,6 +230,18 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       if (stats.calendarUtilisation != null) {
         perResourceAcc[type].calUtilSum += stats.calendarUtilisation;
         perResourceAcc[type].calUtilCount++;
+      }
+      // Per-skill utilisation (only present for resource types with skills defined)
+      if (stats.skillUtil) {
+        if (!perResourceAcc[type].skillUtilSum) perResourceAcc[type].skillUtilSum = {};
+        for (const [skill, util] of Object.entries(stats.skillUtil)) {
+          perResourceAcc[type].skillUtilSum[skill] = (perResourceAcc[type].skillUtilSum[skill] || 0) + util;
+        }
+      }
+      // Schedule adherence (only present for resource types on a weekly schedule)
+      if (stats.scheduleAdherence != null) {
+        perResourceAcc[type].adherenceSum += stats.scheduleAdherence;
+        perResourceAcc[type].adherenceCount++;
       }
       perResourceAcc[type].count++;
     }
@@ -245,6 +257,10 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
             availability: acc.count ? +(acc.availSum / acc.count).toFixed(4) : 1,
             failureCount: acc.count ? +(acc.failureSum / acc.count).toFixed(2) : 0,
             totalDowntime: acc.count ? +(acc.downtimeSum / acc.count).toFixed(4) : 0,
+            skillUtil: acc.skillUtilSum
+              ? Object.fromEntries(Object.entries(acc.skillUtilSum).map(([skill, sum]) => [skill, +(sum / acc.count).toFixed(4)]))
+              : undefined,
+            scheduleAdherence: acc.adherenceCount ? +(acc.adherenceSum / acc.adherenceCount).toFixed(4) : undefined,
           },
         ])
       )
@@ -291,6 +307,33 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
     }
   }
   const perQueue = Object.keys(perQueueAcc).length ? perQueueAcc : undefined;
+
+  // Aggregate container levels across replications. min/max are the extremes
+  // actually observed across all reps (the useful number for capacity
+  // planning — "the worst level any replication reached"); avg/final are
+  // simple means across reps, mirroring perResourceAcc's mean-across-reps
+  // convention above.
+  const containerAcc = {};
+  for (const s of summaries) {
+    if (!s.containerLevels) continue;
+    for (const [id, lvl] of Object.entries(s.containerLevels)) {
+      if (!containerAcc[id]) containerAcc[id] = { min: Infinity, max: -Infinity, avgSum: 0, finalSum: 0, count: 0 };
+      const acc = containerAcc[id];
+      acc.min = Math.min(acc.min, lvl.min);
+      acc.max = Math.max(acc.max, lvl.max);
+      acc.avgSum += lvl.avg ?? 0;
+      acc.finalSum += lvl.final ?? 0;
+      acc.count++;
+    }
+  }
+  const containerLevels = Object.keys(containerAcc).length
+    ? Object.fromEntries(Object.entries(containerAcc).map(([id, acc]) => [id, {
+        min: +acc.min.toFixed(4),
+        max: +acc.max.toFixed(4),
+        avg: acc.count ? +(acc.avgSum / acc.count).toFixed(4) : 0,
+        final: acc.count ? +(acc.finalSum / acc.count).toFixed(4) : 0,
+      }]))
+    : undefined;
 
   // Aggregate waitDist across all replications by pooling raw values per queue
   const waitDistAcc = {};
@@ -454,6 +497,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       maxSimTime: maxTime,
       outcomes: Object.keys(outcomeAcc).length ? outcomeAcc : undefined,
       perResource,
+      containerLevels,
       sections,
       journeys,
       queueJourneys,
