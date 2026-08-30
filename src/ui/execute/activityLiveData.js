@@ -39,7 +39,15 @@ function effectToText(effect) {
 export function extractServerTypes(effect) {
   const text = effectToText(effect);
   if (!text) return [];
-  const assignMatch = text.match(/ASSIGN\s*\(\s*[^,)]+,\s*([^),]+)\)/i);
+  // Only require the 2nd argument to be followed by a comma or the closing
+  // paren — not the closing paren directly — so this still matches when
+  // ASSIGN carries further trailing arguments: a skill literal/Entity.attr
+  // (ASSIGN(Queue, ANY, "Skill")) and/or a container-claim quantity
+  // (ASSIGN(Queue, ServerType, Container:N)). The old regex required the 2nd
+  // arg to be immediately followed by ")", so any 3+-argument ASSIGN failed
+  // to match at all and fell through to the no-serverTypes fallback below
+  // (the whole model's total server count, mislabeled as this activity's pool).
+  const assignMatch = text.match(/ASSIGN\s*\(\s*[^,)]+,\s*([^,)]+)\s*(?:,[^)]*)?\)/i);
   if (assignMatch) return [assignMatch[1].trim()];
   const targetedMatch = text.match(/\b(?:PREEMPT|FAIL|FINISH|REPAIR)\s*\(\s*([^,)]+)/i);
   if (targetedMatch) return [targetedMatch[1].trim()];

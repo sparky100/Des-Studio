@@ -77,6 +77,40 @@ function DepthBadge({ depth, capacity }) {
   );
 }
 
+// Names the entity type(s) currently waiting — dot color alone (typeColor())
+// plus a hover-only title were the only way to tell types apart before this;
+// a queue is conventionally single-type (Queue.customerType) but that's a UI
+// convention, not an engine-enforced constraint, so this renders one pill per
+// distinct type actually present rather than assuming just one.
+function EntityTypeLabels({ entities }) {
+  const { FONT } = useTheme();
+  const types = [...new Set(entities.map(e => e.type))];
+  if (types.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+      {types.map(type => {
+        const color = typeColor(type);
+        return (
+          <div key={type} style={{
+            background: `${color}18`,
+            border: `1px solid ${color}44`,
+            borderRadius: 3,
+            color,
+            fontFamily: FONT,
+            fontSize: 8,
+            fontWeight: 700,
+            letterSpacing: 0.8,
+            padding: "1px 5px",
+            flexShrink: 0,
+          }}>
+            {type}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function EntityDots({ entities }) {
   const { C, FONT } = useTheme();
   const visible = entities.slice(0, MAX_DOT_SHOWN);
@@ -241,6 +275,7 @@ export function ExecuteQueueNode({ data }) {
         <div style={{ fontSize: 9, color: C.muted }}>—</div>
       )}
 
+      {entities.length > 0 && <EntityTypeLabels entities={entities} />}
       {entities.length > 0 && <EntityDots entities={entities} />}
 
       {history.length >= 2 && (

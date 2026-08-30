@@ -74,6 +74,24 @@ describe("extractServerTypes", () => {
     const effect = ["PREEMPT(Staff, PRIORITY(taskPriority))", "SET(repairsInProgress, repairsInProgress - 1)"];
     expect(extractServerTypes(effect)).toEqual(["Staff"]);
   });
+
+  // Regression: the old ASSIGN regex required the 2nd argument to be
+  // followed immediately by the closing ")", so any ASSIGN with a 3rd
+  // argument failed to match at all — falling through to the no-serverTypes
+  // branch, which shows the total server count across every resource type
+  // in the whole model instead of the one real server type this activity
+  // actually seizes.
+  test("ASSIGN with a trailing container-claim quantity still resolves the server type", () => {
+    expect(extractServerTypes("ASSIGN(Hire Queue, Staff, BikesAvailable:1)")).toEqual(["Staff"]);
+  });
+
+  test("ASSIGN(Queue, ANY, \"Skill\") still resolves to ANY (for buildServerTypeIndex's cross-type pooling)", () => {
+    expect(extractServerTypes('ASSIGN(Queue, ANY, "Skill")')).toEqual(["ANY"]);
+  });
+
+  test("ASSIGN with a trailing Entity.attr argument still resolves the server type", () => {
+    expect(extractServerTypes("ASSIGN(Queue, Staff, Entity.priority)")).toEqual(["Staff"]);
+  });
 });
 
 describe("buildServerTypeIndex", () => {
@@ -96,6 +114,13 @@ describe("buildServerTypeIndex", () => {
     const cEvents = [{ id: "ce-3", name: "NoOp", effect: null }];
     const index = buildServerTypeIndex(cEvents, []);
     expect(index.has("ce-3")).toBe(false);
+  });
+
+  test("indexes an ASSIGN with a trailing container-claim quantity, ignoring the container argument", () => {
+    const cEvents = [{ id: "ce-hire", name: "Serve Hire Customer", effect: "ASSIGN(Hire Queue, Staff, BikesAvailable:1)" }];
+    const entityTypes = [{ name: "Staff", role: "server", count: "3" }];
+    const index = buildServerTypeIndex(cEvents, entityTypes);
+    expect(index.get("ce-hire")).toEqual({ serverTypes: ["Staff"], capacities: [3], ceventName: "Serve Hire Customer" });
   });
 });
 
@@ -209,5 +234,34 @@ describe("deriveActivityLiveData", () => {
     expect(anaesthetist.capacity).toBe(2);
     expect(anaesthetist.busyCount).toBe(1);
     expect(anaesthetist.activityBusyCount).toBe(1);
+  });
+
+  test("ASSIGN with a trailing container-claim resolves to the real server type's stats, not a whole-model total (regression)", () => {
+    // Before the fix, "ASSIGN(Hire Queue, Staff, BikesAvailable:1)" wasn't
+    // indexed at all (extractServerTypes returned []), so this fell through
+    // to the "no serverTypes" branch: capacity = every server entity in the
+    // whole model (here, 3 Staff + 15 OnHire = 18) — exactly reproducing the
+    // reported "0 active / 0/18 pool" bug, instead of Staff's real capacity (3).
+    const hireModel = {
+      cEvents: [{ id: "ce-hire", name: "Serve Hire Customer", effect: "ASSIGN(Hire Queue, Staff, BikesAvailable:1)" }],
+    };
+    const serverTypeIndex = buildServerTypeIndex(hireModel.cEvents, [
+      { name: "Staff", role: "server", count: "3" },
+      { name: "OnHire", role: "server", count: "15" },
+    ]);
+    const snap = makeSnap({
+      entities: [
+        { id: 1, type: "Staff", role: "server", status: "busy", currentCustId: 100 },
+        { id: 2, type: "Staff", role: "server", status: "idle" },
+        { id: 3, type: "Staff", role: "server", status: "idle" },
+        ...Array.from({ length: 15 }, (_, i) => ({ id: 20 + i, type: "OnHire", role: "server", status: "idle" })),
+        { id: 100, type: "Customer", role: "customer", status: "busy", ceventName: "Serve Hire Customer" },
+      ],
+    });
+    const live = deriveActivityLiveData(snap, "ce-hire", serverTypeIndex, hireModel);
+    expect(live.serverTypeName).toBe("Staff");
+    expect(live.capacity).toBe(3);
+    expect(live.busyCount).toBe(1);
+    expect(live.activityBusyCount).toBe(1);
   });
 });
