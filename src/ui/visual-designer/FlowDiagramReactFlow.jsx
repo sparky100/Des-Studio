@@ -34,7 +34,7 @@ import { SectionPanelNode } from "./SectionPanelNode.jsx";
 const DRAW_CANVAS_RESERVED_BOTTOM = 24;
 
 function colorForNodeType(type, C) {
-  return { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red, container: C.amber, resource: C.server }[type] || C.accent;
+  return { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red, container: C.amber }[type] || C.accent;
 }
 
 // Badges that flag something worth a second look — an opt-in behavior
@@ -48,8 +48,8 @@ function DesNode({ data, selected }) {
   const { C, FONT } = useTheme();
   const [hovered, setHovered] = useState(false);
   const color = colorForNodeType(data.type, C);
-  const hasTarget = data.type !== "source" && data.type !== "container" && data.type !== "resource";
-  const hasSource = data.type !== "sink" && data.type !== "container" && data.type !== "resource";
+  const hasTarget = data.type !== "source" && data.type !== "container";
+  const hasSource = data.type !== "sink" && data.type !== "container";
   const hasError = !!data.hasError;
   return (
     <div
