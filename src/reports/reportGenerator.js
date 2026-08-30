@@ -827,6 +827,22 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     containerHtml = `<h3>Container levels</h3>${htmlTable(['Container', 'Min', 'Avg', 'Max', 'Final'], containerRows)}`;
   }
 
+  // Queue balking/blocking table — perQueue is a top-level sibling of summary,
+  // not nested inside it (see engine/index.js and makeBatchResult).
+  let rejectionHtml = '';
+  const rejectionEntries = Object.entries(results.perQueue || {})
+    .filter(([, counts]) => (counts.balkCount || 0) > 0 || (counts.blockingCount || 0) > 0);
+  if (rejectionEntries.length) {
+    const rejectionRows = rejectionEntries.map(([q, counts]) => [
+      q,
+      String(counts.balkCount || 0),
+      String(counts.blockingCount || 0),
+    ]);
+    rejectionHtml = `<h3>Queue balking / blocking</h3>
+    <p class="note">Entities that left without joining a queue (balked) or were turned away because the queue was at capacity (blocked).</p>
+    ${htmlTable(['Queue', 'Balked', 'Blocked'], rejectionRows)}`;
+  }
+
   const outcomeHasTimings = outcomes.some(r => r.avgWait != null || r.avgSojourn != null);
   const outcomesHtml = outcomes.length
     ? `<h3>Journey outcomes</h3>
@@ -914,6 +930,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     ${outcomesHtml}
     ${utilChartHtml || utilTableHtml ? `<h3>Resource utilisation</h3>${utilChartHtml}${utilTableHtml}` : ''}
     ${containerHtml}
+    ${rejectionHtml}
     ${timeSeriesHtml}
     ${planVsActualHtml}
     ${goalHtml}
@@ -1198,6 +1215,21 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     });
     lines.push(mdTable(['Resource', 'Capacity', '% Busy'], utilRows));
     lines.push('');
+
+    // Per-skill utilisation (mirrors the HTML report's buildResults())
+    const mdSkillRows = resourceTypes.flatMap(t => {
+      const sk = summary.perResource[t].skillUtil;
+      return sk ? Object.entries(sk).map(([skill, util]) => [
+        `${t} (${skill})`,
+        Number.isFinite(util) ? `${Math.round(util * 100)}%` : '—',
+      ]) : [];
+    });
+    if (mdSkillRows.length) {
+      lines.push('#### Per-skill Utilisation');
+      lines.push('');
+      lines.push(mdTable(['Resource (skill)', '% Busy'], mdSkillRows));
+      lines.push('');
+    }
   }
 
   // Container levels
@@ -1213,6 +1245,21 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
       formatN(lvl.final) ?? '—',
     ]);
     lines.push(mdTable(['Container', 'Min', 'Avg', 'Max', 'Final'], containerRows));
+    lines.push('');
+  }
+
+  // Queue balking / blocking — perQueue is a top-level sibling of summary
+  const mdRejectionEntries = Object.entries(results.perQueue || {})
+    .filter(([, counts]) => (counts.balkCount || 0) > 0 || (counts.blockingCount || 0) > 0);
+  if (mdRejectionEntries.length) {
+    lines.push('### Queue Balking / Blocking');
+    lines.push('');
+    const mdRejectionRows = mdRejectionEntries.map(([q, counts]) => [
+      q,
+      String(counts.balkCount || 0),
+      String(counts.blockingCount || 0),
+    ]);
+    lines.push(mdTable(['Queue', 'Balked', 'Blocked'], mdRejectionRows));
     lines.push('');
   }
 

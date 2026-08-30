@@ -134,6 +134,45 @@ describe('generateReport', () => {
     expect(html).not.toContain('direct-routing');
   });
 
+  test('includes a queue balking/blocking table when perQueue has rejections (HTML)', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithRejections = { ...minimalResults, perQueue: { 'Waiting Room': { balkCount: 7, blockingCount: 2 } } };
+
+    const html = await generateReport(minimalModel, resultsWithRejections, experimentConfig, runMeta);
+
+    expect(html).toContain('Queue balking / blocking');
+    expect(html).toContain('Waiting Room');
+    expect(html).toContain('7');
+    expect(html).toContain('2');
+  });
+
+  test('omits the balking/blocking table when no queue has any rejections (HTML)', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+    expect(html).not.toContain('Queue balking / blocking');
+  });
+
+  test('includes per-skill utilisation rows when perResource has skillUtil (HTML)', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithSkill = { ...minimalResults, summary: { ...minimalResults.summary, perResource: { Doctor: { total: 2, utilisation: 0.6, skillUtil: { Surgery: 0.4 } } } } };
+
+    const html = await generateReport(minimalModel, resultsWithSkill, experimentConfig, runMeta);
+
+    expect(html).toContain('Per-skill utilisation');
+    expect(html).toContain('Doctor (Surgery)');
+    expect(html).toContain('40%');
+  });
+
+  test('includes container levels when summary has containerLevels (HTML)', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithContainer = { ...minimalResults, summary: { ...minimalResults.summary, containerLevels: { Tank: { min: 0, max: 100, avg: 42, final: 60 } } } };
+
+    const html = await generateReport(minimalModel, resultsWithContainer, experimentConfig, runMeta);
+
+    expect(html).toContain('Container levels');
+    expect(html).toContain('Tank');
+  });
+
   test('includes entity types in appendix', async () => {
     callLLMOnce.mockResolvedValue('');
 
@@ -288,6 +327,50 @@ describe('generateReport', () => {
 
     expect(html).toContain('85%');
     expect(html).not.toMatch(/85\.\d%/);
+  });
+});
+
+describe('generateReport — markdown format', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('includes a Queue Balking / Blocking section when perQueue has rejections', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithRejections = { ...minimalResults, perQueue: { 'Waiting Room': { balkCount: 7, blockingCount: 2 } } };
+
+    const md = await generateReport(minimalModel, resultsWithRejections, experimentConfig, runMeta, { format: 'markdown' });
+
+    expect(md).toContain('### Queue Balking / Blocking');
+    expect(md).toContain('Waiting Room');
+    expect(md).toContain('7');
+  });
+
+  test('omits the Queue Balking / Blocking section when no queue has any rejections', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta, { format: 'markdown' });
+    expect(md).not.toContain('Queue Balking / Blocking');
+  });
+
+  test('includes a Per-skill Utilisation subsection when perResource has skillUtil (previously HTML-only)', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithSkill = { ...minimalResults, summary: { ...minimalResults.summary, perResource: { Doctor: { total: 2, utilisation: 0.6, skillUtil: { Surgery: 0.4 } } } } };
+
+    const md = await generateReport(minimalModel, resultsWithSkill, experimentConfig, runMeta, { format: 'markdown' });
+
+    expect(md).toContain('#### Per-skill Utilisation');
+    expect(md).toContain('Doctor (Surgery)');
+    expect(md).toContain('40%');
+  });
+
+  test('includes Container Levels when summary has containerLevels', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithContainer = { ...minimalResults, summary: { ...minimalResults.summary, containerLevels: { Tank: { min: 0, max: 100, avg: 42, final: 60 } } } };
+
+    const md = await generateReport(minimalModel, resultsWithContainer, experimentConfig, runMeta, { format: 'markdown' });
+
+    expect(md).toContain('### Container Levels');
+    expect(md).toContain('Tank');
   });
 });
 
