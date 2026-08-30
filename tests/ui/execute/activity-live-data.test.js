@@ -106,8 +106,8 @@ describe("buildServerTypeIndex", () => {
       { name: "Anesthetist", role: "server", count: "1" },
     ];
     const index = buildServerTypeIndex(cEvents, entityTypes);
-    expect(index.get("ce-1")).toEqual({ serverTypes: ["Clerk"], capacities: [2], ceventName: "Serve" });
-    expect(index.get("ce-2")).toEqual({ serverTypes: ["Surgeon", "Anesthetist"], capacities: [3, 1], ceventName: "Surgery" });
+    expect(index.get("ce-1")).toEqual({ serverTypes: ["Clerk"], capacities: [2], ceventName: "Serve", scheduledEventIds: [] });
+    expect(index.get("ce-2")).toEqual({ serverTypes: ["Surgeon", "Anesthetist"], capacities: [3, 1], ceventName: "Surgery", scheduledEventIds: [] });
   });
 
   test("skips c-events with no server types", () => {
@@ -120,12 +120,22 @@ describe("buildServerTypeIndex", () => {
     const cEvents = [{ id: "ce-hire", name: "Serve Hire Customer", effect: "ASSIGN(Hire Queue, Staff, BikesAvailable:1)" }];
     const entityTypes = [{ name: "Staff", role: "server", count: "3" }];
     const index = buildServerTypeIndex(cEvents, entityTypes);
-    expect(index.get("ce-hire")).toEqual({ serverTypes: ["Staff"], capacities: [3], ceventName: "Serve Hire Customer" });
+    expect(index.get("ce-hire")).toEqual({ serverTypes: ["Staff"], capacities: [3], ceventName: "Serve Hire Customer", scheduledEventIds: [] });
+  });
+
+  test("captures cSchedules' eventId(s) as scheduledEventIds, for this activity's own completion signal", () => {
+    const cEvents = [{
+      id: "ce-hire", name: "Serve Hire Customer", effect: "ASSIGN(Hire Queue, Staff)",
+      cSchedules: [{ eventId: "be-hire-complete", dist: "Fixed", distParams: { value: "5" } }],
+    }];
+    const entityTypes = [{ name: "Staff", role: "server", count: "3" }];
+    const index = buildServerTypeIndex(cEvents, entityTypes);
+    expect(index.get("ce-hire").scheduledEventIds).toEqual(["be-hire-complete"]);
   });
 });
 
-function makeSnap({ clock = 10.0, entities = [], served = 0 } = {}) {
-  return { clock, entities, served };
+function makeSnap({ clock = 10.0, entities = [], served = 0, eventCounts = {} } = {}) {
+  return { clock, entities, served, eventCounts };
 }
 
 describe("deriveActivityLiveData", () => {
@@ -167,6 +177,27 @@ describe("deriveActivityLiveData", () => {
     // Top-level fields mirror the first type (Surgeon) for backward compatibility.
     expect(live.serverTypeName).toBe("Surgeon");
     expect(live.capacity).toBe(2);
+  });
+
+  test("completionSignal is this activity's own scheduled-event fire count, not the model-wide snap.served total (regression)", () => {
+    // Before this fix, completionSignal was snap.served — a single global
+    // total shared by every activity node, so every activity flashed
+    // simultaneously whenever ANY activity anywhere completed a job.
+    const twoActivityModel = {
+      cEvents: [
+        { id: "ce-hire", name: "Serve Hire Customer", effect: "ASSIGN(Hire Queue, Staff)", cSchedules: [{ eventId: "be-hire-complete" }] },
+        { id: "ce-purchase", name: "Serve Purchase Customer", effect: "ASSIGN(Purchase Queue, Staff)", cSchedules: [{ eventId: "be-purchase-complete" }] },
+      ],
+    };
+    const serverTypeIndex = buildServerTypeIndex(twoActivityModel.cEvents, [{ name: "Staff", role: "server", count: "3" }]);
+    // Only the "purchase" b-event fired so far; "hire" hasn't.
+    const snap = makeSnap({ served: 5, eventCounts: { "be-purchase-complete": 5 } });
+
+    const hireLive = deriveActivityLiveData(snap, "ce-hire", serverTypeIndex, twoActivityModel);
+    const purchaseLive = deriveActivityLiveData(snap, "ce-purchase", serverTypeIndex, twoActivityModel);
+
+    expect(hireLive.completionSignal).toBe(0);
+    expect(purchaseLive.completionSignal).toBe(5);
   });
 
   test("returns empty perType and zeroed fields when c-event isn't indexed", () => {
