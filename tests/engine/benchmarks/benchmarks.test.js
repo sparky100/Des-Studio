@@ -128,7 +128,8 @@ describe('Benchmark 3 — M/G/1 P-K mean wait (Uniform[0,2] service)', () => {
 // λ=2.0, μ=1.0, system capacity K=5 (queue capacity=4 + 1 server slot)
 // ρ = 2.0; P_loss = ρ^K(1−ρ)/(1−ρ^(K+1)) = 32·(−1)/(1−64) = 32/63 ≈ 0.508
 // 20 replications, no warmup (system near capacity from t=0), maxSimTime=30000.
-// Assert: blockingCount/(total+blockingCount) within ±3% of 0.508.
+// Assert: blockingCount/total (summary.total is every arrival, blocked ones
+// included — see discardFailedJoin) within ±3% of 0.508.
 
 describe('Benchmark 4 — M/M/1/K finite queue loss probability (K=5)', () => {
   const ANALYTICAL_LOSS = 32 / 63;   // ≈ 0.5079
@@ -180,8 +181,13 @@ describe('Benchmark 4 — M/M/1/K finite queue loss probability (K=5)', () => {
     const model = mm1kModel();
     const lossRates = runReps(model, REPS, BASE_SEED, 0, MAX_SIM).map(r => {
       const blocked = r.perQueue?.['Main Queue']?.blockingCount ?? 0;
-      const entered = r.summary.total;
-      return blocked / (entered + blocked);
+      // summary.total now counts every arrival, including ones blocked at the
+      // door (kept with a terminal "balked" status instead of vanishing —
+      // see src/engine/entities.js discardFailedJoin) — it already IS total
+      // arrivals, not just the ones who got in. blocked is a subset of it,
+      // not an addition to it.
+      const totalArrivals = r.summary.total;
+      return blocked / totalArrivals;
     });
     const meanLoss = avg(lossRates);
     const pctError = Math.abs(meanLoss - ANALYTICAL_LOSS) / ANALYTICAL_LOSS;
