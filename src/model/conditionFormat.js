@@ -1,3 +1,27 @@
+import { clean } from "./macroParser.js";
+
+// Short human-readable label for a condition/predicate object — used by the
+// Visual Designer canvas (routing-branch edge labels, per-schedule "when"
+// summaries) and the Inspector. Handles the top-level AND/OR clause list, a
+// legacy string condition, or a single leaf { variable, operator, value }.
+export function conditionLabel(c, depth = 0) {
+  if (!c) return "condition";
+  if (typeof c === "string") return c;
+  if (typeof c !== "object") return "condition";
+  if ((c.operator === "AND" || c.operator === "OR") && Array.isArray(c.clauses) && depth === 0) {
+    const parts = c.clauses.map(cl => conditionLabel(cl, 1)).filter(p => p !== "condition");
+    return parts.length ? parts.join(` ${c.operator} `) : "condition";
+  }
+  const rawVar  = clean(c.variable || "");
+  // Strip "Entity." / "entity." prefix so "Entity.severity" → "severity"
+  const variable = rawVar.replace(/^entity\./i, "");
+  const op       = clean(c.operator || c.op || "");
+  const value    = c.value;
+  return variable && op && value !== undefined ? `${variable} ${op} ${value}`
+       : variable && value !== undefined       ? `${variable} = ${value}`
+       : "condition";
+}
+
 function parseScalarValue(raw) {
   const text = String(raw ?? "").trim();
   if (text === "true") return true;
