@@ -369,6 +369,22 @@ function LiveNodeMetric({ type, live }) {
     );
   }
 
+  if (type === "container" && live.level != null) {
+    // Same fill-ratio thresholds as ContainerGaugeStrip.jsx's levelColor —
+    // ≥100% red, ≥85% amber, else accent (distinct from the 90/70 red/amber/
+    // green scheme used for resource utilisation elsewhere on this canvas).
+    const hasCapacity = Number.isFinite(live.capacity) && live.capacity > 0;
+    const fillRatio = hasCapacity ? live.level / live.capacity : null;
+    const color = fillRatio == null ? C.accent : fillRatio >= 1 ? C.red : fillRatio >= 0.85 ? C.amber : C.accent;
+    return (
+      <LiveBadge
+        value={hasCapacity ? `${live.level.toFixed(0)}/${live.capacity.toFixed(0)}` : live.level.toFixed(0)}
+        label="level"
+        color={color}
+      />
+    );
+  }
+
   return null;
 }
 
@@ -846,6 +862,16 @@ export function ExecuteCanvas({
             interArrivalLabel: src?.interArrivalLabel ?? null,
             arrivalKey,
           };
+        } else if (node.type === "container") {
+          // Mirrors ContainerGaugeStrip.jsx's own data resolution: live level/
+          // capacity from snap.containers when available, falling back to the
+          // container type's static initialLevel/capacity before the first
+          // FILL/DRAIN.
+          const live = snap.containers?.[node.refId];
+          const ct = (model.containerTypes || []).find(c => c.id === node.refId);
+          const level = live?.level ?? (ct?.initialLevel != null ? Number(ct.initialLevel) : 0);
+          const capacity = live?.capacity ?? (ct?.capacity != null ? Number(ct.capacity) : null);
+          liveData = { level, capacity: Number.isFinite(capacity) ? capacity : null };
         }
       }
       const dimmed = (showSections && focusedSectionId != null && node.sectionId !== focusedSectionId) ||
