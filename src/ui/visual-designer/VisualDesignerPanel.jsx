@@ -313,7 +313,7 @@ function ValidationChecklist({ visualIssues, modelErrors, modelWarnings, graph, 
   );
 }
 
-export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit, flowKey = 0, fitAllRef }) {
+export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit, flowKey = 0, fitAllRef, onGoToDefine }) {
   const { C, FONT } = useTheme();
   const PALETTE_ITEMS = [
     { type: VISUAL_NODE_TYPES.SOURCE,   label: "Add Source",   icon: "S", color: C.green },
@@ -1493,6 +1493,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               onPatchNode={patchNode}
               onDeleteNode={canEdit ? deleteNode : null}
               onClose={() => setInspectorCollapsed(true)}
+              onGoToDefine={onGoToDefine}
             />
           </div>
         </div>

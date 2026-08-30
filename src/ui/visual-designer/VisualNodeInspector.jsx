@@ -83,7 +83,7 @@ function CommitField({ label, value, onChange, disabled, transform, placeholder 
 // model boxes); consolidated here so every gap — including balking,
 // reneging, description, and the Source/Sink effect/routing fields — renders
 // identically instead of reinventing the box each time.
-function DefinePointer({ label, status, summary, tab, color }) {
+function DefinePointer({ label, status, summary, tab, color, onGoTo }) {
   const { C, FONT } = useTheme();
   const c = color || C.muted;
   return (
@@ -97,9 +97,32 @@ function DefinePointer({ label, status, summary, tab, color }) {
       {summary && (
         <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>{summary}</div>
       )}
-      <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
-        Edit in the {tab} tab.
-      </div>
+      {onGoTo ? (
+        <button
+          type="button"
+          onClick={onGoTo}
+          style={{
+            background: "none",
+            border: "none",
+            padding: 0,
+            margin: 0,
+            fontSize: 9,
+            color: c,
+            fontFamily: FONT,
+            fontStyle: "italic",
+            textDecoration: "underline",
+            cursor: "pointer",
+            textAlign: "left",
+            alignSelf: "flex-start",
+          }}
+        >
+          Edit in the {tab} tab →
+        </button>
+      ) : (
+        <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+          Edit in the {tab} tab.
+        </div>
+      )}
     </div>
   );
 }
@@ -107,24 +130,35 @@ function DefinePointer({ label, status, summary, tab, color }) {
 // Gaps shared by Source and Sink nodes — both are backed by the same BEvent
 // schema (description/effect/routing/loopConfig), so one component avoids
 // two copies of the same three pointers drifting apart.
-function BEventPointers({ bEvent }) {
+function BEventPointers({ bEvent, onGoToDefine }) {
   const { C } = useTheme();
   if (!bEvent) return null;
   const hasRouting = (Array.isArray(bEvent.routing) && bEvent.routing.length > 0)
     || (Array.isArray(bEvent.probabilisticRouting) && bEvent.probabilisticRouting.length > 0);
   const loop = bEvent.loopConfig;
+  const goToBEvent = goTo(onGoToDefine, "Bound Events", bEvent.id);
   return (
     <>
       <DefinePointer label="Description" color={C.muted}
-        summary={bEvent.description || "Not set."} tab="Bound Events" />
+        summary={bEvent.description || "Not set."} tab="Bound Events" onGoTo={goToBEvent} />
       <DefinePointer label="Effect" color={hasRouting ? C.amber : C.muted}
         summary={summarizeBEventEffect(bEvent) || "No effect configured"}
-        tab="Bound Events" />
+        tab="Bound Events" onGoTo={goToBEvent} />
       <DefinePointer label="Loop Guard" color={loop ? C.amber : C.muted}
         summary={loop ? `Max ${loop.maxLoopCount ?? "N"} loops → ${loop.exitQueueName || "exit system"}` : "Not configured — no recirculation limit."}
-        tab="Bound Events" />
+        tab="Bound Events" onGoTo={goToBEvent} />
     </>
   );
+}
+
+// Maps a DefinePointer's display tab label to the Define tab id ModelDetail's
+// goToDefine dispatcher expects, and returns a bound click handler — or
+// undefined when no onGoToDefine was supplied, so DefinePointer falls back to
+// its plain-text footer.
+const DEFINE_TAB_IDS = { Queues: "queues", "Bound Events": "bevents", "Conditional Events": "cevents", "Entity Types": "entities" };
+function goTo(onGoToDefine, tabLabel, entityId) {
+  const tabId = DEFINE_TAB_IDS[tabLabel];
+  return onGoToDefine && tabId ? () => onGoToDefine(tabId, entityId) : undefined;
 }
 
 // Coerces to a positive integer string, falling back to fallback when the input is empty/invalid.
@@ -160,7 +194,7 @@ function nonNegativeNumberTransform(raw) {
   return Number.isFinite(n) && n >= 0 ? String(n) : "0";
 }
 
-export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode, onDeleteNode, onClose }) {
+export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode, onDeleteNode, onClose, onGoToDefine }) {
   const { C, FONT } = useTheme();
   const node = (graph.nodes || []).find(item => item.id === selectedNodeId);
   const customers = (model.entityTypes || []).filter(type => type.role === "customer");
@@ -258,10 +292,10 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               compact
             />
           </div>
-          <BEventPointers bEvent={bEvent} />
+          <BEventPointers bEvent={bEvent} onGoToDefine={onGoToDefine} />
           <DefinePointer label="Schedule rows" color={(bEvent.schedules || []).length > 1 ? C.amber : C.muted}
             summary={`${(bEvent.schedules || []).length || 0} row${(bEvent.schedules || []).length === 1 ? "" : "s"} configured. Jitter, linked live-data schedules, and the reneging-timer flag are edited in Bound Events.`}
-            tab="Bound Events" />
+            tab="Bound Events" onGoTo={goTo(onGoToDefine, "Bound Events", bEvent.id)} />
         </>
       )}
 
@@ -316,16 +350,18 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
             </SelectField>
           )}
           <DefinePointer label="Description" color={C.muted}
-            summary={queue.description || "Not set."} tab="Queues" />
+            summary={queue.description || "Not set."} tab="Queues" onGoTo={goTo(onGoToDefine, "Queues", queue.id)} />
           <DefinePointer
             label="Balking" color={hasBalking(queue) ? C.amber : C.muted}
             summary={hasBalking(queue) ? describeBalking(queue) : "Not configured — all arrivals join."}
             tab="Queues"
+            onGoTo={goTo(onGoToDefine, "Queues", queue.id)}
           />
           <DefinePointer
             label="Reneging" color={hasReneging(queue) ? C.amber : C.muted}
             summary={hasReneging(queue) ? `Abandons after ${describeReneging(queue)}` : "Not configured — entities never abandon this queue."}
             tab="Queues"
+            onGoTo={goTo(onGoToDefine, "Queues", queue.id)}
           />
         </>
       )}
@@ -345,7 +381,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
             onChange={value => onPatchNode(node, { cEvents: reorderCEventByPriority(model.cEvents || [], cEvent.id, value) })}
           />
           <DefinePointer label="Description" color={C.muted}
-            summary={cEvent.description || "Not set."} tab="Conditional Events" />
+            summary={cEvent.description || "Not set."} tab="Conditional Events" onGoTo={goTo(onGoToDefine, "Conditional Events", cEvent.id)} />
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
               Condition
@@ -375,16 +411,16 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
           {isDelayActivity ? (
             <DefinePointer label="Activity Type" status="Delay" color={C.amber}
               summary="Entity held for a sampled duration with no resource claimed. Switch to Service in the Conditional Events tab."
-              tab="Conditional Events" />
+              tab="Conditional Events" onGoTo={goTo(onGoToDefine, "Conditional Events", cEvent.id)} />
           ) : isAdvancedActivity ? (
             <DefinePointer label="Activity Type" status="Advanced" color={C.amber}
               summary="This activity uses an advanced effect (e.g. co-seizing several servers) that the canvas can't edit. Switch to Service or Delay in the Conditional Events tab."
-              tab="Conditional Events" />
+              tab="Conditional Events" onGoTo={goTo(onGoToDefine, "Conditional Events", cEvent.id)} />
           ) : (
             <>
               <DefinePointer label="Activity Type" status="Service" color={C.accent}
                 summary="Claims a server for a sampled duration. Switch to Delay, or use an advanced effect (co-seize/batch/match/split), in the Conditional Events tab."
-                tab="Conditional Events" />
+                tab="Conditional Events" onGoTo={goTo(onGoToDefine, "Conditional Events", cEvent.id)} />
               <SelectField label="Server type" value={activityServer} disabled={!canEdit} onChange={value => onPatchNode(node, { serverType: value })}>
                 {servers.length === 0
                   ? <option value="">No server types defined</option>
@@ -402,7 +438,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                   <DefinePointer label="Shift Schedule" color={C.server}
                     status={`${ss.length} period${ss.length !== 1 ? "s" : ""}`}
                     summary={`Pool size varies: ${range} across ${ss.length} shift${ss.length !== 1 ? "s" : ""}.`}
-                    tab="Entity Types" />
+                    tab="Entity Types" onGoTo={goTo(onGoToDefine, "Entity Types", selServer.id)} />
                 );
               })()}
               {(() => {
@@ -413,7 +449,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                   <DefinePointer label="Failure Model" color={C.red}
                     status={scope === "unit" ? "per unit" : "pool"}
                     summary={`MTBF: ${selServer.mtbfDist}(${Object.values(selServer.mtbfDistParams || {}).join(", ")}) · MTTR: ${selServer.mttrDist}(${Object.values(selServer.mttrDistParams || {}).join(", ")})`}
-                    tab="Entity Types" />
+                    tab="Entity Types" onGoTo={goTo(onGoToDefine, "Entity Types", selServer.id)} />
                 );
               })()}
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -469,7 +505,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               </div>
               <DefinePointer label="Schedule rows" color={C.muted}
                 summary={`${activityCSchedules.length || 0} row${activityCSchedules.length === 1 ? "" : "s"} configured. Add/remove rows, change the target B-event, or edit the "when" condition in Conditional Events.`}
-                tab="Conditional Events" />
+                tab="Conditional Events" onGoTo={goTo(onGoToDefine, "Conditional Events", cEvent.id)} />
             </>
           )}
         </>
@@ -484,7 +520,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               <option value="RENEGE">RENEGE</option>
             </SelectField>
           )}
-          <BEventPointers bEvent={bEvent} />
+          <BEventPointers bEvent={bEvent} onGoToDefine={onGoToDefine} />
         </>
       )}
 

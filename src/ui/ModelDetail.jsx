@@ -318,6 +318,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [focusBEventId,setFocusBEventId]=useState(null);
   const [focusScheduleId,setFocusScheduleId]=useState(null);
   const [focusCEventId,setFocusCEventId]=useState(null);
+  const [focusQueueId,setFocusQueueId]=useState(null);
+  const [focusEntityTypeId,setFocusEntityTypeId]=useState(null);
+  // Draw inspector's "Edit in the X tab" pointers jump out to Define via this dispatcher.
+  const goToDefine=(tabId,entityId)=>{setTab(tabId);if(tabId==="queues")setFocusQueueId(entityId);else if(tabId==="bevents")setFocusBEventId(entityId);else if(tabId==="cevents")setFocusCEventId(entityId);else if(tabId==="entities")setFocusEntityTypeId(entityId);};
   const [schedulesVersion,setSchedulesVersion]=useState(0);
   const [resultsView,setResultsView]=useState("summary");
   const [overviewHistory,setOverviewHistory]=useState([]);
@@ -990,7 +994,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="visual"&&(
           renderAuthoringShell(
             <Suspense fallback={<SkeletonPanel rows={5} />}>
-              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch { setDirty(true); toast.error("Couldn't save the new canvas layout — use Save to retry"); } }}/>
+              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onGoToDefine={goToDefine} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch { setDirty(true); toast.error("Couldn't save the new canvas layout — use Save to retry"); } }}/>
             </Suspense>
           )
         )}
@@ -1160,7 +1164,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 <Btn small variant="ghost" onClick={()=>setShowCsvImport(true)}>Import from CSV</Btn>
               </div>
             )}
-            <EntityTypeEditor types={model.entityTypes||[]} sections={model.sections||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} skills={model.skills||[]} errorFilter={errorFilter?.tab==="entities"?{filteredEntityTypeIds:errorFilter.affectedEntityTypeIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} onChange={canEdit?newTypes=>{
+            <EntityTypeEditor types={model.entityTypes||[]} sections={model.sections||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} skills={model.skills||[]} errorFilter={errorFilter?.tab==="entities"?{filteredEntityTypeIds:errorFilter.affectedEntityTypeIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} focusEntityTypeId={focusEntityTypeId} onFocusHandled={()=>setFocusEntityTypeId(null)} onChange={canEdit?newTypes=>{
               const oldTypes = model.entityTypes || [];
               let updated = { ...model, entityTypes: newTypes };
               for (let i = 0; i < newTypes.length; i++) {
@@ -1246,7 +1250,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Event link updated and model saved"); } catch { toast.error("Link updated but model save failed — please save manually"); }
           } : undefined}/>
         </div>)}
-        {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><TabErrors tabId="queues" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} sections={model.sections||[]} containers={model.containerTypes||[]} errorFilter={errorFilter?.tab==="queues"?{filteredQueueIds:errorFilter.affectedQueueIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} onChange={canEdit?newQueues=>{
+        {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto"}}><TabErrors tabId="queues" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} sections={model.sections||[]} containers={model.containerTypes||[]} errorFilter={errorFilter?.tab==="queues"?{filteredQueueIds:errorFilter.affectedQueueIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} focusQueueId={focusQueueId} onFocusHandled={()=>setFocusQueueId(null)} onChange={canEdit?newQueues=>{
           const oldQueues = model.queues || [];
           let updated = { ...model, queues: newQueues };
           for (let i = 0; i < newQueues.length; i++) {

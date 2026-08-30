@@ -1,6 +1,9 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { EntityTypeEditor } from '../../../src/ui/editors/index.jsx';
+
+// jsdom doesn't implement scrollIntoView — the focus/expand effect below calls it.
+if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
 
 // Expands the entity type card whose name input has the given display value,
 // by finding the "Expand" button within that card's own header row — more
@@ -184,5 +187,29 @@ describe('EntityTypeEditor — required sequence (Phase 2, 2c)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
     fireEvent.click(screen.getByRole('button', { name: /Remove Triage Queue/i }));
     expect(handleChange.mock.calls[0][0][0].requiredSequence).toEqual(['Treatment Queue']);
+  });
+});
+
+describe('EntityTypeEditor — focus/expand (Draw "Edit in the Entity Types tab" jump)', () => {
+  const patient = { id: 'et-patient', name: 'Patient', role: 'customer', attrDefs: [] };
+  const nurse = { id: 'et-nurse', name: 'Nurse', role: 'server', count: '2', attrDefs: [] };
+
+  it('focusEntityTypeId auto-expands the matching card, clears any filter, and reports back via onFocusHandled', async () => {
+    const handleFocusHandled = vi.fn();
+    const { rerender } = render(
+      <EntityTypeEditor types={[patient, nurse]} onChange={vi.fn()} focusEntityTypeId={null} onFocusHandled={handleFocusHandled} />
+    );
+
+    // Both cards collapsed by default — expanded-only content isn't shown yet.
+    expect(screen.queryByText('Role:')).not.toBeInTheDocument();
+
+    rerender(
+      <EntityTypeEditor types={[patient, nurse]} onChange={vi.fn()} focusEntityTypeId="et-nurse" onFocusHandled={handleFocusHandled} />
+    );
+
+    // The focused card ("Nurse") expands; the other ("Patient") stays collapsed.
+    await waitFor(() => expect(screen.getByDisplayValue('Nurse').closest('div').textContent).toContain('Role:'));
+    expect(screen.getByDisplayValue('Patient').closest('div').textContent).not.toContain('Role:');
+    await waitFor(() => expect(handleFocusHandled).toHaveBeenCalled());
   });
 });

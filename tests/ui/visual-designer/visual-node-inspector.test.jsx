@@ -506,3 +506,74 @@ describe('VisualNodeInspector — source/sink Effect and Loop Guard pointers', (
     expect(screen.getByText(/routes 25% →/i)).toBeInTheDocument();
   });
 });
+
+// "Edit in the X tab" pointers become real jump links when the host (Draw's
+// VisualDesignerPanel, wired from ModelDetail) supplies onGoToDefine — falling
+// back to the original plain-text footer when it's omitted (e.g. embedded
+// contexts that don't have a Define surface to jump to).
+describe('VisualNodeInspector — DefinePointer jump links', () => {
+  it('renders "Edit in the X tab" pointers as plain text when onGoToDefine is omitted', () => {
+    const model = makeModel({
+      queues: [{ id: 'queue-1', name: 'Queue 1', customerType: 'Customer', discipline: 'FIFO', description: 'Overflow buffer.' }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const queueNode = findNode(graph, 'queue');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={queueNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: /edit in the queues tab/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/edit in the queues tab/i).length).toBeGreaterThan(0);
+  });
+
+  it('clicking a queue\'s "Edit in the Queues tab" link calls onGoToDefine with the queue tab id and the queue\'s id', () => {
+    const model = makeModel({
+      queues: [{ id: 'queue-1', name: 'Queue 1', customerType: 'Customer', discipline: 'FIFO', description: 'Overflow buffer.' }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const queueNode = findNode(graph, 'queue');
+    const onGoToDefine = vi.fn();
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={queueNode.id} canEdit onPatchNode={vi.fn()} onGoToDefine={onGoToDefine} />);
+
+    const links = screen.getAllByRole('button', { name: /edit in the queues tab/i });
+    expect(links.length).toBeGreaterThan(0);
+    fireEvent.click(links[0]);
+    expect(onGoToDefine).toHaveBeenCalledWith('queues', 'queue-1');
+  });
+
+  it('clicking an activity\'s "Edit in the Conditional Events tab" link passes the cEvent id', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    const onGoToDefine = vi.fn();
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} onGoToDefine={onGoToDefine} />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /edit in the conditional events tab/i })[0]);
+    expect(onGoToDefine).toHaveBeenCalledWith('cevents', 'activity-1');
+  });
+
+  it('clicking a source\'s "Edit in the Bound Events tab" link passes the bEvent id', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const sourceNode = findNode(graph, 'source');
+    const onGoToDefine = vi.fn();
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={sourceNode.id} canEdit onPatchNode={vi.fn()} onGoToDefine={onGoToDefine} />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /edit in the bound events tab/i })[0]);
+    expect(onGoToDefine).toHaveBeenCalledWith('bevents', 'arrival-1');
+  });
+
+  it('clicking a server\'s "Edit in the Entity Types tab" link (Shift Schedule pointer) passes the server entity type id', () => {
+    const model = makeModel({
+      entityTypes: [
+        { id: 'customer-1', name: 'Customer', role: 'customer' },
+        { id: 'server-1', name: 'Server', role: 'server', count: 1, shiftSchedule: [{ time: '0', capacity: '2' }, { time: '480', capacity: '1' }] },
+      ],
+    });
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    const onGoToDefine = vi.fn();
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} onGoToDefine={onGoToDefine} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /edit in the entity types tab/i }));
+    expect(onGoToDefine).toHaveBeenCalledWith('entities', 'server-1');
+  });
+});

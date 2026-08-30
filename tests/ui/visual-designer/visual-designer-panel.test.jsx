@@ -661,6 +661,26 @@ describe('Visual Designer shell', () => {
     expect(screen.getByDisplayValue('Customer Arrival')).toBeInTheDocument();
   });
 
+  it('threads onGoToDefine through to the inspector so an "Edit in the X tab" pointer becomes a working jump link', async () => {
+    const user = userEvent.setup();
+    const onGoToDefine = vi.fn();
+
+    render(
+      <VisualDesignerPanel
+        model={disconnectedSourceModel}
+        canEdit
+        onModelChange={vi.fn()}
+        onGoToDefine={onGoToDefine}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /not connected/i }));
+    expect(screen.getByDisplayValue('Customer Arrival')).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: /edit in the bound events tab/i })[0]);
+    expect(onGoToDefine).toHaveBeenCalledWith('bevents', 'arr');
+  });
+
   it('finds a canvas node via search and selects it on click, clearing the query', async () => {
     const user = userEvent.setup();
 
