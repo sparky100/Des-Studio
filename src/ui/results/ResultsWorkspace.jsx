@@ -429,10 +429,18 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
   }
   const perResourceEntries = Object.entries(summary.perResource || {});
   const containerEntries = Object.entries(summary.containerLevels || {});
+  // Capacities must reflect the model that actually produced these results,
+  // not the live model — it may have been edited since the run (same rule
+  // RESOURCE UTILISATION below already follows for serverTypeMap).
   const containerCapacities = {};
-  (model?.containerTypes || []).forEach(ct => {
+  ((results?._model_snapshot ?? model)?.containerTypes || []).forEach(ct => {
     if (ct.capacity != null && ct.capacity !== "") containerCapacities[ct.id] = Number(ct.capacity);
   });
+  const skillEntries = perResourceEntries
+    .filter(([, r]) => r.skillUtil && Object.keys(r.skillUtil).length > 0)
+    .map(([type, r]) => [type, r.skillUtil]);
+  const rejectionEntries = Object.entries(results?.perQueue || {})
+    .filter(([, counts]) => (counts.balkCount || 0) > 0 || (counts.blockingCount || 0) > 0);
   const outcomeEntries = Object.entries(summary.outcomes || {})
     .map(([routeId, outcome]) => ({
       routeId,
@@ -669,6 +677,56 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                 </div>
               );
             })}
+          </div>
+        </>
+      )}
+      {skillEntries.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+            SKILL UTILISATION
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+            {skillEntries.map(([type, skillUtil]) => (
+              <div key={type} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
+                  {type.toUpperCase()}
+                </div>
+                <StatCards
+                  items={Object.entries(skillUtil).map(([skill, util]) => ({
+                    label: skill,
+                    value: utilPct(util),
+                    color: utilColor(util),
+                  }))}
+                />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {rejectionEntries.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+            QUEUE REJECTIONS
+          </div>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Queue</th>
+                  <th style={{ textAlign: "right", width: 60, minWidth: 60, color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Balked</th>
+                  <th style={{ textAlign: "right", width: 60, minWidth: 60, color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Blocked</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rejectionEntries.map(([name, counts]) => (
+                  <tr key={name}>
+                    <td style={{ color: C.text, paddingTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</td>
+                    <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 60 }}>{counts.balkCount ? formatMetricValue(isMultiRep ? counts.balkCount / repCount : counts.balkCount, 0) : "—"}</td>
+                    <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 60 }}>{counts.blockingCount ? formatMetricValue(isMultiRep ? counts.blockingCount / repCount : counts.blockingCount, 0) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </>
       )}
