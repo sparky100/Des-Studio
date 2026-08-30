@@ -196,6 +196,33 @@ describe("F11.2 — Balking", () => {
     expect(mainQMetrics?.balkCount).toBe(10);
   });
 
+  test("live snapshot's byQueue.balked is attributed to the queue that actually balked, not leaked into other queues", () => {
+    // Regression test: the live "Live Metrics" panel used to read a single
+    // global balked total for every queue tile, making an unrelated queue
+    // (here, "Out On Hire Queue") appear to have balked just as much as the
+    // one that actually does ("Hire Queue"). byQueue[name].balked must be
+    // independent per queue.
+    const m = {
+      entityTypes: [{ id: "et-c", name: "Customer", role: "customer", attrDefs: [] }],
+      queues: [
+        { id: "q1", name: "Hire Queue", customerType: "Customer", discipline: "FIFO", balkProbability: 1 },
+        { id: "q2", name: "Out On Hire Queue", customerType: "Customer", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "be-a1", name: "Hire Arrival", scheduledTime: "0", effect: "ARRIVE(Customer, Hire Queue)", schedules: [] },
+        { id: "be-a2", name: "Out Arrival", scheduledTime: "0.05", effect: "ARRIVE(Customer, Out On Hire Queue)", schedules: [] },
+      ],
+      cEvents: [],
+      stateVariables: [],
+    };
+    const eng = buildEngine(m, 1, 0, 1);
+    for (let i = 0; i < 5; i++) { const r = eng.step(); if (r.done) break; }
+    const snap = eng.getSnap();
+    expect(snap.byQueue["Hire Queue"].balked).toBeGreaterThan(0);
+    expect(snap.byQueue["Out On Hire Queue"].balked).toBe(0);
+    expect(snap.byQueue["Out On Hire Queue"].total).toBeGreaterThan(0);
+  });
+
   test("balkCondition: balk when queue.length >= 2", () => {
     // 4 arrivals; first 2 join (queue length 0, 1); 3rd checks length=2 → balks
     const balkCondition = {

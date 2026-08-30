@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { alpha, RADIUS, SHADOW } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
+import { CollapsibleSection } from "../shared/CollapsibleSection.jsx";
 import { csvEscape, downloadTextFile, slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { batchMeansCI, buildHistogramFD, computePercentiles, computeSummaryStats, detectOutliers } from "../../engine/statistics.js";
 import { SectionFilterTabs } from "../editors/helpers.jsx";
@@ -20,60 +21,20 @@ const CHART_H = 140;
 
 const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, waitByArrival: true, serverUtil: true, shiftUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true, systemTrends: true };
 
+// `SectionHeader` here is CollapsibleSection with Results' own aria-controls
+// id convention preserved verbatim (results-section-<id>, matching each
+// section's wrapper div id below) — a thin wrapper so none of the ~19 call
+// sites below need to change.
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
-  const { C, FONT } = useTheme();
   return (
-    <button
-      type="button"
-      aria-expanded={isOpen}
-      aria-controls={`results-section-${id}`}
-      onClick={() => onToggle(id)}
-      style={{
-        alignItems: "center",
-        background: "none",
-        border: "none",
-        borderBottom: `1px solid ${C.border}`,
-        cursor: "pointer",
-        display: "flex",
-        fontFamily: FONT,
-        gap: 8,
-        marginBottom: 0,
-        padding: "8px 0",
-        textAlign: "left",
-        width: "100%",
-      }}
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          color: C.muted,
-          display: "inline-block",
-          fontSize: 9,
-          lineHeight: 1,
-          transition: "transform 160ms cubic-bezier(0.4,0,0.2,1)",
-          transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
-        }}
-      >▶</span>
-      <span style={{
-        color: C.accent,
-        flex: 1,
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: 1.2,
-      }}>{label.toUpperCase()}</span>
-      {badge != null && badge > 0 && (
-        <span style={{
-          background: C.bg,
-          border: `1px solid ${C.border}`,
-          borderRadius: 10,
-          color: C.muted,
-          fontFamily: FONT,
-          fontSize: 9,
-          fontWeight: 700,
-          padding: "1px 7px",
-        }}>{badge}</span>
-      )}
-    </button>
+    <CollapsibleSection
+      id={id}
+      label={label}
+      badge={badge}
+      isOpen={isOpen}
+      onToggle={onToggle}
+      controlsId={`results-section-${id}`}
+    />
   );
 }
 

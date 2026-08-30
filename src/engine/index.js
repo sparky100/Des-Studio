@@ -859,6 +859,17 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     });
     /** @type {Record<string, any>} */
     const byQueue = {};
+    // Balked/blocked entities never actually joined a queue (that's the point of
+    // balking), so they never get `.queue`/`.lastQueue` set to it — they're
+    // attributed via `.terminalQueue` instead (set in entities.js discardFailedJoin).
+    // Tally them in one pass rather than re-filtering `statsEntities` per queue.
+    /** @type {Record<string, number>} */
+    const balkedByQueue = {};
+    for (const e of statsEntities) {
+      if (e.role !== "server" && e.status === "balked" && e.terminalQueue) {
+        balkedByQueue[e.terminalQueue] = (balkedByQueue[e.terminalQueue] || 0) + 1;
+      }
+    }
     (runtimeModel.queues || []).forEach((/** @type {any} */ q) => {
       const qName = q.name;
       if (!qName) return;
@@ -868,6 +879,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         waiting: waitingEntities.length,
         total: seenEntities.length,
         reneged: seenEntities.filter((/** @type {any} */ e) => e.status === "reneged").length,
+        balked: balkedByQueue[qName] || 0,
       };
     });
     // nextArrivals: maps each b-event id to its next scheduled time in the FEL.

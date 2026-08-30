@@ -1,5 +1,5 @@
 // ui/execute/Sparkline.jsx — shared mini line chart for live execute panels
-// Used by ExecuteQueueNode (queue depth history) and ContainerGaugeStrip (container level history)
+// Used by ExecuteQueueNode (queue depth history) and ExecuteContainerNode (container level history)
 export const SPARKLINE_W = 138;
 export const SPARKLINE_H = 22;
 
