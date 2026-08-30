@@ -379,6 +379,35 @@ describe('Visual Designer shell', () => {
     expect(screen.queryByText('2 selected')).not.toBeInTheDocument();
   });
 
+  it('shows a shift indicator for a server using a weekly schedulePattern, not just the older shiftSchedule array', () => {
+    const patternModel = {
+      ...twoStageModel,
+      entityTypes: [
+        ...twoStageModel.entityTypes.slice(0, 1),
+        {
+          ...twoStageModel.entityTypes[1],
+          schedulePattern: {
+            type: 'weekly',
+            mode: 'absolute',
+            defaultCapacity: 1,
+            periods: [{ dayOfWeek: 1, start: '08:00', end: '17:00', capacity: 3 }],
+          },
+        },
+        twoStageModel.entityTypes[2],
+      ],
+    };
+
+    render(
+      <VisualDesignerPanel
+        model={patternModel}
+        canEdit
+        onModelChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('weekly pattern')).toBeInTheDocument();
+  });
+
   it('ignores non-selectable section panels when React Flow reports a noisy selection payload', async () => {
     const user = userEvent.setup();
 

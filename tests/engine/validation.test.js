@@ -161,6 +161,31 @@ describe("validateModel", () => {
     ]));
   });
 
+  it("does not warn V8 when the only sink is a null-routing exit branch (no literal COMPLETE()/RENEGE())", () => {
+    // Regression: hasSinkMacro only ever grepped effect text for COMPLETE(/RENEGE(
+    // — it didn't know that a probabilisticRouting/routing branch with
+    // queueName null already exits the entity directly (see applyRoute in
+    // phases.js), with no COMPLETE() macro call anywhere in the model. A model
+    // that discharges entirely through that mechanism was false-flagged as
+    // having no sink at all.
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: ["ARRIVE(Customer, Queue)"], schedules: [] },
+        {
+          id: "review_done", name: "Review Done", effect: ["RELEASE(Doctor)"], schedules: [],
+          probabilisticRouting: [{ queueName: null, probability: 1 }],
+        },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.warnings.filter(w => w.code === "V8")).toEqual([]);
+  });
+
   it("warns (not blocks) when a sink exists but no source exists", () => {
     const model = {
       entityTypes: [],

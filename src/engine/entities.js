@@ -506,6 +506,7 @@ export function releaseServerClaim(customer, server, clock) {
   }
   if (server) {
     const prevSkill = server._currentSkill;
+    const prevShiftLabel = server._shiftLabel;
     delete server.currentCustId;
     delete server.resourceClaim;
     delete server._currentSkill;
@@ -516,6 +517,19 @@ export function releaseServerClaim(customer, server, clock) {
         if (prevSkill) {
           if (!server._skillBusyTime) server._skillBusyTime = {};
           server._skillBusyTime[prevSkill] = (server._skillBusyTime[prevSkill] || 0) + delta;
+        }
+        // Per-shift utilisation (F86.4): attribute only THIS stint's duration to
+        // the shift that was active when it started, into a per-label map —
+        // never overwrite a single scalar with the label. server._shiftLabel is
+        // only ever reassigned at the *next* claim, so without this map a server
+        // that stays claimed across many stints/shifts has its entire lifetime
+        // _busyTime silently misattributed to whichever shift happened to be
+        // active at its most recent claim, wildly inflating that shift's
+        // utilisation (seen as >100%, even >1000%, in practice) while starving
+        // every other shift of the credit it actually earned.
+        if (prevShiftLabel) {
+          if (!server._shiftBusyTime) server._shiftBusyTime = {};
+          server._shiftBusyTime[prevShiftLabel] = (server._shiftBusyTime[prevShiftLabel] || 0) + delta;
         }
       }
       delete server._busyStart;
@@ -660,8 +674,10 @@ export function flushRetiredServerStats(srv, state) {
       acc.skillBusyTimeSum[skill] = (acc.skillBusyTimeSum[skill] || 0) + bt;
     }
   }
-  if (srv._shiftLabel && srv._busyTime) {
-    acc.perShiftBusyTimeSum[srv._shiftLabel] = (acc.perShiftBusyTimeSum[srv._shiftLabel] || 0) + srv._busyTime;
+  if (srv._shiftBusyTime) {
+    for (const [label, bt] of Object.entries(srv._shiftBusyTime)) {
+      acc.perShiftBusyTimeSum[label] = (acc.perShiftBusyTimeSum[label] || 0) + bt;
+    }
   }
 }
 

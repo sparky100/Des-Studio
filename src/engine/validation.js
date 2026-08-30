@@ -479,10 +479,18 @@ export function validateModel(model) {
   });
 
   // ── V8: Model must have at least one arrival source and at least one sink ──
+  // A routing/probabilisticRouting branch with a falsy queueName exits the entity
+  // directly (applyRoute in engine/phases.js calls completeEntity() for exactly
+  // this case) — a first-class exit mechanism alongside a literal COMPLETE()/
+  // RENEGE() macro call, just expressed structurally instead of in the effect
+  // string. Mirrors hasAnyNullRoutingExit in simulation/modelChecker.js's CHK-002
+  // check, which has the same "does this model have a sink" question to answer.
   const hasArrive = bEvents.some(b => /ARRIVE\s*\(/i.test(effectText(b.effect)));
+  const hasNullRoutingExit = (bEvent) =>
+    [...(bEvent.routing || []), ...(bEvent.probabilisticRouting || [])].some(branch => !branch.queueName);
   const hasSinkMacro = bEvents.some(b => {
     const text = effectText(b.effect);
-    return /COMPLETE\s*\(/i.test(text) || /RENEGE\s*\(/i.test(text);
+    return /COMPLETE\s*\(/i.test(text) || /RENEGE\s*\(/i.test(text) || hasNullRoutingExit(b);
   });
 
   if (!hasArrive && !hasSinkMacro) {
