@@ -67,4 +67,11 @@ describe("ExecuteQueueNode — renege/balk pulse", () => {
     expect(screen.queryByText("reneged")).not.toBeInTheDocument();
     expect(screen.queryByText("balked")).not.toBeInTheDocument();
   });
+
+  test("renders at the fixed Execute card height regardless of content", () => {
+    const { container } = render(
+      <ExecuteQueueNode data={{ label: "Hire Queue", liveData: { ...baseLiveData, entities: Array.from({ length: 12 }, (_, i) => ({ id: i, type: "Customer" })) } }} />
+    );
+    expect(container.firstChild).toHaveStyle({ height: "155px", overflow: "hidden" });
+  });
 });

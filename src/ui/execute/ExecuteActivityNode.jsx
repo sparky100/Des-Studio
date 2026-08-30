@@ -9,9 +9,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position } from "../shared/xyflow.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { EXEC_CARD_HEIGHT } from "./executeLayout.js";
 
 const MAX_DOTS = 12;
 const FLASH_MS = 400;
+// A COSEIZE spanning many server types would otherwise grow this node's
+// height without bound (one ResourceRow per type) — capped the same way
+// ExecuteQueueNode already caps entity dots (MAX_DOT_SHOWN, "+N" overflow)
+// so every activity node fits the one fixed card height every node type
+// now renders at (see EXEC_CARD_HEIGHT).
+const MAX_ROWS_SHOWN = 3;
 
 function Dot({ busyHere, busyElsewhere, failed }) {
   const { C } = useTheme();
@@ -162,6 +169,8 @@ export function ExecuteActivityNode({ data }) {
   return (
     <div style={{
       width: 160,
+      height: EXEC_CARD_HEIGHT,
+      overflow: "hidden",
       background: C.surface,
       border: `1.5px solid ${flashing ? ACTIVITY_COLOR : `${ACTIVITY_COLOR}44`}`,
       borderLeft: `4px solid ${ACTIVITY_COLOR}`,
@@ -216,19 +225,26 @@ export function ExecuteActivityNode({ data }) {
 
       {live ? (
         rows ? (
-          rows.map((row, i) => (
-            <div key={row.serverTypeName ?? i} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <ResourceRow
-                serverName={row.serverTypeName}
-                capacity={row.capacity}
-                busyCount={row.busyCount}
-                activityBusyCount={row.activityBusyCount}
-                failedCount={row.failedCount}
-                utilisation={row.utilisation}
-                skillBreakdown={row.skillBreakdown}
-              />
-            </div>
-          ))
+          <>
+            {rows.slice(0, MAX_ROWS_SHOWN).map((row, i) => (
+              <div key={row.serverTypeName ?? i} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <ResourceRow
+                  serverName={row.serverTypeName}
+                  capacity={row.capacity}
+                  busyCount={row.busyCount}
+                  activityBusyCount={row.activityBusyCount}
+                  failedCount={row.failedCount}
+                  utilisation={row.utilisation}
+                  skillBreakdown={row.skillBreakdown}
+                />
+              </div>
+            ))}
+            {rows.length > MAX_ROWS_SHOWN && (
+              <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>
+                +{rows.length - MAX_ROWS_SHOWN} more
+              </div>
+            )}
+          </>
         ) : (
           <>
             {/* Server type sublabel */}

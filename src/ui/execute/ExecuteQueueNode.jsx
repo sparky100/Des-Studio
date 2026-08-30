@@ -9,6 +9,7 @@ import { Handle, Position } from "../shared/xyflow.js";
 import { TOKEN_COLORS } from "../shared/tokens.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { Sparkline } from "./Sparkline.jsx";
+import { EXEC_CARD_HEIGHT } from "./executeLayout.js";
 
 const MAX_DOT_SHOWN = 8;
 const HISTORY_LEN   = 20;
@@ -163,6 +164,8 @@ export function ExecuteQueueNode({ data }) {
   return (
     <div style={{
       width: 160,
+      height: EXEC_CARD_HEIGHT,
+      overflow: "hidden",
       background: C.surface,
       border: `1.5px solid ${pulseColor ?? `${QUEUE_COLOR}44`}`,
       borderLeft: `4px solid ${QUEUE_COLOR}`,
@@ -200,8 +203,12 @@ export function ExecuteQueueNode({ data }) {
       />
 
       {pulse && (
+        // Positioned inside the card's bounds (not floating above the top
+        // edge like the arrival badge elsewhere) — the card now clips to a
+        // fixed height (overflow: hidden), so anything placed outside its
+        // box would be invisible.
         <div style={{
-          position: "absolute", top: -9, right: 8,
+          position: "absolute", top: 4, right: 8,
           background: pulseColor, color: C.bg,
           borderRadius: 4, padding: "1px 6px",
           fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase",

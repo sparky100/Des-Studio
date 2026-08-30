@@ -24,7 +24,7 @@ import { AnimatedEdge }        from "./AnimatedEdge.jsx";
 import { formatSimWallTime }   from "../../engine/clockUtils.js";
 import { formatDistributionLabel } from "../../model/distributionFormat.js";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
-import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_NODE_HEIGHT } from "./executeLayout.js";
+import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_CARD_HEIGHT } from "./executeLayout.js";
 import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
@@ -820,7 +820,7 @@ export function ExecuteCanvas({
       const minX = Math.min(...members.map(n => n.x));
       const minY = Math.min(...members.map(n => n.y));
       const maxX = Math.max(...members.map(n => n.x + EXEC_NODE_WIDTH));
-      const maxY = Math.max(...members.map(n => n.y + (EXEC_NODE_HEIGHT[n.type] ?? 120)));
+      const maxY = Math.max(...members.map(n => n.y + EXEC_CARD_HEIGHT));
       return {
         id: `section-panel:${sec.id}`,
         sectionId: sec.id,

@@ -9,13 +9,13 @@ import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 import { formatDistributionLabel } from "../../model/distributionFormat.js";
 // Pure constants module (imports only dagre) — safe to share with Draw per
 // ADR-020: no Execute *components* cross into the designer.
-import { EXEC_CARD_WIDTH, EXEC_NODE_HEIGHT } from "../execute/executeLayout.js";
+import { EXEC_CARD_WIDTH, EXEC_CARD_HEIGHT } from "../execute/executeLayout.js";
 
-// Every Draw object renders at one standard size: the largest size it could
-// need at run time, so a Draw box is always at least as big as the Run-canvas
-// card the same object will become — no per-type or content-driven variance.
+// Every Draw object renders at one standard size, matching the one fixed
+// size every Run-canvas card now renders at too (EXEC_CARD_WIDTH/HEIGHT) —
+// no per-type or content-driven variance on either canvas.
 export const NODE_WIDTH = EXEC_CARD_WIDTH; // 160 — matches the Run canvas's card width
-export const NODE_HEIGHT = Math.max(...Object.values(EXEC_NODE_HEIGHT)); // 155 — tallest Run card (sink)
+export const NODE_HEIGHT = EXEC_CARD_HEIGHT; // 155 — matches the Run canvas's card height
 export const ALIGN_GAP = 48;   // gap between a selected node and a newly palette-added node
 const DAGRE_RANK_SEP = 50;   // gap between right edge of one rank and left edge of next
 const DAGRE_NODE_SEP = 36;   // gap between nodes within the same rank

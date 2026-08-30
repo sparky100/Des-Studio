@@ -43,4 +43,11 @@ describe("ExecuteSinkNode — reneged/balked badges", () => {
     expect(screen.queryByText(/reneged/)).not.toBeInTheDocument();
     expect(screen.queryByText(/balked/)).not.toBeInTheDocument();
   });
+
+  test("renders at the fixed Execute card height regardless of content, even with both badges present", () => {
+    const { container } = render(
+      <ExecuteSinkNode data={{ label: "Hire Complete", liveData: { served: 10, reneged: 3, balked: 2 } }} />
+    );
+    expect(container.firstChild).toHaveStyle({ height: "155px", overflow: "hidden" });
+  });
 });

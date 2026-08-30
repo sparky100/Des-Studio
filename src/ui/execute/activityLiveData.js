@@ -29,11 +29,20 @@ function effectToText(effect) {
 // ASSIGN(Queue, ServerType) -> [ServerType]
 // ASSIGN(Queue, ANY, "Skill") -> ["ANY"] — resolved to the real pool by buildServerTypeIndex
 // COSEIZE(Queue, ServerType1, ServerType2, ...) -> [ServerType1, ServerType2, ...] (variadic)
+// PREEMPT(ServerType[, Criterion]) / FAIL(ServerType[, N]) / FINISH(ServerType[, Criterion]) /
+// REPAIR(ServerType[, N]) -> [ServerType] — these target a resource without ever ASSIGNing/
+// COSEIZEing it, so without this an activity built purely from one of them (e.g. a "preempt
+// repair for a higher-priority customer" C-event) fell through to the no-serverTypes branch
+// in deriveActivityLiveData below, which shows the total server count across every resource
+// type in the whole model — a meaningless number, mislabeled exactly like a real per-resource
+// pool card.
 export function extractServerTypes(effect) {
   const text = effectToText(effect);
   if (!text) return [];
   const assignMatch = text.match(/ASSIGN\s*\(\s*[^,)]+,\s*([^),]+)\)/i);
   if (assignMatch) return [assignMatch[1].trim()];
+  const targetedMatch = text.match(/\b(?:PREEMPT|FAIL|FINISH|REPAIR)\s*\(\s*([^,)]+)/i);
+  if (targetedMatch) return [targetedMatch[1].trim()];
   const coseizeMatch = text.match(/COSEIZE\s*\(([^)]+)\)/i);
   if (coseizeMatch) {
     const args = coseizeMatch[1].split(",").map(s => s.trim()).filter(Boolean);
