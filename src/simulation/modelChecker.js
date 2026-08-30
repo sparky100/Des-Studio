@@ -91,6 +91,22 @@ function hasAnyExitEffect(bEvents) {
   return bEvents.some(b => /\b(COMPLETE|RENEGE)\s*\(/i.test(effectString(b)));
 }
 
+// A routing/probabilisticRouting branch with a falsy queueName (null/undefined/"")
+// exits the entity from the system directly — applyRoute in src/engine/phases.js
+// calls completeEntity() for exactly this case. This is a first-class exit
+// mechanism on equal footing with a literal COMPLETE()/RENEGE() macro call, just
+// expressed structurally instead of in the effect string — e.g. a B-event whose
+// only effect is a RELEASE(...) plus a `probabilisticRouting: [{queueName: null,
+// probability: 1}]` branch never calls COMPLETE() itself, but genuinely does exit
+// every entity that reaches it. (A bare defaultQueueName with no routing[]/
+// probabilisticRouting[] is a separate, inert case — it does nothing in the
+// engine — so it's deliberately not treated as an exit here.)
+function hasAnyNullRoutingExit(bEvents) {
+  return bEvents.some(b =>
+    [...(b.routing || []), ...(b.probabilisticRouting || [])].some(branch => !branch.queueName)
+  );
+}
+
 /**
  * CHK-001: Entity type has no arrival B-event that creates it.
  */
@@ -141,8 +157,9 @@ function chk002(model) {
       }
     }
   }
-  // Current format: COMPLETE() / RENEGE(ctx) exit any customer entity
-  if (hasAnyExitEffect(bEvents)) {
+  // Current format: COMPLETE() / RENEGE(ctx) exit any customer entity, as does
+  // a routing branch with queueName: null (see hasAnyNullRoutingExit above).
+  if (hasAnyExitEffect(bEvents) || hasAnyNullRoutingExit(bEvents)) {
     for (const et of entityTypes) {
       if (et.role !== "server") destroyedTypes.add((et.name || '').trim().toLowerCase());
     }

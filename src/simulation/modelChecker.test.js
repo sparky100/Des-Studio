@@ -82,6 +82,63 @@ describe("CHK-002 No sink for entity type", () => {
     expect(chk[0].nodeName).toBe("Customer");
     expect(chk[0].severity).toBe("error");
   });
+
+  // Regression: a B-event that only ever exits entities via a routing branch
+  // with queueName: null (no literal COMPLETE()/RENEGE() call in its effect
+  // string) was a false CHK-002 positive — applyRoute in src/engine/phases.js
+  // treats a falsy queueName exactly like a COMPLETE() call, so this is a
+  // genuinely valid exit, just expressed structurally instead of in the effect.
+  test("does not trigger when the only exit is a probabilisticRouting branch with queueName: null", () => {
+    const model = {
+      ...wellFormedModel,
+      bEvents: [
+        wellFormedModel.bEvents[0], // arrive
+        {
+          id: "release1", name: "Release", scheduledTime: 9999,
+          effect: "RELEASE(Clerk)",
+          probabilisticRouting: [{ queueName: null, probability: 1 }],
+        },
+      ],
+      cEvents: [],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-002")).toHaveLength(0);
+  });
+
+  test("does not trigger when the only exit is a conditional routing[] branch with queueName: null", () => {
+    const model = {
+      ...wellFormedModel,
+      bEvents: [
+        wellFormedModel.bEvents[0], // arrive
+        {
+          id: "release1", name: "Release", scheduledTime: 9999,
+          effect: "RELEASE(Clerk)",
+          routing: [{ condition: { variable: "Entity.outcome", operator: "==", value: "discharge" }, queueName: null }],
+        },
+      ],
+      cEvents: [],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-002")).toHaveLength(0);
+  });
+
+  test("still triggers when routing branches only ever name a real queue (no null-exit branch)", () => {
+    const model = {
+      ...wellFormedModel,
+      queues: [...wellFormedModel.queues, { id: "q2", name: "OtherQueue" }],
+      bEvents: [
+        wellFormedModel.bEvents[0], // arrive
+        {
+          id: "release1", name: "Release", scheduledTime: 9999,
+          effect: "RELEASE(Clerk)",
+          probabilisticRouting: [{ queueName: "OtherQueue", probability: 1 }],
+        },
+      ],
+      cEvents: [],
+    };
+    const issues = checkModel(model);
+    expect(issues.filter(i => i.code === "CHK-002")).toHaveLength(1);
+  });
 });
 
 describe("CHK-003 C-event references undefined queue", () => {
