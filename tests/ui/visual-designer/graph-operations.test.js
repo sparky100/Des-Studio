@@ -339,6 +339,53 @@ describe("visual designer graph operations", () => {
     ]));
   });
 
+  it("does not flag a PREEMPT-only activity as missing a completion route", () => {
+    // PREEMPT/FAIL/REPAIR are one-shot server-state mutations with nothing to
+    // route onward — an empty cSchedules (and so zero outgoing canvas edges)
+    // is their correct, expected shape, not a modeling omission (issue: the
+    // check previously fired on every PREEMPT-based interruption activity).
+    const modelWithPreempt = {
+      ...baseModel,
+      cEvents: [
+        ...baseModel.cEvents,
+        {
+          id: "preempt-for-main",
+          name: "Preempt for Main Queue",
+          priority: 0,
+          condition: "queue(Main Queue).length > 0 AND idle(Clerk).count == 0",
+          effect: ["PREEMPT(Clerk, PRIORITY(taskPriority))"],
+          cSchedules: [],
+        },
+      ],
+    };
+    const graph = deriveGraphFromModel(modelWithPreempt);
+
+    const issues = validateVisualGraph(graph, modelWithPreempt);
+    expect(issues.some(issue => issue.nodeId === "activity:preempt-for-main")).toBe(false);
+  });
+
+  it("still flags an ASSIGN-based activity with an empty cSchedules as missing a completion route", () => {
+    const modelWithDanglingAssign = {
+      ...baseModel,
+      cEvents: [
+        {
+          id: "start-service",
+          name: "Start Service",
+          priority: 1,
+          condition: "queue(Main Queue).length > 0 AND idle(Clerk).count > 0",
+          effect: "ASSIGN(Main Queue, Clerk)",
+          cSchedules: [], // dangling — Clerk would be seized forever
+        },
+      ],
+    };
+    const graph = deriveGraphFromModel(modelWithDanglingAssign);
+
+    const issues = validateVisualGraph(graph, modelWithDanglingAssign);
+    expect(issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nodeId: "activity:start-service", message: expect.stringContaining("no completion route") }),
+    ]));
+  });
+
   it("addVisualNode adds a container with an id that avoids existing container ids", () => {
     const modelWithContainer = { ...baseModel, containerTypes: [{ id: "container-1", capacity: "100", initialLevel: "0" }] };
     const next = addVisualNode(modelWithContainer, "container");

@@ -948,7 +948,14 @@ export function addVisualPattern(model, patternId, options = {}) {
   };
 }
 
-export function validateVisualGraph(graph = {}) {
+// Macros that hold an entity in a new "busy" stage and need a later event to
+// route it onward — a completion route (cSchedules, or JOIN/MATCH's own
+// direct edge) is genuinely required for these. PREEMPT/FAIL/REPAIR/SET/
+// SET_ATTR/COST etc. are one-shot state mutations with nothing to route:
+// zero outgoing edges is their correct, expected shape, not an omission.
+const HOLDING_MACROS = new Set(["ASSIGN", "DELAY", "COSEIZE", "BATCH", "SPLIT", "TRANSPORT", "JOIN", "MATCH"]);
+
+export function validateVisualGraph(graph = {}, model = {}) {
   const nodes = graph.nodes || [];
   const edges = graph.edges || [];
   const incoming = new Map(nodes.map(node => [node.id, 0]));
@@ -977,7 +984,12 @@ export function validateVisualGraph(graph = {}) {
       push("warning", node.id, `${node.label} has no incoming queue.`);
     }
     if (node.type === VISUAL_NODE_TYPES.ACTIVITY && (outgoing.get(node.id) || 0) === 0) {
-      push("warning", node.id, `${node.label} has no completion route.`);
+      const cEvent = (model.cEvents || []).find(c => c.id === node.refId);
+      // Unresolvable ref (shouldn't happen, but stay safe): keep the warning.
+      const needsRoute = cEvent ? macroCalls(cEvent.effect).some(call => HOLDING_MACROS.has(call.macro)) : true;
+      if (needsRoute) {
+        push("warning", node.id, `${node.label} has no completion route.`);
+      }
     }
     if (node.type === VISUAL_NODE_TYPES.SINK && (incoming.get(node.id) || 0) === 0
         && node.sublabel !== "Reneging exit") {
