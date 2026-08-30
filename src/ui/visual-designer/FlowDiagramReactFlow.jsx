@@ -28,6 +28,13 @@ function colorForNodeType(type, C) {
   return { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red, container: C.amber }[type] || C.accent;
 }
 
+// Badges that flag something worth a second look — an opt-in behavior
+// (balking/reneging), a conditional branch ("when"), or an activity type
+// Draw can't fully edit (delay/advanced) — render amber, same as the
+// original "when" badge. Everything else (discipline, feed, route counts,
+// a plain "service" activity) stays the neutral accent color.
+const ATTENTION_BADGES = new Set(["when", "balks", "reneges", "delay", "advanced"]);
+
 function DesNode({ data, selected }) {
   const { C, FONT } = useTheme();
   const [hovered, setHovered] = useState(false);
@@ -136,14 +143,16 @@ function DesNode({ data, selected }) {
       )}
       {!!data.badges?.length && (
         <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 2 }}>
-          {data.badges.map(badge => (
+          {data.badges.map(badge => {
+            const attention = ATTENTION_BADGES.has(badge);
+            return (
             <span
               key={badge}
               style={{
-                background: badge === "when" ? `${C.amber}22` : `${C.accent}22`,
-                border: `1px solid ${badge === "when" ? C.amber : C.accent}`,
+                background: attention ? `${C.amber}22` : `${C.accent}22`,
+                border: `1px solid ${attention ? C.amber : C.accent}`,
                 borderRadius: 999,
-                color: badge === "when" ? C.amber : C.accent,
+                color: attention ? C.amber : C.accent,
                 fontSize: 9,
                 fontWeight: 700,
                 padding: "1px 5px",
@@ -152,7 +161,8 @@ function DesNode({ data, selected }) {
             >
               {badge}
             </span>
-          ))}
+            );
+          })}
         </div>
       )}
       {hasSource && (

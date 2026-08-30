@@ -786,4 +786,82 @@ describe("deriveGraphFromModel — canvas detail lines and badges", () => {
     const activity = graph.nodes.find(n => n.id === "activity:start-triage");
     expect(activity.badges).toContain("2 routes");
   });
+
+  it("does not badge a queue with balking/reneging when neither is configured", () => {
+    const graph = deriveGraphFromModel(minimalModel);
+    const queue = graph.nodes.find(n => n.id === "queue:waiting");
+    expect(queue.badges).not.toContain("balks");
+    expect(queue.badges).not.toContain("reneges");
+  });
+
+  it("badges a queue with 'balks' when balkProbability is set", () => {
+    const model = {
+      ...minimalModel,
+      queues: [{ ...minimalModel.queues[0], balkProbability: 0.1 }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const queue = graph.nodes.find(n => n.id === "queue:waiting");
+    expect(queue.badges).toContain("balks");
+  });
+
+  it("badges a queue with 'balks' when balkCondition is set", () => {
+    const model = {
+      ...minimalModel,
+      queues: [{ ...minimalModel.queues[0], balkCondition: { variable: "Entity.severity", operator: "<", value: 3 } }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const queue = graph.nodes.find(n => n.id === "queue:waiting");
+    expect(queue.badges).toContain("balks");
+  });
+
+  it("badges a queue with 'reneges' when renegeDist is set", () => {
+    const model = {
+      ...minimalModel,
+      queues: [{ ...minimalModel.queues[0], renegeDist: "Exponential", renegeDistParams: { rate: 0.1 } }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const queue = graph.nodes.find(n => n.id === "queue:waiting");
+    expect(queue.badges).toContain("reneges");
+  });
+
+  it("gives a Service activity an always-on 'service' type badge", () => {
+    const graph = deriveGraphFromModel(minimalModel); // effect: ASSIGN(Waiting, Server)
+    const activity = graph.nodes.find(n => n.id === "activity:start-service");
+    expect(activity.badges).toContain("service");
+  });
+
+  it("gives a Delay activity a 'delay' type badge", () => {
+    const model = {
+      ...minimalModel,
+      cEvents: [{ ...minimalModel.cEvents[0], effect: "DELAY(Waiting)" }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const activity = graph.nodes.find(n => n.id === "activity:start-service");
+    expect(activity.badges).toContain("delay");
+  });
+
+  it("gives an advanced-effect (COSEIZE) activity an 'advanced' type badge", () => {
+    const model = {
+      ...minimalModel,
+      cEvents: [{ ...minimalModel.cEvents[0], effect: "COSEIZE(Waiting, Server, Server)" }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const activity = graph.nodes.find(n => n.id === "activity:start-service");
+    expect(activity.badges).toContain("advanced");
+  });
+
+  it("still badges 'service' (not 'advanced') for a skill-gated ASSIGN", () => {
+    // ASSIGN with a 3rd (skill) arg is "advanced" by classifyActivityEffect's call
+    // shape, but VisualNodeInspector's isAdvancedActivity treats any ASSIGN call as
+    // Service-editable — the canvas badge must match that, not classifyActivityEffect
+    // literally, or the two surfaces would disagree about this activity's type.
+    const model = {
+      ...minimalModel,
+      cEvents: [{ ...minimalModel.cEvents[0], effect: 'ASSIGN(Waiting, Server, "Paediatrics")' }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const activity = graph.nodes.find(n => n.id === "activity:start-service");
+    expect(activity.badges).toContain("service");
+    expect(activity.badges).not.toContain("advanced");
+  });
 });

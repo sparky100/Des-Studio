@@ -4,9 +4,10 @@
 // model.graph data is used only for layout metadata such as node positions.
 
 import dagre from "@dagrejs/dagre";
-import { clean, effectText, macroCalls } from "../../model/macroParser.js";
-import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
+import { classifyActivityEffect, clean, effectText, macroCalls } from "../../model/macroParser.js";
+import { conditionLabel, extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 import { formatDistributionLabel } from "../../model/distributionFormat.js";
+import { hasBalking, hasReneging } from "../../model/balkRenegeFormat.js";
 // Pure constants module (imports only dagre) — safe to share with Draw per
 // ADR-020: no Execute *components* cross into the designer.
 import { EXEC_CARD_WIDTH, EXEC_CARD_HEIGHT } from "../execute/executeLayout.js";
@@ -122,23 +123,10 @@ function withLayout(nodes, edges, graph = {}) {
   });
 }
 
-export function conditionLabel(c, depth = 0) {
-  if (!c) return "condition";
-  if (typeof c === "string") return c;
-  if (typeof c !== "object") return "condition";
-  if ((c.operator === "AND" || c.operator === "OR") && Array.isArray(c.clauses) && depth === 0) {
-    const parts = c.clauses.map(cl => conditionLabel(cl, 1)).filter(p => p !== "condition");
-    return parts.length ? parts.join(` ${c.operator} `) : "condition";
-  }
-  const rawVar  = clean(c.variable || "");
-  // Strip "Entity." / "entity." prefix so "Entity.severity" → "severity"
-  const variable = rawVar.replace(/^entity\./i, "");
-  const op       = clean(c.operator || c.op || "");
-  const value    = c.value;
-  return variable && op && value !== undefined ? `${variable} ${op} ${value}`
-       : variable && value !== undefined       ? `${variable} = ${value}`
-       : "condition";
-}
+// Re-exported for existing callers (this module used to define it directly;
+// it now lives in model/conditionFormat.js so the model-layer balking
+// formatter can use it too without src/model importing back into src/ui).
+export { conditionLabel };
 
 export function deriveGraphFromModel(model = {}) {
   const bEvents = model.bEvents || [];
@@ -168,6 +156,13 @@ export function deriveGraphFromModel(model = {}) {
     queueNodeByName.set(norm(queue.name), id);
     const cap = queue.capacity ? parseInt(queue.capacity, 10) : null;
     const validCap = Number.isFinite(cap) && cap > 0 ? cap : null;
+    // Balking/reneging are opt-in and off by default, unlike discipline (every
+    // queue has one) — so they're only badged when actually configured,
+    // matching the "when"/"feed"/"N routes" conditional-badge convention
+    // rather than discipline's always-on one.
+    const queueBadges = [queue.discipline || "FIFO"];
+    if (hasBalking(queue)) queueBadges.push("balks");
+    if (hasReneging(queue)) queueBadges.push("reneges");
     nodes.push({
       id,
       type: VISUAL_NODE_TYPES.QUEUE,
@@ -175,7 +170,7 @@ export function deriveGraphFromModel(model = {}) {
       label: queue.name || "Queue",
       sublabel: queue.customerType ? `Accepts ${queue.customerType}` : "Queue",
       detail: validCap ? `cap ${validCap}${queue.overflowDestination ? ` → ${queue.overflowDestination}` : ""}` : undefined,
-      badges: [queue.discipline || "FIFO"],
+      badges: queueBadges,
       capacity: validCap,
     });
   });
@@ -238,7 +233,21 @@ export function deriveGraphFromModel(model = {}) {
   cEvents.forEach(event => {
     const id = nodeId(VISUAL_NODE_TYPES.ACTIVITY, event.id || event.name);
     const effectCalls = macroCalls(event.effect);
-    const isDelay = effectCalls.some(c => c.macro === "DELAY");
+    // Single source of truth for Service/Delay/Advanced classification —
+    // mirrors VisualNodeInspector.jsx's isDelayActivity/isAdvancedActivity
+    // exactly (kind==="delay"; kind==="advanced" with no ASSIGN call at all —
+    // a skill-gated ASSIGN(...,...,"Skill") is "advanced" by call shape but
+    // still counts as Service here, same as the Inspector) so canvas badge
+    // and inspector notice can never disagree. Replaces the previous looser
+    // "any DELAY call present" check.
+    const effectKind = classifyActivityEffect(event.effect).kind;
+    const hasAssignCall = effectCalls.some(c => c.macro === "ASSIGN");
+    const isDelay = effectKind === "delay";
+    const activityTypeBadge =
+      effectKind === "delay" ? "delay"
+      : effectKind === "advanced" && !hasAssignCall ? "advanced"
+      : effectKind === "empty" ? "not set"
+      : "service";
     const queueRefs = [
       ...extractQueueNamesFromCondition(event.condition),
       // ASSIGN/DELAY/JOIN/COSEIZE/BATCH all carry their source queue as args[0].
@@ -277,7 +286,7 @@ export function deriveGraphFromModel(model = {}) {
           ? `${serverNames.join(", ")} · Priority ${event.priority || 1}`
           : `Priority ${event.priority || 1}`,
       detail: formatDistributionLabel(event.cSchedules) || undefined,
-      badges: hasWhen ? ["when"] : [],
+      badges: [activityTypeBadge, ...(hasWhen ? ["when"] : [])],
     });
 
     uniqueQueueRefs.forEach(queueName => {

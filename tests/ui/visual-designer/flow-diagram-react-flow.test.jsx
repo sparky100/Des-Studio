@@ -120,6 +120,51 @@ describe('FlowDiagramReactFlow — node error badge', () => {
   });
 });
 
+// "Attention" badges (balking/reneging present, a "when" branch, a delay/
+// advanced-effect activity) render amber like the original "when" badge;
+// everything else (discipline, service type, feed, route counts) stays the
+// neutral accent color — see ATTENTION_BADGES in FlowDiagramReactFlow.jsx.
+describe('FlowDiagramReactFlow — badge attention coloring', () => {
+  it('colors an attention badge (balks) differently from a neutral one (FIFO) on the same node', () => {
+    const graph = makeGraph({
+      nodes: [
+        { id: 'queue:queue-1', type: 'queue', refId: 'queue-1', x: 0, y: 0, label: 'Queue 1', badges: ['FIFO', 'balks'] },
+      ],
+    });
+    render(<FlowDiagramReactFlow graph={graph} canEdit />);
+    const neutral = screen.getByText('FIFO');
+    const attention = screen.getByText('balks');
+    expect(attention.style.color).not.toBe(neutral.style.color);
+    expect(attention.style.borderColor).not.toBe(neutral.style.borderColor);
+  });
+
+  it('colors the "reneges" and "delay" badges as attention too', () => {
+    const graph = makeGraph({
+      nodes: [
+        { id: 'queue:queue-1', type: 'queue', refId: 'queue-1', x: 0, y: 0, label: 'Queue 1', badges: ['reneges'] },
+        { id: 'activity:activity-1', type: 'activity', refId: 'activity-1', x: 100, y: 0, label: 'Wait', badges: ['delay'] },
+      ],
+    });
+    render(<FlowDiagramReactFlow graph={graph} canEdit />);
+    const reneges = screen.getByText('reneges');
+    const delay = screen.getByText('delay');
+    expect(reneges.style.color).toBe(delay.style.color);
+  });
+
+  it('colors "service" like a neutral badge, not an attention one', () => {
+    const graph = makeGraph({
+      nodes: [
+        { id: 'activity:activity-1', type: 'activity', refId: 'activity-1', x: 0, y: 0, label: 'Triage', badges: ['service'] },
+        { id: 'queue:queue-2', type: 'queue', refId: 'queue-2', x: 100, y: 0, label: 'Queue 2', badges: ['reneges'] },
+      ],
+    });
+    render(<FlowDiagramReactFlow graph={graph} canEdit />);
+    const service = screen.getByText('service');
+    const reneges = screen.getByText('reneges');
+    expect(service.style.color).not.toBe(reneges.style.color);
+  });
+});
+
 function makeSectionedGraph() {
   return {
     nodes: [

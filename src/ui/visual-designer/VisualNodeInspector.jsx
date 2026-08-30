@@ -5,6 +5,8 @@ import { ConditionBuilder, EntityFilterBuilder } from "../editors/index.jsx";
 import { reorderCEventByPriority } from "../editors/helpers.jsx";
 import { VISUAL_NODE_TYPES, conditionLabel } from "./graph.js";
 import { classifyActivityEffect, macroCalls } from "../../model/macroParser.js";
+import { describeBalking, describeReneging, hasBalking, hasReneging } from "../../model/balkRenegeFormat.js";
+import { summarizeBEventEffect } from "../../model/effectSummary.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { disciplineAttr, disciplineBase } from "../shared/utils.js";
 
@@ -70,6 +72,58 @@ function CommitField({ label, value, onChange, disabled, transform, placeholder 
         }}
       />
     </div>
+  );
+}
+
+// DefinePointer — the canvas's "point to Define" convention for a field Draw
+// intentionally doesn't edit (the Inspector is a deliberate quick-edit
+// subset, not full parity with the Define tabs — see
+// docs/reviews/visual-designer-inspector-review.md). Was previously
+// duplicated ad hoc per field (delay/advanced-effect/shift-schedule/failure-
+// model boxes); consolidated here so every gap — including balking,
+// reneging, description, and the Source/Sink effect/routing fields — renders
+// identically instead of reinventing the box each time.
+function DefinePointer({ label, status, summary, tab, color }) {
+  const { C, FONT } = useTheme();
+  const c = color || C.muted;
+  return (
+    <div style={{ background: `${c}10`, border: `1px solid ${c}33`, borderRadius: 6, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: c, fontFamily: FONT }}>{label}</span>
+        {status != null && (
+          <span style={{ fontSize: 9, color: c, fontFamily: FONT, background: `${c}22`, borderRadius: 3, padding: "1px 5px" }}>{status}</span>
+        )}
+      </div>
+      {summary && (
+        <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>{summary}</div>
+      )}
+      <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+        Edit in the {tab} tab.
+      </div>
+    </div>
+  );
+}
+
+// Gaps shared by Source and Sink nodes — both are backed by the same BEvent
+// schema (description/effect/routing/loopConfig), so one component avoids
+// two copies of the same three pointers drifting apart.
+function BEventPointers({ bEvent }) {
+  const { C } = useTheme();
+  if (!bEvent) return null;
+  const hasRouting = (Array.isArray(bEvent.routing) && bEvent.routing.length > 0)
+    || (Array.isArray(bEvent.probabilisticRouting) && bEvent.probabilisticRouting.length > 0);
+  const loop = bEvent.loopConfig;
+  return (
+    <>
+      <DefinePointer label="Description" color={C.muted}
+        summary={bEvent.description || "Not set."} tab="Bound Events" />
+      <DefinePointer label="Effect" color={hasRouting ? C.amber : C.muted}
+        summary={summarizeBEventEffect(bEvent) || "No effect configured"}
+        tab="Bound Events" />
+      <DefinePointer label="Loop Guard" color={loop ? C.amber : C.muted}
+        summary={loop ? `Max ${loop.maxLoopCount ?? "N"} loops → ${loop.exitQueueName || "exit system"}` : "Not configured — no recirculation limit."}
+        tab="Bound Events" />
+    </>
   );
 }
 
@@ -204,6 +258,10 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               compact
             />
           </div>
+          <BEventPointers bEvent={bEvent} />
+          <DefinePointer label="Schedule rows" color={(bEvent.schedules || []).length > 1 ? C.amber : C.muted}
+            summary={`${(bEvent.schedules || []).length || 0} row${(bEvent.schedules || []).length === 1 ? "" : "s"} configured. Jitter, linked live-data schedules, and the reneging-timer flag are edited in Bound Events.`}
+            tab="Bound Events" />
         </>
       )}
 
@@ -257,6 +315,18 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                 .map(q => <option key={q.id || q.name} value={q.name}>{q.name}</option>)}
             </SelectField>
           )}
+          <DefinePointer label="Description" color={C.muted}
+            summary={queue.description || "Not set."} tab="Queues" />
+          <DefinePointer
+            label="Balking" color={hasBalking(queue) ? C.amber : C.muted}
+            summary={hasBalking(queue) ? describeBalking(queue) : "Not configured — all arrivals join."}
+            tab="Queues"
+          />
+          <DefinePointer
+            label="Reneging" color={hasReneging(queue) ? C.amber : C.muted}
+            summary={hasReneging(queue) ? `Abandons after ${describeReneging(queue)}` : "Not configured — entities never abandon this queue."}
+            tab="Queues"
+          />
         </>
       )}
 
@@ -274,6 +344,8 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
             // hand it back whole via patch.cEvents, rather than writing the number in place.
             onChange={value => onPatchNode(node, { cEvents: reorderCEventByPriority(model.cEvents || [], cEvent.id, value) })}
           />
+          <DefinePointer label="Description" color={C.muted}
+            summary={cEvent.description || "Not set."} tab="Conditional Events" />
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
               Condition
@@ -301,21 +373,18 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
             />
           </div>
           {isDelayActivity ? (
-            <div style={{ background: "#fef3c710", border: "1px solid #d9770640", borderRadius: 6, padding: "8px 10px", fontSize: 11, color: "#d97706", fontFamily: FONT, lineHeight: 1.5 }}>
-              Delay activity — entity held for a sampled duration with no resource claimed.
-            </div>
+            <DefinePointer label="Activity Type" status="Delay" color={C.amber}
+              summary="Entity held for a sampled duration with no resource claimed. Switch to Service in the Conditional Events tab."
+              tab="Conditional Events" />
           ) : isAdvancedActivity ? (
-            <div style={{ background: `${C.amber}10`, border: `1px solid ${C.amber}33`, borderRadius: 6, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: C.amber, fontFamily: FONT }}>Advanced effect</span>
-              <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
-                This activity uses an advanced effect (e.g. co-seizing several servers) that the canvas can't edit.
-              </div>
-              <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
-                Edit it in the C-Events editor.
-              </div>
-            </div>
+            <DefinePointer label="Activity Type" status="Advanced" color={C.amber}
+              summary="This activity uses an advanced effect (e.g. co-seizing several servers) that the canvas can't edit. Switch to Service or Delay in the Conditional Events tab."
+              tab="Conditional Events" />
           ) : (
             <>
+              <DefinePointer label="Activity Type" status="Service" color={C.accent}
+                summary="Claims a server for a sampled duration. Switch to Delay, or use an advanced effect (co-seize/batch/match/split), in the Conditional Events tab."
+                tab="Conditional Events" />
               <SelectField label="Server type" value={activityServer} disabled={!canEdit} onChange={value => onPatchNode(node, { serverType: value })}>
                 {servers.length === 0
                   ? <option value="">No server types defined</option>
@@ -330,18 +399,10 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                 const lastCap = parseInt(ss[ss.length - 1]?.capacity, 10) || 1;
                 const range = firstCap === lastCap ? `${firstCap}` : `${firstCap}-${lastCap}`;
                 return (
-                  <div style={{ background: `${C.server}10`, border: `1px solid ${C.server}33`, borderRadius: 6, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: C.server, fontFamily: FONT }}>Shift Schedule</span>
-                      <span style={{ fontSize: 9, color: C.server, fontFamily: FONT, background: `${C.server}22`, borderRadius: 3, padding: "1px 5px" }}>{ss.length} period{ss.length !== 1 ? "s" : ""}</span>
-                    </div>
-                    <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
-                      Pool size varies: {range} across {ss.length} shift{ss.length !== 1 ? "s" : ""}.
-                    </div>
-                    <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
-                      Manage shift periods in the Forms/Tabs Entity Types editor.
-                    </div>
-                  </div>
+                  <DefinePointer label="Shift Schedule" color={C.server}
+                    status={`${ss.length} period${ss.length !== 1 ? "s" : ""}`}
+                    summary={`Pool size varies: ${range} across ${ss.length} shift${ss.length !== 1 ? "s" : ""}.`}
+                    tab="Entity Types" />
                 );
               })()}
               {(() => {
@@ -349,20 +410,10 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                 if (!selServer?.mtbfDist) return null;
                 const scope = selServer.failureScope || "unit";
                 return (
-                  <div style={{ background: `${C.red}10`, border: `1px solid ${C.red}33`, borderRadius: 6, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: C.red, fontFamily: FONT }}>Failure Model</span>
-                      <span style={{ fontSize: 9, color: C.red, fontFamily: FONT, background: `${C.red}22`, borderRadius: 3, padding: "1px 5px" }}>
-                        {scope === "unit" ? "per unit" : "pool"}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
-                      MTBF: {selServer.mtbfDist}({Object.values(selServer.mtbfDistParams || {}).join(", ")}) · MTTR: {selServer.mttrDist}({Object.values(selServer.mttrDistParams || {}).join(", ")})
-                    </div>
-                    <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
-                      Manage failure settings in the Forms/Tabs Entity Types editor.
-                    </div>
-                  </div>
+                  <DefinePointer label="Failure Model" color={C.red}
+                    status={scope === "unit" ? "per unit" : "pool"}
+                    summary={`MTBF: ${selServer.mtbfDist}(${Object.values(selServer.mtbfDistParams || {}).join(", ")}) · MTTR: ${selServer.mttrDist}(${Object.values(selServer.mttrDistParams || {}).join(", ")})`}
+                    tab="Entity Types" />
                 );
               })()}
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -416,6 +467,9 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                   })
                 )}
               </div>
+              <DefinePointer label="Schedule rows" color={C.muted}
+                summary={`${activityCSchedules.length || 0} row${activityCSchedules.length === 1 ? "" : "s"} configured. Add/remove rows, change the target B-event, or edit the "when" condition in Conditional Events.`}
+                tab="Conditional Events" />
             </>
           )}
         </>
@@ -430,6 +484,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               <option value="RENEGE">RENEGE</option>
             </SelectField>
           )}
+          <BEventPointers bEvent={bEvent} />
         </>
       )}
 

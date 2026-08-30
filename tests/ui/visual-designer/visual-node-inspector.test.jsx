@@ -293,7 +293,7 @@ describe('VisualNodeInspector — advanced activity effects', () => {
 
     expect(screen.queryByLabelText(/server type/i)).not.toBeInTheDocument();
     expect(screen.getByText(/advanced effect .* the canvas can't edit/i)).toBeInTheDocument();
-    expect(screen.getByText(/C-Events editor/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/edit in the conditional events tab/i).length).toBeGreaterThan(0);
   });
 
   it('still shows the Server type control, with the right server, for a skill-gated ASSIGN', () => {
@@ -312,5 +312,197 @@ describe('VisualNodeInspector — advanced activity effects', () => {
     render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
 
     expect(screen.getByLabelText(/server type/i)).toHaveValue('Server');
+  });
+});
+
+// Balking/reneging are edited only in Define (Queues tab) — the Inspector
+// shows a read-only "edit in Define" pointer with the current value (or a
+// "not configured" state) rather than silently omitting them.
+describe('VisualNodeInspector — queue balking/reneging/description pointers', () => {
+  it('shows "not configured" for balking and reneging on a plain queue', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const queueNode = findNode(graph, 'queue');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={queueNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText(/not configured — all arrivals join/i)).toBeInTheDocument();
+    expect(screen.getByText(/not configured — entities never abandon this queue/i)).toBeInTheDocument();
+    expect(screen.getByText('Not set.')).toBeInTheDocument(); // Description
+  });
+
+  it('summarizes a probability-based balking config', () => {
+    const model = makeModel({
+      queues: [{ id: 'queue-1', name: 'Queue 1', customerType: 'Customer', discipline: 'FIFO', balkProbability: 0.15 }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const queueNode = findNode(graph, 'queue');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={queueNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText(/15% of arrivals balk/i)).toBeInTheDocument();
+  });
+
+  it('summarizes a condition-based balking config', () => {
+    const model = makeModel({
+      queues: [{
+        id: 'queue-1', name: 'Queue 1', customerType: 'Customer', discipline: 'FIFO',
+        balkCondition: { variable: 'Entity.severity', operator: '<', value: 3 },
+      }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const queueNode = findNode(graph, 'queue');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={queueNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText(/balks when severity < 3/i)).toBeInTheDocument();
+  });
+
+  it('summarizes a configured reneging distribution', () => {
+    const model = makeModel({
+      queues: [{
+        id: 'queue-1', name: 'Queue 1', customerType: 'Customer', discipline: 'FIFO',
+        renegeDist: 'Exponential', renegeDistParams: { rate: 0.1 },
+      }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const queueNode = findNode(graph, 'queue');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={queueNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText(/abandons after exp/i)).toBeInTheDocument();
+  });
+
+  it('shows a queue\'s description when set, and names the Queues tab', () => {
+    const model = makeModel({
+      queues: [{ id: 'queue-1', name: 'Queue 1', customerType: 'Customer', discipline: 'FIFO', description: 'Overflow buffer for peak hours.' }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const queueNode = findNode(graph, 'queue');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={queueNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText('Overflow buffer for peak hours.')).toBeInTheDocument();
+    expect(screen.getAllByText(/edit in the queues tab/i).length).toBeGreaterThan(0);
+  });
+});
+
+describe('VisualNodeInspector — activity type pointer', () => {
+  it('shows a "Service" activity type pointer for a plain ASSIGN activity', () => {
+    const model = makeModel();
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText('Activity Type')).toBeInTheDocument();
+    expect(screen.getByText('Service')).toBeInTheDocument();
+    expect(screen.getByText(/switch to delay/i)).toBeInTheDocument();
+  });
+
+  it('shows a "Delay" activity type pointer for a delay activity', () => {
+    const model = makeModel({
+      cEvents: [{
+        id: 'activity-1', name: 'Wait', priority: 1,
+        condition: 'queue(Queue 1).length > 0',
+        effect: 'DELAY(Queue 1)',
+        cSchedules: [],
+      }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText('Activity Type')).toBeInTheDocument();
+    expect(screen.getByText('Delay')).toBeInTheDocument();
+  });
+
+  it('shows an "Advanced" activity type pointer for a COSEIZE activity', () => {
+    const model = makeModel({
+      cEvents: [{
+        id: 'activity-1', name: 'Joint Procedure', priority: 1,
+        condition: 'queue(Queue 1).length > 0',
+        effect: 'COSEIZE(Queue 1, Nurse, Doctor)',
+        cSchedules: [],
+      }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText('Activity Type')).toBeInTheDocument();
+    expect(screen.getByText('Advanced')).toBeInTheDocument();
+  });
+});
+
+describe('VisualNodeInspector — description pointers', () => {
+  it('shows an activity\'s description when set, and names the Conditional Events tab', () => {
+    const model = makeModel({
+      cEvents: [{ ...makeModel().cEvents[0], description: 'Primary triage assessment.' }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText('Primary triage assessment.')).toBeInTheDocument();
+  });
+
+  it('shows a source\'s description when set, and names the Bound Events tab', () => {
+    const model = makeModel({
+      bEvents: [{ ...makeModel().bEvents[0], description: 'Walk-in patient arrivals.' }],
+    });
+    const graph = deriveGraphFromModel(model);
+    const sourceNode = findNode(graph, 'source');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={sourceNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText('Walk-in patient arrivals.')).toBeInTheDocument();
+    expect(screen.getAllByText(/edit in the bound events tab/i).length).toBeGreaterThan(0);
+  });
+});
+
+describe('VisualNodeInspector — source/sink Effect and Loop Guard pointers', () => {
+  function makeSinkModel(bEventOverrides = {}) {
+    return makeModel({
+      bEvents: [
+        makeModel().bEvents[0],
+        {
+          id: 'complete-1', name: 'Complete', scheduledTime: '9999',
+          // COMPLETE() (alongside RELEASE) guarantees a sink node regardless
+          // of whether routing/probabilisticRouting is set — a bare RELEASE
+          // with no routing table and no COMPLETE produces a plain queue-to-
+          // queue edge instead, with no sink node to select in the Inspector.
+          effect: ['RELEASE(Server, Queue 1)', 'COMPLETE()'],
+          schedules: [],
+          ...bEventOverrides,
+        },
+      ],
+      cEvents: [{ ...makeModel().cEvents[0], cSchedules: [{ eventId: 'complete-1', dist: 'Fixed', distParams: { value: '1' } }] }],
+    });
+  }
+
+  it('shows the Loop Guard as not configured by default', () => {
+    const model = makeSinkModel();
+    const graph = deriveGraphFromModel(model);
+    const sinkNode = findNode(graph, 'sink');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={sinkNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText(/not configured — no recirculation limit/i)).toBeInTheDocument();
+  });
+
+  it('summarizes a configured Loop Guard', () => {
+    const model = makeSinkModel({ loopConfig: { maxLoopCount: 3, exitQueueName: 'Queue 1' } });
+    const graph = deriveGraphFromModel(model);
+    const sinkNode = findNode(graph, 'sink');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={sinkNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText(/max 3 loops/i)).toBeInTheDocument();
+  });
+
+  it('summarizes the Effect via the same routing summary used elsewhere', () => {
+    const model = makeSinkModel({
+      probabilisticRouting: [
+        { probability: 0.25, queueName: null },
+        { probability: 0.75, queueName: 'Queue 1' },
+      ],
+    });
+    const graph = deriveGraphFromModel(model);
+    const sinkNode = findNode(graph, 'sink');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={sinkNode.id} canEdit onPatchNode={vi.fn()} />);
+
+    expect(screen.getByText(/routes 25% →/i)).toBeInTheDocument();
   });
 });
