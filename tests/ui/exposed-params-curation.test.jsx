@@ -102,6 +102,22 @@ describe('Business view curation (exposedParams)', () => {
     expect(screen.queryByText(/Old knob/)).not.toBeInTheDocument();
   });
 
+  it('exposes a container capacity/initial-level param and shows the unbounded-capacity tip', async () => {
+    renderDetail({
+      ...baseModel,
+      containerTypes: [{ id: 'BikesAvailable', capacity: 10, initialLevel: 5 }],
+    });
+    await openAccessTab();
+
+    fireEvent.click(screen.getByRole('button', { name: /add an adjustable setting/i }));
+    fireEvent.change(await screen.findByPlaceholderText(/filter parameters/i), { target: { value: 'bikesavailable — capacity' } });
+    fireEvent.click(screen.getByRole('button', { name: /^bikesavailable — capacity/i }));
+
+    expect(screen.getByText(/BikesAvailable — capacity — currently 10/)).toBeInTheDocument();
+    // No explicit min set yet — the unbounded-capacity tip now also names containers.
+    expect(screen.getByText(/queue-size or container-capacity settings/i)).toBeInTheDocument();
+  });
+
   it('disables already-exposed parameters in the picker instead of offering them again', async () => {
     renderDetail({ ...baseModel, exposedParams: [{ path: 'entityTypes.et-teller.count' }] });
     await openAccessTab();

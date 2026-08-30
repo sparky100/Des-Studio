@@ -65,9 +65,10 @@ export function resolveExposedParams(model) {
 
 /**
  * Clamp a viewer-entered value to the entry's curated bounds. Queue-capacity
- * knobs additionally get an implicit floor of 1 when the owner set no
- * explicit min: applySweepValues() maps values <= 0 to "unlimited capacity",
- * which a business user should not stumble into from a number input.
+ * and container-capacity knobs additionally get an implicit floor of 1 when
+ * the owner set no explicit min: applySweepValues() maps values <= 0 to
+ * "unlimited capacity", which a business user should not stumble into from a
+ * number input.
  *
  * @param {{ type?: string, min?: number, max?: number }} entry
  * @param {number} value
@@ -77,7 +78,7 @@ export function clampExposedValue(entry, value) {
   let v = Number(value);
   if (!Number.isFinite(v)) return v;
   let min = entry?.min;
-  if (min == null && entry?.type === "queueCapacity") min = 1;
+  if (min == null && (entry?.type === "queueCapacity" || entry?.type === "containerCapacity")) min = 1;
   if (min != null && v < min) v = min;
   if (entry?.max != null && v > entry.max) v = entry.max;
   return v;

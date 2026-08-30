@@ -43,6 +43,10 @@ describe("enumerateSweepableParams", () => {
     stateVariables: [
       { name: "threshold", initialValue: "10" },
     ],
+    containerTypes: [
+      { id: "BikesAvailable", capacity: 10, initialLevel: 5 },
+      { id: "Overflow", capacity: null, initialLevel: 0 },
+    ],
   };
 
   test("returns entity type count params with natural English labels", () => {
@@ -88,6 +92,22 @@ describe("enumerateSweepableParams", () => {
     const svs = params.filter(p => p.type === "stateVarInit");
     expect(svs.length).toBe(1);
     expect(svs[0].label).toBe("threshold — starting value");
+  });
+
+  test("returns container capacity and initial-level params with natural English labels", () => {
+    const params = enumerateSweepableParams(basicModel);
+    const caps = params.filter(p => p.type === "containerCapacity");
+    const inits = params.filter(p => p.type === "containerInitialLevel");
+    expect(caps).toHaveLength(2);
+    expect(inits).toHaveLength(2);
+    expect(caps[0].label).toBe("BikesAvailable — capacity");
+    expect(caps[0].currentValue).toBe(10);
+    expect(caps[0].path).toBe("containerTypes.BikesAvailable.capacity");
+    expect(inits[0].label).toBe("BikesAvailable — initial level");
+    expect(inits[0].currentValue).toBe(5);
+    // Unbounded container (capacity: null) reports Infinity, mirroring an
+    // unlimited queue's currentValue.
+    expect(caps[1].currentValue).toBe(Infinity);
   });
 
   test("handles model with no entity types gracefully", () => {
@@ -253,6 +273,36 @@ describe("applySweepValue", () => {
     const param = { type: "cEventDistParam", targetId: "c_seize", paramKey: "mean" };
     const cloned = applySweepValue(model, param, 0.5);
     expect(cloned.cEvents[0].cSchedules[0].distParams.mean).toBe("0.5");
+  });
+
+  test("modifies container capacity", () => {
+    const model = { containerTypes: [{ id: "BikesAvailable", capacity: 10, initialLevel: 5 }] };
+    const param = { type: "containerCapacity", targetId: "BikesAvailable" };
+    const cloned = applySweepValue(model, param, 20);
+    expect(cloned.containerTypes[0].capacity).toBe(20);
+    expect(model.containerTypes[0].capacity).toBe(10); // original unchanged
+  });
+
+  test("sets container capacity to null (unbounded) for a value <= 0", () => {
+    const model = { containerTypes: [{ id: "BikesAvailable", capacity: 10, initialLevel: 5 }] };
+    const param = { type: "containerCapacity", targetId: "BikesAvailable" };
+    const cloned = applySweepValue(model, param, 0);
+    expect(cloned.containerTypes[0].capacity).toBeNull();
+  });
+
+  test("modifies container initial level", () => {
+    const model = { containerTypes: [{ id: "BikesAvailable", capacity: 10, initialLevel: 5 }] };
+    const param = { type: "containerInitialLevel", targetId: "BikesAvailable" };
+    const cloned = applySweepValue(model, param, 8);
+    expect(cloned.containerTypes[0].initialLevel).toBe(8);
+    expect(model.containerTypes[0].initialLevel).toBe(5); // original unchanged
+  });
+
+  test("clamps container initial level to minimum 0", () => {
+    const model = { containerTypes: [{ id: "BikesAvailable", capacity: 10, initialLevel: 5 }] };
+    const param = { type: "containerInitialLevel", targetId: "BikesAvailable" };
+    const cloned = applySweepValue(model, param, -3);
+    expect(cloned.containerTypes[0].initialLevel).toBe(0);
   });
 
   test("modifies state variable initial value", () => {

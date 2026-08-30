@@ -13,6 +13,8 @@ const PARAMS = [
   { type: "queueCapacity", label: "Main Queue — maximum capacity", description: "Queue cap", currentValue: Infinity, path: "queues.q-1.capacity" },
   { type: "bEventDistParam", label: "Arrivals — mean", description: "Average time between arrivals", currentValue: 5, path: "bEvents.b-1.mean" },
   { type: "stateVarInit", label: "stock — starting value", description: "Initial stock level", currentValue: 10, path: "stateVariables.stock.init" },
+  { type: "containerCapacity", label: "BikesAvailable — capacity", description: "Maximum level of container 'BikesAvailable'", currentValue: 10, path: "containerTypes.BikesAvailable.capacity" },
+  { type: "containerInitialLevel", label: "BikesAvailable — initial level", description: "Starting level of container 'BikesAvailable'", currentValue: 10, path: "containerTypes.BikesAvailable.initialLevel" },
 ];
 
 function renderPanel(props = {}) {
@@ -30,10 +32,17 @@ describe("ParamBrowserPanel", () => {
     expect(screen.getByText("Arrival Distributions")).toBeInTheDocument();
     expect(screen.getByText("State Variables")).toBeInTheDocument();
     expect(screen.getByText("Queue Capacity")).toBeInTheDocument();
+    expect(screen.getByText("Containers")).toBeInTheDocument();
     // Servers & Capacity holds both the plain count and the shift-capacity
     // param, and opens by default (it's the first non-empty group).
     expect(screen.getByRole("button", { name: /^number of teller/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /shift 3 capacity/i })).toBeInTheDocument();
+  });
+
+  test("Containers group holds both a container's capacity and initial-level params", () => {
+    renderPanel();
+    expect(screen.getByRole("button", { name: /bikesavailable — capacity/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /bikesavailable — initial level/i })).toBeInTheDocument();
   });
 
   test("search flattens the groups and matches label, subLabel, and description", () => {
@@ -98,10 +107,12 @@ describe("ParamBrowserPanel", () => {
   });
 
   test("paramColor maps every param type family to a distinct themed colour", () => {
-    const C = { server: "s", green: "g", bEvent: "b", cEvent: "c", muted: "m" };
+    const C = { server: "s", green: "g", amber: "a", bEvent: "b", cEvent: "c", muted: "m" };
     expect(paramColor("entityTypeCount", C)).toBe("s");
     expect(paramColor("shiftCapacity", C)).toBe("s");
     expect(paramColor("queueCapacity", C)).toBe("g");
+    expect(paramColor("containerCapacity", C)).toBe("a");
+    expect(paramColor("containerInitialLevel", C)).toBe("a");
     expect(paramColor("bEventDistParam", C)).toBe("b");
     expect(paramColor("bEventPiecewisePeriodParam", C)).toBe("b");
     expect(paramColor("cEventDistParam", C)).toBe("c");

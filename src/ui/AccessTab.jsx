@@ -242,9 +242,9 @@ export function AccessTab({
                         onClose={()=>setExposedPickerOpen(false)}
                       />
                     )}
-                    {resolved.some(r=>r.type==="queueCapacity"&&r.min==null)&&(
+                    {resolved.some(r=>(r.type==="queueCapacity"||r.type==="containerCapacity")&&r.min==null)&&(
                       <div style={{fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>
-                        Tip: for queue-size settings, viewers' entries are kept at 1 or above (0 would mean an unlimited queue).
+                        Tip: for queue-size or container-capacity settings, viewers' entries are kept at 1 or above (0 would mean unlimited).
                       </div>
                     )}
                     {dirty&&exposed.length>0&&(
