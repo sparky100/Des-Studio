@@ -5,7 +5,6 @@ import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
 import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, alignNodes, distributeNodes, VISUAL_PATTERNS, ADVANCED_EFFECT_BLOCK_MESSAGE } from "./graph-operations.js";
 import { classifyActivityEffect } from "../../model/macroParser.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
-import { computeRunOverlaps } from "./runFootprint.js";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { RouteEdgeDialog } from "./RouteEdgeDialog.jsx";
 import { validateModel } from "../../engine/validation.js";
@@ -341,17 +340,10 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   const [showSections, setShowSections] = useState(() => {
     try { return localStorage.getItem("des.sections.show") !== "0"; } catch { return true; }
   });
-  // "Run size" ghost outlines — a viewing preference like the Sections
-  // toggle, so global rather than per-model. Off by default.
-  const [showRunFootprint, setShowRunFootprint] = useState(() => {
-    try { return localStorage.getItem("des.runFootprint.show") === "1"; } catch { return false; }
-  });
-  // Cycles through overlapping nodes on repeated clicks of the overlap chip.
-  const overlapCycleRef = useRef(0);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   // Measured sizes reported by ReactFlow (dimensions changes) keyed by node id —
-  // used by align/distribute so real node heights (which grow past NODE_HEIGHT when
-  // badges wrap) drive the math instead of the fixed NODE_* constants.
+  // used by align/distribute as the authoritative node size, falling back to
+  // the fixed NODE_* constants before the first measurement arrives.
   const nodeSizesRef = useRef({});
   const [arrangeOpen, setArrangeOpen] = useState(false);
   const arrangeMenuRef = useRef(null);
@@ -392,11 +384,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   const focusSectionRef = useRef(null);
   const [nodeSearchQuery, setNodeSearchQuery] = useState("");
   const graph = useMemo(() => deriveGraphFromModel(model || {}), [model]);
-  // Pairs of nodes whose Run-canvas footprints collide at the committed
-  // positions — always computed (advisory chip + amber badges), independent
-  // of the "Run size" ghost toggle.
-  const runOverlaps = useMemo(() => computeRunOverlaps(graph.nodes), [graph.nodes]);
-  useEffect(() => { overlapCycleRef.current = 0; }, [runOverlaps]);
   const searchMatches = useMemo(() => searchGraphNodes(graph.nodes, nodeSearchQuery), [graph.nodes, nodeSearchQuery]);
   const matchedNodeIds = useMemo(() => new Set(searchMatches.map(n => n.id)), [searchMatches]);
   const storedViewport = useMemo(() => {
@@ -1260,58 +1247,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                 )}
               </div>
 
-              <button
-                type="button"
-                aria-pressed={showRunFootprint}
-                onClick={() => setShowRunFootprint(prev => {
-                  const next = !prev;
-                  try { localStorage.setItem("des.runFootprint.show", next ? "1" : "0"); } catch { /* storage unavailable (private mode) — non-critical */ }
-                  return next;
-                })}
-                title={showRunFootprint
-                  ? "Hide Run-canvas size outlines"
-                  : "Show each object's Run-canvas size as a dashed outline — Run cards are larger than Draw cards"}
-                style={{
-                  background: showRunFootprint ? `${C.accent}22` : "transparent",
-                  border: `1px solid ${showRunFootprint ? C.accent : C.border}`,
-                  borderRadius: 4,
-                  color: showRunFootprint ? C.accent : C.muted,
-                  cursor: "pointer",
-                  fontFamily: FONT,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: "5px 10px",
-                }}
-              >
-                Run size
-              </button>
-
-              {runOverlaps.pairs.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const ids = [...runOverlaps.nodeIds];
-                    if (!ids.length) return;
-                    focusNode(ids[overlapCycleRef.current % ids.length]);
-                    overlapCycleRef.current += 1;
-                  }}
-                  title="Objects too close together: their larger Run-canvas cards will overlap during execution. Click to jump to each affected object."
-                  style={{
-                    background: `${C.amber}22`,
-                    border: `1px solid ${C.amber}`,
-                    borderRadius: 4,
-                    color: C.amber,
-                    cursor: "pointer",
-                    fontFamily: FONT,
-                    fontSize: 10,
-                    fontWeight: 700,
-                    padding: "5px 10px",
-                  }}
-                >
-                  ⚠ {runOverlaps.pairs.length} run overlap{runOverlaps.pairs.length !== 1 ? "s" : ""}
-                </button>
-              )}
-
               {(model?.sections || []).length > 0 && (
                 <button
                   type="button"
@@ -1474,8 +1409,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               focusSectionRef={focusSectionRef}
               matchedNodeIds={matchedNodeIds}
               showSections={showSections}
-              showRunFootprint={showRunFootprint}
-              overlapNodeIds={runOverlaps.nodeIds}
               onNodeSelect={selectNode}
               onNodeSelectionChange={syncSelection}
               onNodeMeasure={(id, dims) => {

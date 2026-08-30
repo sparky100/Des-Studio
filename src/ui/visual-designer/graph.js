@@ -8,10 +8,13 @@ import { clean, effectText, macroCalls } from "../../model/macroParser.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 // Pure constants module (imports only dagre) — safe to share with Draw per
 // ADR-020: no Execute *components* cross into the designer.
-import { EXEC_CARD_WIDTH, EXEC_NODE_HEIGHT, EXEC_DEFAULT_HEIGHT } from "../execute/executeLayout.js";
+import { EXEC_CARD_WIDTH, EXEC_NODE_HEIGHT } from "../execute/executeLayout.js";
 
-export const NODE_WIDTH = 142;
-export const NODE_HEIGHT = 68;
+// Every Draw object renders at one standard size: the largest size it could
+// need at run time, so a Draw box is always at least as big as the Run-canvas
+// card the same object will become — no per-type or content-driven variance.
+export const NODE_WIDTH = EXEC_CARD_WIDTH; // 160 — matches the Run canvas's card width
+export const NODE_HEIGHT = Math.max(...Object.values(EXEC_NODE_HEIGHT)); // 155 — tallest Run card (sink)
 export const ALIGN_GAP = 48;   // gap between a selected node and a newly palette-added node
 const DAGRE_RANK_SEP = 50;   // gap between right edge of one rank and left edge of next
 const DAGRE_NODE_SEP = 36;   // gap between nodes within the same rank
@@ -64,16 +67,16 @@ function layoutById(graph = {}) {
   return new Map((graph.nodes || []).map(node => [node.id, node]));
 }
 
-// Dagre reserves a box per node sized to whichever canvas renders it larger —
-// Draw's uniform NODE_WIDTH x NODE_HEIGHT or the Run canvas's bigger cards
-// (EXEC_CARD_WIDTH wide, per-type heights). Both canvases anchor cards at the
-// same top-left x/y, so auto-laid nodes (imported/AI-generated models,
-// "Layout" reset) can never overlap on either canvas.
-function layoutBoxSize(type) {
-  return {
-    width: Math.max(NODE_WIDTH, EXEC_CARD_WIDTH),
-    height: Math.max(NODE_HEIGHT, EXEC_NODE_HEIGHT[type] ?? EXEC_DEFAULT_HEIGHT),
-  };
+// Dagre reserves a uniform NODE_WIDTH x NODE_HEIGHT box per node. Since that
+// standard size is already the largest size any object needs at run time,
+// Draw's own box is always at least as big as the Run canvas's card for the
+// same object — both canvases anchor cards at the same top-left x/y, so
+// auto-laid nodes (imported/AI-generated models, "Layout" reset) can never
+// overlap on either canvas.
+// A fresh object per call — dagre attaches x/y onto whatever label object
+// setNode is given, so nodes must never share one object reference.
+function layoutBoxSize() {
+  return { width: NODE_WIDTH, height: NODE_HEIGHT };
 }
 
 function withLayout(nodes, edges, graph = {}) {
