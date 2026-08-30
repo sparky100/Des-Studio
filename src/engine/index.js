@@ -1181,6 +1181,14 @@ const cycleLog = [];
         state.__completedSinceSample = 0;
         for (const srv of entities.filter(e => e.role === 'server')) {
           srv._busyTime = 0;
+          // _shiftBusyTime/_skillBusyTime (F86.4 per-shift and per-skill utilisation,
+          // see releaseServerClaim) are per-label maps that mirror _busyTime but are
+          // never overwritten in place — only _busyTime was being zeroed here, so
+          // busy time credited to these maps before warmup survived into the
+          // post-warmup denominator-clipped calculation and could push
+          // calendarUtilisation/skillUtil above 100%.
+          srv._shiftBusyTime = {};
+          srv._skillBusyTime = {};
           srv._totalDowntime = 0;
           srv._failureCount  = 0;
           srv._starvationTime = 0;
@@ -1189,6 +1197,13 @@ const cycleLog = [];
           if (srv.status === 'failed') srv._failedAt = clock;
           if (srv._starvationStart != null) srv._starvationStart = clock;
         }
+        // Servers retired before warmup completed already flushed their lifetime
+        // busy/starvation/downtime/skill/shift stats into this accumulator (see
+        // flushRetiredServerStats) — discard it along with the live-server resets
+        // above, or a resource whose instances turn over (count changes, capacity
+        // schedules that shed servers) leaks pre-warmup history into the
+        // post-warmup summary the same way _busyTime would without the reset.
+        state.__retiredResourceStats = {};
         for (const sv of runtimeModel.stateVariables || []) {
           if (sv.resetOnWarmup) {
             try   { state[sv.name] = JSON.parse(sv.initialValue); }

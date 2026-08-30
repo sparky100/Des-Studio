@@ -64,4 +64,23 @@ describe('Per-shift utilisation attribution (F86.4)', () => {
     // The overall (calendar) utilisation must also stay a real percentage.
     expect(r.utilisation).toBeLessThanOrEqual(1);
   });
+
+  test('warm-up reset clears per-shift/per-skill busy-time maps, not just _busyTime', () => {
+    // Bug: the WARMUP handler zeroed server._busyTime but never reset
+    // server._shiftBusyTime/_skillBusyTime (added by the fix above) or
+    // state.__retiredResourceStats. Busy time credited to those maps before
+    // warmup survived into the post-warmup calculation, whose denominator
+    // (elapsed, period.elapsed) IS correctly clipped to the post-warmup
+    // window — so the leaked pre-warmup numerator against a shrunk
+    // denominator pushed calendarUtilisation/perShiftUtil above 100%.
+    const eng = buildEngine(model(), 1, 100, 250, null, 200000, 5000, false);
+    eng.runAll();
+    const r = eng.getSummary().perResource.Server;
+
+    expect(r.calendarUtilisation).toBeLessThanOrEqual(1);
+    expect(r.utilisation).toBeLessThanOrEqual(1);
+    for (const period of r.perShiftUtil) {
+      expect(period.utilisation).toBeLessThanOrEqual(1);
+    }
+  });
 });
