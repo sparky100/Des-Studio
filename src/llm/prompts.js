@@ -1777,14 +1777,17 @@ export function parseReportRecommendations(text) {
 
 // ── AI Sidebar: design-context model Q&A ──────────────────────────────────────
 
+// context.forceModelContext (set by callers when the model changed since the
+// last turn) no longer changes anything here — the full model digest and the
+// system guidance are both resent unconditionally on every turn regardless —
+// but is left as an accepted, harmless no-op field rather than requiring
+// call-site changes.
 export function buildModelQueryPrompt(question, model = {}, history = [], context = {}) {
-  const isFirstTurn = history.length === 0 || context.forceModelContext === true;
-
   // Resend the full model digest on every turn, not just the first — a follow-up
   // question may ask about a fact (e.g. an entity count) that the LLM's own prior
   // answer never restated, and conversation history alone is not a reliable source
   // of truth for numeric data.
-  let userContent;
+  let userContent, systemContent;
   {
     const entityTypes = (model.entityTypes || []).map(et => {
       const entry = { name: et.name || et.id, role: et.role || 'customer' };
@@ -1850,12 +1853,14 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
     if (context.currentTab) modelDigest._currentTab = context.currentTab;
     if (context.workflowMode) modelDigest._workflowMode = context.workflowMode;
 
-    const systemContent = [
+    systemContent = [
       "You are assisting a simulation modeller in flow. You have full knowledge of the model structure below.",
       "Give concrete, specific answers that reference the model's actual entities, queues, events, and attributes by name.",
       "When asked to review a specific editor tab (entity types, queues, B-events, C-events, sections, state variables), focus your analysis on that area.",
       "If the model has C-events, you can reason about conditional event logic and whether the conditions and effects are correctly wired.",
-      "A C-event with activityType:'delay' uses the DELAY macro — the entity waits for a sampled duration without occupying any server. No server type is needed. The duration comes from the cSchedule. The completion B-event handles routing. IMPORTANT: the completion B-event effect must be EMPTY when routing is used — do NOT add COMPLETE() alongside probabilistic or conditional routing because COMPLETE() fires before routing and prevents it from executing. The exit/null routing branch automatically completes the entity. Use COMPLETE() only when the entity always exits with no routing at all.",
+      "Each C-event (Activity) is one of: Service — claims a resource for a sampled duration via ASSIGN, optionally co-seizing several resource types at once via COSEIZE; Delay — holds the entity for a sampled duration without claiming any resource, via the DELAY macro; or an advanced effect such as JOIN/MATCH/BATCH/SPLIT/UNBATCH (merging or splitting entities) or PREEMPT/FAIL/REPAIR (resource interruption and failure modelling). Don't assume every C-event claims a resource.",
+      "A Delay-type C-event's completion B-event must leave its effect EMPTY when that B-event uses conditional or probabilistic routing — do NOT add COMPLETE() alongside a routing table. COMPLETE() marks the entity fully done immediately, and the routing table only fires for an entity still in a 'waiting' state, so adding COMPLETE() silently skips the routing table entirely rather than erroring. Use COMPLETE() only when the entity always exits with no routing at all; the exit/null-queue routing branch already ends the entity's journey on its own.",
+      "Balking and reneging are configured on the Queue itself (a queue's balkProbability/balkCondition and renegeDist/renegeDistParams fields), not as a B-event effect. A queue with neither field set has no balking or reneging.",
       "If the model has performance goals, you can assess whether the model structure is sufficient to measure them.",
       "If a question requires running the simulation to answer definitively (e.g. 'what is the average wait?'), say so — you can only reason about the model definition, not predict results.",
       "Do not invent data not present in the model context above.",
@@ -1865,8 +1870,21 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
     userContent = truncateWords(JSON.stringify({ question, model: modelDigest }, null, 2));
   }
 
+  // The detailed, model-design-aware systemContent built above used to be
+  // discarded — only a short generic string ("You are assisting..." on the
+  // first turn, an even thinner "Continue assisting..." on every turn after)
+  // ever reached the model, so the DELAY/COMPLETE() routing gotcha, the
+  // Activity Type distinction, and the balking/reneging-lives-on-Queue fact
+  // were computed but never sent. Sent unconditionally now — every turn, not
+  // just the first — since userContent already resends the full model digest
+  // on every turn for the same reason (conversation history alone isn't a
+  // reliable source of truth), and a follow-up question can just as easily
+  // turn on one of these app-design facts as a first question can. A single,
+  // unchanging system message across a conversation is also exactly what
+  // prompt caching wants, which the old first-turn/follow-up wording split
+  // would have defeated.
   const messages = [
-    ...(isFirstTurn ? [{ role: 'system', content: `You are assisting a simulation modeller in flow. You have detailed knowledge of the model. Answer concisely and precisely. Do not invent data. ${NOTES_PRIORITY_GUARDRAIL}` }] : [{ role: 'system', content: `Continue assisting the modeller about the model described earlier. Be concise and precise. Do not invent data. ${NOTES_PRIORITY_GUARDRAIL}` }]),
+    { role: 'system', content: systemContent },
     ...history.slice(-8),
     { role: 'user', content: userContent },
   ];

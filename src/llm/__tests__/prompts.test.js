@@ -106,6 +106,46 @@ describe('buildModelQueryPrompt', () => {
     expect(result.messages.length).toBeGreaterThan(2);
     expect(result.max_tokens).toBeGreaterThanOrEqual(4000);
   });
+
+  // Regression guard: the detailed, app-design-aware system message used to
+  // be built (as a local `systemContent`) and then silently discarded — only
+  // a generic one-liner ever reached the model, so none of this guidance
+  // (verified accurate against src/engine/macros.js and src/engine/phases.js
+  // at the time this was fixed) was ever actually sent.
+  describe('system message carries the real app-design guidance', () => {
+    test('explains the Delay-activity / COMPLETE()-vs-routing gotcha', () => {
+      const result = buildModelQueryPrompt('Explain this model', minimalModel);
+      const system = result.messages[0].content;
+      expect(system.toLowerCase()).toContain('complete()');
+      expect(system.toLowerCase()).toContain('routing');
+      expect(system.toLowerCase()).toContain('waiting');
+    });
+
+    test('explains that balking/reneging live on the Queue, not a B-event', () => {
+      const result = buildModelQueryPrompt('Explain this model', minimalModel);
+      const system = result.messages[0].content;
+      expect(system).toContain('balkProbability');
+      expect(system).toContain('renegeDist');
+    });
+
+    test('names the Service / Delay / advanced-effect Activity Type distinction', () => {
+      const result = buildModelQueryPrompt('Explain this model', minimalModel);
+      const system = result.messages[0].content;
+      expect(system).toContain('COSEIZE');
+      expect(system).toContain('DELAY');
+    });
+
+    test('is sent as the system message on every turn, not just the first', () => {
+      const history = [
+        { role: 'user', content: 'How many queues does this model have?' },
+        { role: 'assistant', content: 'This model has one queue.' },
+      ];
+      const firstTurn = buildModelQueryPrompt('Explain this model', minimalModel);
+      const laterTurn = buildModelQueryPrompt('And how many servers?', minimalModel, history);
+      expect(laterTurn.messages[0].role).toBe('system');
+      expect(laterTurn.messages[0].content).toBe(firstTurn.messages[0].content);
+    });
+  });
 });
 
 describe('buildReportRecommendationsPrompt', () => {
