@@ -22,10 +22,19 @@ export function extractImportedModelPayload(payload) {
     access: {},
   };
   for (const key of MODEL_JSON_KEYS) {
-    if (key === "graph" || key === "experimentDefaults") {
+    if (key === "graph") {
+      // Never trust externally-supplied node positions on import: an LLM
+      // asked to fill in flow's schema sometimes hallucinates a `graph` key
+      // with arbitrary/overlapping x/y even though the schema never asks
+      // for one. Always discard it so deriveGraphFromModel() computes a
+      // fresh dagre auto-layout — the same effect as the "↺ Layout" reset
+      // button (resetLayout in VisualDesignerPanel.jsx / relayoutModel in
+      // graph-operations.js, both of which wipe graph.nodes to []).
+      model[key] = null;
+    } else if (key === "experimentDefaults") {
       model[key] = source[key] && typeof source[key] === "object" && !Array.isArray(source[key])
         ? source[key]
-        : key === "graph" ? null : {};
+        : {};
     } else {
       model[key] = Array.isArray(source[key]) ? source[key] : [];
     }

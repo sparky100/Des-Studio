@@ -149,7 +149,7 @@ describe('model JSON import', () => {
     });
   });
 
-  it('preserves graph key when present in imported model_json', () => {
+  it('discards graph node positions on import even when present in model_json', () => {
     const imported = extractImportedModelPayload({
       name: 'Graph model',
       model_json: {
@@ -157,7 +157,25 @@ describe('model JSON import', () => {
         graph: { nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] },
       },
     });
-    expect(imported.graph).toEqual({ nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] });
+    expect(imported.graph).toBeNull();
+  });
+
+  it('discards LLM-hallucinated node x/y positions on import', () => {
+    const imported = extractImportedModelPayload({
+      name: 'Hallucinated positions model',
+      model_json: {
+        ...emptyModelJson,
+        graph: {
+          version: 1,
+          nodes: [
+            { id: 'n1', type: 'queue', refId: 'q1', x: 120, y: 340 },
+            { id: 'n2', type: 'activity', refId: 'a1', x: 900, y: 20 },
+          ],
+          viewport: { x: 0, y: 0, zoom: 1 },
+        },
+      },
+    });
+    expect(imported.graph).toBeNull();
   });
 
   it('preserves the model-level skills registry when present in imported model_json', () => {
