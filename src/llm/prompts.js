@@ -1,5 +1,16 @@
 const DEFAULT_MODEL_NAME = "Untitled model";
-const MAX_PROMPT_WORDS = 2000;
+// Word budget for the JSON data block sent to the LLM. This used to be 2000, which
+// sounds generous but isn't: a batch/results payload for a model with ~25+ queues
+// and resources (kpis.queues[], kpis.resources[], model.bEvents/cEvents, etc.) already
+// exceeds it, and truncateWords() cuts the JSON.stringify output at a word boundary
+// with no regard for structure — it can and does slice the payload apart mid-array,
+// silently dropping aggregateStats/goalGaps entirely if they happen to serialise after
+// the cut point. The LLM then has no verified figures for the very numbers its system
+// prompt (NO_INVENTED_METRICS_GUARDRAIL) tells it to cite, and fills them in itself —
+// this is the root cause of "batch analysis makes up numbers" reports. 20000 words is
+// still a small fraction of the model's context window (even the largest showcase
+// models here stay well under it) but comfortably covers realistic model sizes.
+const MAX_PROMPT_WORDS = 20000;
 const NOTES_PRIORITY_GUARDRAIL = "Notes and description are free-text context written by the modeller and may be outdated or describe a different scenario than the model's current definition. If notes/description conflict with structured fields (entityTypes[].count, queues[].capacity, etc.), the structured fields are always authoritative — never cite a count or value from notes/description that disagrees with the structured data.";
 const NO_INVENTED_METRICS_GUARDRAIL = "Every current-state KPI value (utilisation, wait time, throughput, etc.) you state MUST be the exact figure from the data provided in this prompt — never recompute, estimate, or apply queueing-theory formulas (Little's Law, M/M/c, etc.) to produce a different 'current' value. Theoretical/formula-based reasoning is permitted only when projecting the predicted effect of a proposed change, never when stating a current or actual value. Resource utilisation appears in this payload as kpis.resources[].utilisation (0-100 integer percent). Goal evaluation data is in goalGaps[].current — this is the identical utilisation expressed as a 0-1 fraction; convert between them by multiplying/dividing by 100, never by re-deriving a new value. " +
   "Before writing any analysis: silently cross-check every numeric value you plan to state against every numeric value given in this prompt's data (kpis.resources[].utilisation, goalGaps[].current/target/gap, aggregateStats means, etc.) — do not introduce any number that is not present in that data. Do NOT output this verification step, a list of the source values, or a table of them in your response — proceed straight to the requested output using only verified values. " +
@@ -13,6 +24,12 @@ function finiteOrNull(value) {
 function truncateWords(text, maxWords = MAX_PROMPT_WORDS) {
   const words = String(text || "").split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return words.join(" ");
+  // This is a last-resort safety valve, not something that should fire in normal
+  // operation — when it does, it can silently cut a JSON data payload apart mid-object,
+  // dropping whatever data happened to serialise after the cut point. Log it so an
+  // unexpectedly large model/result set shows up in the console instead of surfacing
+  // only as "the AI made up a number" with no trace of why.
+  console.warn(`[llm/prompts] Prompt payload truncated at ${maxWords} words (was ${words.length}) — some structured data was dropped before it reached the model.`);
   return `${words.slice(0, maxWords).join(" ")} ...`;
 }
 
@@ -552,6 +569,15 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
   // Build a sections digest so the LLM understands section entry/exit semantics
   const sectionsDigest = buildSectionsDigest(model);
 
+  // Computed before payload assembly — see the comment on the equivalent line in
+  // buildExplainResultsPrompt — so confidenceIntervals/goalGaps (small, fixed-size,
+  // the exact figures NO_INVENTED_METRICS_GUARDRAIL requires) can be placed ahead of
+  // kpis/waitDist/perQueue (which grow with model size) in the payload below.
+  const goalGaps = buildGoalGaps(model, agg, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
+  const goalsInstr = goalGaps?.length
+    ? ` Performance goals were set. For each goal use this format: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])". Cite exact numbers from the goalGaps data.`
+    : "";
+
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
@@ -562,19 +588,13 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
       ...(sectionsDigest.length ? { sections: sectionsDigest } : {}),
     },
     experiment,
+    ...(confidenceIntervals.length ? { confidenceIntervals } : {}),
+    ...(goalGaps?.length ? { goalGaps } : {}),
     kpis: buildKpis(model, results),
     waitDist: waitDistForPrompt,
     perQueue: Object.keys(perQueue).length ? perQueue : undefined,
-    ...(confidenceIntervals.length ? { confidenceIntervals } : {}),
     ...(shiftCapacity.length ? { shiftCapacity } : {}),
   };
-
-  const goalGaps = buildGoalGaps(model, agg, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
-  const goalsInstr = goalGaps?.length
-    ? ` Performance goals were set. For each goal use this format: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])". Cite exact numbers from the goalGaps data.`
-    : "";
-
-  if (goalGaps?.length) payload.goalGaps = goalGaps;
 
   const warningsInstr = payload.kpis.warning_phaseCTruncated
     ? ` NOTE: This batch or individual run may contain unreliable results — conditional-event logic couldn't resolve within its pass limit${payload.kpis.warning_phaseCTruncatedCount != null && payload.kpis.warning_phaseCTruncatedOfReplications != null ? ` (${payload.kpis.warning_phaseCTruncatedCount} of ${payload.kpis.warning_phaseCTruncatedOfReplications} replications affected)` : ""}, so some events that should have fired may not have. Mention this caveat.`
@@ -1137,6 +1157,14 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
       ciWidth: (s.upper != null && s.lower != null) ? +(s.upper - s.lower).toFixed(1) : null,
     }));
 
+  // Computed before payload assembly (rather than appended after) so aggregateStats/
+  // goalGaps/confidenceIntervals — the statistically-validated figures
+  // NO_INVENTED_METRICS_GUARDRAIL requires the model to cite verbatim — can be placed
+  // ahead of kpis/perQueue in the payload below. Those grow with model size (one entry
+  // per queue/resource); if the word budget is ever exceeded, it's their tail that gets
+  // clipped, not the small fixed-size validated data. See MAX_PROMPT_WORDS.
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
+
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
@@ -1150,15 +1178,13 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
       ...(cEvents ? { cEvents } : {}),
     },
     experiment: extractExperiment(experimentConfig),
+    aggregateStats: results.aggregateStats || {},
+    confidenceIntervals: confidenceIntervals.length ? confidenceIntervals : undefined,
+    ...(goalGaps?.length ? { goalGaps } : {}),
     kpis: buildKpis(model, results),
     // perQueue already contains p50/p90/p95/p99 — omit waitDist to avoid sending duplicate percentile data
     perQueue: Object.keys(perQueue).length ? perQueue : undefined,
-    aggregateStats: results.aggregateStats || {},
-    confidenceIntervals: confidenceIntervals.length ? confidenceIntervals : undefined,
   };
-
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, { ...getSummary(results), waitDist: results?.waitDist, runtimeMetrics: results?.runtimeMetrics });
-  if (goalGaps?.length) payload.goalGaps = goalGaps;
 
   // Deliberately NOT asking the model to restate exact MET/MISSED status, current
   // value, target, or gap here — a deterministic Goal Status checklist (computed
@@ -1750,10 +1776,13 @@ export function buildReportRecommendationsPrompt(model = {}, results = {}) {
   const payload = {
     model: { name: model.name || DEFAULT_MODEL_NAME, goals: goalsToPrompt(model) },
     kpis: { avgWait: finiteOrNull(summary.avgWait), avgSvc: finiteOrNull(summary.avgSvc), served: finiteOrNull(summary.served), reneged: finiteOrNull(summary.reneged), balked: finiteOrNull(summary.balked), avgWIP: finiteOrNull(summary.avgWIP), ...(outcomes ? { outcomes } : {}) },
-    queues,
-    resources,
     aggregateStats: results.aggregateStats || {},
     ...(goalGaps ? { goalGaps } : {}),
+    // queues/resources scale with model size — placed after the small fixed-size
+    // validated data above so truncation (see MAX_PROMPT_WORDS), if it ever fires,
+    // clips these instead.
+    queues,
+    resources,
     ...(entityAnomalies ? { entityAnomalies } : {}),
     ...(containerLevels ? { containerLevels } : {}),
   };
@@ -1959,13 +1988,20 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
           }
         : null,
     },
-    kpis,
+    // aggregateStats and goalGaps are the statistically-validated figures the system
+    // prompt (NO_INVENTED_METRICS_GUARDRAIL) requires the model to cite verbatim, and
+    // they're small and fixed-size (one entry per tracked metric/goal). kpis is placed
+    // after them, not before: it grows with the model (one entry per queue/resource),
+    // so if the word budget above is ever exceeded for an unusually large model, it's
+    // kpis' tail that gets clipped — not the compact validated data the guardrail
+    // depends on. See MAX_PROMPT_WORDS.
     aggregateStats: Object.fromEntries(
       Object.entries(aggregateStats || {})
         .filter(([, v]) => v && v.n > 0)
         .map(([k, v]) => [k, { n: v.n, mean: finiteOrNull(v.mean), lower: finiteOrNull(v.lower), upper: finiteOrNull(v.upper) }])
     ),
     ...(goalGaps?.length ? { goalGaps } : {}),
+    kpis,
   };
 
   // Deliberately not asking for exact current/target/gap/MET-MISSED restatement here —

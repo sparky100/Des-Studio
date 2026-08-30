@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   applySuggestionPatch,
   applySchedulePatch,
+  buildBatchAnalysisPrompt,
   buildCiResults,
   buildComparisonPrompt,
   buildExplainResultsPrompt,
   buildGoalGaps,
   buildNarrativePrompt,
   buildPlanRefinementPrompt,
+  buildReportRecommendationsPrompt,
   buildResultsQueryPrompt,
   buildSensitivityPrompt,
   buildSuggestionPrompt,
@@ -1272,6 +1274,119 @@ describe("explain prompt token budget", () => {
     expect(userContent).toMatch(/json/i);
     expect(userContent).toMatch(/suggestions/i);
     expect(userContent).toMatch(/What Happened/i);
+  });
+});
+
+// Regression coverage for the "batch analysis makes up numbers" bug: makeMessages()
+// truncates the JSON payload at a fixed word count with no regard for structure, so a
+// model large enough to push the payload past that budget could silently lose
+// aggregateStats/goalGaps — the exact validated figures NO_INVENTED_METRICS_GUARDRAIL
+// tells the LLM to cite — leaving the LLM to invent them instead. Two things are
+// asserted: (1) a realistically large model's prompt is not truncated at all under the
+// current budget, and (2) even if the budget is exceeded by an extreme model, the
+// small fixed-size validated fields are ordered ahead of the large per-queue/resource
+// data so they survive the cut.
+describe("large-model prompt payloads keep aggregateStats/goalGaps", () => {
+  function makeLargeModel(n) {
+    return {
+      name: "Large synthetic model",
+      goals: [{ label: "Utilisation goal", scope: { id: "r0", name: "Resource0", type: "resource" }, metric: "resource.utilisation", target: 0.85, operator: "<" }],
+      entityTypes: Array.from({ length: n }, (_, i) => ({ id: `r${i}`, name: `Resource${i}`, role: "server", count: 3 + (i % 4) })),
+      queues: Array.from({ length: n }, (_, i) => ({ id: `q${i}`, name: `Queue${i}`, capacity: 20 + i })),
+      stateVariables: [],
+      bEvents: Array.from({ length: Math.ceil(n / 2) }, (_, i) => ({ id: `b${i}`, name: `Arrival${i}`, dist: "exponential", distParams: { rate: 0.3 + i * 0.01 } })),
+      cEvents: Array.from({ length: Math.ceil(n / 2) }, (_, i) => ({ id: `c${i}`, name: `Service${i}`, dist: "normal", distParams: { mean: 10 + i, sd: 2 } })),
+    };
+  }
+
+  function makeLargeCombinedResult(model) {
+    const perQueue = {};
+    const waitDist = {};
+    for (const q of model.queues) {
+      perQueue[q.name] = { avgWait: 5.3, maxDepth: 12, avgDepth: 3.2, blocked: 4, balked: 2 };
+      waitDist[q.name] = { n: 200, mean: 5.3, p50: 4.1, p90: 11.2, p95: 14.0, p99: 20.1 };
+    }
+    const perResource = {};
+    for (const r of model.entityTypes) {
+      perResource[r.name] = { utilisation: 62, calendarUtilisation: 58, idleCount: 4, busyCount: 30 };
+    }
+    const summary = {
+      avgWait: 6.1, avgSvc: 9.4, avgSojourn: 15.5, served: 980, reneged: 12, balked: 8,
+      total: 1000, servedRatio: 0.98, totalCost: 45210, costPerServed: 46.1, avgWIP: 22.4,
+      perQueue, perResource,
+    };
+    return { summary, waitDist, perQueue, perResource, aggregateStats: {} };
+  }
+
+  function makeAggregateStats() {
+    const stats = {};
+    for (const m of ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.served", "summary.reneged", "summary.totalCost", "summary.costPerServed"]) {
+      stats[m] = { n: 20, mean: 12.3, lower: 10.1, upper: 14.5 };
+    }
+    return stats;
+  }
+
+  it("buildBatchAnalysisPrompt: a realistically large model is not truncated and keeps aggregateStats/goalGaps", () => {
+    const largeModel = makeLargeModel(25);
+    const combinedResult = makeLargeCombinedResult(largeModel);
+    const aggregateStats = makeAggregateStats();
+    const ciSummary = { finalReps: 20, converged: true, relativeHalfWidth: 4.2, kpiPath: "summary.avgWait", ci: { mean: 12, lower: 10, upper: 14, halfWidth: 2 } };
+    const prompt = buildBatchAnalysisPrompt(largeModel, combinedResult, aggregateStats, ciSummary, "pro");
+    const userContent = prompt.messages[1].content;
+    expect(userContent.trim().endsWith("...")).toBe(false);
+    expect(userContent).toContain('"aggregateStats"');
+    expect(userContent).toContain('"goalGaps"');
+  });
+
+  it("buildExplainResultsPrompt: a realistically large model is not truncated and keeps aggregateStats/goalGaps", () => {
+    const largeModel = makeLargeModel(25);
+    const combinedResult = makeLargeCombinedResult(largeModel);
+    const aggregateStats = makeAggregateStats();
+    const prompt = buildExplainResultsPrompt(largeModel, {}, { ...combinedResult, aggregateStats }, []);
+    const userContent = prompt.messages[1].content;
+    expect(userContent.trim().endsWith("...")).toBe(false);
+    expect(userContent).toContain('"aggregateStats"');
+    expect(userContent).toContain('"goalGaps"');
+  });
+
+  it("buildBatchAnalysisPrompt: even an extreme model that exceeds the word budget keeps aggregateStats/goalGaps ahead of the cut", () => {
+    // Large enough to exceed MAX_PROMPT_WORDS (20000) even after the budget increase —
+    // proves the defense-in-depth key ordering, not just the raised budget.
+    const hugeModel = makeLargeModel(300);
+    const combinedResult = makeLargeCombinedResult(hugeModel);
+    const aggregateStats = makeAggregateStats();
+    const ciSummary = { finalReps: 20, converged: true, relativeHalfWidth: 4.2, kpiPath: "summary.avgWait", ci: { mean: 12, lower: 10, upper: 14, halfWidth: 2 } };
+    const prompt = buildBatchAnalysisPrompt(hugeModel, combinedResult, aggregateStats, ciSummary, "pro");
+    const userContent = prompt.messages[1].content;
+    expect(userContent.trim().endsWith("...")).toBe(true); // sanity: this test model really does exceed the budget
+    expect(userContent).toContain('"aggregateStats"');
+    expect(userContent).toContain('"goalGaps"');
+  });
+
+  it("buildReportRecommendationsPrompt keeps aggregateStats/goalGaps ahead of the per-queue/resource arrays", () => {
+    const largeModel = makeLargeModel(25);
+    const combinedResult = makeLargeCombinedResult(largeModel);
+    const aggregateStats = makeAggregateStats();
+    const prompt = buildReportRecommendationsPrompt(largeModel, { ...combinedResult, aggregateStats });
+    const userContent = prompt.messages[1].content;
+    const aggIdx = userContent.indexOf('"aggregateStats"');
+    const queuesIdx = userContent.indexOf('"queues"');
+    expect(aggIdx).toBeGreaterThan(-1);
+    expect(queuesIdx).toBeGreaterThan(-1);
+    expect(aggIdx).toBeLessThan(queuesIdx);
+  });
+
+  it("buildNarrativePrompt keeps goalGaps ahead of the per-queue kpis/perQueue data", () => {
+    const largeModel = makeLargeModel(25);
+    const combinedResult = makeLargeCombinedResult(largeModel);
+    const aggregateStats = makeAggregateStats();
+    const prompt = buildNarrativePrompt(largeModel, {}, { ...combinedResult, aggregateStats });
+    const userContent = prompt.messages[1].content;
+    const goalGapsIdx = userContent.indexOf('"goalGaps"');
+    const perQueueIdx = userContent.indexOf('"perQueue"');
+    expect(goalGapsIdx).toBeGreaterThan(-1);
+    expect(perQueueIdx).toBeGreaterThan(-1);
+    expect(goalGapsIdx).toBeLessThan(perQueueIdx);
   });
 });
 
