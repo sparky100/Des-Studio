@@ -147,7 +147,12 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
   }
   if (result.phaseCTruncated || summary.phaseCTruncated) {
     resultsJson.phaseCTruncated = true;
-    resultsJson.summary = { ...resultsJson.summary, phaseCTruncated: true };
+    const truncatedReplicationCount = result.truncatedReplicationCount ?? summary.truncatedReplicationCount;
+    resultsJson.summary = {
+      ...resultsJson.summary,
+      phaseCTruncated: true,
+      ...(truncatedReplicationCount != null ? { truncatedReplicationCount } : {}),
+    };
   }
   if (result.cycleLimitReached || summary.cycleLimitReached) {
     resultsJson.cycleLimitReached = true;

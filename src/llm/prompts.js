@@ -469,7 +469,11 @@ export function buildKpis(model = {}, results = {}) {
   if (containerLevels) kpis.containerLevels = containerLevels;
   if (summary.activityCounts) kpis.activityCounts = summary.activityCounts;
   if (summary.preemptCounts) kpis.preemptCounts = summary.preemptCounts;
-  if (summary.phaseCTruncated) kpis.warning_phaseCTruncated = true;
+  if (summary.phaseCTruncated) {
+    kpis.warning_phaseCTruncated = true;
+    if (summary.truncatedReplicationCount != null) kpis.warning_phaseCTruncatedCount = summary.truncatedReplicationCount;
+    if (summary.numReplications != null) kpis.warning_phaseCTruncatedOfReplications = summary.numReplications;
+  }
   if (summary.warnings?.length) kpis.warnings = summary.warnings;
   if (summary.terminatingState) {
     const ts = summary.terminatingState;
@@ -573,7 +577,7 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
   if (goalGaps?.length) payload.goalGaps = goalGaps;
 
   const warningsInstr = payload.kpis.warning_phaseCTruncated
-    ? " NOTE: Phase C was truncated during this run — some conditional events may not have fired. Mention this caveat."
+    ? ` NOTE: This batch or individual run may contain unreliable results — conditional-event logic couldn't resolve within its pass limit${payload.kpis.warning_phaseCTruncatedCount != null && payload.kpis.warning_phaseCTruncatedOfReplications != null ? ` (${payload.kpis.warning_phaseCTruncatedCount} of ${payload.kpis.warning_phaseCTruncatedOfReplications} replications affected)` : ""}, so some events that should have fired may not have. Mention this caveat.`
     : "";
 
   const wipInstr = payload.kpis.terminatingState?.note
@@ -1166,7 +1170,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     : "";
 
   const warningsInstr = payload.kpis.warning_phaseCTruncated
-    ? " NOTE: Phase C was truncated — some conditional events may not have fired. Mention this caveat."
+    ? ` NOTE: This batch or individual run may contain unreliable results — conditional-event logic couldn't resolve within its pass limit${payload.kpis.warning_phaseCTruncatedCount != null && payload.kpis.warning_phaseCTruncatedOfReplications != null ? ` (${payload.kpis.warning_phaseCTruncatedCount} of ${payload.kpis.warning_phaseCTruncatedOfReplications} replications affected)` : ""}, so some events that should have fired may not have. Mention this caveat.`
     : "";
 
   const sensitivityReady = ciResults.some(item => item.n >= 5);
@@ -1951,7 +1955,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     : "";
 
   const truncatedInstr = kpis.warning_phaseCTruncated
-    ? " NOTE: Phase C was truncated during this run — some conditional events may not have fired. Mention this caveat in the Confidence Summary."
+    ? ` NOTE: This batch or individual run may contain unreliable results — conditional-event logic couldn't resolve within its pass limit${kpis.warning_phaseCTruncatedCount != null && kpis.warning_phaseCTruncatedOfReplications != null ? ` (${kpis.warning_phaseCTruncatedCount} of ${kpis.warning_phaseCTruncatedOfReplications} replications affected)` : ""}, so some events that should have fired may not have. Mention this caveat in the Confidence Summary.`
     : "";
 
   const sectionList = goalGaps?.length
