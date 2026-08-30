@@ -392,7 +392,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   const graphWithViewport = useMemo(() =>
     storedViewport ? { ...graph, viewport: storedViewport } : graph,
   [graph, storedViewport]);
-  const visualIssues = useMemo(() => validateVisualGraph(graph), [graph]);
+  const visualIssues = useMemo(() => validateVisualGraph(graph, model || {}), [graph, model]);
   const modelValidation = useMemo(() => validateModel(model || {}), [model]);
   // Derived map of canvas node ID -> validation messages — never stored in model_json.
   // A Map (not just a Set) so the canvas badge can show the message on hover instead of

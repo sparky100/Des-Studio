@@ -43,7 +43,7 @@ function SelectField({ label, value, onChange, children, disabled }) {
 // Commits on blur/Enter rather than every keystroke — matches every other model editor
 // (QueueEditor, BEventEditor, etc.) and avoids flooding the model's 20-entry undo stack
 // with one entry per character typed.
-function CommitField({ label, value, onChange, disabled, transform, placeholder }) {
+function CommitField({ label, value, onChange, disabled, transform, placeholder, multiline }) {
   const { C, FONT } = useTheme();
   const id = `visual-commit-${useId()}`;
   return (
@@ -58,6 +58,7 @@ function CommitField({ label, value, onChange, disabled, transform, placeholder 
         disabled={disabled}
         placeholder={placeholder}
         ariaLabel={label}
+        multiline={multiline}
         style={{
           background: C.bg,
           border: `1px solid ${C.border}`,
@@ -69,6 +70,7 @@ function CommitField({ label, value, onChange, disabled, transform, placeholder 
           width: "100%",
           boxSizing: "border-box",
           opacity: disabled ? 0.5 : 1,
+          ...(multiline ? { resize: "vertical", lineHeight: 1.5 } : {}),
         }}
       />
     </div>
@@ -130,7 +132,7 @@ function DefinePointer({ label, status, summary, tab, color, onGoTo }) {
 // Gaps shared by Source and Sink nodes — both are backed by the same BEvent
 // schema (description/effect/routing/loopConfig), so one component avoids
 // two copies of the same three pointers drifting apart.
-function BEventPointers({ bEvent, onGoToDefine }) {
+function BEventPointers({ bEvent, onGoToDefine, onPatchNode, node, canEdit }) {
   const { C } = useTheme();
   if (!bEvent) return null;
   const hasRouting = (Array.isArray(bEvent.routing) && bEvent.routing.length > 0)
@@ -139,8 +141,8 @@ function BEventPointers({ bEvent, onGoToDefine }) {
   const goToBEvent = goTo(onGoToDefine, "Bound Events", bEvent.id);
   return (
     <>
-      <DefinePointer label="Description" color={C.muted}
-        summary={bEvent.description || "Not set."} tab="Bound Events" onGoTo={goToBEvent} />
+      <CommitField label="Description" value={bEvent.description} disabled={!canEdit} multiline
+        placeholder="Not set." onChange={value => onPatchNode(node, { description: value })} />
       <DefinePointer label="Effect" color={hasRouting ? C.amber : C.muted}
         summary={summarizeBEventEffect(bEvent) || "No effect configured"}
         tab="Bound Events" onGoTo={goToBEvent} />
@@ -292,7 +294,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               compact
             />
           </div>
-          <BEventPointers bEvent={bEvent} onGoToDefine={onGoToDefine} />
+          <BEventPointers bEvent={bEvent} node={node} onPatchNode={onPatchNode} canEdit={canEdit} onGoToDefine={onGoToDefine} />
           <DefinePointer label="Schedule rows" color={(bEvent.schedules || []).length > 1 ? C.amber : C.muted}
             summary={`${(bEvent.schedules || []).length || 0} row${(bEvent.schedules || []).length === 1 ? "" : "s"} configured. Jitter, linked live-data schedules, and the reneging-timer flag are edited in Bound Events.`}
             tab="Bound Events" onGoTo={goTo(onGoToDefine, "Bound Events", bEvent.id)} />
@@ -349,8 +351,8 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                 .map(q => <option key={q.id || q.name} value={q.name}>{q.name}</option>)}
             </SelectField>
           )}
-          <DefinePointer label="Description" color={C.muted}
-            summary={queue.description || "Not set."} tab="Queues" onGoTo={goTo(onGoToDefine, "Queues", queue.id)} />
+          <CommitField label="Description" value={queue.description} disabled={!canEdit} multiline
+            placeholder="Not set." onChange={value => onPatchNode(node, { description: value })} />
           <DefinePointer
             label="Balking" color={hasBalking(queue) ? C.amber : C.muted}
             summary={hasBalking(queue) ? describeBalking(queue) : "Not configured — all arrivals join."}
@@ -380,8 +382,8 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
             // hand it back whole via patch.cEvents, rather than writing the number in place.
             onChange={value => onPatchNode(node, { cEvents: reorderCEventByPriority(model.cEvents || [], cEvent.id, value) })}
           />
-          <DefinePointer label="Description" color={C.muted}
-            summary={cEvent.description || "Not set."} tab="Conditional Events" onGoTo={goTo(onGoToDefine, "Conditional Events", cEvent.id)} />
+          <CommitField label="Description" value={cEvent.description} disabled={!canEdit} multiline
+            placeholder="Not set." onChange={value => onPatchNode(node, { description: value })} />
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
               Condition
@@ -503,9 +505,6 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                   })
                 )}
               </div>
-              <DefinePointer label="Schedule rows" color={C.muted}
-                summary={`${activityCSchedules.length || 0} row${activityCSchedules.length === 1 ? "" : "s"} configured. Add/remove rows, change the target B-event, or edit the "when" condition in Conditional Events.`}
-                tab="Conditional Events" onGoTo={goTo(onGoToDefine, "Conditional Events", cEvent.id)} />
             </>
           )}
         </>
@@ -520,7 +519,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               <option value="RENEGE">RENEGE</option>
             </SelectField>
           )}
-          <BEventPointers bEvent={bEvent} onGoToDefine={onGoToDefine} />
+          <BEventPointers bEvent={bEvent} node={node} onPatchNode={onPatchNode} canEdit={canEdit} onGoToDefine={onGoToDefine} />
         </>
       )}
 

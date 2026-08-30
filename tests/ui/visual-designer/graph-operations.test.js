@@ -239,6 +239,26 @@ describe("visual designer graph operations", () => {
     expect(deriveGraphFromModel(next).edges.map(edge => `${edge.from}->${edge.to}`)).toContain("source:arrival-0->queue:main-q");
   });
 
+  it("writes description onto the underlying queue, source (bEvent), activity (cEvent), and sink (bEvent)", () => {
+    const graph = deriveGraphFromModel(baseModel);
+    const queue = graph.nodes.find(node => node.id === "queue:main-q");
+    const source = graph.nodes.find(node => node.id === "source:arrival-0");
+    const activity = graph.nodes.find(node => node.id === "activity:start-service");
+    const sink = graph.nodes.find(node => node.type === "sink");
+
+    const withQueueDesc = updateVisualNode(baseModel, queue, { description: "Front-of-house waiting line." });
+    expect(withQueueDesc.queues.find(item => item.id === "main-q").description).toBe("Front-of-house waiting line.");
+
+    const withSourceDesc = updateVisualNode(baseModel, source, { description: "Walk-in arrivals." });
+    expect(withSourceDesc.bEvents.find(event => event.id === "arrival").description).toBe("Walk-in arrivals.");
+
+    const withActivityDesc = updateVisualNode(baseModel, activity, { description: "Front desk check-in." });
+    expect(withActivityDesc.cEvents.find(event => event.id === "start-service").description).toBe("Front desk check-in.");
+
+    const withSinkDesc = updateVisualNode(baseModel, sink, { description: "Service complete." });
+    expect(withSinkDesc.bEvents.find(event => event.id === sink.refId?.replace("route-exit:", "")).description).toBe("Service complete.");
+  });
+
   it("updates source inter-arrival and activity service distributions through selected node patches", () => {
     const graph = deriveGraphFromModel(baseModel);
     const source = graph.nodes.find(node => node.id === "source:arrival-0");
@@ -336,6 +356,53 @@ describe("visual designer graph operations", () => {
       expect.objectContaining({ message: expect.stringContaining("No Source node") }),
       expect.objectContaining({ message: expect.stringContaining("No Sink node") }),
       expect.objectContaining({ nodeId: "queue:main-q", message: expect.stringContaining("no downstream activity") }),
+    ]));
+  });
+
+  it("does not flag a PREEMPT-only activity as missing a completion route", () => {
+    // PREEMPT/FAIL/REPAIR are one-shot server-state mutations with nothing to
+    // route onward — an empty cSchedules (and so zero outgoing canvas edges)
+    // is their correct, expected shape, not a modeling omission (issue: the
+    // check previously fired on every PREEMPT-based interruption activity).
+    const modelWithPreempt = {
+      ...baseModel,
+      cEvents: [
+        ...baseModel.cEvents,
+        {
+          id: "preempt-for-main",
+          name: "Preempt for Main Queue",
+          priority: 0,
+          condition: "queue(Main Queue).length > 0 AND idle(Clerk).count == 0",
+          effect: ["PREEMPT(Clerk, PRIORITY(taskPriority))"],
+          cSchedules: [],
+        },
+      ],
+    };
+    const graph = deriveGraphFromModel(modelWithPreempt);
+
+    const issues = validateVisualGraph(graph, modelWithPreempt);
+    expect(issues.some(issue => issue.nodeId === "activity:preempt-for-main")).toBe(false);
+  });
+
+  it("still flags an ASSIGN-based activity with an empty cSchedules as missing a completion route", () => {
+    const modelWithDanglingAssign = {
+      ...baseModel,
+      cEvents: [
+        {
+          id: "start-service",
+          name: "Start Service",
+          priority: 1,
+          condition: "queue(Main Queue).length > 0 AND idle(Clerk).count > 0",
+          effect: "ASSIGN(Main Queue, Clerk)",
+          cSchedules: [], // dangling — Clerk would be seized forever
+        },
+      ],
+    };
+    const graph = deriveGraphFromModel(modelWithDanglingAssign);
+
+    const issues = validateVisualGraph(graph, modelWithDanglingAssign);
+    expect(issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nodeId: "activity:start-service", message: expect.stringContaining("no completion route") }),
     ]));
   });
 
