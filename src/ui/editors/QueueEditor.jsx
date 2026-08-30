@@ -6,7 +6,7 @@ import { disciplineBase, disciplineAttr } from "../shared/utils.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
-const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[], errorFilter=null, onClearErrorFilter, onChange}) => {
+const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[], containers=[], errorFilter=null, onClearErrorFilter, onChange}) => {
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -243,6 +243,14 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
                   const balkVars=[
                     ...queues.map(oq=>({label:`Queue.${oq.name}.length`,value:`Queue.${oq.name}.length`})),
                     ...stateVariables.filter(sv=>sv.name).map(sv=>({label:sv.name,value:sv.name})),
+                    // Container tokens (e.g. "BikesAvailable — current level") — the engine
+                    // already resolves container(...) inside a balkCondition via the same
+                    // state spread cEvent conditions use (see resolveContainerValue in
+                    // conditions.js); this was just missing from the picker.
+                    ...(containers||[]).filter(ct=>ct.id).flatMap(ct=>([
+                      {label:`${ct.id} — current level`,value:`container(${ct.id}).level`},
+                      {label:`${ct.id} — capacity`,value:`container(${ct.id}).capacity`},
+                    ])),
                   ];
                   const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 6px'};
                   return(<>

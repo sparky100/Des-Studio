@@ -37,4 +37,36 @@ describe('QueueEditor', () => {
       expect.objectContaining({ name: 'Triage Queue' }),
     ]);
   });
+
+  it('offers container tokens (e.g. "current level") in the condition-based balking variable picker', () => {
+    // Regression: the balk-condition variable dropdown was hand-rolled here
+    // (not the shared ConditionBuilder) and only offered queue lengths and
+    // state variables — container(...) tokens were missing even though the
+    // engine already resolves them fine inside a balkCondition.
+    render(
+      <QueueEditor
+        queues={[{
+          id: 'q1', name: 'Hire Queue', customerType: 'HireCustomer', discipline: 'FIFO',
+          // Already condition-mode balking (QueueEditor is fully controlled via
+          // props/onChange — a mocked onChange means clicking the mode select
+          // in-test wouldn't actually flip it, so start in the target state).
+          balkCondition: { variable: '', operator: '>', value: 0 },
+        }]}
+        entityTypes={[{ id: 'hire', name: 'HireCustomer', role: 'customer', attrDefs: [] }]}
+        containers={[{ id: 'BikesAvailable', capacity: '5', initialLevel: '5' }]}
+        onChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText('Expand'));
+    // The Balking SectionPanel auto-opens because its status ("condition") is
+    // active — no separate click needed here (unlike an "off"/inactive status).
+
+    // QueueEditor is fully controlled — a mocked onChange won't propagate a
+    // selection back into `value`, so the regression coverage that matters is
+    // that these options exist at all (they didn't before this fix).
+    screen.getByDisplayValue('— variable —');
+    expect(screen.getByRole('option', { name: 'BikesAvailable — current level' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'BikesAvailable — capacity' })).toBeInTheDocument();
+  });
 });
