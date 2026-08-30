@@ -80,6 +80,11 @@ function extractResources(model = {}, summary = {}) {
       idleCount: finiteOrNull(pr?.idleCount),
       totalServers: finiteOrNull(pr?.total),
     };
+    if (pr?.skillUtil && Object.keys(pr.skillUtil).length > 0) {
+      result.skillUtil = Object.fromEntries(
+        Object.entries(pr.skillUtil).map(([skill, util]) => [skill, Number.isFinite(util) ? Math.round(util * 100) : null])
+      );
+    }
     if (server.mtbfDist) {
       result.failureModel = {
         mtbfDist: server.mtbfDist,
@@ -119,6 +124,21 @@ function extractResources(model = {}, summary = {}) {
     }
     return result;
   });
+}
+
+// Shared by buildKpis() and the prompts that bypass it (buildPlanRefinementPrompt,
+// buildReportRecommendationsPrompt) — merges capacity/initialLevel from the model's
+// containerTypes into the run's summary.containerLevels. Returns null when the run
+// has no container data at all.
+function extractContainerLevels(model = {}, summary = {}) {
+  if (!summary.containerLevels || !Object.keys(summary.containerLevels).length) return null;
+  const containerMeta = Object.fromEntries((model.containerTypes || []).map(ct => [ct.id, ct]));
+  return Object.fromEntries(
+    Object.entries(summary.containerLevels).map(([id, lvl]) => [
+      id,
+      { ...lvl, capacity: containerMeta[id]?.capacity ?? null, initialLevel: containerMeta[id]?.initialLevel ?? null },
+    ])
+  );
 }
 
 // Builds a { resourceName: utilisationPercent } map from buildKpis().resources, for use
@@ -441,15 +461,8 @@ export function buildKpis(model = {}, results = {}) {
   if (summary.totalCost) kpis.totalCost = finiteOrNull(summary.totalCost);
   if (summary.costPerServed) kpis.costPerServed = finiteOrNull(summary.costPerServed);
   if (summary.maxWIP) kpis.maxWIP = finiteOrNull(summary.maxWIP);
-  if (summary.containerLevels) {
-    const containerMeta = Object.fromEntries((model.containerTypes || []).map(ct => [ct.id, ct]));
-    kpis.containerLevels = Object.fromEntries(
-      Object.entries(summary.containerLevels).map(([id, lvl]) => [
-        id,
-        { ...lvl, capacity: containerMeta[id]?.capacity ?? null, initialLevel: containerMeta[id]?.initialLevel ?? null },
-      ])
-    );
-  }
+  const containerLevels = extractContainerLevels(model, summary);
+  if (containerLevels) kpis.containerLevels = containerLevels;
   if (summary.phaseCTruncated) kpis.warning_phaseCTruncated = true;
   if (summary.warnings?.length) kpis.warnings = summary.warnings;
   if (summary.terminatingState) {
@@ -1495,6 +1508,8 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
     meanWait: q.meanWait,
     p90Wait: q.p90,
     utilisation: null,
+    balkCount: q.balkCount,
+    blockingCount: q.blockingCount,
   }));
 
   const summary = getSummary(results);
@@ -1504,6 +1519,8 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
     if (kq) kq.utilisation = r.utilisation;
     else kpiSummary.push({ name: r.name, meanWait: null, p90Wait: null, utilisation: r.utilisation });
   }
+
+  const containerLevels = extractContainerLevels(model, summary);
 
   const payload = {
     model: {
@@ -1515,6 +1532,7 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
     capacityEnvelope: extractCapacityEnvelope(model),
     goalGaps: goalGaps || [],
     kpiSummary,
+    ...(containerLevels ? { containerLevels } : {}),
     constraintStatement: "Resource counts and shift windows are fixed. Recommend schedule timing and sequencing changes only.",
   };
 
@@ -1713,6 +1731,7 @@ export function buildReportRecommendationsPrompt(model = {}, results = {}) {
   const queues = extractQueues(model, results);
   const resources = extractResources(model, summary);
   const outcomes = extractOutcomes(summary);
+  const containerLevels = extractContainerLevels(model, summary);
 
   const payload = {
     model: { name: model.name || DEFAULT_MODEL_NAME, goals: goalsToPrompt(model) },
@@ -1722,6 +1741,7 @@ export function buildReportRecommendationsPrompt(model = {}, results = {}) {
     aggregateStats: results.aggregateStats || {},
     ...(goalGaps ? { goalGaps } : {}),
     ...(entityAnomalies ? { entityAnomalies } : {}),
+    ...(containerLevels ? { containerLevels } : {}),
   };
 
   return {
