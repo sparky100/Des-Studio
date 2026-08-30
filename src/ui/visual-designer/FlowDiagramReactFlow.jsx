@@ -62,7 +62,11 @@ function DesNode({ data, selected }) {
       display: "flex",
       flexDirection: "column",
       gap: 5,
-      padding: 8,
+      // Extra right padding clears the source handle: React Flow centers a
+      // right-side handle on the node's border (translate(50%, -50%)), so it
+      // intrudes ~8px into the box — plain 8px padding let text run flush up
+      // to that point.
+      padding: "8px 16px 8px 8px",
       fontFamily: FONT,
       fontSize: 10,
     }}>
@@ -116,19 +120,19 @@ function DesNode({ data, selected }) {
       )}
       <div style={{
         color,
-        fontSize: 8,
+        fontSize: 9,
         fontWeight: 700,
         letterSpacing: 1,
         textTransform: "uppercase",
       }}>
         {data.type}
       </div>
-      <div title={data.label} style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.3 }}>{data.label}</div>
+      <div title={data.label} style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.3 }}>{data.label}</div>
       {!!data.sublabel && (
-        <div title={data.sublabel} style={{ color: C.muted, fontSize: 9, lineHeight: 1.35 }}>{data.sublabel}</div>
+        <div title={data.sublabel} style={{ color: C.muted, fontSize: 10, lineHeight: 1.35 }}>{data.sublabel}</div>
       )}
       {!!data.detail && (
-        <div title={data.detail} style={{ color: C.muted, fontSize: 9, lineHeight: 1.35 }}>{data.detail}</div>
+        <div title={data.detail} style={{ color: C.muted, fontSize: 10, lineHeight: 1.35 }}>{data.detail}</div>
       )}
       {!!data.badges?.length && (
         <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 2 }}>
@@ -140,7 +144,7 @@ function DesNode({ data, selected }) {
                 border: `1px solid ${badge === "when" ? C.amber : C.accent}`,
                 borderRadius: 999,
                 color: badge === "when" ? C.amber : C.accent,
-                fontSize: 8,
+                fontSize: 9,
                 fontWeight: 700,
                 padding: "1px 5px",
                 letterSpacing: 0.5,
