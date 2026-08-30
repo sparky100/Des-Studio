@@ -163,6 +163,16 @@ describe('generateReport', () => {
     expect(html).toContain('40%');
   });
 
+  test('includes a Balked KPI in the Executive Summary and Summary Statistics tables (HTML)', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithBalked = { ...minimalResults, summary: { ...minimalResults.summary, balked: 7 } };
+
+    const html = await generateReport(minimalModel, resultsWithBalked, experimentConfig, runMeta);
+
+    expect(html).toContain('Balked (left without joining)');
+    expect(html).toContain('7');
+  });
+
   test('includes container levels when summary has containerLevels (HTML)', async () => {
     callLLMOnce.mockResolvedValue('');
     const resultsWithContainer = { ...minimalResults, summary: { ...minimalResults.summary, containerLevels: { Tank: { min: 0, max: 100, avg: 42, final: 60 } } } };
@@ -371,6 +381,15 @@ describe('generateReport — markdown format', () => {
 
     expect(md).toContain('### Container Levels');
     expect(md).toContain('Tank');
+  });
+
+  test('includes a balked KPI row in Key Results', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithBalked = { ...minimalResults, summary: { ...minimalResults.summary, balked: 7 } };
+
+    const md = await generateReport(minimalModel, resultsWithBalked, experimentConfig, runMeta, { format: 'markdown' });
+
+    expect(md).toMatch(/balked.*\|.*7/i);
   });
 });
 

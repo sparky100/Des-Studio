@@ -117,6 +117,30 @@ describe("BottomPanel — F9C.9 live metrics", () => {
     fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
     expect(screen.getByText(/run the simulation to see live metrics/i)).toBeInTheDocument();
   });
+
+  test("shows a Balked metric card per queue, mirroring Reneged", () => {
+    render(<BottomPanel log={log} snap={{ ...snap, balked: 4 }} model={model} />);
+    fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
+    expect(screen.getByText("BALKED")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+  });
+
+  test("a balked entity's outcome renders in JOURNEY OUTCOMES with its own routeLabel and description", () => {
+    const balkedSnap = {
+      ...snap,
+      entities: [
+        ...snap.entities,
+        {
+          id: 3, type: "Customer", role: "customer", status: "balked", arrivalTime: 2, balkTime: 2,
+          outcome: { status: "balked", routeId: "balk:queue a", routeLabel: 'Balked at "Queue A"', endedBy: "BALK", endedAt: 2 },
+        },
+      ],
+    };
+    render(<BottomPanel log={log} snap={balkedSnap} model={model} />);
+    fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
+    expect(screen.getByText('Balked at "Queue A"')).toBeInTheDocument();
+    expect(screen.getByText("Left without being served.")).toBeInTheDocument();
+  });
 });
 
 describe("BottomPanel — F9C.11 node-filtered log", () => {

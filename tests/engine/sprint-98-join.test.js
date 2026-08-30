@@ -218,11 +218,18 @@ describe('JOIN — degraded forks and lost members (lenient completeness)', () =
     const result = run(forkJoinModel({ testQueueCapacity: 1 }));
     const parent = customers(result).find(e => e._splitParent === true);
     expect(parent._splitChildren).toHaveLength(1);
-    // The balked clone was spliced out of the system entirely.
-    expect(clonesOf(result, parent.id)).toHaveLength(1);
+    // The blocked clone is kept with a terminal "balked" status (mirroring
+    // RENEGE's shape) instead of vanishing — it's tracked in the summary,
+    // just never recorded into _splitChildren (a separate ledger of clones
+    // that actually joined).
+    const clones = clonesOf(result, parent.id);
+    expect(clones).toHaveLength(2);
+    const blockedClone = clones.find(c => c.status === "balked");
+    expect(blockedClone).toBeDefined();
+    expect(blockedClone.outcome?.endedBy).toBe("BLOCK");
 
     // The join proceeds with the one recorded clone — nothing waits for the
-    // balked one, and it is not "lost" (SPLIT never recorded it).
+    // blocked one, and it is not "lost" (SPLIT never recorded it).
     expect(parent.joined.children).toHaveLength(1);
     expect(parent.joined.lostMemberIds).toEqual([]);
     expect(parent.joined.at).toBe(6);
@@ -253,21 +260,25 @@ describe('JOIN — degraded forks and lost members (lenient completeness)', () =
     expect(merge).toContain(`#${reneged[0].id}`);
   });
 
-  test('lost via vanish: a clone spliced out of the system (capacity block, no overflow) is counted as lost', () => {
+  test('lost via block: a clone blocked rejoining SyncQueue (capacity, no overflow) is counted as lost', () => {
     // SyncQueue capacity 2: parent (t=2) and clone A (t=6) fill it; clone B's
     // release at t=10 finds it full, and with no overflow destination the
-    // clone exits the system — absent from entities[] entirely, the
-    // "absent = lost" branch (distinct from terminal-status loss above).
+    // clone is blocked — kept with a terminal "balked" status (mirroring
+    // RENEGE's shape) rather than vanishing with no trace. It's still "lost"
+    // for JOIN's purposes: it never arrives at the rendezvous, which is what
+    // lostMemberIds actually tracks (arrival, not entities[] presence).
     const result = run(forkJoinModel({ syncQueueCapacity: 2 }));
     const parent = customers(result).find(e => e._splitParent === true);
     const clones = clonesOf(result, parent.id);
-    // The vanished clone left no trace in the summary.
-    expect(clones).toHaveLength(1);
+    expect(clones).toHaveLength(2);
 
     expect(parent.joined.children).toHaveLength(1);
     expect(parent.joined.lostMemberIds).toHaveLength(1);
     const lostId = parent.joined.lostMemberIds[0];
-    expect(customers(result).some(e => e.id === lostId)).toBe(false);
+    const lostClone = customers(result).find(e => e.id === lostId);
+    expect(lostClone).toBeDefined();
+    expect(lostClone.status).toBe("balked");
+    expect(lostClone.outcome?.endedBy).toBe("BLOCK");
     expect(parent.joined.at).toBe(10);
     expect(parent.status).toBe("done");
 

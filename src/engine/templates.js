@@ -776,7 +776,11 @@ const PRIORITY_ED_BALKING = {
   stateVariables: [{ name: "traumaInService", initialValue: "0" }],
   goals: [
     { metric: "avgWait", operator: "<",  target: "20", label: "avgWait < 20 min" },
-    { metric: "reneged", operator: "<",  target: "10", label: "balked < 10" },
+    // The Waiting queue only configures balkProbability (no renegeDist — see
+    // below), so "reneged" is always 0 here and this goal was silently
+    // vacuous before "balked" existed as its own tracked metric. Now tracks
+    // what the label always claimed to.
+    { metric: "balked", operator: "<",  target: "10", label: "balked < 10" },
   ],
   bEvents: [
     { id: "b_arrive",   name: "Patient Arrives",     scheduledTime: "0",    effect: ["ARRIVE(Patient, Waiting)"],

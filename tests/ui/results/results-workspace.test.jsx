@@ -470,4 +470,38 @@ describe("ResultsWorkspace", () => {
 
     expect(screen.queryByText("CONTAINER LEVELS")).not.toBeInTheDocument();
   });
+
+  test("shows a BALKED summary card when summary.balked is present, mirroring RENEGED", () => {
+    const balkedResults = {
+      ...results,
+      summary: { total: 100, served: 80, reneged: 5, balked: 15 },
+    };
+
+    render(<ResultsWorkspace results={balkedResults} model={model} />);
+
+    expect(screen.getByText("BALKED")).toBeInTheDocument();
+    // Single-run display shows the balk rate as a percentage (15/100 = 15%).
+    expect(screen.getByText("15%")).toBeInTheDocument();
+  });
+
+  test("hides the BALKED summary card when summary.balked is 0 or absent", () => {
+    render(<ResultsWorkspace results={results} model={model} />);
+    expect(screen.queryByText("BALKED")).not.toBeInTheDocument();
+  });
+
+  test("JOURNEY OUTCOMES shows a balked outcome with its own routeLabel and a distinct color", () => {
+    const balkedOutcomeResults = {
+      ...results,
+      summary: {
+        total: 10, served: 8,
+        outcomes: {
+          "balk:hire queue": { routeId: "balk:hire queue", routeLabel: 'Balked at "Hire Queue"', status: "balked", endedBy: "BALK", count: 2 },
+        },
+      },
+    };
+
+    render(<ResultsWorkspace results={balkedOutcomeResults} model={model} />);
+
+    expect(screen.getByText('BALKED AT "HIRE QUEUE"')).toBeInTheDocument();
+  });
 });

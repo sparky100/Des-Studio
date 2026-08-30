@@ -205,6 +205,61 @@ describe("detectRoutingEvents — completion is scoped to the entity's own activ
 
     expect(detectRoutingEvents(prevSnap, currSnap, graph)).toEqual([]);
   });
+
+  test("an entity balking directly out of a queue (never entering an activity) animates nothing", () => {
+    const graph = deriveGraphFromModel(twoStageClinicModel);
+    const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "waiting", queue: "Triage Queue" }] };
+    const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "balked" }] };
+
+    expect(detectRoutingEvents(prevSnap, currSnap, graph)).toEqual([]);
+  });
+
+  test("an entity balking after leaving an activity animates the terminal edge, exactly like done/reneged", () => {
+    // Same two-chain fixture as the "own activity" test above — reused here
+    // to confirm curr.status === "balked" is classified identically to
+    // "done"/"reneged" by the wasActive-terminal branch, not treated as a
+    // still-active entity with no matching case.
+    const model = {
+      entityTypes: [
+        { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "clerkA", name: "Clerk A", role: "server", count: 1, attrDefs: [] },
+        { id: "clerkB", name: "Clerk B", role: "server", count: 1, attrDefs: [] },
+      ],
+      queues: [
+        { id: "qa", name: "Queue A", customerType: "Patient", discipline: "FIFO" },
+        { id: "qb", name: "Queue B", customerType: "Patient", discipline: "FIFO" },
+      ],
+      stateVariables: [],
+      bEvents: [
+        { id: "arriveA", name: "Arrival A", scheduledTime: "0", effect: "ARRIVE(Patient, Queue A)", schedules: [] },
+        { id: "arriveB", name: "Arrival B", scheduledTime: "0", effect: "ARRIVE(Patient, Queue B)", schedules: [] },
+        { id: "completeA", name: "Complete A", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+        { id: "completeB", name: "Complete B", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+      ],
+      cEvents: [
+        {
+          id: "serveA", name: "Serve A", priority: 1,
+          condition: "queue(Queue A).length > 0 AND idle(Clerk A).count > 0",
+          effect: "ASSIGN(Queue A, Clerk A)",
+          cSchedules: [{ eventId: "completeA", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+        },
+        {
+          id: "serveB", name: "Serve B", priority: 2,
+          condition: "queue(Queue B).length > 0 AND idle(Clerk B).count > 0",
+          effect: "ASSIGN(Queue B, Clerk B)",
+          cSchedules: [{ eventId: "completeB", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+        },
+      ],
+    };
+    const graph = deriveGraphFromModel(model);
+
+    const prevSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "serving", lastQueue: "Queue B" }] };
+    const currSnap = { entities: [{ id: 1, type: "Patient", role: "customer", status: "balked" }] };
+
+    const events = detectRoutingEvents(prevSnap, currSnap, graph);
+    const terminalB = findEdge(graph, e => e.source === "terminal" && e.from === "activity:serveB");
+    expect(events).toEqual([{ edgeId: terminalB.id, entityType: "Patient" }]);
+  });
 });
 
 describe("detectRoutingEvents — same-cycle re-seize (the states a real run actually shows)", () => {

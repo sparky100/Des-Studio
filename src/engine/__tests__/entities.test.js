@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { createServerEntities, makeHelpers, resetSeq, claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState, sortResourceEntities } from '../entities.js';
+import { createServerEntities, makeHelpers, resetSeq, claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState, sortResourceEntities, attemptQueueJoin, setOutcome, pruneTerminalEntities } from '../entities.js';
 
 beforeEach(() => {
   resetSeq();
@@ -238,5 +238,102 @@ describe('resource claim helpers', () => {
       { id: 4, type: 'Server', status: 'idle', arrivalTime: 0 },
     ];
     expect(sortResourceEntities(resources).map(e => e.id)).toEqual([3, 4, 9]);
+  });
+});
+
+describe('attemptQueueJoin — balked/blocked entities get a terminal status + outcome (not discarded)', () => {
+  function makeCtx({ queues = [], entities = [], state = {} } = {}) {
+    return {
+      model: { queues },
+      entities,
+      state,
+      msgs: [],
+      rng: () => 0.5,
+      index: null,
+    };
+  }
+
+  test('balkProbability=1 with no overflow destination: entity kept with status="balked", outcome endedBy="BALK"', () => {
+    const queues = [{ id: 'q1', name: 'Hire Queue', balkProbability: 1 }];
+    const ctx = makeCtx({ queues });
+    const entity = { id: 1, type: 'Customer', role: 'customer' };
+    const joined = attemptQueueJoin(entity, 'Hire Queue', 5, ctx);
+
+    expect(joined).toBe(false);
+    // Kept in ctx.entities, not spliced out — added since it was never live before.
+    expect(ctx.entities).toContain(entity);
+    expect(entity.status).toBe('balked');
+    expect(entity.balkTime).toBe(5);
+    expect(entity.outcome).toEqual(expect.objectContaining({
+      status: 'balked',
+      routeLabel: 'Balked at "Hire Queue"',
+      endedBy: 'BALK',
+      endedAt: 5,
+    }));
+    expect(ctx.state.__balked).toBe(1);
+  });
+
+  test('capacity exceeded with no overflow destination: outcome endedBy="BLOCK"', () => {
+    const queues = [{ id: 'q1', name: 'Hire Queue', capacity: '1' }];
+    const alreadyWaiting = { id: 1, type: 'Customer', role: 'customer', status: 'waiting', queue: 'Hire Queue' };
+    const ctx = makeCtx({ queues, entities: [alreadyWaiting] });
+    const entity = { id: 2, type: 'Customer', role: 'customer' };
+    attemptQueueJoin(entity, 'Hire Queue', 3, ctx);
+
+    expect(entity.status).toBe('balked');
+    expect(entity.outcome?.endedBy).toBe('BLOCK');
+    expect(entity.outcome?.routeLabel).toBe('Blocked at "Hire Queue"');
+  });
+
+  test('an entity already live in ctx.entities is not duplicated when it balks', () => {
+    const queues = [{ id: 'q1', name: 'Hire Queue', balkProbability: 1 }];
+    const entity = { id: 7, type: 'Customer', role: 'customer', status: 'serving' };
+    const ctx = makeCtx({ queues, entities: [entity] });
+    attemptQueueJoin(entity, 'Hire Queue', 2, ctx);
+
+    expect(ctx.entities).toEqual([entity]);
+    expect(entity.status).toBe('balked');
+  });
+
+  test('reroutes to overflowDestination instead of balking when one is configured', () => {
+    const queues = [
+      { id: 'q1', name: 'Hire Queue', balkProbability: 1, overflowDestination: 'Overflow' },
+      { id: 'q2', name: 'Overflow' },
+    ];
+    const ctx = makeCtx({ queues });
+    const entity = { id: 1, type: 'Customer', role: 'customer' };
+    const joined = attemptQueueJoin(entity, 'Hire Queue', 1, ctx);
+
+    expect(joined).toBe(true);
+    expect(entity.status).toBe('waiting');
+    expect(entity.queue).toBe('Overflow');
+    expect(entity.outcome).toBeUndefined();
+  });
+
+  test('successful join is unaffected: no outcome, no balked status', () => {
+    const queues = [{ id: 'q1', name: 'Hire Queue' }];
+    const ctx = makeCtx({ queues });
+    const entity = { id: 1, type: 'Customer', role: 'customer' };
+    const joined = attemptQueueJoin(entity, 'Hire Queue', 1, ctx);
+
+    expect(joined).toBe(true);
+    expect(entity.status).toBe('waiting');
+    expect(entity.outcome).toBeUndefined();
+    expect(ctx.state.__balked).toBeUndefined();
+  });
+});
+
+describe('pruneTerminalEntities — balked entities are terminal (pruned like done/reneged)', () => {
+  test('sweeps balked entities out of the live pool alongside done/reneged, keeps servers and live customers', () => {
+    const entities = [
+      { id: 1, role: 'customer', status: 'done' },
+      { id: 2, role: 'customer', status: 'reneged' },
+      { id: 3, role: 'customer', status: 'balked' },
+      { id: 4, role: 'customer', status: 'waiting' },
+      { id: 5, role: 'server', status: 'balked' }, // servers are never removed, regardless of status
+    ];
+    const { entities: kept, removed } = pruneTerminalEntities(entities, []);
+    expect(kept.map(e => e.id)).toEqual([4, 5]);
+    expect(removed.map(e => e.id).sort()).toEqual([1, 2, 3]);
   });
 });

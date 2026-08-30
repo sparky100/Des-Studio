@@ -528,6 +528,14 @@ describe('M5 — string vs. predicate-object parity via evaluatePredicate', () =
     expect(evaluatePredicate('served > 0 OR reneged > 0', state)).toBe(false);
   });
 
+  test('balked token resolves state.__balked, mirroring reneged/served', () => {
+    expect(evaluatePredicate('balked > 0', { __balked: 2 })).toBe(true);
+    expect(evaluatePredicate('balked > 0', { __balked: 0 })).toBe(false);
+    // Bare `state.balked` fallback (no __balked set) mirrors reneged/served.
+    expect(evaluatePredicate('balked > 0', { balked: 3 })).toBe(true);
+    expect(evaluatePredicate({ variable: 'balked', operator: '>', value: 0 }, { __balked: 1 })).toBe(true);
+  });
+
   test('custom state variable substitution works for string form', () => {
     const state = { myCounter: 7 };
     expect(evaluatePredicate('myCounter > 5', state)).toBe(true);

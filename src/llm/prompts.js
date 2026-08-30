@@ -445,8 +445,10 @@ export function buildKpis(model = {}, results = {}) {
     totalEntities: finiteOrNull(summary.total),
     served: finiteOrNull(resolveCount("served")),
     reneged: finiteOrNull(resolveCount("reneged")),
+    balked: finiteOrNull(resolveCount("balked")),
     servedRatio: finiteOrNull(summary.servedRatio),
-    renegedNote: (summary.reneged > 0) ? "Reneged entities left the system before being served (e.g. balked at a full queue or abandoned after waiting too long)." : undefined,
+    renegedNote: (summary.reneged > 0) ? "Reneged entities abandoned the queue after waiting too long (see balked for entities that left without joining a queue at all)." : undefined,
+    balkedNote: (summary.balked > 0) ? "Balked entities left without joining a queue at all — either voluntarily (a configured balk condition/probability) or because the queue was at capacity with no overflow destination." : undefined,
     avgWait: finiteOrNull(summary.avgWait),
     avgService: finiteOrNull(summary.avgSvc),
     avgSojourn: finiteOrNull(summary.avgSojourn),
@@ -817,6 +819,7 @@ const GOAL_STAT_KEY = {
   served:     "summary.served",
   servedRatio: "summary.servedRatio",
   reneged:    "summary.reneged",
+  balked:     "summary.balked",
   totalCost:  "summary.totalCost",
   costPerServed: "summary.costPerServed",
 };
@@ -832,6 +835,7 @@ const GOAL_SUMMARY_KEY = {
   'summary.served':     'served',
   'summary.servedRatio': 'servedRatio',
   'summary.reneged':    'reneged',
+  'summary.balked':     'balked',
   'summary.totalCost':  'totalCost',
   'summary.costPerServed': 'costPerServed',
   avgWait:    'avgWait',
@@ -843,6 +847,7 @@ const GOAL_SUMMARY_KEY = {
   served:     'served',
   servedRatio: 'servedRatio',
   reneged:    'reneged',
+  balked:     'balked',
   totalCost:  'totalCost',
   costPerServed: 'costPerServed',
 };
@@ -1410,6 +1415,7 @@ export function buildResultsQueryPrompt(question, model = {}, results = {}, conv
       totalEntities: summary.total,
       served: summary.served,
       reneged: summary.reneged,
+      balked: summary.balked,
       avgWait: summary.avgWait,
       avgService: summary.avgSvc,
       avgSojourn: summary.avgSojourn,
@@ -1735,7 +1741,7 @@ export function buildReportRecommendationsPrompt(model = {}, results = {}) {
 
   const payload = {
     model: { name: model.name || DEFAULT_MODEL_NAME, goals: goalsToPrompt(model) },
-    kpis: { avgWait: finiteOrNull(summary.avgWait), avgSvc: finiteOrNull(summary.avgSvc), served: finiteOrNull(summary.served), reneged: finiteOrNull(summary.reneged), avgWIP: finiteOrNull(summary.avgWIP), ...(outcomes ? { outcomes } : {}) },
+    kpis: { avgWait: finiteOrNull(summary.avgWait), avgSvc: finiteOrNull(summary.avgSvc), served: finiteOrNull(summary.served), reneged: finiteOrNull(summary.reneged), balked: finiteOrNull(summary.balked), avgWIP: finiteOrNull(summary.avgWIP), ...(outcomes ? { outcomes } : {}) },
     queues,
     resources,
     aggregateStats: results.aggregateStats || {},

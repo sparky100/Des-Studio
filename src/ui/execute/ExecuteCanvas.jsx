@@ -60,13 +60,15 @@ function resolveKpiValue(key, snap, entities, summary, totals) {
   const customers = entities.filter(e => e.role !== "server");
   const doneCount = customers.filter(e => e.status === "done").length;
   const renegedCount = customers.filter(e => e.status === "reneged").length;
+  const balkedCount = customers.filter(e => e.status === "balked").length;
   switch (key) {
     case "arrived": return preferMetricValue(summary?.total, totals?.arrived) ?? customers.length;
     case "served":  return preferMetricValue(summary?.served, totals?.served) ?? doneCount ?? snap.served ?? 0;
     case "reneged": return preferMetricValue(summary?.reneged, totals?.reneged) ?? renegedCount ?? snap.reneged ?? 0;
+    case "balked":  return preferMetricValue(summary?.balked, totals?.balked) ?? balkedCount ?? snap.balked ?? 0;
     case "waiting": return customers.filter(e => e.status === "waiting").length;
     case "clock":   return parseFloat(snap.clock).toFixed(1);
-    case "active":  return customers.filter(e => e.status !== "done" && e.status !== "reneged").length;
+    case "active":  return customers.filter(e => e.status !== "done" && e.status !== "reneged" && e.status !== "balked").length;
     case "avgWait": return summary?.avgWait != null ? +summary.avgWait.toFixed(1) : "—";
     default:        return "—";
   }
@@ -78,6 +80,7 @@ function KpiSlot({ metricKey, snap, entities, summary, totals, onEdit }) {
     arrived: { label: "Arrived total", color: C.kpiArr },
     served:  { label: "Served total",  color: C.kpiSvc },
     reneged: { label: "Reneged total", color: C.danger },
+    balked:  { label: "Balked total",  color: C.balked },
     waiting: { label: "Waiting now",   color: C.bEvent },
     clock:   { label: "Sim Clock",     color: C.server },
     active:  { label: "Active now",    color: C.cEvent  },
@@ -186,8 +189,8 @@ export function detectRoutingEvents(prevSnap, currSnap, graph) {
   for (const curr of currSnap.entities || []) {
     if (curr.role === "server") continue;
     const prev = prevById.get(curr.id);
-    const wasActive = prev && prev.status !== "waiting" && prev.status !== "done" && prev.status !== "reneged";
-    const currActive = curr.status !== "waiting" && curr.status !== "done" && curr.status !== "reneged";
+    const wasActive = prev && prev.status !== "waiting" && prev.status !== "done" && prev.status !== "reneged" && prev.status !== "balked";
+    const currActive = curr.status !== "waiting" && curr.status !== "done" && curr.status !== "reneged" && curr.status !== "balked";
 
     if (!prev) {
       // New entity arrived → Source → Queue edge. When the entity was seized
@@ -202,7 +205,7 @@ export function detectRoutingEvents(prevSnap, currSnap, graph) {
         pushSeizeEdge(curr.lastQueue, curr.type);
       }
     } else if (prev.status === "waiting" && curr.status !== "waiting"
-               && curr.status !== "done" && curr.status !== "reneged") {
+               && curr.status !== "done" && curr.status !== "reneged" && curr.status !== "balked") {
       // Entity seized from queue → Queue → Activity edge
       pushSeizeEdge(prev.queue, curr.type);
     } else if (wasActive && currActive
@@ -231,11 +234,12 @@ export function detectRoutingEvents(prevSnap, currSnap, graph) {
         // match is an improvement over no token at all.
         || findEdge(e => e.source === "routing" && nodeById.get(e.to)?.label === curr.queue);
       if (edge) events.push({ edgeId: edge.id, entityType: curr.type });
-    } else if (wasActive && (curr.status === "done" || curr.status === "reneged")) {
-      // Entity completed after being served/delayed → Activity → Sink edge,
-      // scoped to the activity it actually left. No unscoped fallback here —
-      // an entity reneging directly out of a queue (never entering an
-      // activity) has no edge to animate and correctly produces no token.
+    } else if (wasActive && (curr.status === "done" || curr.status === "reneged" || curr.status === "balked")) {
+      // Entity completed (or balked/blocked trying to rejoin after being
+      // served/delayed) → Activity → Sink edge, scoped to the activity it
+      // actually left. No unscoped fallback here — an entity reneging or
+      // balking directly out of a queue (never entering an activity) has no
+      // edge to animate and correctly produces no token.
       const activityIds = activityIdsFedByQueue(prev.lastQueue ?? prev.queue);
       const edge = findEdge(e => e.source === "terminal" && activityIds.includes(e.from));
       if (edge) events.push({ edgeId: edge.id, entityType: curr.type });

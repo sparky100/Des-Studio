@@ -45,7 +45,7 @@ describe("attemptQueueJoin — multi-hop overflow chain", () => {
     expect(byQueue("Queue C").length).toBeGreaterThanOrEqual(1);
   });
 
-  test("A -> B -> A cycle: third entity is discarded (exits system) rather than looping", () => {
+  test("A -> B -> A cycle: third entity is blocked (terminal, not looping or double-counted)", () => {
     const model = makeChainModel([
       { id: "q-a", name: "Queue A", customerType: "Customer", discipline: "FIFO", capacity: 1, overflowDestination: "Queue B" },
       { id: "q-b", name: "Queue B", customerType: "Customer", discipline: "FIFO", capacity: 1, overflowDestination: "Queue A" },
@@ -55,9 +55,13 @@ describe("attemptQueueJoin — multi-hop overflow chain", () => {
 
     expect(byQueue("Queue A").length).toBe(1);
     expect(byQueue("Queue B").length).toBe(1);
-    // 3rd entity hits the cycle guard and is discarded — not present in either queue,
-    // and not double-counted into a queue that's already at capacity.
-    const total = snap.entities.filter(e => e.role === "customer").length;
-    expect(total).toBe(2);
+    // 3rd entity hits the cycle guard — not present in (nor double-counted
+    // into) either queue, but it is kept with a terminal "balked" status
+    // (mirroring RENEGE's shape) instead of vanishing with no record.
+    const customers = snap.entities.filter(e => e.role === "customer");
+    expect(customers.length).toBe(3);
+    const blocked = customers.find(e => e.queue !== "Queue A" && e.queue !== "Queue B");
+    expect(blocked.status).toBe("balked");
+    expect(blocked.outcome).toEqual(expect.objectContaining({ endedBy: "BLOCK" }));
   });
 });

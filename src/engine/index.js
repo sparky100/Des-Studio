@@ -897,6 +897,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       clock:    clock || 0,
       served:   state.__served  || 0,
       reneged:  state.__reneged || 0,
+      balked:   state.__balked  || 0,
       entities: entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
       scalars:  Object.fromEntries(
         Object.entries(state).filter(([k]) => !k.startsWith("__"))
@@ -1522,7 +1523,7 @@ const cycleLog = [];
         }
         return out;
       };
-      const wipCountAtSample = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged").length;
+      const wipCountAtSample = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged" && e.status !== "balked").length;
       const completedSinceSample = state.__completedSinceSample || 0;
       if (stepSnap) {
         _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: withRecentWaits(stepSnap.byQueue), wip: wipCountAtSample, completed: completedSinceSample });
@@ -1588,7 +1589,7 @@ const cycleLog = [];
     // G11 — WIP time-average: integrate WIP count over time
     const dt = clock - _lastWipSnapTime;
     if (dt > 0) {
-      const wipCount = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged").length;
+      const wipCount = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged" && e.status !== "balked").length;
       _wipIntegral += wipCount * dt;
       _lastWipSnapTime = clock;
     }
@@ -1846,6 +1847,7 @@ const cycleLog = [];
     const customers    = allEntitiesForStats().filter(e => e.role !== "server");
     const served       = customers.filter(e => e.status === "done");
     const reneged      = customers.filter(e => e.status === "reneged");
+    const balked       = customers.filter(e => e.status === "balked");
     const waitingAtEnd = customers.filter(e => e.status === "waiting");
     const servingAtEnd = customers.filter(e => e.status === "serving").length;
     const servers      = entities.filter(e => e.role === "server");
@@ -1919,18 +1921,22 @@ const cycleLog = [];
     /** @type {Record<string, any>} */
     const outcomes = {};
     const ensureOutcome = (/** @type {any} */ entity) => {
-      const fallbackStatus = entity.status === "reneged" ? "reneged" : "completed";
-      const fallbackRoute = entity.status === "reneged" ? "status:reneged" : "status:done";
+      // In practice every reneged/balked entity already has entity.outcome
+      // set by RENEGE/discardFailedJoin, so this fallback is defense-in-
+      // depth for a hypothetical future path that flips status without it.
+      const fallbackStatus = entity.status === "reneged" ? "reneged" : entity.status === "balked" ? "balked" : "completed";
+      const fallbackRoute = entity.status === "reneged" ? "status:reneged" : entity.status === "balked" ? "status:balked" : "status:done";
+      const fallbackLabel = entity.status === "reneged" ? "Reneged" : entity.status === "balked" ? "Balked" : "Completed";
       return entity.outcome || {
         status: fallbackStatus,
         routeId: fallbackRoute,
-        routeLabel: entity.status === "reneged" ? "Reneged" : "Completed",
-        endedBy: entity.status === "reneged" ? "status" : "status",
-        endedAt: entity.renegeTime ?? entity.completionTime ?? null,
+        routeLabel: fallbackLabel,
+        endedBy: "status",
+        endedAt: entity.renegeTime ?? entity.balkTime ?? entity.completionTime ?? null,
       };
     };
     for (const entity of customers) {
-      if (entity.status !== "done" && entity.status !== "reneged") continue;
+      if (entity.status !== "done" && entity.status !== "reneged" && entity.status !== "balked") continue;
       const outcome = ensureOutcome(entity);
       if (outcome.endedAt != null && outcome.endedAt < _statsResetTime) continue;
       const routeId = outcome.routeId || `${outcome.status || entity.status}:unknown`;
@@ -1948,7 +1954,7 @@ const cycleLog = [];
       outcomes[routeId].count++;
       const wait = entityWaitAfterWarmup(entity);
       if (Number.isFinite(wait)) { outcomes[routeId]._waitSum += wait; outcomes[routeId]._waitN++; }
-      const endTime = entity.completionTime ?? entity.renegeTime ?? null;
+      const endTime = entity.completionTime ?? entity.renegeTime ?? entity.balkTime ?? null;
       const sojourn = endTime != null ? truncateInterval(entity.arrivalTime, endTime) : null;
       if (Number.isFinite(sojourn)) { outcomes[routeId]._sojournSum += sojourn; outcomes[routeId]._sojournN++; }
     }
@@ -2189,11 +2195,14 @@ const cycleLog = [];
           }
         }
         if (visitedSections.length > 0) {
-          const isDone = entity.status === "done" || entity.status === "reneged";
+          // isDone means "reached a terminal state" (done/reneged/balked), not
+          // literally status === "done" — kept the historical name.
+          const isDone = entity.status === "done" || entity.status === "reneged" || entity.status === "balked";
           let sink;
           if (!isDone)                          sink = "Incomplete";
           else if (entity.outcome?.routeLabel)  sink = entity.outcome.routeLabel;
           else if (entity.status === "reneged") sink = "Reneged";
+          else if (entity.status === "balked")  sink = "Balked";
           else                                  sink = null;
           const key = sink != null
             ? [...visitedSections, sink].join("→")
@@ -2214,11 +2223,12 @@ const cycleLog = [];
       if (!entity.stages?.length) continue;
       const queueParts = entity.stages.map((/** @type {any} */ s) => s.queueName).filter(Boolean);
       if (!queueParts.length) continue;
-      const isDone = entity.status === "done" || entity.status === "reneged";
+      const isDone = entity.status === "done" || entity.status === "reneged" || entity.status === "balked";
       let sink;
       if (!isDone)                          sink = "Incomplete";
       else if (entity.outcome?.routeLabel)  sink = entity.outcome.routeLabel;
       else if (entity.status === "reneged") sink = "Reneged";
+      else if (entity.status === "balked")  sink = "Balked";
       else                                  sink = null;
       const path = sink != null ? [...queueParts, sink].join("→") : queueParts.join("→");
       queueJourneys[path] = (queueJourneys[path] || 0) + 1;
@@ -2228,6 +2238,7 @@ const cycleLog = [];
       total:             customers.length,
       served:            served.length,
       reneged:           reneged.length,
+      balked:            balked.length,
       avgWait:           avgWait   != null ? +avgWait.toFixed(4)   : null,
       avgWaitByLittle,
       waitDiscrepancy,

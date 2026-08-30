@@ -916,15 +916,27 @@ describe('SPLIT(EntityType, N, TargetQueue)', () => {
     expect(parent._splitChildren).toEqual(clones.map(c => c.id));
   });
 
-  test('partial balking: clones that fail to join are discarded, parent records only the joined ones', () => {
+  test('partial balking: a clone that fails to join is kept with a terminal "balked" status, not discarded; parent records only the joined ones', () => {
     const parent = { id: 1, type: 'Customer', role: 'customer', status: 'serving', arrivalTime: 0, attrs: {}, stages: [] };
     const entities = [parent];
     // capacity=1 means only the first clone fits; the rest block with no overflow destination
-    const ctx = makeCtx(entities, {}, makeSplitModel({ capacity: 1 }), 5, { _contextCustId: parent.id });
+    const state = {};
+    const ctx = makeCtx(entities, state, makeSplitModel({ capacity: 1 }), 5, { _contextCustId: parent.id });
     applyEffect('SPLIT(Customer, 3, CloneQueue)', ctx);
 
+    // Only the clone that actually joined CloneQueue is recorded as a split child.
     expect(parent._splitChildren.length).toBe(1);
-    expect(entities.map(e => e.id)).toEqual([parent.id, parent._splitChildren[0]]);
+    const blockedClone = entities.find(e => e.id !== parent.id && e.id !== parent._splitChildren[0]);
+    // The blocked clone stays in `entities` (mirroring RENEGE's shape) instead
+    // of vanishing with no record — this is the behavior change from the old
+    // "discarded" assumption this test used to encode.
+    expect(entities.map(e => e.id)).toEqual([parent.id, parent._splitChildren[0], blockedClone.id]);
+    expect(blockedClone.status).toBe('balked');
+    expect(blockedClone.outcome).toEqual(expect.objectContaining({
+      status: 'balked',
+      endedBy: 'BLOCK',
+    }));
+    expect(state.__balked).toBe(1);
   });
 
   test('all clones balking still leaves the parent marked as a split parent with an empty child list', () => {

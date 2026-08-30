@@ -65,4 +65,16 @@ describe("buildResultsXlsx — container/skill/rejection sheets", () => {
     });
     expect(findSheet("Queue Rejections")).toBeUndefined();
   });
+
+  it("includes a Balked row on the Summary sheet and a Balked column on the Replications sheet", async () => {
+    await buildResultsXlsx({
+      results: { summary: { total: 10, served: 6, reneged: 2, balked: 2 } },
+      model: { name: "Bike Shop" },
+    });
+    const summarySheet = findSheet("Summary");
+    expect(summarySheet.rows).toContainEqual(["Balked", 2]);
+    const repSheet = findSheet("Replications");
+    expect(repSheet.rows[0]).toContain("Balked");
+    expect(repSheet.rows[1]).toContain(2);
+  });
 });

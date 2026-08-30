@@ -12,7 +12,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, setOutcome } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
 // per-macro usages below for the (large, and macro-specific) set of fields
@@ -287,22 +287,10 @@ function claimMatchesPair(customer, server) {
   return true;
 }
 
-/**
- * @param {Record<string, any>|null} entity
- * @param {{ status: string, routeId?: string, routeLabel?: string, endedBy: string, endedAt: number, sourceEventId?: any, sourceEventName?: any }} outcome
- */
-function setOutcome(entity, { status, routeId, routeLabel, endedBy, endedAt, sourceEventId = null, sourceEventName = null }) {
-  if (!entity) return;
-  entity.outcome = {
-    status,
-    routeId,
-    routeLabel,
-    endedBy,
-    endedAt,
-    ...(sourceEventId ? { sourceEventId } : {}),
-    ...(sourceEventName ? { sourceEventName } : {}),
-  };
-}
+// setOutcome is imported from entities.js — relocated there so
+// discardFailedJoin (balked/blocked entities) can share it without a
+// circular import (entities.js is the lower-level module; macros.js already
+// imports several helpers from it).
 
 // Shared completion logic for COMPLETE() and FINISH(ServerType) — marks the
 // customer done, records the service stage, releases the primary server (and any
@@ -1334,11 +1322,11 @@ export const MACROS = [
   // complete, merges it back into one surviving entity routed to TargetQueue.
   //
   // Completeness is lenient: a family is complete once every member that can
-  // still arrive is waiting here — members that went terminal (done/reneged)
-  // or vanished from the system (balk/overflow splice) along their branch are
-  // counted as "never coming", so one lost clone degrades the join instead of
-  // deadlocking it. The ORIGINAL parent survives when present (preserving its
-  // arrivalTime and stage history, so sojourn spans the whole fork-join);
+  // still arrive is waiting here — members that went terminal (done/reneged/
+  // balked) along their branch are counted as "never coming", so one lost
+  // clone degrades the join instead of deadlocking it. The ORIGINAL parent
+  // survives when present (preserving its arrivalTime and stage history, so
+  // sojourn spans the whole fork-join);
   // otherwise the earliest member to reach the rendezvous survives. Merged
   // members are terminated MATCH-style (visible in results with
   // endedBy: "JOIN") and snapshotted onto survivor.joined.children so branch
@@ -1384,7 +1372,12 @@ export const MACROS = [
         return; // nothing join-relevant waiting — silent
       }
 
-      const TERMINAL = new Set(["done", "reneged"]);
+      // "balked" must count as terminal here too — otherwise a family member
+      // who balked/was blocked mid-journey (now kept in `entities` with a
+      // terminal status instead of being silently removed) would look like
+      // it's still "pending", and JOIN would wait forever for an arrival
+      // that will never come.
+      const TERMINAL = new Set(["done", "reneged", "balked"]);
       const arrivedIds = new Set(waiting.map((/** @type {any} */ e) => e.id));
       let mergedFamilies = 0;
 

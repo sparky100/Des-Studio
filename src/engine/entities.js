@@ -45,6 +45,7 @@ export const ENTITY_STATUSES = {
   serving:   { color: "#06b6d4", label: "Serving"   },
   done:      { color: "#3fb950", label: "Done"      },
   reneged:   { color: "#f85149", label: "Reneged"   },
+  balked:    { color: "#d29922", label: "Balked"    },
   idle:      { color: "#3fb950", label: "Idle"      },
   busy:      { color: "#f59e0b", label: "Busy"      },
   failed:    { color: "#f85149", label: "Failed"    },
@@ -418,7 +419,7 @@ function waitingSnapshot(entity, clock, queueName) {
  */
 export function markEntityWaiting(entity, clock, queueName = entity.queue ?? entity.lastQueue ?? null, index = null) {
   if (!entity) return false;
-  if (entity.status === "done" || entity.status === "reneged") return false;
+  if (entity.status === "done" || entity.status === "reneged" || entity.status === "balked") return false;
   // An entity can be re-routed into a new queue while already "waiting" in
   // another (e.g. RELEASE's provisional join immediately followed by
   // conditional/probabilistic routing's re-join) — no clearWaitingState runs
@@ -677,8 +678,8 @@ export function repairServers(failedServers, clock) {
 }
 
 /**
- * Removes terminal (done/reneged) customer entities from the live entity
- * pool, and drops any FEL entries that exist only to act on a removed
+ * Removes terminal (done/reneged/balked) customer entities from the live
+ * entity pool, and drops any FEL entries that exist only to act on a removed
  * entity (auto-renege timers, cSchedule completions requiring entity
  * context). Servers are never removed — they're long-lived resources, not
  * flow entities. Shared by the one-time warmup prune and the periodic
@@ -692,7 +693,7 @@ export function pruneTerminalEntities(entities, fel) {
   const kept = [];
   const removed = [];
   for (const e of entities) {
-    if (e.role === "server" || (e.status !== "done" && e.status !== "reneged")) {
+    if (e.role === "server" || (e.status !== "done" && e.status !== "reneged" && e.status !== "balked")) {
       kept.push(e);
     } else {
       removed.push(e);
@@ -753,7 +754,12 @@ export function attemptQueueJoin(entity, queueName, clock, ctx, opts = {}) {
   const qKey = norm(qDef?.name || queueName);
 
   if (visited.has(qKey)) {
-    discardFailedJoin(entity, ctx, `#${entity.id} (${entity.type}) overflow cycle detected at "${queueName}" — exited system`);
+    discardFailedJoin(entity, ctx, `#${entity.id} (${entity.type}) overflow cycle detected at "${queueName}" — exited system`, {
+      clock,
+      routeId: `block:cycle:${qKey}`,
+      routeLabel: `Blocked at "${queueName}" (overflow cycle)`,
+      endedBy: "BLOCK",
+    });
     return false;
   }
   visited.add(qKey);
@@ -802,6 +808,29 @@ export function attemptQueueJoin(entity, queueName, clock, ctx, opts = {}) {
 }
 
 /**
+ * Records an entity's terminal outcome — how and why it left the system.
+ * Shared by every macro/mechanism that ends an entity's journey (RENEGE,
+ * RENEGE_OLDEST, COMPLETE/FINISH family, JOIN/MATCH family-completion, and
+ * discardFailedJoin below for balked/blocked entities) so `getSummary()`'s
+ * outcomes/journeys aggregation has one consistent shape to read regardless
+ * of which mechanism produced it.
+ * @param {Record<string, any>|null} entity
+ * @param {{ status: string, routeId?: string, routeLabel?: string, endedBy: string, endedAt: number, sourceEventId?: any, sourceEventName?: any }} outcome
+ */
+export function setOutcome(entity, { status, routeId, routeLabel, endedBy, endedAt, sourceEventId = null, sourceEventName = null }) {
+  if (!entity) return;
+  entity.outcome = {
+    status,
+    routeId,
+    routeLabel,
+    endedBy,
+    endedAt,
+    ...(sourceEventId ? { sourceEventId } : {}),
+    ...(sourceEventName ? { sourceEventName } : {}),
+  };
+}
+
+/**
  * @param {string} metricKey
  * @param {string} reasonLabel
  * @param {Record<string, any>} entity
@@ -819,20 +848,45 @@ function rerouteOrExit(metricKey, reasonLabel, entity, qDef, queueName, clock, c
     ctx.msgs?.push(`#${entity.id} (${entity.type}) ${reasonLabel} at "${queueName}" → rerouted to "${dest}"`);
     return attemptQueueJoin(entity, dest, clock, ctx, { visitedQueues: visited });
   }
-  discardFailedJoin(entity, ctx, `#${entity.id} (${entity.type}) ${reasonLabel} at "${queueName}" — exited system`);
+  const endedBy = metricKey === "balkCount" ? "BALK" : "BLOCK";
+  discardFailedJoin(entity, ctx, `#${entity.id} (${entity.type}) ${reasonLabel} at "${queueName}" — exited system`, {
+    clock,
+    routeId: `${metricKey === "balkCount" ? "balk" : "block"}:${norm(queueName)}`,
+    routeLabel: `${metricKey === "balkCount" ? "Balked" : "Blocked"} at "${queueName}"`,
+    endedBy,
+  });
   return false;
 }
 
 /**
+ * An entity balked, was blocked at capacity, or hit an overflow-routing
+ * cycle, and has nowhere left to go. Gives it a terminal "balked" status +
+ * outcome record — mirroring RENEGE's shape — instead of silently vanishing
+ * with no trace at all (the previous behavior: spliced out of `entities`
+ * with no status change, so it could never appear in outcomes, journeys, or
+ * even the total-arrived count).
+ *
+ * If the entity was never live in `ctx.entities` (e.g. it balked immediately
+ * on ARRIVE, before ever successfully joining anything), it is added now —
+ * the same way a successful join would have — so it is counted the same way
+ * a customer who arrives and immediately reneges still is.
  * @param {Record<string, any>} entity
  * @param {Record<string, any>} ctx
  * @param {string} msg
+ * @param {{ clock: number, routeId: string, routeLabel: string, endedBy: string }} outcome
  */
-function discardFailedJoin(entity, ctx, msg) {
+function discardFailedJoin(entity, ctx, msg, { clock, routeId, routeLabel, endedBy }) {
   const { entities } = ctx;
-  const idx = entities.indexOf(entity);
-  if (idx !== -1) entities.splice(idx, 1);
-  indexUntrackEntity(ctx.index, entity);
+  const alreadyLive = ctx.index ? ctx.index.byId.get(entity.id) === entity : entities.includes(entity);
+  if (!alreadyLive) {
+    entities.push(entity);
+    indexTrackEntity(ctx.index, entity);
+    ctx.noteEntityCreated?.(entity);
+  }
+  entity.status = "balked";
+  entity.balkTime = clock;
+  setOutcome(entity, { status: "balked", routeId, routeLabel, endedBy, endedAt: clock });
+  if (ctx.state) ctx.state.__balked = (ctx.state.__balked || 0) + 1;
   ctx.msgs?.push(msg);
 }
 

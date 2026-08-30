@@ -190,6 +190,7 @@ function resolveVariable(ref, state) {
 
   if (text === "served") return state.__served ?? state.served ?? 0;
   if (text === "reneged") return state.__reneged ?? state.reneged ?? 0;
+  if (text === "balked") return state.__balked ?? state.balked ?? 0;
   if (text === "loopCount") return state.__loopCount ?? state.loopCount ?? state.currentEntity?.loopCount ?? 0;
   if (text === "clock") return state.clock ?? 0;
 

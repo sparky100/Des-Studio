@@ -7,7 +7,7 @@
 // a valid condition on every render — including right after Discard, which
 // restores the same nested value and re-triggers the same "edit", trapping
 // the user in an unbreakable unsaved-changes loop (the reported bug).
-import { render } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { ConditionBuilder } from "../../../src/ui/editors/ConditionBuilder.jsx";
 
@@ -118,5 +118,16 @@ describe("ConditionBuilder — auto-repair effect must not treat flattening as a
       />
     );
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("ConditionBuilder — built-in token dropdown", () => {
+  it("offers 'balked' as a selectable built-in token, mirroring 'served'/'reneged'", () => {
+    renderBuilder({});
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Clause" }));
+    const tokenSelect = screen.getAllByRole("combobox")[0];
+    const options = Array.from(tokenSelect.querySelectorAll("option")).map(o => ({ value: o.value, label: o.textContent }));
+    expect(options).toContainEqual({ value: "balked", label: "Balked — total who left without joining a queue" });
+    expect(options).toContainEqual({ value: "served", label: "Served — total who have completed service" });
   });
 });
