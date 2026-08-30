@@ -96,6 +96,21 @@ describe("buildLLMBundle", () => {
     expect(bundle).toContain("PASS");
   });
 
+  it("includes a Per-Skill Utilisation table when a resource has skillUtil", () => {
+    const resultsWithSkill = { ...singleRepResults, summary: { ...singleRepResults.summary, perResource: { Nurse: { total: 2, utilisation: 0.5, skillUtil: { Triage: 0.7 } } } } };
+    const bundle = buildLLMBundle(model, resultsWithSkill, { replications: 1 });
+    expect(bundle).toContain("### Per-Skill Utilisation");
+    expect(bundle).toContain("Nurse");
+    expect(bundle).toContain("Triage");
+    expect(bundle).toContain("70%");
+  });
+
+  it("omits the Per-Skill Utilisation table when no resource has skillUtil", () => {
+    const resultsNoSkill = { ...singleRepResults, summary: { ...singleRepResults.summary, perResource: { Nurse: { total: 2, utilisation: 0.5 } } } };
+    const bundle = buildLLMBundle(model, resultsNoSkill, { replications: 1 });
+    expect(bundle).not.toContain("### Per-Skill Utilisation");
+  });
+
   it("produces output that exceeds the 2000-word prompt cap without truncation", () => {
     const bundle = buildLLMBundle(model, multiRepResults, {
       runLabel: "Test run",
