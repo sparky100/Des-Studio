@@ -23,4 +23,20 @@ describe("ExecuteSourceNode", () => {
     render(<ExecuteSourceNode data={{ label: "Hire Arrival", liveData: null }} />);
     expect(screen.getByText("Hire Arrival")).toBeInTheDocument();
   });
+
+  test("shows the running arrival total, mirroring ExecuteSinkNode's served count", () => {
+    render(
+      <ExecuteSourceNode data={{ label: "Hire Arrival", liveData: { clock: 10, nextArrivalTime: 15, interArrivalLabel: "Exp(mean=15)", arrivalKey: 3, arrived: 52 } }} />
+    );
+    expect(screen.getByText("52")).toBeInTheDocument();
+    expect(screen.getByText("arrived")).toBeInTheDocument();
+  });
+
+  test("shows 0 arrived rather than blank when liveData is present but arrived is unset", () => {
+    render(
+      <ExecuteSourceNode data={{ label: "Hire Arrival", liveData: { clock: 0, nextArrivalTime: null, interArrivalLabel: null, arrivalKey: 0 } }} />
+    );
+    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getByText("arrived")).toBeInTheDocument();
+  });
 });

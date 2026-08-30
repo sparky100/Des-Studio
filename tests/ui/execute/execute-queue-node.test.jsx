@@ -1,7 +1,10 @@
-// ExecuteQueueNode's entity-type label — before this, the only way to tell
-// which entity type(s) were waiting in a queue was dot color (typeColor())
-// plus a hover-only title ("#id type"); there was no always-visible text
-// naming the type. Follows the same isolated-render pattern
+// ExecuteQueueNode's depth-caption wording — an earlier iteration added a
+// live, per-instant "one pill per distinct entity type currently waiting"
+// row, but that was replaced: the queue's own design-time configured type
+// (Queue.customerType) is folded straight into the existing depth caption
+// instead ("2 customers waiting"), since the design already says who's
+// allowed in a queue — no need to guess from whichever entities happen to be
+// waiting right now. Follows the same isolated-render pattern
 // execute-queue-node-pulse.test.jsx already uses.
 import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
@@ -12,38 +15,49 @@ vi.mock("../../../src/ui/shared/xyflow.js", async () => {
   return { ...actual, Handle: () => null };
 });
 
-const baseLiveData = { depth: 0, discipline: "FIFO", clock: 10 };
+const baseLiveData = { depth: 0, discipline: "FIFO", clock: 10, entities: [] };
 
-describe("ExecuteQueueNode — entity type label", () => {
-  test("shows no type label when the queue is empty", () => {
-    render(<ExecuteQueueNode data={{ label: "Hire Queue", liveData: { ...baseLiveData, entities: [] } }} />);
-    expect(screen.queryByText("Customer")).not.toBeInTheDocument();
+describe("ExecuteQueueNode — depth caption", () => {
+  test("falls back to the generic 'waiting' caption when the queue has no configured customerType", () => {
+    render(<ExecuteQueueNode data={{ label: "Hire Queue", liveData: { ...baseLiveData, depth: 2 } }} />);
+    expect(screen.getByText("waiting")).toBeInTheDocument();
   });
 
-  test("names the entity type waiting in a single-type queue", () => {
+  test("pluralizes the configured customerType into the caption, e.g. '2 Customers waiting'", () => {
     render(
       <ExecuteQueueNode data={{
         label: "Hire Queue",
-        liveData: { ...baseLiveData, depth: 2, entities: [
+        liveData: { ...baseLiveData, depth: 2, customerType: "Customer" },
+      }} />
+    );
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("Customers waiting")).toBeInTheDocument();
+  });
+
+  test("leaves the 'capacity' caption untouched even when customerType is set", () => {
+    render(
+      <ExecuteQueueNode data={{
+        label: "Hire Queue",
+        liveData: { ...baseLiveData, depth: 2, capacity: 5, customerType: "Customer" },
+      }} />
+    );
+    expect(screen.getByText("2/5")).toBeInTheDocument();
+    expect(screen.getByText("capacity")).toBeInTheDocument();
+    expect(screen.queryByText(/Customers/)).not.toBeInTheDocument();
+  });
+
+  test("no longer renders a separate per-type pill row", () => {
+    render(
+      <ExecuteQueueNode data={{
+        label: "Hire Queue",
+        liveData: { ...baseLiveData, depth: 2, customerType: "Customer", entities: [
           { id: 1, type: "Customer" },
           { id: 2, type: "Customer" },
         ] },
       }} />
     );
-    expect(screen.getByText("Customer")).toBeInTheDocument();
-  });
-
-  test("shows one pill per distinct type when a queue hosts more than one", () => {
-    render(
-      <ExecuteQueueNode data={{
-        label: "Shared Queue",
-        liveData: { ...baseLiveData, depth: 2, entities: [
-          { id: 1, type: "Customer" },
-          { id: 2, type: "Repair Job" },
-        ] },
-      }} />
-    );
-    expect(screen.getByText("Customer")).toBeInTheDocument();
-    expect(screen.getByText("Repair Job")).toBeInTheDocument();
+    // The type name only ever appears inside the caption text now, not as a
+    // standalone pill (the caption reads "Customers waiting", not "Customer").
+    expect(screen.queryByText("Customer")).not.toBeInTheDocument();
   });
 });

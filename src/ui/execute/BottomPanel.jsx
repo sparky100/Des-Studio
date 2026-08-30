@@ -269,7 +269,14 @@ function StageKpisTable({ snap, model, sectionsOpen, onToggleSection }) {
   );
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
+    // Vertical stack, matching ResultsWorkspace's SummaryCardGrid outer <section> —
+    // sections were previously a CSS grid (auto-fit/1fr), so at wide viewport
+    // widths QUEUES/SERVERS/etc. could sit side-by-side as grid columns, making
+    // the collapsible header on each one behave oddly (collapsing a mid-row
+    // section left a gap instead of the rows below sliding up). The per-item
+    // tile grids *inside* each section (metricGridStyle etc.) are unaffected —
+    // only this outer container changed.
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Queue rows */}
       {queues.length > 0 && (
         <div style={panelStyle}>

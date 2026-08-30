@@ -280,13 +280,17 @@ describe("ResultsWorkspace", () => {
 
     render(<ResultsWorkspace results={noSectionResults} model={model} />);
 
+    // QUEUE REJECTIONS renders as a card per queue (matching every other
+    // section in the panel — see CONTAINER LEVELS/ACTIVITY THROUGHPUT etc.),
+    // not a <table>.
     const heading = screen.getByText("QUEUE REJECTIONS");
-    const table = heading.nextElementSibling.querySelector("table");
-    expect(within(table).getByText("Queue A")).toBeInTheDocument();
-    expect(within(table).getByText("5")).toBeInTheDocument();
-    expect(within(table).getByText("3")).toBeInTheDocument();
-    // A queue with zero rejections is omitted from the table entirely.
-    expect(within(table).queryByText("Queue B")).not.toBeInTheDocument();
+    const section = heading.nextElementSibling;
+    expect(section.querySelector("table")).toBeNull();
+    expect(within(section).getByText("QUEUE A")).toBeInTheDocument();
+    expect(within(section).getByText("5")).toBeInTheDocument();
+    expect(within(section).getByText("3")).toBeInTheDocument();
+    // A queue with zero rejections gets no card at all.
+    expect(within(section).queryByText("QUEUE B")).not.toBeInTheDocument();
   });
 
   test("does not render a QUEUE REJECTIONS card when no queue has any balk/blocking", () => {

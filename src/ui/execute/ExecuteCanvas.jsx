@@ -838,6 +838,7 @@ export function ExecuteCanvas({
             capacity: Number.isFinite(cap) && cap > 0 ? cap : null,
             entities: queueEntities,
             discipline: qDef?.discipline ?? null,
+            customerType: qDef?.customerType ?? null,
             clock: snap.clock,
             renegeBalkPulse: queuePulses[node.label] ?? null,
           };
@@ -878,11 +879,16 @@ export function ExecuteCanvas({
           const arrivalKey = typeEntities.length
             ? Math.max(...typeEntities.map(e => e.id))
             : 0;
+          // Per-source arrival total from eventCounts (the ARRIVE b-event's fire
+          // count) — same lookup the sink branch above already uses for its own
+          // "served" count (node.refId is this source's ARRIVE b-event id).
+          const arrivedCount = node.refId ? (snap.eventCounts?.[node.refId] ?? 0) : 0;
           liveData = {
             clock: snap.clock,
             nextArrivalTime: src?.bEventId != null ? (snap.nextArrivals?.[src.bEventId] ?? null) : null,
             interArrivalLabel: src?.interArrivalLabel ?? null,
             arrivalKey,
+            arrived: arrivedCount,
           };
         } else if (node.type === "container") {
           // Live level/capacity from snap.containers when available, falling
