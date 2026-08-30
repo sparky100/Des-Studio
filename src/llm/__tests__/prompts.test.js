@@ -100,6 +100,29 @@ describe('buildReportRecommendationsPrompt', () => {
     expect(result).toBeDefined();
     expect(Array.isArray(result.messages)).toBe(true);
   });
+
+  test('payload includes containerLevels (enriched with capacity/initialLevel) when the run has container data', () => {
+    const modelWithContainer = { ...minimalModel, containerTypes: [{ id: 'Tank', capacity: 200, initialLevel: 50 }] };
+    const resultsWithContainer = { ...minimalResults, summary: { ...minimalResults.summary, containerLevels: { Tank: { min: 0, max: 100, avg: 42, final: 60 } } } };
+    const result = buildReportRecommendationsPrompt(modelWithContainer, resultsWithContainer);
+    const payload = JSON.parse(result.messages[1].content);
+    expect(payload.containerLevels).toEqual({ Tank: { min: 0, max: 100, avg: 42, final: 60, capacity: 200, initialLevel: 50 } });
+  });
+
+  test('payload omits containerLevels when the run has no container data', () => {
+    const result = buildReportRecommendationsPrompt(minimalModel, minimalResults);
+    const payload = JSON.parse(result.messages[1].content);
+    expect(payload.containerLevels).toBeUndefined();
+  });
+
+  test('payload queues already carry balk/blocking counts (via extractQueues, unchanged)', () => {
+    const resultsWithRejections = { ...minimalResults, perQueue: { 'Waiting Queue': { balkCount: 3, blockingCount: 1 } } };
+    const result = buildReportRecommendationsPrompt(minimalModel, resultsWithRejections);
+    const payload = JSON.parse(result.messages[1].content);
+    const q = payload.queues.find(q => q.name === 'Waiting Queue');
+    expect(q.balkCount).toBe(3);
+    expect(q.blockingCount).toBe(1);
+  });
 });
 
 describe('parseReportRecommendations', () => {

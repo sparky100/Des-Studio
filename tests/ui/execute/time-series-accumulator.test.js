@@ -216,3 +216,64 @@ describe("makeBatchResult timeSeries averaging", () => {
     expect(batch.sojournDist.mean).toBe(4);
   });
 });
+
+// Batch aggregation must not silently drop container levels, per-skill
+// utilisation, or schedule adherence — all three were previously computed
+// only for single-replication runs and vanished once a run went through
+// makeBatchResult (the multi-replication/batch aggregation path).
+describe("makeBatchResult container/skill/adherence aggregation", () => {
+  it("aggregates containerLevels: min/max as extremes across reps, avg/final as the mean across reps", () => {
+    const replicationPayloads = [
+      { result: { summary: { containerLevels: { Bikes: { min: 2, max: 18, avg: 10, final: 5 } } } } },
+      { result: { summary: { containerLevels: { Bikes: { min: 0, max: 15, avg: 8, final: 3 } } } } },
+    ];
+
+    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
+    expect(batch.summary.containerLevels).toEqual({
+      Bikes: { min: 0, max: 18, avg: 9, final: 4 },
+    });
+  });
+
+  it("omits containerLevels entirely when no replication reports it", () => {
+    const replicationPayloads = [
+      { result: { summary: {} } },
+      { result: { summary: {} } },
+    ];
+    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
+    expect(batch.summary.containerLevels).toBeUndefined();
+  });
+
+  it("averages perResource[type].skillUtil across only the replications that reported each skill", () => {
+    const replicationPayloads = [
+      { result: { summary: { perResource: { Staff: { total: 2, utilisation: 0.5, skillUtil: { Repair: 0.4, Assembly: 0.2 } } } } } },
+      { result: { summary: { perResource: { Staff: { total: 2, utilisation: 0.6, skillUtil: { Repair: 0.6 } } } } } },
+    ];
+
+    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
+    // Repair: mean over 2 reps = (0.4+0.6)/2 = 0.5. Assembly: only 1 rep reported it,
+    // but the divisor is acc.count (2, replications that reported perResource for this
+    // type at all), matching the existing utilisation/availability averaging convention.
+    expect(batch.summary.perResource.Staff.skillUtil).toEqual({ Repair: 0.5, Assembly: 0.1 });
+    expect(batch.summary.perResource.Staff.utilisation).toBeCloseTo(0.55);
+  });
+
+  it("leaves skillUtil undefined for a resource type with no skills", () => {
+    const replicationPayloads = [
+      { result: { summary: { perResource: { Staff: { total: 2, utilisation: 0.5 } } } } },
+    ];
+    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
+    expect(batch.summary.perResource.Staff.skillUtil).toBeUndefined();
+  });
+
+  it("averages perResource[type].scheduleAdherence across only the replications that reported it", () => {
+    const replicationPayloads = [
+      { result: { summary: { perResource: { Staff: { total: 2, utilisation: 0.5, scheduleAdherence: 0.9 } } } } },
+      { result: { summary: { perResource: { Staff: { total: 2, utilisation: 0.5, scheduleAdherence: 0.8 } } } } },
+      // A rep whose resource of this type has no weekly schedule reports no scheduleAdherence
+      // at all — it must not be treated as 0 and corrupt the average.
+      { result: { summary: { perResource: { Staff: { total: 2, utilisation: 0.5 } } } } },
+    ];
+    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
+    expect(batch.summary.perResource.Staff.scheduleAdherence).toBeCloseTo(0.85);
+  });
+});

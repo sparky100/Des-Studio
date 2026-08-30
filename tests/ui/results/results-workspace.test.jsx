@@ -257,11 +257,95 @@ describe("ResultsWorkspace", () => {
 
     fireEvent.click(screen.getByText(/QUEUE WAIT TIMES/i));
 
-    expect(screen.getByText("Balked")).toBeInTheDocument();
-    expect(screen.getByText("Blocked")).toBeInTheDocument();
+    // Scoped to the per-section queue table specifically — the standalone
+    // QUEUE REJECTIONS summary card (see next test) also renders "Balked"/
+    // "Blocked" text now that it's no longer gated on Sections, so an
+    // unscoped screen.getByText would be ambiguous.
     const table = screen.getByText("Mean").closest("table");
+    expect(within(table).getByText("Balked")).toBeInTheDocument();
+    expect(within(table).getByText("Blocked")).toBeInTheDocument();
     expect(within(table).getByText("5")).toBeInTheDocument();
     expect(within(table).getByText("3")).toBeInTheDocument();
+  });
+
+  test("shows a QUEUE REJECTIONS summary card with balk/block counts even when the model has no Sections", () => {
+    // Regression: balk/blocking data previously only rendered inside the
+    // per-Section queue table (SectionResultsPanel), which requires
+    // model.sections to be defined. A model with no Sections at all — like
+    // most real models — never showed balk data anywhere in Results.
+    const noSectionResults = {
+      ...results,
+      perQueue: { "Queue A": { balkCount: 5, blockingCount: 3 }, "Queue B": { balkCount: 0, blockingCount: 0 } },
+    };
+
+    render(<ResultsWorkspace results={noSectionResults} model={model} />);
+
+    const heading = screen.getByText("QUEUE REJECTIONS");
+    const table = heading.nextElementSibling.querySelector("table");
+    expect(within(table).getByText("Queue A")).toBeInTheDocument();
+    expect(within(table).getByText("5")).toBeInTheDocument();
+    expect(within(table).getByText("3")).toBeInTheDocument();
+    // A queue with zero rejections is omitted from the table entirely.
+    expect(within(table).queryByText("Queue B")).not.toBeInTheDocument();
+  });
+
+  test("does not render a QUEUE REJECTIONS card when no queue has any balk/blocking", () => {
+    const cleanResults = {
+      ...results,
+      perQueue: { "Queue A": { balkCount: 0, blockingCount: 0 } },
+    };
+
+    render(<ResultsWorkspace results={cleanResults} model={model} />);
+
+    expect(screen.queryByText("QUEUE REJECTIONS")).not.toBeInTheDocument();
+  });
+
+  test("renders a SKILL UTILISATION card per resource type when perResource has skillUtil", () => {
+    const skillResults = {
+      ...results,
+      summary: { perResource: { Clerk: { total: 2, utilisation: 0.5, skillUtil: { Repair: 0.8, Sales: 0.3 } } } },
+    };
+
+    render(<ResultsWorkspace results={skillResults} model={model} />);
+
+    const heading = screen.getByText("SKILL UTILISATION");
+    const card = heading.nextElementSibling;
+    expect(within(card).getByText("CLERK")).toBeInTheDocument();
+    expect(within(card).getByText("REPAIR")).toBeInTheDocument();
+    expect(within(card).getByText("80%")).toBeInTheDocument();
+    expect(within(card).getByText("SALES")).toBeInTheDocument();
+    expect(within(card).getByText("30%")).toBeInTheDocument();
+  });
+
+  test("does not render SKILL UTILISATION when no resource type has skillUtil", () => {
+    const noSkillResults = {
+      ...results,
+      summary: { perResource: { Clerk: { total: 2, utilisation: 0.5 } } },
+    };
+
+    render(<ResultsWorkspace results={noSkillResults} model={model} />);
+
+    expect(screen.queryByText("SKILL UTILISATION")).not.toBeInTheDocument();
+  });
+
+  test("renders CONTAINER LEVELS from a batch (multi-replication) result the same as a single run", () => {
+    // Regression for the makeBatchResult containerLevels aggregation fix —
+    // ResultsWorkspace itself needs no special-casing since it already reads
+    // summary.containerLevels generically; this just confirms the batch shape
+    // (summary.containerLevels populated by aggregation, not a single run)
+    // renders identically.
+    const containerModel = { ...model, containerTypes: [{ id: "Bikes", capacity: "20" }] };
+    const batchResults = {
+      ...results,
+      replications: 3,
+      summary: { containerLevels: { Bikes: { min: 2, max: 18, avg: 9, final: 5 } } },
+    };
+
+    render(<ResultsWorkspace results={batchResults} model={containerModel} />);
+
+    expect(screen.getByText("CONTAINER LEVELS")).toBeInTheDocument();
+    expect(screen.getByText("BIKES")).toBeInTheDocument();
+    expect(screen.getByText("5 / 20")).toBeInTheDocument();
   });
 
   test("renders a System-Level Trends section with WIP, throughput, wait-by-arrival, and sojourn cards", () => {

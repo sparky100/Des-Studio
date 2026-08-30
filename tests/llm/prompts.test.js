@@ -348,6 +348,26 @@ describe("LLM prompt builders", () => {
       expect(payload.kpis.containerLevels).toEqual({ Tank: { min: 0, max: 100, avg: 42, final: 60, capacity: 200, initialLevel: 50 } });
     });
 
+    it("includes per-skill utilisation (as whole percentages) in a resource's kpis entry when present", () => {
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2, perResource: { Nurse: { total: 2, utilisation: 0.5, skillUtil: { Triage: 0.8, IV: 0.25 } } } } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      const nurse = payload.kpis.resources.find(r => r.name === "Nurse");
+      expect(nurse.skillUtil).toEqual({ Triage: 80, IV: 25 });
+    });
+
+    it("omits skillUtil from a resource's kpis entry when the resource has no skills", () => {
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2, perResource: { Nurse: { total: 2, utilisation: 0.5 } } } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      const nurse = payload.kpis.resources.find(r => r.name === "Nurse");
+      expect(nurse.skillUtil).toBeUndefined();
+    });
+
     it("includes warnings and phaseCTruncated in kpis when set", () => {
       const prompt = buildSuggestionPrompt(
         model, {},
@@ -938,6 +958,28 @@ describe("Sprint 70 — buildPlanRefinementPrompt", () => {
     const prompt = buildPlanRefinementPrompt(scheduleModel, {}, scheduleResults);
     const wordCount = prompt.messages[1].content.split(/\s+/).filter(Boolean).length;
     expect(wordCount).toBeLessThanOrEqual(2000);
+  });
+
+  it("kpiSummary carries balkCount/blockingCount per queue (previously dropped even though extractQueues computes them)", () => {
+    const resultsWithRejections = { ...scheduleResults, perQueue: { "Main queue": { balkCount: 4, blockingCount: 2 } } };
+    const modelWithQueue = { ...scheduleModel, queues: [{ id: "q1", name: "Main queue" }] };
+    const prompt = buildPlanRefinementPrompt(modelWithQueue, {}, resultsWithRejections);
+    const payload = JSON.parse(prompt.messages[1].content);
+    const q = payload.kpiSummary.find(k => k.name === "Main queue");
+    expect(q.balkCount).toBe(4);
+    expect(q.blockingCount).toBe(2);
+  });
+
+  it("payload includes containerLevels when the run has container data, omits it otherwise", () => {
+    const modelWithContainer = { ...scheduleModel, containerTypes: [{ id: "Tank", capacity: 200, initialLevel: 50 }] };
+    const resultsWithContainer = { ...scheduleResults, summary: { ...scheduleResults.summary, containerLevels: { Tank: { min: 0, max: 100, avg: 42, final: 60 } } } };
+    const withContainer = buildPlanRefinementPrompt(modelWithContainer, {}, resultsWithContainer);
+    const payloadWith = JSON.parse(withContainer.messages[1].content);
+    expect(payloadWith.containerLevels).toEqual({ Tank: { min: 0, max: 100, avg: 42, final: 60, capacity: 200, initialLevel: 50 } });
+
+    const without = buildPlanRefinementPrompt(scheduleModel, {}, scheduleResults);
+    const payloadWithout = JSON.parse(without.messages[1].content);
+    expect(payloadWithout.containerLevels).toBeUndefined();
   });
 
   it("system prompt contains the string 'hard constraints'", () => {

@@ -297,6 +297,21 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
       lines.push(`| ${r.name} | ${r.count ?? '—'} | ${util} | ${r.busyCount ?? '—'} | ${r.idleCount ?? '—'} | ${schedule} | ${adherence} |`);
     }
     lines.push('');
+
+    // Per-skill utilisation — only present for resources with skills defined
+    const skillRows = kpis.resources.flatMap(r =>
+      r.skillUtil ? Object.entries(r.skillUtil).map(([skill, util]) => [r.name, skill, util]) : []
+    );
+    if (skillRows.length) {
+      lines.push('### Per-Skill Utilisation');
+      lines.push('');
+      lines.push('| Resource | Skill | Utilisation |');
+      lines.push('|----------|-------|-------------|');
+      for (const [name, skill, util] of skillRows) {
+        lines.push(`| ${name} | ${skill} | ${util != null ? `${util}%` : '—'} |`);
+      }
+      lines.push('');
+    }
   }
 
   // CI table — present only when aggregateStats exists (multi-replication).
