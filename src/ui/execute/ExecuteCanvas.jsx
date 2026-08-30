@@ -20,6 +20,7 @@ import { ExecuteSourceNode }   from "./ExecuteSourceNode.jsx";
 import { ExecuteQueueNode }    from "./ExecuteQueueNode.jsx";
 import { ExecuteActivityNode } from "./ExecuteActivityNode.jsx";
 import { ExecuteSinkNode }     from "./ExecuteSinkNode.jsx";
+import { ExecuteContainerNode } from "./ExecuteContainerNode.jsx";
 import { AnimatedEdge }        from "./AnimatedEdge.jsx";
 import { formatSimWallTime }   from "../../engine/clockUtils.js";
 import { formatDistributionLabel } from "../../model/distributionFormat.js";
@@ -28,7 +29,6 @@ import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_CARD_HEIGHT } from "./execu
 import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
-import { ContainerGaugeStrip } from "./ContainerGaugeStrip.jsx";
 import { buildServerTypeIndex, deriveActivityLiveData } from "./activityLiveData.js";
 export { DEFAULT_KPI_SLOTS };
 
@@ -380,21 +380,8 @@ function LiveNodeMetric({ type, live }) {
     );
   }
 
-  if (type === "container" && live.level != null) {
-    // Same fill-ratio thresholds as ContainerGaugeStrip.jsx's levelColor —
-    // ≥100% red, ≥85% amber, else accent (distinct from the 90/70 red/amber/
-    // green scheme used for resource utilisation elsewhere on this canvas).
-    const hasCapacity = Number.isFinite(live.capacity) && live.capacity > 0;
-    const fillRatio = hasCapacity ? live.level / live.capacity : null;
-    const color = fillRatio == null ? C.accent : fillRatio >= 1 ? C.red : fillRatio >= 0.85 ? C.amber : C.accent;
-    return (
-      <LiveBadge
-        value={hasCapacity ? `${live.level.toFixed(0)}/${live.capacity.toFixed(0)}` : live.level.toFixed(0)}
-        label="level"
-        color={color}
-      />
-    );
-  }
+  // "container" has its own dedicated ExecuteContainerNode component (registered
+  // in FLOW_NODE_TYPE below) and never falls through to this generic LiveNode path.
 
   return null;
 }
@@ -461,12 +448,13 @@ const liveNodeTypes = {
   queueNode:     ExecuteQueueNode,
   activityNode:  ExecuteActivityNode,
   sinkNode:      ExecuteSinkNode,
+  containerNode: ExecuteContainerNode,
   sectionPanel:  SectionPanelNode,
 };
 
 const edgeTypes = { animatedEdge: AnimatedEdge };
 
-const FLOW_NODE_TYPE = { source: "sourceNode", queue: "queueNode", activity: "activityNode", sink: "sinkNode" };
+const FLOW_NODE_TYPE = { source: "sourceNode", queue: "queueNode", activity: "activityNode", sink: "sinkNode", container: "containerNode" };
 
 function toFlowNode(node) {
   return {
@@ -897,15 +885,15 @@ export function ExecuteCanvas({
             arrivalKey,
           };
         } else if (node.type === "container") {
-          // Mirrors ContainerGaugeStrip.jsx's own data resolution: live level/
-          // capacity from snap.containers when available, falling back to the
-          // container type's static initialLevel/capacity before the first
-          // FILL/DRAIN.
+          // Live level/capacity from snap.containers when available, falling
+          // back to the container type's static initialLevel/capacity before
+          // the first FILL/DRAIN. `clock` drives ExecuteContainerNode's
+          // sparkline history the same way queue nodes track theirs.
           const live = snap.containers?.[node.refId];
           const ct = (model.containerTypes || []).find(c => c.id === node.refId);
           const level = live?.level ?? (ct?.initialLevel != null ? Number(ct.initialLevel) : 0);
           const capacity = live?.capacity ?? (ct?.capacity != null ? Number(ct.capacity) : null);
-          liveData = { level, capacity: Number.isFinite(capacity) ? capacity : null };
+          liveData = { level, capacity: Number.isFinite(capacity) ? capacity : null, clock: snap.clock };
         }
       }
       const dimmed = (showSections && focusedSectionId != null && node.sectionId !== focusedSectionId) ||
@@ -995,10 +983,6 @@ export function ExecuteCanvas({
             ))}
           </div>
         </div>
-      )}
-
-      {snap?.containers && Object.keys(snap.containers).length > 0 && (
-        <ContainerGaugeStrip containers={snap.containers} model={model} />
       )}
 
       <div

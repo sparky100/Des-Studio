@@ -264,6 +264,11 @@ describe('attemptQueueJoin — balked/blocked entities get a terminal status + o
     expect(ctx.entities).toContain(entity);
     expect(entity.status).toBe('balked');
     expect(entity.balkTime).toBe(5);
+    // Never actually joined "Hire Queue", so .queue/.lastQueue stay unset — but
+    // .terminalQueue records which queue it balked at, so the live snapshot's
+    // byQueue breakdown can attribute the balk to the right queue.
+    expect(entity.queue).toBeUndefined();
+    expect(entity.terminalQueue).toBe('Hire Queue');
     expect(entity.outcome).toEqual(expect.objectContaining({
       status: 'balked',
       routeLabel: 'Balked at "Hire Queue"',

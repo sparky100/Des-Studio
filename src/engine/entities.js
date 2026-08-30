@@ -786,6 +786,7 @@ export function attemptQueueJoin(entity, queueName, clock, ctx, opts = {}) {
   if (visited.has(qKey)) {
     discardFailedJoin(entity, ctx, `#${entity.id} (${entity.type}) overflow cycle detected at "${queueName}" — exited system`, {
       clock,
+      queueName,
       routeId: `block:cycle:${qKey}`,
       routeLabel: `Blocked at "${queueName}" (overflow cycle)`,
       endedBy: "BLOCK",
@@ -881,6 +882,7 @@ function rerouteOrExit(metricKey, reasonLabel, entity, qDef, queueName, clock, c
   const endedBy = metricKey === "balkCount" ? "BALK" : "BLOCK";
   discardFailedJoin(entity, ctx, `#${entity.id} (${entity.type}) ${reasonLabel} at "${queueName}" — exited system`, {
     clock,
+    queueName,
     routeId: `${metricKey === "balkCount" ? "balk" : "block"}:${norm(queueName)}`,
     routeLabel: `${metricKey === "balkCount" ? "Balked" : "Blocked"} at "${queueName}"`,
     endedBy,
@@ -903,9 +905,9 @@ function rerouteOrExit(metricKey, reasonLabel, entity, qDef, queueName, clock, c
  * @param {Record<string, any>} entity
  * @param {Record<string, any>} ctx
  * @param {string} msg
- * @param {{ clock: number, routeId: string, routeLabel: string, endedBy: string }} outcome
+ * @param {{ clock: number, queueName?: string, routeId: string, routeLabel: string, endedBy: string }} outcome
  */
-function discardFailedJoin(entity, ctx, msg, { clock, routeId, routeLabel, endedBy }) {
+function discardFailedJoin(entity, ctx, msg, { clock, queueName, routeId, routeLabel, endedBy }) {
   const { entities } = ctx;
   const alreadyLive = ctx.index ? ctx.index.byId.get(entity.id) === entity : entities.includes(entity);
   if (!alreadyLive) {
@@ -915,6 +917,14 @@ function discardFailedJoin(entity, ctx, msg, { clock, routeId, routeLabel, ended
   }
   entity.status = "balked";
   entity.balkTime = clock;
+  // The entity never actually joined `queueName` (that's the whole point of
+  // balking/blocking), so `.queue`/`.lastQueue` are never set for it here —
+  // but the live snapshot's per-queue breakdown (engine/index.js `snap().byQueue`)
+  // still needs to attribute this balk/block to the specific queue it happened
+  // at, not just the model-wide total. Record it in its own field so that
+  // attribution doesn't collide with `.lastQueue`'s existing "queue this
+  // entity actually waited/was served from" meaning used elsewhere.
+  if (queueName) entity.terminalQueue = queueName;
   setOutcome(entity, { status: "balked", routeId, routeLabel, endedBy, endedAt: clock });
   if (ctx.state) ctx.state.__balked = (ctx.state.__balked || 0) + 1;
   ctx.msgs?.push(msg);

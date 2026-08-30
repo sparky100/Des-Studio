@@ -119,10 +119,15 @@ describe("BottomPanel — F9C.9 live metrics", () => {
   });
 
   test("shows a Balked metric card per queue, mirroring Reneged", () => {
-    render(<BottomPanel log={log} snap={{ ...snap, balked: 4 }} model={model} />);
+    // Regression: BALKED/RENEGED used to read a single global snap.balked/
+    // snap.reneged scalar inside the per-queue loop, so every queue's tile
+    // showed the same model-wide total. It must now read the per-queue
+    // breakdown (snap.byQueue[name].balked/.reneged) instead.
+    render(<BottomPanel log={log} snap={{ ...snap, balked: 99, byQueue: { "Queue A": { balked: 4, reneged: 0 } } }} model={model} />);
     fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
     expect(screen.getByText("BALKED")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.queryByText("99")).not.toBeInTheDocument();
   });
 
   test("a balked entity's outcome renders in JOURNEY OUTCOMES with its own routeLabel and description", () => {
@@ -140,6 +145,53 @@ describe("BottomPanel — F9C.9 live metrics", () => {
     fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
     expect(screen.getByText('Balked at "Queue A"')).toBeInTheDocument();
     expect(screen.getByText("Left without being served.")).toBeInTheDocument();
+  });
+});
+
+describe("BottomPanel — Live Metrics collapsible sections (matching Results tab pattern)", () => {
+  test("sections default to expanded", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} />);
+    fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
+    const header = screen.getByRole("button", { name: /queues/i });
+    expect(header).toHaveAttribute("aria-expanded", "true");
+    expect(document.getElementById("stagekpis-section-queues")).toHaveStyle({ display: "flex" });
+  });
+
+  test("collapsing a section hides its content and flips aria-expanded", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} />);
+    fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
+    const header = screen.getByRole("button", { name: /queues/i });
+    fireEvent.click(header);
+    expect(header).toHaveAttribute("aria-expanded", "false");
+    expect(document.getElementById("stagekpis-section-queues")).toHaveStyle({ display: "none" });
+    // Content is hidden, not unmounted, so re-expanding doesn't lose derived state.
+    fireEvent.click(header);
+    expect(header).toHaveAttribute("aria-expanded", "true");
+  });
+
+  test("collapsed state persists across remounts via localStorage, like Results' own sections", () => {
+    const { unmount } = render(<BottomPanel log={log} snap={snap} model={model} />);
+    fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
+    fireEvent.click(screen.getByRole("button", { name: /queues/i }));
+    unmount();
+
+    render(<BottomPanel log={log} snap={snap} model={model} />);
+    fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
+    expect(screen.getByRole("button", { name: /queues/i })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("B-EVENTS/C-EVENTS groups are independently collapsible", () => {
+    const modelWithEvents = {
+      ...model,
+      bEvents: [{ id: "b1", name: "Arrival", scheduledTime: "0" }],
+    };
+    render(<BottomPanel log={log} snap={{ ...snap, eventCounts: { b1: 3 } }} model={modelWithEvents} />);
+    fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
+    const header = screen.getByRole("button", { name: /b-events/i });
+    expect(header).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(header);
+    expect(header).toHaveAttribute("aria-expanded", "false");
+    expect(document.getElementById("stagekpis-section-bevents")).toHaveStyle({ display: "none" });
   });
 });
 

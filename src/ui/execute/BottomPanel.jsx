@@ -8,6 +8,14 @@ import { QueueDepthTimePlot, QueueWaitTimePlot, QueueHistogram } from "./SweepVi
 import { formatSimWallTime } from "../../engine/clockUtils.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { ActivityDetail } from "./NodeDetailSidebar.jsx";
+import { CollapsibleSection } from "../shared/CollapsibleSection.jsx";
+
+// Live Metrics section collapse/expand state, persisted the same way Results'
+// own sections are (see ResultsWorkspace.jsx's SECTION_DEFAULTS/sectionsOpen) —
+// a localStorage-backed { id: boolean } map, all expanded by default so existing
+// users see no behavior change until they collapse something.
+const STAGE_KPI_SECTION_DEFAULTS = { bevents: true, cevents: true, queues: true, servers: true, outcomes: true, paths: true, sections: true };
+const STAGE_KPI_SECTIONS_KEY = "des.stagekpis.sections";
 
 const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
@@ -32,15 +40,14 @@ const PANEL_MIN_HEIGHT = 220;
 const PANEL_MAX_HEIGHT = 640;
 const PANEL_MAXIMIZED_HEIGHT = "65vh";
 
-function EventCountGroup({ title, color, events, counts }) {
+function EventCountGroup({ id, title, color, events, counts, isOpen, onToggle }) {
   const { C, FONT } = useTheme();
   if (events.length === 0) return null;
+  const controlsId = `stagekpis-section-${id}`;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 10, color, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
-        {title}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+      <CollapsibleSection id={id} label={title} isOpen={isOpen} onToggle={onToggle} controlsId={controlsId} />
+      <div id={controlsId} style={{ display: isOpen ? "grid" : "none", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
         {events.map((event) => {
           const count = counts[event.id] || 0;
           return (
@@ -82,8 +89,8 @@ function EventCountGroup({ title, color, events, counts }) {
 
 // ── Stage KPIs ────────────────────────────────────────────────────────────────
 
-function EventCountsTable({ snap, model }) {
-  const { C, FONT } = useTheme();
+function EventCountsTable({ snap, model, sectionsOpen, onToggleSection }) {
+  const { C } = useTheme();
   const counts = snap?.eventCounts ?? {};
   const bEvents = (model.bEvents || []).filter(b => parseFloat(b.scheduledTime) < 900 || Object.prototype.hasOwnProperty.call(counts, b.id));
   const cEvents = model.cEvents || [];
@@ -92,22 +99,28 @@ function EventCountsTable({ snap, model }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <EventCountGroup
+        id="bevents"
         title="B-EVENTS (BOUND) — TIMES FIRED"
         color={C.bEvent}
         events={bEvents}
         counts={counts}
+        isOpen={sectionsOpen.bevents}
+        onToggle={onToggleSection}
       />
       <EventCountGroup
+        id="cevents"
         title="C-EVENTS (CONDITIONAL) — TIMES FIRED"
         color={C.cEvent}
         events={cEvents}
         counts={counts}
+        isOpen={sectionsOpen.cevents}
+        onToggle={onToggleSection}
       />
     </div>
   );
 }
 
-function StageKpisTable({ snap, model }) {
+function StageKpisTable({ snap, model, sectionsOpen, onToggleSection }) {
   const { C, FONT } = useTheme();
   if (!snap) {
     return (
@@ -244,8 +257,8 @@ function StageKpisTable({ snap, model }) {
     gap: 8,
   };
 
-  const metricCard = (label, value, color = C.text) => (
-    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", minWidth: 0 }}>
+  const metricCard = (label, value, color = C.text, title = undefined) => (
+    <div title={title} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", minWidth: 0 }}>
       <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>
         {label.toUpperCase()}
       </div>
@@ -260,10 +273,8 @@ function StageKpisTable({ snap, model }) {
       {/* Queue rows */}
       {queues.length > 0 && (
         <div style={panelStyle}>
-          <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
-            QUEUES
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <CollapsibleSection id="queues" label="Queues" isOpen={sectionsOpen.queues} onToggle={onToggleSection} controlsId="stagekpis-section-queues" />
+          <div id="stagekpis-section-queues" style={{ display: sectionsOpen.queues ? "flex" : "none", flexDirection: "column", gap: 8 }}>
             {queues.map(q => {
               const inQueue  = entities.filter(e => e.role !== "server" && (e.queue === q.name || e.lastQueue === q.name));
               const waiting  = entities.filter(e => e.role !== "server" && e.queue === q.name && e.status === "waiting");
@@ -278,11 +289,11 @@ function StageKpisTable({ snap, model }) {
                   </div>
                   <div style={metricGridStyle}>
                     {metricCard("Waiting", waiting.length, waiting.length > 0 ? C.amber : C.text)}
-                    {metricCard("Mean wait", fmt(meanWait, 1))}
-                    {metricCard("Max wait", fmt(maxWait, 1))}
+                    {metricCard("Mean wait (now)", fmt(meanWait, 1), C.text, "Live snapshot of entities currently waiting in this queue right now — not a running average across the whole run.")}
+                    {metricCard("Max wait (now)", fmt(maxWait, 1), C.text, "Live snapshot of entities currently waiting in this queue right now — not a running average across the whole run.")}
                     {metricCard("Arrivals", inQueue.length)}
-                    {metricCard("Reneged", snap.reneged || 0, C.reneged)}
-                    {metricCard("Balked", snap.balked || 0, C.balked)}
+                    {metricCard("Reneged", snap.byQueue?.[q.name]?.reneged || 0, C.reneged)}
+                    {metricCard("Balked", snap.byQueue?.[q.name]?.balked || 0, C.balked)}
                   </div>
                 </div>
               );
@@ -294,10 +305,8 @@ function StageKpisTable({ snap, model }) {
       {/* Server rows */}
       {serverTypes.length > 0 && (
         <div style={panelStyle}>
-          <div style={{ fontSize: 10, color: C.purple, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
-            SERVERS
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <CollapsibleSection id="servers" label="Servers" isOpen={sectionsOpen.servers} onToggle={onToggleSection} controlsId="stagekpis-section-servers" />
+          <div id="stagekpis-section-servers" style={{ display: sectionsOpen.servers ? "flex" : "none", flexDirection: "column", gap: 8 }}>
             {serverTypes.map(et => {
               const declaredCapacity = parseInt(et.count || "1", 10) || 1;
               const servers  = entities.filter(e => e.role === "server" && e.type === et.name);
@@ -330,10 +339,8 @@ function StageKpisTable({ snap, model }) {
 
       {outcomeRows.length > 0 && (
         <div style={panelStyle}>
-          <div style={{ fontSize: 10, color: C.served, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
-            JOURNEY OUTCOMES
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <CollapsibleSection id="outcomes" label="Journey outcomes" isOpen={sectionsOpen.outcomes} onToggle={onToggleSection} controlsId="stagekpis-section-outcomes" />
+          <div id="stagekpis-section-outcomes" style={{ display: sectionsOpen.outcomes ? "flex" : "none", flexDirection: "column", gap: 8 }}>
             {outcomeRows.map(outcome => {
               const outcomeColor = outcome.status === "reneged" ? C.reneged : outcome.status === "balked" ? C.balked : C.served;
               const hasWait    = Number.isFinite(outcome.avgWait)    && outcome.avgWait    > 0;
@@ -362,10 +369,8 @@ function StageKpisTable({ snap, model }) {
       {/* Journey path traces — top-10 paths from entity.stages[] */}
       {topPaths.length > 0 && (
         <div style={panelStyle}>
-          <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
-            JOURNEY PATHS
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <CollapsibleSection id="paths" label="Journey paths" isOpen={sectionsOpen.paths} onToggle={onToggleSection} controlsId="stagekpis-section-paths" />
+          <div id="stagekpis-section-paths" style={{ display: sectionsOpen.paths ? "flex" : "none", flexDirection: "column", gap: 6 }}>
             {topPaths.map(([path, count]) => {
               const pct = totalJourneys > 0 ? ((count / totalJourneys) * 100).toFixed(0) : 0;
               const segs = path.split("→");
@@ -410,10 +415,8 @@ function StageKpisTable({ snap, model }) {
       {/* Section metrics — only shown when model.sections is defined */}
       {hasSections && (
         <div style={panelStyle}>
-          <div style={{ fontSize: 10, color: C.purple, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
-            SECTIONS
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <CollapsibleSection id="sections" label="Sections" isOpen={sectionsOpen.sections} onToggle={onToggleSection} controlsId="stagekpis-section-sections" />
+          <div id="stagekpis-section-sections" style={{ display: sectionsOpen.sections ? "flex" : "none", flexDirection: "column", gap: 8 }}>
             {modelSections.map(sec => {
               const s = sectionStats[sec.id];
               if (!s || s.count === 0) return null;
@@ -1196,6 +1199,19 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
     try { const s = parseInt(localStorage.getItem("des.bottomPanel.height"), 10); return Number.isFinite(s) ? Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, s)) : BOTTOM_PANEL_BODY_HEIGHT; } catch { return BOTTOM_PANEL_BODY_HEIGHT; }
   });
   const [maximized, setMaximized] = useState(false);
+  const [stageKpiSectionsOpen, setStageKpiSectionsOpen] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(STAGE_KPI_SECTIONS_KEY) || "null");
+      return stored ? { ...STAGE_KPI_SECTION_DEFAULTS, ...stored } : { ...STAGE_KPI_SECTION_DEFAULTS };
+    } catch { return { ...STAGE_KPI_SECTION_DEFAULTS }; }
+  });
+  const toggleStageKpiSection = (id) => {
+    setStageKpiSectionsOpen(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      try { localStorage.setItem(STAGE_KPI_SECTIONS_KEY, JSON.stringify(next)); } catch { /* storage unavailable (private mode) — non-critical */ }
+      return next;
+    });
+  };
   const dragStateRef = useRef(null);
   const bodyHeightRef = useRef(bodyHeight);
   useEffect(() => { bodyHeightRef.current = bodyHeight; }, [bodyHeight]);
@@ -1352,8 +1368,8 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
           )}
           {activeTab === "stagekpis" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              <EventCountsTable snap={snap} model={model} />
-              <StageKpisTable snap={snap} model={model} />
+              <EventCountsTable snap={snap} model={model} sectionsOpen={stageKpiSectionsOpen} onToggleSection={toggleStageKpiSection} />
+              <StageKpisTable snap={snap} model={model} sectionsOpen={stageKpiSectionsOpen} onToggleSection={toggleStageKpiSection} />
             </div>
           )}
         </div>
