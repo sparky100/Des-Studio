@@ -18,6 +18,28 @@ const EXEC_NODE_SEP   = 50;    // vertical gap between nodes in the same column
 const EXEC_MARGIN_X   = 60;
 const EXEC_MARGIN_Y   = 60;
 
+// ── Canvas auto-fill height (F9C.9) ──────────────────────────────────────────
+// Shared by ExecuteCanvas.jsx and the Draw canvas (FlowDiagramReactFlow.jsx) —
+// a pure, component-free module (per ADR-020: Execute *components* don't cross
+// into the designer, but sharing pure layout utilities through this neutral
+// module is the same established pattern EXEC_CARD_WIDTH/HEIGHT above already
+// use). Each caller passes its own reservedBottom (how much chrome sits below
+// its own canvas), since that differs between the two surfaces.
+const CANVAS_FILL_FLOOR = 280;
+// Default reserved-bottom — space for Execute's collapsed BottomPanel bar +
+// layout gap. Callers with different chrome below their canvas (e.g. Draw)
+// should pass their own value explicitly rather than relying on this default.
+const CANVAS_RESERVED_BOTTOM = 64;
+
+/**
+ * How tall a canvas should be to fill the remaining viewport below it.
+ * Pure so it's directly testable without mounting ReactFlow.
+ */
+export function computeCanvasFillHeight(topOffset, viewportHeight, reservedBottom = CANVAS_RESERVED_BOTTOM) {
+  if (!Number.isFinite(topOffset) || !Number.isFinite(viewportHeight)) return null;
+  return Math.max(CANVAS_FILL_FLOOR, viewportHeight - topOffset - reservedBottom);
+}
+
 /**
  * Produces execute-canvas node positions.
  * Saved x/y from the visual designer are preserved whenever present.

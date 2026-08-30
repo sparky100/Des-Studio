@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BaseEdge,
@@ -18,14 +18,23 @@ import {
 import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
 import { isActivityRouteEdge, NODE_WIDTH, NODE_HEIGHT } from "./graph.js";
+// Pure layout utility shared with the Execute canvas (see executeLayout.js's
+// own comment) — importing from this constants-only module, not from
+// ExecuteCanvas.jsx itself, keeps ADR-020's Draw/Execute component boundary intact.
+import { computeCanvasFillHeight } from "../execute/executeLayout.js";
 import { computeAlignmentGuides } from "./alignmentGuides.js";
 import { computeLoopRailYById } from "./loopEdgeRouting.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useFitNodeRef } from "../shared/useFitNodeRef.js";
 import { SectionPanelNode } from "./SectionPanelNode.jsx";
 
+// Nothing docks below the Draw canvas the way Execute's BottomPanel does —
+// just its own container margin/padding, so this is much smaller than
+// ExecuteCanvas's 64px reserved-bottom (space for a collapsed BottomPanel bar).
+const DRAW_CANVAS_RESERVED_BOTTOM = 24;
+
 function colorForNodeType(type, C) {
-  return { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red, container: C.amber }[type] || C.accent;
+  return { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red, container: C.amber, resource: C.server }[type] || C.accent;
 }
 
 // Badges that flag something worth a second look — an opt-in behavior
@@ -39,8 +48,8 @@ function DesNode({ data, selected }) {
   const { C, FONT } = useTheme();
   const [hovered, setHovered] = useState(false);
   const color = colorForNodeType(data.type, C);
-  const hasTarget = data.type !== "source" && data.type !== "container";
-  const hasSource = data.type !== "sink" && data.type !== "container";
+  const hasTarget = data.type !== "source" && data.type !== "container" && data.type !== "resource";
+  const hasSource = data.type !== "sink" && data.type !== "container" && data.type !== "resource";
   const hasError = !!data.hasError;
   return (
     <div
@@ -495,6 +504,27 @@ export function FlowDiagramReactFlow({
   const [dragPositions, setDragPositions] = useState({});
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const wrapperRef = useRef(null);
+  // Auto-fill height (F9C.9-style, mirroring ExecuteCanvas.jsx's own canvas):
+  // measured live from the canvas's actual position rather than a static
+  // "100vh - 260px" guess capped at 900px, which clipped the canvas well
+  // short of the viewport on a tall screen. Nothing sits below this canvas
+  // the way Execute's BottomPanel does, so the reserved-bottom here is just
+  // room for the container's own margin, not Execute's 64px BottomPanel bar.
+  const [autoFillHeight, setAutoFillHeight] = useState(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = wrapperRef.current;
+      if (!el) return;
+      setAutoFillHeight(computeCanvasFillHeight(el.getBoundingClientRect().top, window.innerHeight, DRAW_CANVAS_RESERVED_BOTTOM));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+    };
+  }, []);
   const suppressViewportSyncRef = useRef(true);
   const nodeClickHandledRef = useRef(false);
   const boxSelectingRef = useRef(false);
@@ -633,7 +663,11 @@ export function FlowDiagramReactFlow({
       }}
       style={{
         position: "relative",
-        height: "clamp(400px, calc(100vh - 260px), 900px)",
+        // Falls back to the old static clamp for the one frame before the
+        // first live measurement completes, avoiding a flash of an unsized
+        // canvas — computeCanvasFillHeight (a live measurement, not a fixed
+        // upper bound) takes over immediately after.
+        height: autoFillHeight != null ? `${autoFillHeight}px` : "clamp(400px, calc(100vh - 260px), 900px)",
         minHeight: 380,
         width: "100%",
         background: dragOver ? `${C.accent}06` : C.bg,

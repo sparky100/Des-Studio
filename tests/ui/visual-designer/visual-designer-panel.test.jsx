@@ -185,7 +185,9 @@ describe('Visual Designer shell', () => {
     expect(screen.getByRole('button', { name: /^design$/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Visual Designer')).toBeInTheDocument();
     expect(screen.getByLabelText('Visual Designer canvas')).toBeInTheDocument();
-    expect(screen.getByTestId('react-flow')).toHaveAttribute('data-node-count', '6');
+    // 6 flow nodes + 2 Resource nodes (Triage Nurse, Consultant — one per
+    // role:"server" entity type, each disconnected like a container node).
+    expect(screen.getByTestId('react-flow')).toHaveAttribute('data-node-count', '8');
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-edge-count', '5');
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-fit-view', 'false');
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-viewport-zoom', '1');

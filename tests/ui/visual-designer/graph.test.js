@@ -403,6 +403,48 @@ describe("deriveGraphFromModel — container nodes", () => {
   });
 });
 
+describe("deriveGraphFromModel — resource nodes", () => {
+  it("emits one resource node per role:\"server\" entity type, with zero edges", () => {
+    // minimalModel already has one role:"server" entity type ("Server").
+    const graph = deriveGraphFromModel(minimalModel);
+
+    const resourceNodes = graph.nodes.filter(node => node.type === "resource");
+    expect(resourceNodes).toHaveLength(1);
+    expect(resourceNodes[0]).toEqual(expect.objectContaining({
+      id: "resource:Server", type: "resource", refId: "Server", sublabel: "cap 1",
+    }));
+
+    // Resources don't participate in entity flow — no edge should touch them.
+    const resourceNodeIds = new Set(resourceNodes.map(node => node.id));
+    expect(graph.edges.some(edge => resourceNodeIds.has(edge.from) || resourceNodeIds.has(edge.to))).toBe(false);
+  });
+
+  it("emits one resource node per server-role entity type, ignoring customer-role types", () => {
+    const model = {
+      ...minimalModel,
+      entityTypes: [
+        ...minimalModel.entityTypes,
+        { id: "clerk", name: "Clerk", role: "server", count: "3", attrDefs: [] },
+      ],
+    };
+    const graph = deriveGraphFromModel(model);
+    const resourceNodes = graph.nodes.filter(node => node.type === "resource");
+    expect(resourceNodes).toHaveLength(2);
+    expect(resourceNodes.map(n => n.refId).sort()).toEqual(["Clerk", "Server"]);
+  });
+
+  it("gives resource nodes finite layout coordinates", () => {
+    const graph = deriveGraphFromModel(minimalModel);
+    assertNodesHaveFiniteCoords({ nodes: graph.nodes.filter(node => node.type === "resource") });
+  });
+
+  it("produces no resource nodes when there are no server-role entity types", () => {
+    const model = { ...minimalModel, entityTypes: minimalModel.entityTypes.filter(et => et.role !== "server") };
+    const graph = deriveGraphFromModel(model);
+    expect(graph.nodes.some(node => node.type === "resource")).toBe(false);
+  });
+});
+
 describe("deriveGraphFromModel — JOIN/SPLIT/MATCH/UNBATCH/COSEIZE/BATCH edges", () => {
   it("derives incoming and outgoing edges for a JOIN(Source, Target) C-event effect", () => {
     const model = {

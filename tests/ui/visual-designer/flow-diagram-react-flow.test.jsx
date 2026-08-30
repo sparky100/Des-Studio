@@ -443,3 +443,27 @@ describe('FlowDiagramReactFlow — live drag positions', () => {
     expect(latestFlowProps.current.snapGrid).toBeUndefined();
   });
 });
+
+describe('FlowDiagramReactFlow — auto-fill height (F9C.9)', () => {
+  // Regression: the canvas used to be pinned to a static
+  // clamp(400px, calc(100vh - 260px), 900px) — the 900px upper bound clipped
+  // the canvas well short of the viewport on a tall screen. It's now measured
+  // live (computeCanvasFillHeight, shared with ExecuteCanvas.jsx), the same
+  // fix already shipped there, so this can't regress on smaller screens
+  // either (a floor is still enforced by that shared function).
+  it('sizes the canvas from a live measurement instead of the static viewport clamp', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} />);
+    const wrapper = screen.getByLabelText('Visual Designer canvas');
+    // jsdom defaults: getBoundingClientRect().top = 0, innerHeight = 768.
+    // computeCanvasFillHeight(0, 768, 24) = max(280, 768 - 0 - 24) = 744.
+    expect(wrapper.style.height).toBe('744px');
+  });
+
+  it('remeasures on window resize, so a tall screen is no longer capped at 900px', () => {
+    render(<FlowDiagramReactFlow graph={makeGraph()} />);
+    const wrapper = screen.getByLabelText('Visual Designer canvas');
+    Object.defineProperty(window, 'innerHeight', { value: 1200, configurable: true });
+    act(() => window.dispatchEvent(new Event('resize')));
+    expect(wrapper.style.height).toBe('1176px'); // 1200 - 0 - 24
+  });
+});

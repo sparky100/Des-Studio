@@ -4,8 +4,11 @@
 //                        idleCount, utilisation, completionSignal }
 // activityBusyCount = servers currently serving THIS activity only.
 // busyCount = ALL servers of this type currently busy (pool-level).
-// completionSignal is snap.served — strictly increases on each COMPLETE event,
-// used to trigger the flash without needing direct FEL access.
+// completionSignal is this activity's OWN scheduled-follow-on-event fire count
+// (see activityLiveData.js's completionSignalFor) — strictly increases only
+// when THIS c-event's own work finishes, not the model-wide snap.served total
+// (which used to make every activity node flash simultaneously whenever any
+// activity anywhere completed a job).
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position } from "../shared/xyflow.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -72,6 +75,18 @@ function PoolText({ activityBusyCount, busyCount, failedCount, capacity }) {
   );
 }
 
+// Plain numeric count shown under the dot grid (small pools) so a viewer
+// doesn't have to count squares — DotGrid's boxes stay, this just makes the
+// count explicit, mirroring the wording PoolText already uses for large pools.
+function ActiveCount({ activityBusyCount }) {
+  const { C, FONT } = useTheme();
+  return (
+    <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: activityBusyCount > 0 ? C.cEvent : C.muted }}>
+      {activityBusyCount} active
+    </span>
+  );
+}
+
 function SkillBadges({ skillBreakdown }) {
   const { C, FONT } = useTheme();
   if (!skillBreakdown) return null;
@@ -95,7 +110,7 @@ function SkillBadges({ skillBreakdown }) {
   );
 }
 
-function ResourceRow({ serverName, capacity, busyCount, activityBusyCount, failedCount, utilisation, skillBreakdown }) {
+function ResourceRow({ serverName, capacity, busyCount, activityBusyCount, failedCount, skillBreakdown }) {
   const { C, FONT } = useTheme();
   const useText     = capacity > MAX_DOTS;
   const hasFailures = failedCount > 0;
@@ -106,29 +121,21 @@ function ResourceRow({ serverName, capacity, busyCount, activityBusyCount, faile
           {serverName}
         </div>
       )}
-      {useText
-        ? <PoolText activityBusyCount={activityBusyCount} busyCount={busyCount} failedCount={failedCount} capacity={capacity} />
-        : <DotGrid  capacity={capacity} activityBusyCount={activityBusyCount} totalBusyCount={busyCount} failedCount={failedCount} />
-      }
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginTop: 1,
-      }}>
-        <span style={{
-          fontSize: 9,
-          fontFamily: FONT,
-          color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted,
-        }}>
-          {utilisation.toFixed(0)}%
-        </span>
-        {hasFailures && (
+      {useText ? (
+        <PoolText activityBusyCount={activityBusyCount} busyCount={busyCount} failedCount={failedCount} capacity={capacity} />
+      ) : (
+        <>
+          <DotGrid capacity={capacity} activityBusyCount={activityBusyCount} totalBusyCount={busyCount} failedCount={failedCount} />
+          <ActiveCount activityBusyCount={activityBusyCount} />
+        </>
+      )}
+      {hasFailures && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 1 }}>
           <span style={{ fontSize: 9, color: C.red, fontFamily: FONT, fontWeight: 600 }}>
             ⚠ {failedCount} failed
           </span>
-        )}
-      </div>
+        </div>
+      )}
       <SkillBadges skillBreakdown={skillBreakdown} />
     </>
   );
@@ -161,7 +168,6 @@ export function ExecuteActivityNode({ data }) {
   const busyCount          = live?.busyCount          ?? 0;
   const activityBusyCount  = live?.activityBusyCount  ?? 0;
   const failedCount        = live?.failedCount        ?? 0;
-  const utilisation        = live?.utilisation        ?? 0;
   const serverName         = live?.serverTypeName     ?? null;
   const rows               = live?.perType?.length > 1 ? live.perType : null;
   const skillBreakdown     = live?.skillBreakdown     ?? null;
@@ -234,7 +240,6 @@ export function ExecuteActivityNode({ data }) {
                   busyCount={row.busyCount}
                   activityBusyCount={row.activityBusyCount}
                   failedCount={row.failedCount}
-                  utilisation={row.utilisation}
                   skillBreakdown={row.skillBreakdown}
                 />
               </div>
@@ -259,7 +264,6 @@ export function ExecuteActivityNode({ data }) {
               busyCount={busyCount}
               activityBusyCount={activityBusyCount}
               failedCount={failedCount}
-              utilisation={utilisation}
               skillBreakdown={skillBreakdown}
             />
           </>

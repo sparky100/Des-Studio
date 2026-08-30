@@ -104,13 +104,30 @@ export function buildServerTypeIndex(cEvents, entityTypes) {
       );
       return parseInt(et?.count ?? "1", 10) || 1;
     });
-    index.set(ce.id, { serverTypes, capacities, ceventName: ce.name });
+    // Scheduled follow-on B-event id(s) — used to give this specific activity
+    // its own completion signal (see completionSignal below) instead of the
+    // model-wide snap.served total.
+    const scheduledEventIds = (ce.cSchedules || []).map(cs => cs.eventId).filter(Boolean);
+    index.set(ce.id, { serverTypes, capacities, ceventName: ce.name, scheduledEventIds });
   }
   return index;
 }
 
+// Sum of eventCounts fire counts for the B-event(s) a c-event schedules —
+// strictly increases only when THIS activity's own follow-on event fires,
+// unlike snap.served (a model-wide total shared by every activity node).
+function completionSignalFor(scheduledEventIds, snap) {
+  if (!scheduledEventIds?.length) return 0;
+  return scheduledEventIds.reduce((sum, id) => sum + (snap.eventCounts?.[id] || 0), 0);
+}
+
 // Compute live busy/idle/failed/capacity stats for a single server type against the current snapshot.
-function deriveTypeStats(serverType, snap, refId, model) {
+// refId is the c-event this is being computed for (scopes activityBusyCount/
+// serverDetails' ceventName match); pass null for a standalone, not-c-event-
+// scoped view of a resource type (e.g. a canvas Resource node covering every
+// activity that draws from this pool) — activityBusyCount is then always 0
+// (no c-event to match against) and can simply be ignored by the caller.
+export function deriveTypeStats(serverType, snap, refId, model) {
   const entities = snap.entities || [];
   const servers = entities.filter(e => e.role === "server");
   const relevant = servers.filter(e => e.type.trim().toLowerCase() === serverType.trim().toLowerCase());
@@ -194,6 +211,11 @@ export function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
   const serverTypes = meta?.serverTypes ?? [];
 
   if (!serverTypes.length) {
+    // Not indexed (e.g. no ASSIGN/COSEIZE server type resolved) — fall back to
+    // looking the c-event up directly by id for its own scheduled event(s),
+    // same as the indexed path below, rather than the model-wide snap.served.
+    const ce = (model?.cEvents || []).find(c => c.id === refId);
+    const scheduledEventIds = (ce?.cSchedules || []).map(cs => cs.eventId).filter(Boolean);
     return {
       serverTypeName: null,
       capacity: (snap.entities || []).filter(e => e.role === "server").length,
@@ -203,7 +225,7 @@ export function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
       failedCount: 0,
       suspendedCount: 0,
       utilisation: 0,
-      completionSignal: snap.served,
+      completionSignal: completionSignalFor(scheduledEventIds, snap),
       servers: [],
       perType: [],
       clock: snap.clock,
@@ -217,7 +239,7 @@ export function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
 
   return {
     ...first,
-    completionSignal: snap.served,
+    completionSignal: completionSignalFor(meta?.scheduledEventIds, snap),
     clock: snap.clock,
     perType,
   };

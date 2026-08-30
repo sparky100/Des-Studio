@@ -21,32 +21,26 @@ import { ExecuteQueueNode }    from "./ExecuteQueueNode.jsx";
 import { ExecuteActivityNode } from "./ExecuteActivityNode.jsx";
 import { ExecuteSinkNode }     from "./ExecuteSinkNode.jsx";
 import { ExecuteContainerNode } from "./ExecuteContainerNode.jsx";
+import { ExecuteResourceNode } from "./ExecuteResourceNode.jsx";
 import { AnimatedEdge }        from "./AnimatedEdge.jsx";
 import { formatSimWallTime }   from "../../engine/clockUtils.js";
 import { formatDistributionLabel } from "../../model/distributionFormat.js";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
-import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_CARD_HEIGHT } from "./executeLayout.js";
+import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_CARD_HEIGHT, computeCanvasFillHeight } from "./executeLayout.js";
 import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
-import { buildServerTypeIndex, deriveActivityLiveData } from "./activityLiveData.js";
+import { buildServerTypeIndex, deriveActivityLiveData, deriveTypeStats } from "./activityLiveData.js";
 export { DEFAULT_KPI_SLOTS };
 
 // ── Canvas height (maximise-by-default, F9C.9) ───────────────────────────────
 const CANVAS_DRAG_MIN = 250;
 const CANVAS_DRAG_MAX = 900;
-const CANVAS_FILL_FLOOR = 280;
-// Space reserved below the canvas for the collapsed BottomPanel bar + layout gap.
-const CANVAS_RESERVED_BOTTOM = 64;
-
-/**
- * How tall the canvas should be to fill the remaining viewport below it.
- * Pure so it's directly testable without mounting ReactFlow.
- */
-export function computeCanvasFillHeight(topOffset, viewportHeight, reservedBottom = CANVAS_RESERVED_BOTTOM) {
-  if (!Number.isFinite(topOffset) || !Number.isFinite(viewportHeight)) return null;
-  return Math.max(CANVAS_FILL_FLOOR, viewportHeight - topOffset - reservedBottom);
-}
+// computeCanvasFillHeight now lives in executeLayout.js (a pure, component-
+// free module) so the Draw canvas can reuse it too without crossing the
+// Execute/Designer component boundary (ADR-020) — re-exported here so
+// existing imports from this file keep working.
+export { computeCanvasFillHeight };
 
 // ── Configurable KPI bar (F9C.7) ─────────────────────────────────────────────
 
@@ -449,12 +443,13 @@ const liveNodeTypes = {
   activityNode:  ExecuteActivityNode,
   sinkNode:      ExecuteSinkNode,
   containerNode: ExecuteContainerNode,
+  resourceNode:  ExecuteResourceNode,
   sectionPanel:  SectionPanelNode,
 };
 
 const edgeTypes = { animatedEdge: AnimatedEdge };
 
-const FLOW_NODE_TYPE = { source: "sourceNode", queue: "queueNode", activity: "activityNode", sink: "sinkNode", container: "containerNode" };
+const FLOW_NODE_TYPE = { source: "sourceNode", queue: "queueNode", activity: "activityNode", sink: "sinkNode", container: "containerNode", resource: "resourceNode" };
 
 function toFlowNode(node) {
   return {
@@ -900,6 +895,12 @@ export function ExecuteCanvas({
           const level = live?.level ?? (ct?.initialLevel != null ? Number(ct.initialLevel) : 0);
           const capacity = live?.capacity ?? (ct?.capacity != null ? Number(ct.capacity) : null);
           liveData = { level, capacity: Number.isFinite(capacity) ? capacity : null, clock: snap.clock };
+        } else if (node.type === "resource") {
+          // node.refId is the resource (server-role entity type) name.
+          // refId=null here (no c-event scope) since this node covers every
+          // activity that draws from this pool, not just one — see
+          // deriveTypeStats' doc comment.
+          liveData = deriveTypeStats(node.refId, snap, null, model);
         }
       }
       const dimmed = (showSections && focusedSectionId != null && node.sectionId !== focusedSectionId) ||
