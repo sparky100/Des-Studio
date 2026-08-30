@@ -937,7 +937,7 @@ export function ExecuteCanvas({
             )}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 10 }}>
-            {kpiSlots.slice(0, 5).map((key, i) => (
+            {kpiSlots.slice(0, 6).map((key, i) => (
               <KpiSlot
                 key={i}
                 metricKey={key}

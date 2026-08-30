@@ -300,7 +300,7 @@ describe("ResultsWorkspace", () => {
     expect(screen.queryByText("QUEUE REJECTIONS")).not.toBeInTheDocument();
   });
 
-  test("renders an ACTIVITY THROUGHPUT table sorted by completion count when summary.activityCounts is present", () => {
+  test("renders an ACTIVITY THROUGHPUT card per activity, sorted by completion count, when summary.activityCounts is present", () => {
     const activityResults = {
       ...results,
       summary: {
@@ -314,12 +314,11 @@ describe("ResultsWorkspace", () => {
     render(<ResultsWorkspace results={activityResults} model={model} />);
 
     const heading = screen.getByText("ACTIVITY THROUGHPUT");
-    const table = heading.nextElementSibling.querySelector("table");
-    const rows = within(table).getAllByRole("row").slice(1); // drop header row
-    expect(within(rows[0]).getByText("Inspect")).toBeInTheDocument();
-    expect(within(rows[0]).getByText("12")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("Repair Job")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("4")).toBeInTheDocument();
+    const cards = heading.nextElementSibling.children;
+    expect(within(cards[0]).getByText("INSPECT")).toBeInTheDocument();
+    expect(within(cards[0]).getByText("12")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("REPAIR JOB")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("4")).toBeInTheDocument();
   });
 
   test("does not render ACTIVITY THROUGHPUT when summary.activityCounts is absent", () => {

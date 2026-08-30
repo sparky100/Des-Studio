@@ -760,25 +760,17 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
             ACTIVITY THROUGHPUT
           </div>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Activity</th>
-                  <th style={{ textAlign: "right", width: 90, minWidth: 90, color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Completions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activityEntries.map(a => (
-                  <tr key={a.id}>
-                    <td style={{ color: C.text, paddingTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</td>
-                    <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 90 }}>
-                      {formatMetricValue(isMultiRep ? avgPerRun(a.count) : a.count, 0)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+            {activityEntries.map(a => (
+              <div key={a.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
+                  {a.name.toUpperCase()}
+                </div>
+                <div style={{ fontSize: 18, color: C.accent, fontFamily: FONT, fontWeight: 700 }}>
+                  {formatMetricValue(isMultiRep ? avgPerRun(a.count) : a.count, 0)}
+                </div>
+              </div>
+            ))}
           </div>
         </>
       )}
