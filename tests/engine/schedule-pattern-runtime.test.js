@@ -114,3 +114,27 @@ describe('calendarUtilisation — calendar-aware overall utilisation', () => {
     expect(nurse.utilisation).toBeGreaterThan(0.5);
   });
 });
+
+describe('scheduleAdherence (F86.5) — actual server count vs desired capacity', () => {
+  // Bug: __desiredServerCapacity is keyed by lowercase-normalized type name
+  // (see applyShiftChange in phases.js — String(...).trim().toLowerCase()),
+  // but the sampling loop compared it directly against byType, which is keyed
+  // by the entity type's actual-case name (e.g. "Nurse"). For any type name
+  // containing an uppercase letter — i.e. virtually every real model — the
+  // lookup always missed, `matching` never incremented, and scheduleAdherence
+  // read 0% regardless of how well the resource actually tracked its
+  // schedule. Requires collectTimeSeries=true — the sampling only runs
+  // alongside time-series collection.
+  test('is close to 1 for a resource that opens/closes exactly on schedule', () => {
+    const result = buildEngine(calendarModel(), 42, 0, 700, null, 5000, 5000, true).runAll();
+    const nurse = result.summary.perResource?.Nurse;
+    expect(nurse.scheduleAdherence).not.toBeUndefined();
+    expect(nurse.scheduleAdherence).toBeGreaterThan(0.9);
+  });
+
+  test('is undefined for a resource with no schedulePattern', () => {
+    const result = buildEngine(calendarModel(), 42, 0, 700, null, 5000, 5000, true).runAll();
+    const clerk = result.summary.perResource?.Clerk;
+    expect(clerk.scheduleAdherence).toBeUndefined();
+  });
+});
