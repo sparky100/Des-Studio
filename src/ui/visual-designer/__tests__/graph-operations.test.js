@@ -769,13 +769,19 @@ describe('alignNodes with per-node sizes', () => {
 
   test('middleY falls back to NODE_HEIGHT when a node has no measured height', () => {
     const nodes = [
-      { id: 'a', x: 0, y: 0, height: 68 },
-      { id: 'b', x: 100, y: 10 },
+      { id: 'a', x: 0, y: 0, height: 100 },
+      { id: 'b', x: 100, y: 10 }, // no height — must fall back to the live NODE_HEIGHT
       { id: 'c', x: 200, y: 0, height: 120 },
     ];
     const result = alignNodes(nodes, 'middleY');
-    const middles = result.map(node => node.y + heightOf(nodes, node.id) / 2);
-    expect(new Set(middles).size).toBe(1);
+    // Recompute the same middleY formula using heightOf (which itself falls
+    // back to NODE_HEIGHT for 'b') — pins down that the fallback participated,
+    // without assuming the fixture's heights divide evenly (Math.round can
+    // legitimately place each node's center up to 0.5px apart otherwise).
+    const avgMiddle = nodes.reduce((sum, n) => sum + n.y + heightOf(nodes, n.id) / 2, 0) / nodes.length;
+    result.forEach(node => {
+      expect(node.y).toBe(Math.round(avgMiddle - heightOf(nodes, node.id) / 2));
+    });
   });
 
   test('bottom aligns the taller node bottom with shorter node bottoms', () => {

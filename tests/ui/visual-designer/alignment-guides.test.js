@@ -49,16 +49,20 @@ describe("computeAlignmentGuides", () => {
   });
 
   it("finds a center-to-center match distinct from either node's edges", () => {
-    // dragged: top=0, height=68 (default) => center=34.
-    // other: top=14, height=40 (measured) => center=34 — centers coincide exactly,
-    // while every top/bottom combination between the two is >6px apart, so this
-    // can only be a center-to-center match, not a coincidental edge match.
+    // dragged: top=0, default height (NODE_HEIGHT) => center=NODE_HEIGHT/2.
+    // other: height=40 (measured), positioned so its center coincides with the
+    // dragged node's center — while every top/bottom combination between the
+    // two stays well outside the snap threshold, so this can only be a
+    // center-to-center match, not a coincidental edge match.
+    const draggedCenter = NODE_HEIGHT / 2;
+    const otherHeight = 40;
+    const otherTop = draggedCenter - otherHeight / 2;
     const dragged = node("dragged", 0, 0);
-    const other = node("other", 300, 14, { measured: { width: NODE_WIDTH, height: 40 } });
+    const other = node("other", 300, otherTop, { measured: { width: NODE_WIDTH, height: otherHeight } });
     const { guides } = computeAlignmentGuides(dragged, [other], 1);
     const horizontal = guides.find(g => g.orientation === "horizontal");
     expect(horizontal).toBeDefined();
-    expect(horizontal.position).toBe(34);
+    expect(horizontal.position).toBe(draggedCenter);
   });
 
   it("adjusts the snap threshold by zoom — a 5px delta matches at zoom=1 but not at zoom=2", () => {
