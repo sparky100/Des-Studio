@@ -2,10 +2,18 @@
 // Returns a sorted array of { code, severity, resource?, message, suggestion } objects.
 // severity: "critical" | "warning"
 
-export function evaluateResultsHealth(results = {}, model = {}) {
+export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
   const flags = [];
   const summary = results?.summary || {};
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
+  // A handful of summary/perQueue fields (blockingCount, balkCount, total arrivals)
+  // are stored as raw sums across all replications in a batch — divide by the
+  // replication count so Key Findings reports the same per-run average as the
+  // rest of the results view, not a batch-wide total.
+  const n = Number.isFinite(repCount) && repCount > 0 ? repCount : 1;
+  const isMultiRep = n > 1;
+  const perRun = (total) => (isMultiRep && Number.isFinite(total) ? Math.round(total / n) : total);
+  const perRunSuffix = isMultiRep ? " per run" : "";
 
   // H1 — Resource utilisation ≥ 85% / ≥ 90% / ≥ 95%
   // Prefer the calendar-aware figure for scheduled resources — the plain
@@ -64,9 +72,12 @@ export function evaluateResultsHealth(results = {}, model = {}) {
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
     const zeroDur = Number(stats?.maxSustainedZeroUtil);
     if (!Number.isFinite(zeroDur) || zeroDur <= 0) continue;
-    const totalArrived = Number(summary.total ?? summary.arrived ?? summary.totalArrived ?? 0);
-    const avgInterArrival = totalArrived > 0 && summary.avgSojourn != null
-      ? (summary.maxSimTime ?? (summary.terminatingState?.finalTime ?? 100)) / totalArrived
+    // summary.total is summed across all replications in a batch — bring it back
+    // down to a single run's arrival count before pairing it with maxSimTime
+    // (a single run's duration) to get a per-run average inter-arrival time.
+    const totalArrivedPerRun = Number(summary.total ?? summary.arrived ?? summary.totalArrived ?? 0) / n;
+    const avgInterArrival = totalArrivedPerRun > 0 && summary.avgSojourn != null
+      ? (summary.maxSimTime ?? (summary.terminatingState?.finalTime ?? 100)) / totalArrivedPerRun
       : null;
     if (avgInterArrival != null && zeroDur > avgInterArrival * 5) {
       flags.push({ code: "H11", severity: "warning", resource: typeName,
@@ -154,14 +165,18 @@ export function evaluateResultsHealth(results = {}, model = {}) {
     if (Number.isFinite(capacity) && capacity > 0) {
       const blockingCount = Number(results?.perQueue?.[queue.name]?.blockingCount) || 0;
       if (blockingCount <= 0) continue;
+      // blockedPct is a ratio of two batch-wide totals, so it's already
+      // scale-invariant — only the displayed absolute count needs to come
+      // back down to a per-run average.
       const blockedPct = totalArrived > 0 ? blockingCount / totalArrived : 0;
+      const blockingCountAvg = perRun(blockingCount);
       if (blockedPct >= 0.1) {
         flags.push({ code: "H4", severity: "critical", resource: queue.name,
-          message: `${queue.name} rejected ${blockingCount} arrival(s) at capacity (${Math.round(blockedPct * 100)}% of all arrivals) — the queue is full and entities are being blocked or overflowed.`,
+          message: `${queue.name} rejected ${blockingCountAvg} arrival(s) at capacity${perRunSuffix} (${Math.round(blockedPct * 100)}% of all arrivals) — the queue is full and entities are being blocked or overflowed.`,
           suggestion: `Increase ${queue.name} capacity or add an overflow route to handle peak demand.` });
       } else {
         flags.push({ code: "H4", severity: "warning", resource: queue.name,
-          message: `${queue.name} rejected ${blockingCount} arrival(s) at capacity — the queue reached its limit of ${capacity}.`,
+          message: `${queue.name} rejected ${blockingCountAvg} arrival(s) at capacity${perRunSuffix} — the queue reached its limit of ${capacity}.`,
           suggestion: `Consider increasing ${queue.name} capacity or adding an overflow route.` });
       }
     } else {
@@ -177,14 +192,18 @@ export function evaluateResultsHealth(results = {}, model = {}) {
   for (const queue of model?.queues || []) {
     const balkCount = Number(results?.perQueue?.[queue.name]?.balkCount) || 0;
     if (balkCount <= 0) continue;
+    // balkPct is a ratio of two batch-wide totals, so it's already
+    // scale-invariant — only the displayed absolute count needs to come
+    // back down to a per-run average.
     const balkPct = totalArrived > 0 ? balkCount / totalArrived : 0;
+    const balkCountAvg = perRun(balkCount);
     if (balkPct >= 0.1) {
       flags.push({ code: "H6", severity: "critical", resource: queue.name,
-        message: `${balkCount} entities balked at ${queue.name} (${Math.round(balkPct * 100)}% of all arrivals) — they left rather than join this queue.`,
+        message: `${balkCountAvg} entities balked at ${queue.name}${perRunSuffix} (${Math.round(balkPct * 100)}% of all arrivals) — they left rather than join this queue.`,
         suggestion: `Review ${queue.name}'s balk probability/condition — a large share of demand is being turned away before it even joins the queue.` });
     } else {
       flags.push({ code: "H6", severity: "warning", resource: queue.name,
-        message: `${balkCount} entit${balkCount === 1 ? "y" : "ies"} balked at ${queue.name} — declined to join rather than wait.`,
+        message: `${balkCountAvg} entit${balkCountAvg === 1 ? "y" : "ies"} balked at ${queue.name}${perRunSuffix} — declined to join rather than wait.`,
         suggestion: `Review ${queue.name}'s balk probability/condition if this is unintended.` });
     }
   }

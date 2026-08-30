@@ -1744,8 +1744,16 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     return next;
   });
 
+  // Replication count for avg-per-run display in sections, journey panels, and key findings
+  const storedRepCountRW = Array.isArray(results?.replications)
+    ? results.replications.length
+    : (typeof results?.replications === 'number' && results.replications > 1 ? results.replications : null);
+  const repCountRW = replicationResults.length > 0
+    ? replicationResults.length
+    : (results?.summary?.numReplications ?? results?.runtimeMetrics?.replications ?? storedRepCountRW ?? 1);
+
   const chartModel = useMemo(() => buildResultsViewModel(results, results?._model_snapshot ?? model, { activeSectionIds }), [results, model, activeSectionIds]);
-  const healthFlags = useMemo(() => evaluateResultsHealth(results, model), [results, model]);
+  const healthFlags = useMemo(() => evaluateResultsHealth(results, model, repCountRW), [results, model, repCountRW]);
 
   const handleExportLLMBundle = useCallback(() => {
     const expConfig = results?._experiment_config || {};
@@ -1855,14 +1863,6 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const hasSectionResults = !!(model?.sections?.length && sectionStats);
   const queueJourneys = results?.summary?.queueJourneys;
   const hasQueueJourneys = !!queueJourneys && Object.keys(queueJourneys).length > 0;
-
-  // Replication count for avg-per-run display in sections and journey panels
-  const storedRepCountRW = Array.isArray(results?.replications)
-    ? results.replications.length
-    : (typeof results?.replications === 'number' && results.replications > 1 ? results.replications : null);
-  const repCountRW = replicationResults.length > 0
-    ? replicationResults.length
-    : (results?.summary?.numReplications ?? results?.runtimeMetrics?.replications ?? storedRepCountRW ?? 1);
 
   // ── Shared responsive grid style used by all three chart sections ───────────
   const CHART_GRID = {

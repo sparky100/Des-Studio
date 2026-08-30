@@ -69,6 +69,38 @@ describe("evaluateResultsHealth — H4 (capacity blocking)", () => {
   });
 });
 
+describe("evaluateResultsHealth — H4 (capacity blocking) with a batch of replications", () => {
+  test("displayed count is the per-run average, not the batch-wide total", () => {
+    const model = makeModel([{ name: "Main Queue", capacity: 5 }]);
+    // blockingCount is stored summed across all replications (batch convention) —
+    // 50 rejections across 10 reps is 5/run, matching the rest of the results view.
+    const results = { summary: { total: 1000 }, perQueue: { "Main Queue": { blockingCount: 50 } } };
+    const flags = evaluateResultsHealth(results, model, 10);
+    const h4 = flags.find(f => f.code === "H4");
+    expect(h4).toBeDefined();
+    expect(h4.message).toContain("rejected 5 arrival(s)");
+    expect(h4.message).not.toContain("50");
+  });
+
+  test("with no repCount given (single run), the raw total is shown unchanged", () => {
+    const model = makeModel([{ name: "Main Queue", capacity: 5 }]);
+    const results = { summary: { total: 100 }, perQueue: { "Main Queue": { blockingCount: 15 } } };
+    const flags = evaluateResultsHealth(results, model);
+    const h4 = flags.find(f => f.code === "H4");
+    expect(h4.message).toContain("rejected 15 arrival(s)");
+  });
+
+  test("severity is still driven by the batch-wide percentage, not the averaged count", () => {
+    const model = makeModel([{ name: "Main Queue", capacity: 5 }]);
+    // 150/1000 = 15% of all arrivals, well over the 10% critical threshold,
+    // even though the per-run average (15) looks small in isolation.
+    const results = { summary: { total: 1000 }, perQueue: { "Main Queue": { blockingCount: 150 } } };
+    const flags = evaluateResultsHealth(results, model, 10);
+    const h4 = flags.find(f => f.code === "H4");
+    expect(h4.severity).toBe("critical");
+  });
+});
+
 describe("evaluateResultsHealth — H6 (balking)", () => {
   test("no flag when balkCount is 0", () => {
     const model = makeModel([{ name: "Main Queue", balkProbability: 0.5 }]);
@@ -104,6 +136,42 @@ describe("evaluateResultsHealth — H6 (balking)", () => {
     };
     const flags = evaluateResultsHealth(results, model);
     expect(flags.some(f => f.code === "H6")).toBe(false);
+  });
+});
+
+describe("evaluateResultsHealth — H6 (balking) with a batch of replications", () => {
+  test("displayed count is the per-run average, not the batch-wide total", () => {
+    const model = makeModel([{ name: "Main Queue", balkProbability: 0.5 }]);
+    // balkCount is stored summed across all replications — 40 across 5 reps is 8/run.
+    const results = { summary: { total: 500 }, perQueue: { "Main Queue": { balkCount: 40 } } };
+    const flags = evaluateResultsHealth(results, model, 5);
+    const h6 = flags.find(f => f.code === "H6");
+    expect(h6).toBeDefined();
+    expect(h6.message).toContain("8 entities balked");
+    expect(h6.message).not.toContain("40 entities");
+  });
+});
+
+describe("evaluateResultsHealth — H11 (zombie asset) with a batch of replications", () => {
+  test("per-run arrival count (not the batch total) sets the inter-arrival baseline", () => {
+    const model = makeModel([]);
+    const baseResults = (total) => ({
+      summary: {
+        total,
+        avgSojourn: 10,
+        maxSimTime: 100,
+        perResource: { Server1: { maxSustainedZeroUtil: 40 } },
+      },
+    });
+    // Single run: 20 arrivals over 100 time units → avg inter-arrival 5 → idle-for-40 is > 5x → flags.
+    const singleRun = evaluateResultsHealth(baseResults(20), model, 1);
+    expect(singleRun.some(f => f.code === "H11")).toBe(true);
+
+    // Same per-run arrival rate, but stored as a 5-replication batch total (100 = 20/run).
+    // Using the raw batch total instead of the per-run average would inflate the
+    // apparent arrival rate 5x and suppress this flag — it must still fire.
+    const batch = evaluateResultsHealth(baseResults(100), model, 5);
+    expect(batch.some(f => f.code === "H11")).toBe(true);
   });
 });
 
