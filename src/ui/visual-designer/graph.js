@@ -6,6 +6,7 @@
 import dagre from "@dagrejs/dagre";
 import { clean, effectText, macroCalls } from "../../model/macroParser.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
+import { formatDistributionLabel } from "../../model/distributionFormat.js";
 // Pure constants module (imports only dagre) — safe to share with Draw per
 // ADR-020: no Execute *components* cross into the designer.
 import { EXEC_CARD_WIDTH, EXEC_NODE_HEIGHT } from "../execute/executeLayout.js";
@@ -166,13 +167,16 @@ export function deriveGraphFromModel(model = {}) {
     const id = nodeId(VISUAL_NODE_TYPES.QUEUE, queue.id || queue.name);
     queueNodeByName.set(norm(queue.name), id);
     const cap = queue.capacity ? parseInt(queue.capacity, 10) : null;
+    const validCap = Number.isFinite(cap) && cap > 0 ? cap : null;
     nodes.push({
       id,
       type: VISUAL_NODE_TYPES.QUEUE,
       refId: queue.id || null,
       label: queue.name || "Queue",
       sublabel: queue.customerType ? `Accepts ${queue.customerType}` : "Queue",
-      capacity: Number.isFinite(cap) && cap > 0 ? cap : null,
+      detail: validCap ? `cap ${validCap}${queue.overflowDestination ? ` → ${queue.overflowDestination}` : ""}` : undefined,
+      badges: [queue.discipline || "FIFO"],
+      capacity: validCap,
     });
   });
 
@@ -210,6 +214,7 @@ export function deriveGraphFromModel(model = {}) {
         refId: event.id || null,
         label: event.name || `${customerType} Arrival`,
         sublabel: `Adds ${customerType} to ${queueName}`,
+        detail: formatDistributionLabel(event.schedules ?? event.schedule) || undefined,
         badges: hasFeed ? ["feed"] : [],
       });
       if (targetQueueId) {
@@ -271,6 +276,7 @@ export function deriveGraphFromModel(model = {}) {
         : serverNames.length
           ? `${serverNames.join(", ")} · Priority ${event.priority || 1}`
           : `Priority ${event.priority || 1}`,
+      detail: formatDistributionLabel(event.cSchedules) || undefined,
       badges: hasWhen ? ["when"] : [],
     });
 
@@ -482,7 +488,9 @@ export function deriveGraphFromModel(model = {}) {
       type: VISUAL_NODE_TYPES.CONTAINER,
       refId: id,
       label: id,
-      sublabel: ct.capacity != null && ct.capacity !== "" ? `cap ${ct.capacity}` : "unbounded",
+      sublabel: ct.capacity != null && ct.capacity !== ""
+        ? `cap ${ct.capacity}${ct.initialLevel != null ? `, start ${ct.initialLevel}` : ""}`
+        : "unbounded",
       ...sectionByElemId.get(id),
     });
   });
@@ -519,6 +527,16 @@ export function deriveGraphFromModel(model = {}) {
   dedupedEdges.forEach(edge => {
     if (!adjacency.has(edge.from)) adjacency.set(edge.from, []);
     adjacency.get(edge.from).push(edge);
+  });
+
+  // An Activity with more than one outgoing routing/terminal edge branches —
+  // flag it with a "N routes" badge. A plain single-destination RELEASE
+  // already produces exactly one such edge, so "1 route" never shows.
+  dedupedNodes.forEach(node => {
+    if (node.type !== VISUAL_NODE_TYPES.ACTIVITY) return;
+    const routeCount = (adjacency.get(node.id) || [])
+      .filter(edge => edge.source === "routing" || edge.source === "terminal").length;
+    if (routeCount > 1) node.badges.push(`${routeCount} routes`);
   });
 
   function visit(nodeId) {

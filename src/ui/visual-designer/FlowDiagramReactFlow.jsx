@@ -127,6 +127,9 @@ function DesNode({ data, selected }) {
       {!!data.sublabel && (
         <div title={data.sublabel} style={{ color: C.muted, fontSize: 9, lineHeight: 1.35 }}>{data.sublabel}</div>
       )}
+      {!!data.detail && (
+        <div title={data.detail} style={{ color: C.muted, fontSize: 9, lineHeight: 1.35 }}>{data.detail}</div>
+      )}
       {!!data.badges?.length && (
         <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 2 }}>
           {data.badges.map(badge => (

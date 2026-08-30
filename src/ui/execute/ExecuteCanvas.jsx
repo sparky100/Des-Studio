@@ -22,6 +22,7 @@ import { ExecuteActivityNode } from "./ExecuteActivityNode.jsx";
 import { ExecuteSinkNode }     from "./ExecuteSinkNode.jsx";
 import { AnimatedEdge }        from "./AnimatedEdge.jsx";
 import { formatSimWallTime }   from "../../engine/clockUtils.js";
+import { formatDistributionLabel } from "../../model/distributionFormat.js";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_NODE_HEIGHT } from "./executeLayout.js";
 import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
@@ -249,28 +250,12 @@ export function detectRoutingEvents(prevSnap, currSnap, graph) {
 }
 
 // ── Return a short human-readable label for the inter-arrival distribution of a b-event.
-// Walks the schedules array to find the first row that declares a distribution.
 function getInterArrivalLabel(bEvent) {
   if (!bEvent) return null;
   const schedules = Array.isArray(bEvent.schedules) ? bEvent.schedules
     : Array.isArray(bEvent.schedule) ? bEvent.schedule
     : [];
-  for (const row of schedules) {
-    const distType = row.dist || row.distType || row.distribution?.type || "";
-    if (!distType) continue;
-    const params = row.distParams || row.params || row.distribution || {};
-    switch (String(distType).toLowerCase()) {
-      case "exponential": return params.rate   != null ? `Exp(λ=${params.rate})`                        : "Exp";
-      case "uniform":     return params.min    != null ? `U(${params.min}, ${params.max})`              : "Uniform";
-      case "normal":      return params.mean   != null ? `N(μ=${params.mean}, σ=${params.stdDev})`      : "Normal";
-      case "fixed":       return params.value  != null ? `Fixed(${params.value})`                       : "Fixed";
-      case "triangular":  return                         `Tri(${params.min}, ${params.mode}, ${params.max})`;
-      case "lognormal":   return params.logMean!= null ? `LogN(μ=${params.logMean})`                    : "LogNormal";
-      case "empirical":   return params.values != null ? `Empirical(n=${params.values.length})`         : "Empirical";
-      default:            return String(distType).charAt(0).toUpperCase() + String(distType).slice(1);
-    }
-  }
-  return null;
+  return formatDistributionLabel(schedules);
 }
 
 // Parse customer type from a b-event's ARRIVE(CustomerType, ...) effect.
