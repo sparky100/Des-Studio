@@ -379,7 +379,7 @@ describe("deriveGraphFromModel — container nodes", () => {
     const containerNodes = graph.nodes.filter(node => node.type === "container");
     expect(containerNodes).toHaveLength(2);
     expect(containerNodes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "container:Tank", type: "container", refId: "Tank", sublabel: "cap 1000" }),
+      expect.objectContaining({ id: "container:Tank", type: "container", refId: "Tank", sublabel: "cap 1000, start 500" }),
       expect.objectContaining({ id: "container:Buffer", type: "container", refId: "Buffer", sublabel: "unbounded" }),
     ]));
 
@@ -684,5 +684,106 @@ describe("deriveGraphFromModel — back-edge detection (F12.6)", () => {
     expect(loopEdges[0]).toEqual(expect.objectContaining({ from: "activity:activity2", to: "queue:q-a" }));
     expect(graph.edges.find(e => e.from === "activity:repair" && e.to === "queue:pickup-q").loop).toBeFalsy();
     expect(graph.edges.find(e => e.from === "activity:timeaway" && e.to === "queue:pickup-q").loop).toBeFalsy();
+  });
+});
+
+// Standard-size Draw nodes freed up room for extra "at a glance" design-time
+// info — see docs plan for the node-sizing change. These cover the new
+// data.detail line and the discipline/route-count badges built on top of it.
+describe("deriveGraphFromModel — canvas detail lines and badges", () => {
+  it("always shows a discipline badge on queue nodes, defaulting to FIFO", () => {
+    const graph = deriveGraphFromModel(minimalModel); // queue discipline: "FIFO"
+    const queue = graph.nodes.find(n => n.id === "queue:waiting");
+    expect(queue.badges).toEqual(["FIFO"]);
+  });
+
+  it("defaults the discipline badge to FIFO when the queue omits discipline", () => {
+    const model = {
+      ...minimalModel,
+      queues: [{ id: "waiting", name: "Waiting", customerType: "Customer" }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const queue = graph.nodes.find(n => n.id === "queue:waiting");
+    expect(queue.badges).toEqual(["FIFO"]);
+  });
+
+  it("shows a custom discipline badge verbatim, e.g. a priority-attribute queue", () => {
+    const model = {
+      ...minimalModel,
+      queues: [{ id: "waiting", name: "Waiting", customerType: "Customer", discipline: "PRIORITY(severity)" }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const queue = graph.nodes.find(n => n.id === "queue:waiting");
+    expect(queue.badges).toEqual(["PRIORITY(severity)"]);
+  });
+
+  it("shows no capacity detail line for an uncapacitated queue", () => {
+    const graph = deriveGraphFromModel(minimalModel);
+    const queue = graph.nodes.find(n => n.id === "queue:waiting");
+    expect(queue.detail).toBeUndefined();
+  });
+
+  it("shows a capacity detail line, plus overflow destination when set", () => {
+    const model = {
+      ...minimalModel,
+      queues: [{
+        id: "waiting", name: "Waiting", customerType: "Customer", discipline: "FIFO",
+        capacity: "12", overflowDestination: "Overflow Queue",
+      }],
+    };
+    const graph = deriveGraphFromModel(model);
+    const queue = graph.nodes.find(n => n.id === "queue:waiting");
+    expect(queue.detail).toBe("cap 12 → Overflow Queue");
+  });
+
+  it("shows the source's inter-arrival distribution as a detail line when declared", () => {
+    const model = {
+      ...minimalModel,
+      bEvents: [
+        { ...minimalModel.bEvents[0], schedules: [{ dist: "Exponential", distParams: { rate: 0.5 } }] },
+        minimalModel.bEvents[1],
+      ],
+    };
+    const graph = deriveGraphFromModel(model);
+    const source = graph.nodes.find(n => n.type === "source");
+    expect(source.detail).toBe("Exp(λ=0.5)");
+  });
+
+  it("leaves the source detail line unset when no inter-arrival distribution is declared", () => {
+    const graph = deriveGraphFromModel(minimalModel); // bEvents[0].schedules: []
+    const source = graph.nodes.find(n => n.type === "source");
+    expect(source.detail).toBeUndefined();
+  });
+
+  it("shows the activity's service-time distribution as a detail line", () => {
+    const graph = deriveGraphFromModel(minimalModel); // cSchedules[0]: Fixed(1)
+    const activity = graph.nodes.find(n => n.id === "activity:start-service");
+    expect(activity.detail).toBe("Fixed(1)");
+  });
+
+  it("does not badge a single-destination activity with a route count", () => {
+    const graph = deriveGraphFromModel(twoStageModel);
+    const activity = graph.nodes.find(n => n.id === "activity:start-triage");
+    expect(activity.badges.some(b => /route/.test(b))).toBe(false);
+  });
+
+  it("badges a branching activity with its route count", () => {
+    const graph = deriveGraphFromModel({
+      ...twoStageModel,
+      bEvents: twoStageModel.bEvents.map(event =>
+        event.id === "triage-complete"
+          ? {
+              ...event,
+              effect: "RELEASE(Triage Nurse)",
+              probabilisticRouting: [
+                { probability: 0.25, queueName: null },
+                { probability: 0.75, queueName: "Consultant Queue" },
+              ],
+            }
+          : event
+      ),
+    });
+    const activity = graph.nodes.find(n => n.id === "activity:start-triage");
+    expect(activity.badges).toContain("2 routes");
   });
 });
