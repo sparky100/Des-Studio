@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -6,11 +6,22 @@ import { disciplineBase, disciplineAttr } from "../shared/utils.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
-const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[], containers=[], errorFilter=null, onClearErrorFilter, onChange}) => {
+const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[], containers=[], errorFilter=null, onClearErrorFilter, onChange, focusQueueId=null, onFocusHandled}) => {
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
   const [activeSectionIds,setActiveSectionIds]=useState([]);
+  const cardRefs=useRef({});
+
+  useEffect(()=>{
+    if(!focusQueueId)return;
+    setExpandedIds(prev=>new Set([...prev,focusQueueId]));
+    setFilterText("");
+    setTimeout(()=>{
+      cardRefs.current[focusQueueId]?.scrollIntoView({behavior:"smooth",block:"start"});
+      onFocusHandled?.();
+    },80);
+  },[focusQueueId]);
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(queues.map(q=>q.id)));
@@ -124,7 +135,7 @@ const QueueEditor = ({queues=[], entityTypes=[], stateVariables=[], sections=[],
         ].join(" · ");
 
         return (
-          <div key={q.id} style={{background:C.bg,border:`1px solid ${C.cEvent}33`,
+          <div key={q.id} ref={el=>cardRefs.current[q.id]=el} style={{background:C.bg,border:`1px solid ${C.cEvent}33`,
             borderLeft:`3px solid ${C.cEvent}`,borderRadius:6,padding:12,
             display:'flex',flexDirection:'column',gap:isExpanded?10:0}}>
 

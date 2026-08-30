@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
@@ -56,12 +56,23 @@ const wouldCreateInheritanceCycle=(childId,candidateParentId,allTypes)=>{
   return false;
 };
 
-const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=null,timeUnit="minutes",errorFilter=null,onClearErrorFilter,skills=[],onChange})=>{
+const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=null,timeUnit="minutes",errorFilter=null,onClearErrorFilter,skills=[],onChange,focusEntityTypeId=null,onFocusHandled})=>{
   const { C, FONT } = useTheme();
   const { confirm, confirmDialog } = useConfirm();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
   const [activeSectionIds,setActiveSectionIds]=useState([]);
+  const cardRefs=useRef({});
+
+  useEffect(()=>{
+    if(!focusEntityTypeId)return;
+    setExpandedIds(prev=>new Set([...prev,focusEntityTypeId]));
+    setFilterText("");
+    setTimeout(()=>{
+      cardRefs.current[focusEntityTypeId]?.scrollIntoView({behavior:"smooth",block:"start"});
+      onFocusHandled?.();
+    },80);
+  },[focusEntityTypeId]);
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(types.map(e=>e.id)));
@@ -233,7 +244,7 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
         const roleSummary=et.role==="server"?(hasShifts?`resource · pool ${shiftFirstCap} · ${et.shiftSchedule.length} shift${et.shiftSchedule.length!==1?"s":""}`:`resource · pool ${et.count||1}`):"arriving entity";
 
         return (
-          <div key={et.id} style={{background:C.bg,border:`1px solid ${et.role==="server"?C.server+"44":C.cEvent+"33"}`,
+          <div key={et.id} ref={el=>cardRefs.current[et.id]=el} style={{background:C.bg,border:`1px solid ${et.role==="server"?C.server+"44":C.cEvent+"33"}`,
             borderLeft:`3px solid ${et.role==="server"?C.server:C.cEvent}`,borderRadius:6,padding:12,display:"flex",flexDirection:"column",gap:8}}>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <button onClick={()=>toggleExpand(et.id)}

@@ -1,6 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { QueueEditor } from '../../../src/ui/editors/index.jsx';
+
+// jsdom doesn't implement scrollIntoView — the focus/expand effect below calls it.
+if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
 
 describe('QueueEditor', () => {
   it('describes named queues and customer binding without implicit queue copy', () => {
@@ -68,5 +71,42 @@ describe('QueueEditor', () => {
     screen.getByDisplayValue('— variable —');
     expect(screen.getByRole('option', { name: 'BikesAvailable — current level' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'BikesAvailable — capacity' })).toBeInTheDocument();
+  });
+
+  it('focusQueueId auto-expands the matching card, clears any filter, and reports back via onFocusHandled', async () => {
+    const handleFocusHandled = vi.fn();
+    const { rerender } = render(
+      <QueueEditor
+        queues={[
+          { id: 'q1', name: 'Triage', customerType: 'Patient', discipline: 'FIFO' },
+          { id: 'q2', name: 'Treatment', customerType: 'Patient', discipline: 'FIFO' },
+        ]}
+        entityTypes={[{ id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] }]}
+        onChange={vi.fn()}
+        focusQueueId={null}
+        onFocusHandled={handleFocusHandled}
+      />
+    );
+
+    // Both cards collapsed by default — expanded-only content isn't shown yet.
+    expect(screen.queryByText('ACCEPTS')).not.toBeInTheDocument();
+
+    rerender(
+      <QueueEditor
+        queues={[
+          { id: 'q1', name: 'Triage', customerType: 'Patient', discipline: 'FIFO' },
+          { id: 'q2', name: 'Treatment', customerType: 'Patient', discipline: 'FIFO' },
+        ]}
+        entityTypes={[{ id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] }]}
+        onChange={vi.fn()}
+        focusQueueId="q2"
+        onFocusHandled={handleFocusHandled}
+      />
+    );
+
+    // The focused card ("Treatment") expands; the other ("Triage") stays collapsed.
+    await waitFor(() => expect(screen.getByDisplayValue('Treatment').closest('div').parentElement.textContent).toContain('ACCEPTS'));
+    expect(screen.getByDisplayValue('Triage').closest('div').parentElement.textContent).not.toContain('ACCEPTS');
+    await waitFor(() => expect(handleFocusHandled).toHaveBeenCalled());
   });
 });
