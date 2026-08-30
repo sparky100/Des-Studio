@@ -1251,6 +1251,23 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
   };
 }
 
+// Repair a specific LLM formatting slip seen on the very first key of a JSON
+// response: the model emits the key's opening quote immediately followed by its
+// value, with no closing quote/colon/opening quote in between — e.g.
+// `{ "analysis## What Happened\n...` instead of `{ "analysis": "## What Happened\n...`.
+// The value itself is otherwise well-formed and properly closed later in the string,
+// so inserting the missing `": "` right after the key name is enough to make the
+// whole thing valid JSON again. Scoped to the start of the object and to the
+// caller's known first key(s), so it never touches an already-valid response or
+// rewrites legitimate content that happens to contain the same word elsewhere.
+function repairMissingKeyColon(json, keys = ["analysis"]) {
+  let out = json;
+  for (const key of keys) {
+    out = out.replace(new RegExp(`^(\\s*\\{\\s*)"${key}(?!"\\s*:)`), `$1"${key}": "`);
+  }
+  return out;
+}
+
 export function parseSuggestionResponse(text = "") {
   const stripStructuredBlock = (value = "") => value
     .replace(/<json>[\s\S]*?(?:<\/json>|$)/gi, "")
@@ -1321,8 +1338,9 @@ export function parseSuggestionResponse(text = "") {
         .filter(s => typeof s.rank === "number" && s.change && typeof s.change.type === "string")
     : [];
 
-  const repaired = tryRepair(rawJson);
-  for (const candidate of [rawJson, repaired, tryTruncate(rawJson), tryTruncate(repaired)]) {
+  const colonFixed = repairMissingKeyColon(rawJson);
+  const repaired = tryRepair(colonFixed);
+  for (const candidate of [colonFixed, repaired, tryTruncate(colonFixed), tryTruncate(repaired)]) {
     try {
       const parsed = JSON.parse(candidate);
       const analysis = typeof parsed.analysis === "string" ? parsed.analysis : (narrativeOnly || "");
@@ -1614,10 +1632,12 @@ export function parsePlanRefinementResponse(text = "") {
   const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
   const incompleteFence = !fenceMatch && text.match(/```json\s*([\s\S]+)$/);
   const tagMatch = !fenceMatch && !incompleteFence && text.match(/<json>\s*([\s\S]*?)<\/json>/i);
-  const rawJson = fenceMatch ? fenceMatch[1].trim()
+  const rawJson = repairMissingKeyColon(
+    fenceMatch ? fenceMatch[1].trim()
     : incompleteFence ? incompleteFence[1].trim()
     : tagMatch ? tagMatch[1].trim()
-    : text.trim();
+    : text.trim()
+  );
 
   const mapRecommendations = (arr) => Array.isArray(arr)
     ? arr.filter(r => r && typeof r === "object").map(r => ({
