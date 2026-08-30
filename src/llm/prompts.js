@@ -342,9 +342,10 @@ function extractBEvents(model = {}, results = {}) {
   });
 }
 
-function extractCEvents(model = {}) {
+function extractCEvents(model = {}, results = {}) {
   const cEvents = model.cEvents || [];
   if (!cEvents.length) return undefined;
+  const activityCounts = results.summary?.activityCounts || {};
   return cEvents.map(ev => {
     const effects = Array.isArray(ev.effect) ? ev.effect : (ev.effect ? [ev.effect] : []);
     const effectTypes = [...new Set(
@@ -368,6 +369,7 @@ function extractCEvents(model = {}) {
       entry.dist = cScheds[0].dist;
       entry.distParams = cScheds[0].distParams || {};
     }
+    if (activityCounts[ev.id]) entry.fireCount = activityCounts[ev.id].count;
     return entry;
   });
 }
@@ -465,6 +467,8 @@ export function buildKpis(model = {}, results = {}) {
   if (summary.maxWIP) kpis.maxWIP = finiteOrNull(summary.maxWIP);
   const containerLevels = extractContainerLevels(model, summary);
   if (containerLevels) kpis.containerLevels = containerLevels;
+  if (summary.activityCounts) kpis.activityCounts = summary.activityCounts;
+  if (summary.preemptCounts) kpis.preemptCounts = summary.preemptCounts;
   if (summary.phaseCTruncated) kpis.warning_phaseCTruncated = true;
   if (summary.warnings?.length) kpis.warnings = summary.warnings;
   if (summary.terminatingState) {
@@ -1001,7 +1005,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     }));
 
   const bEvents = extractBEvents(model, results);
-  const cEvents = extractCEvents(model);
+  const cEvents = extractCEvents(model, results);
   const stateVariables = (model.stateVariables || []).filter(v => v.name).map(v => ({
     name: v.name, initialValue: v.initialValue ?? null,
   }));
@@ -1111,7 +1115,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     name: q.name, discipline: q.discipline, capacity: q.capacity ?? null,
   }));
   const bEvents = extractBEvents(model, results);
-  const cEvents = extractCEvents(model);
+  const cEvents = extractCEvents(model, results);
   // Strip distribution params from Explain prompt — the LLM must read KPI values
   // from kpis and goalGaps, not recompute them from raw arrival/service distributions.
   if (bEvents) for (const ev of bEvents) { delete ev.dist; delete ev.distParams; }
@@ -1900,7 +1904,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
 
   const goalGaps = buildGoalGaps(model, aggregateStats, { ...getSummary(combinedResult), waitDist: combinedResult?.waitDist, runtimeMetrics: combinedResult?.runtimeMetrics });
   const bEvents = extractBEvents(model, combinedResult);
-  const cEvents = extractCEvents(model);
+  const cEvents = extractCEvents(model, combinedResult);
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
@@ -2006,7 +2010,7 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
     name: v.name, initialValue: v.initialValue ?? null,
   }));
   const bEvents = extractBEvents(model, results || {});
-  const cEvents = extractCEvents(model);
+  const cEvents = extractCEvents(model, results || {});
   const kpis = buildKpis(model, results || {});
 
   const payload = {

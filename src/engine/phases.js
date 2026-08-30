@@ -134,7 +134,7 @@ export function applyShiftChange(ev, ctx) {
             ? Math.max(0, srv._scheduledDuration - (ctx.clock - (cust.serviceStart ?? ctx.clock)))
             : 0;
           cust._remainingService = rem;
-          preemptCustomer(cust, srv, ctx.clock, ctx);
+          preemptCustomer(cust, srv, ctx.clock, ctx, "SHIFT_CHANGE");
         }
         const idx = ctx.entities.indexOf(srv);
         if (idx >= 0) ctx.entities.splice(idx, 1);
@@ -515,9 +515,6 @@ export function fireBEvent(ev, ctx) {
  * @param {any} ctx
  */
 export function fireCEvent(ev, ctx) {
-  // Count C-event firing
-  if (ev.id) ctx.incEventCount?.(ev.id);
-
   const { clock, model } = ctx;
   const effectCtx = { ...ctx, felRef: null, entityFilter: ev.entityFilter ?? null, ceventName: ev.name };
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
@@ -529,6 +526,16 @@ export function fireCEvent(ev, ctx) {
   if (noOp) {
     return { msgs, felEntries, noOp: true };
   }
+
+  // Count C-event firing — only genuine (non-no-op) fires. A JOIN re-scanned
+  // on every Phase C pass while waiting for the rest of its split family stays
+  // condition-true but effect-no-op on every pass until the family completes;
+  // counting those would (a) make activityCounts mean "evaluation attempts"
+  // rather than "completions" and (b) make the count depend on how many passes
+  // the dirty-set filter (enableFilteredPhaseC) happens to re-scan it on — an
+  // internal optimization that must stay invisible to simulation semantics
+  // (see tests/engine/phase-c-dirty-filter.test.js).
+  if (ev.id) ctx.incEventCount?.(ev.id);
 
   // Resolve attribute-conditional cSchedules.
   // When ANY entry has a `when` predicate, first-match semantics apply:

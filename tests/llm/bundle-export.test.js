@@ -111,6 +111,32 @@ describe("buildLLMBundle", () => {
     expect(bundle).not.toContain("### Per-Skill Utilisation");
   });
 
+  it("includes an Activity Throughput table when summary has activityCounts", () => {
+    const resultsWithActivity = { ...singleRepResults, summary: { ...singleRepResults.summary, activityCounts: { startService: { name: "StartService", count: 88 } } } };
+    const bundle = buildLLMBundle(model, resultsWithActivity, { replications: 1 });
+    expect(bundle).toContain("### Activity Throughput");
+    expect(bundle).toContain("StartService");
+    expect(bundle).toContain("88");
+  });
+
+  it("omits the Activity Throughput table when summary has no activityCounts", () => {
+    const bundle = buildLLMBundle(model, singleRepResults, { replications: 1 });
+    expect(bundle).not.toContain("### Activity Throughput");
+  });
+
+  it("includes a Preemptions table when summary has preemptCounts", () => {
+    const resultsWithPreempt = { ...singleRepResults, summary: { ...singleRepResults.summary, preemptCounts: { Patient: { total: 4, byReason: { PREEMPT: 3, FAILURE: 1 } } } } };
+    const bundle = buildLLMBundle(model, resultsWithPreempt, { replications: 1 });
+    expect(bundle).toContain("### Preemptions");
+    expect(bundle).toContain("Patient");
+    expect(bundle).toContain("3 PREEMPT, 1 FAILURE");
+  });
+
+  it("omits the Preemptions table when summary has no preemptCounts", () => {
+    const bundle = buildLLMBundle(model, singleRepResults, { replications: 1 });
+    expect(bundle).not.toContain("### Preemptions");
+  });
+
   it("produces output that exceeds the 2000-word prompt cap without truncation", () => {
     const bundle = buildLLMBundle(model, multiRepResults, {
       runLabel: "Test run",

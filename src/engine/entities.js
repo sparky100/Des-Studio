@@ -593,11 +593,25 @@ export function selectVictimServer(busyServers, criterion, entities, index, warn
  * @param {Record<string, any>} srv
  * @param {number} clock
  * @param {Record<string, any>} ctx
+ * @param {string} [reason] — what triggered this interruption: "PREEMPT" (default,
+ *   the PREEMPT macro), "FAIL" (the FAIL macro), "FAILURE" (automatic MTBF/MTTR
+ *   breakdown), or "SHIFT_CHANGE" (reactive capacity retirement when a shift closes).
  */
-export function preemptCustomer(cust, srv, clock, ctx) {
+export function preemptCustomer(cust, srv, clock, ctx, reason = "PREEMPT") {
   const scheduledDuration = srv._scheduledDuration || 0;
   const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
   cust._remainingService  = remainingService;
+  // Count the interruption by the customer's entity type (F-request: "how many times
+  // was a RepairJob preempted?") with a reason breakdown, mirroring the __balked/
+  // __reneged state-counter convention and the endedBy BALK/BLOCK split from balked
+  // entities (PR #517) — one shared shape for "why did this entity's flow get cut short".
+  if (ctx?.state) {
+    const state = ctx.state;
+    state.__preemptCounts = state.__preemptCounts || {};
+    const acc = state.__preemptCounts[cust.type] || (state.__preemptCounts[cust.type] = { total: 0, byReason: {} });
+    acc.total++;
+    acc.byReason[reason] = (acc.byReason[reason] || 0) + 1;
+  }
   releaseServerClaim(cust, srv, clock);
   // Release any other co-seized servers still claimed by this customer (COSEIZE pattern) —
   // otherwise a PREEMPT/FAIL on one co-seized resource leaves the others stuck "busy" forever.

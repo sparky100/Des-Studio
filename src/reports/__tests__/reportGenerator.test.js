@@ -183,6 +183,27 @@ describe('generateReport', () => {
     expect(html).toContain('Tank');
   });
 
+  test('includes activity throughput when summary has activityCounts (HTML)', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithActivity = { ...minimalResults, summary: { ...minimalResults.summary, activityCounts: { repair: { name: 'Repair Job', count: 4 } } } };
+
+    const html = await generateReport(minimalModel, resultsWithActivity, experimentConfig, runMeta);
+
+    expect(html).toContain('Activity throughput');
+    expect(html).toContain('Repair Job');
+  });
+
+  test('includes preemptions when summary has preemptCounts (HTML)', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithPreempt = { ...minimalResults, summary: { ...minimalResults.summary, preemptCounts: { RepairJob: { total: 4, byReason: { PREEMPT: 3, FAILURE: 1 } } } } };
+
+    const html = await generateReport(minimalModel, resultsWithPreempt, experimentConfig, runMeta);
+
+    expect(html).toContain('Preemptions');
+    expect(html).toContain('RepairJob');
+    expect(html).toContain('3 PREEMPT, 1 FAILURE');
+  });
+
   test('includes entity types in appendix', async () => {
     callLLMOnce.mockResolvedValue('');
 
@@ -381,6 +402,27 @@ describe('generateReport — markdown format', () => {
 
     expect(md).toContain('### Container Levels');
     expect(md).toContain('Tank');
+  });
+
+  test('includes Activity Throughput when summary has activityCounts', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithActivity = { ...minimalResults, summary: { ...minimalResults.summary, activityCounts: { repair: { name: 'Repair Job', count: 4 } } } };
+
+    const md = await generateReport(minimalModel, resultsWithActivity, experimentConfig, runMeta, { format: 'markdown' });
+
+    expect(md).toContain('### Activity Throughput');
+    expect(md).toContain('Repair Job');
+  });
+
+  test('includes Preemptions when summary has preemptCounts', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithPreempt = { ...minimalResults, summary: { ...minimalResults.summary, preemptCounts: { RepairJob: { total: 4, byReason: { PREEMPT: 3, FAILURE: 1 } } } } };
+
+    const md = await generateReport(minimalModel, resultsWithPreempt, experimentConfig, runMeta, { format: 'markdown' });
+
+    expect(md).toContain('### Preemptions');
+    expect(md).toContain('RepairJob');
+    expect(md).toContain('3 PREEMPT, 1 FAILURE');
   });
 
   test('includes a balked KPI row in Key Results', async () => {

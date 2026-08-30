@@ -77,4 +77,56 @@ describe("buildResultsXlsx — container/skill/rejection sheets", () => {
     expect(repSheet.rows[0]).toContain("Balked");
     expect(repSheet.rows[1]).toContain(2);
   });
+
+  it("includes a Preempted row on the Summary sheet and a Preempted column on the Replications sheet", async () => {
+    await buildResultsXlsx({
+      results: {
+        summary: {
+          total: 10, served: 6, reneged: 0,
+          preemptCounts: { RepairJob: { total: 3, byReason: { PREEMPT: 3 } } },
+        },
+      },
+      model: { name: "Bike Shop" },
+    });
+    const summarySheet = findSheet("Summary");
+    expect(summarySheet.rows).toContainEqual(["Preempted", 3]);
+    const repSheet = findSheet("Replications");
+    expect(repSheet.rows[0]).toContain("Preempted");
+    expect(repSheet.rows[1]).toContain(3);
+  });
+
+  it("adds a Preemptions sheet with one row per (entity type, reason) when summary.preemptCounts is present", async () => {
+    await buildResultsXlsx({
+      results: {
+        summary: {
+          preemptCounts: { RepairJob: { total: 4, byReason: { PREEMPT: 3, FAILURE: 1 } } },
+        },
+      },
+      model: { name: "Bike Shop" },
+    });
+    const sheet = findSheet("Preemptions");
+    expect(sheet).toBeDefined();
+    expect(sheet.rows).toContainEqual(["RepairJob", 4, "PREEMPT", 3]);
+    expect(sheet.rows).toContainEqual(["", "", "FAILURE", 1]);
+  });
+
+  it("omits the Preemptions sheet when there is no preemption data", async () => {
+    await buildResultsXlsx({ results: { summary: {} }, model: { name: "Plain" } });
+    expect(findSheet("Preemptions")).toBeUndefined();
+  });
+
+  it("adds an Activity Throughput sheet when summary.activityCounts is present", async () => {
+    await buildResultsXlsx({
+      results: { summary: { activityCounts: { repair: { name: "Repair Job", count: 4 } } } },
+      model: { name: "Bike Shop" },
+    });
+    const sheet = findSheet("Activity Throughput");
+    expect(sheet).toBeDefined();
+    expect(sheet.rows).toContainEqual(["Repair Job", 4]);
+  });
+
+  it("omits the Activity Throughput sheet when there is no activity data", async () => {
+    await buildResultsXlsx({ results: { summary: {} }, model: { name: "Plain" } });
+    expect(findSheet("Activity Throughput")).toBeUndefined();
+  });
 });

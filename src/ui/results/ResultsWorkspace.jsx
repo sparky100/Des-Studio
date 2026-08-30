@@ -169,6 +169,15 @@ function MetricStrip({ items }) {
   );
 }
 
+// Human-readable labels for preemptCustomer()'s `reason` tags (src/engine/entities.js) —
+// what interrupted an entity's service mid-way.
+const PREEMPT_REASON_LABEL = {
+  PREEMPT: "preempted",
+  FAIL: "manually failed",
+  FAILURE: "broke down",
+  SHIFT_CHANGE: "capacity reduced",
+};
+
 // ── StatCards ─────────────────────────────────────────────────────────────────
 // Unified stat footer used by both line-chart panels and histogram panels.
 // Replaces the ad-hoc MetricStrip that appeared below time-series charts.
@@ -451,6 +460,12 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     .map(([type, r]) => [type, r.skillUtil]);
   const rejectionEntries = Object.entries(results?.perQueue || {})
     .filter(([, counts]) => (counts.balkCount || 0) > 0 || (counts.blockingCount || 0) > 0);
+  const activityEntries = Object.entries(summary.activityCounts || {})
+    .map(([id, entry]) => ({ id, name: entry.name || id, count: entry.count || 0 }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const preemptEntries = Object.entries(summary.preemptCounts || {})
+    .map(([type, acc]) => ({ type, total: acc.total || 0, byReason: acc.byReason || {} }))
+    .sort((a, b) => b.total - a.total || a.type.localeCompare(b.type));
   const outcomeEntries = Object.entries(summary.outcomes || {})
     .map(([routeId, outcome]) => ({
       routeId,
@@ -737,6 +752,62 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                 ))}
               </tbody>
             </table>
+          </div>
+        </>
+      )}
+      {activityEntries.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+            ACTIVITY THROUGHPUT
+          </div>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Activity</th>
+                  <th style={{ textAlign: "right", width: 90, minWidth: 90, color: C.muted, fontWeight: 600, fontSize: 11, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}`, lineHeight: 1.4 }}>Completions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activityEntries.map(a => (
+                  <tr key={a.id}>
+                    <td style={{ color: C.text, paddingTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</td>
+                    <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 90 }}>
+                      {formatMetricValue(isMultiRep ? avgPerRun(a.count) : a.count, 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+      {preemptEntries.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+            INTERRUPTIONS
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+            {preemptEntries.map(p => {
+              const reasonParts = Object.entries(p.byReason)
+                .filter(([, n]) => n > 0)
+                .map(([reason, n]) => `${formatMetricValue(isMultiRep ? avgPerRun(n) : n, 0)} ${PREEMPT_REASON_LABEL[reason] || reason.toLowerCase()}`);
+              return (
+                <div key={p.type} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                  <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
+                    {p.type.toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: 18, color: C.amber, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>
+                    {formatMetricValue(isMultiRep ? avgPerRun(p.total) : p.total, 0)}
+                  </div>
+                  {reasonParts.length > 0 && (
+                    <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                      {reasonParts.join(" · ")}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}

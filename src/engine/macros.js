@@ -1206,7 +1206,7 @@ export const MACROS = [
           const custId = srv.currentCustId;
           const cust = findEntityById(ctx.index, entities, custId);
           if (cust) {
-            const remainingService = preemptCustomer(cust, srv, clock, ctx);
+            const remainingService = preemptCustomer(cust, srv, clock, ctx, "FAIL");
             msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
           }
         }

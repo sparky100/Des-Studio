@@ -845,6 +845,33 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     ${htmlTable(['Queue', 'Balked', 'Blocked'], rejectionRows)}`;
   }
 
+  // Activity throughput table — how many times each activity actually completed.
+  let activityHtml = '';
+  const activityEntries = Object.entries(summary.activityCounts || {})
+    .map(([id, entry]) => [entry.name || id, entry.count || 0])
+    .sort((a, b) => b[1] - a[1]);
+  if (activityEntries.length) {
+    activityHtml = `<h3>Activity throughput</h3>
+    <p class="note">How many times each activity actually completed during the run.</p>
+    ${htmlTable(['Activity', 'Completions'], activityEntries.map(([name, count]) => [name, String(count)]))}`;
+  }
+
+  // Preemptions table — entities interrupted mid-service (PREEMPT/FAIL macros,
+  // an automatic MTBF/MTTR breakdown, or a shift-close capacity reduction).
+  let preemptHtml = '';
+  const preemptTypeEntries = Object.entries(summary.preemptCounts || {})
+    .sort(([, a], [, b]) => (b.total || 0) - (a.total || 0));
+  if (preemptTypeEntries.length) {
+    const preemptRows = preemptTypeEntries.map(([type, acc]) => [
+      type,
+      String(acc.total || 0),
+      Object.entries(acc.byReason || {}).filter(([, n]) => n > 0).map(([r, n]) => `${n} ${r}`).join(', '),
+    ]);
+    preemptHtml = `<h3>Preemptions</h3>
+    <p class="note">Entities whose service was interrupted mid-way — by a PREEMPT macro (bumped for a higher priority), a FAIL macro, an automatic breakdown (FAILURE), or a shift-close capacity reduction (SHIFT_CHANGE).</p>
+    ${htmlTable(['Entity type', 'Total', 'Reason breakdown'], preemptRows)}`;
+  }
+
   const outcomeHasTimings = outcomes.some(r => r.avgWait != null || r.avgSojourn != null);
   const outcomesHtml = outcomes.length
     ? `<h3>Journey outcomes</h3>
@@ -933,6 +960,8 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     ${utilChartHtml || utilTableHtml ? `<h3>Resource utilisation</h3>${utilChartHtml}${utilTableHtml}` : ''}
     ${containerHtml}
     ${rejectionHtml}
+    ${activityHtml}
+    ${preemptHtml}
     ${timeSeriesHtml}
     ${planVsActualHtml}
     ${goalHtml}
@@ -1263,6 +1292,33 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
       String(counts.blockingCount || 0),
     ]);
     lines.push(mdTable(['Queue', 'Balked', 'Blocked'], mdRejectionRows));
+    lines.push('');
+  }
+
+  // Activity throughput — how many times each activity actually completed
+  const mdActivityEntries = Object.entries(summary.activityCounts || {})
+    .map(([id, entry]) => [entry.name || id, entry.count || 0])
+    .sort((a, b) => b[1] - a[1]);
+  if (mdActivityEntries.length) {
+    lines.push('### Activity Throughput');
+    lines.push('');
+    lines.push(mdTable(['Activity', 'Completions'], mdActivityEntries.map(([name, count]) => [name, String(count)])));
+    lines.push('');
+  }
+
+  // Preemptions — entities interrupted mid-service (PREEMPT/FAIL macros, an
+  // automatic MTBF/MTTR breakdown, or a shift-close capacity reduction).
+  const mdPreemptTypeEntries = Object.entries(summary.preemptCounts || {})
+    .sort(([, a], [, b]) => (b.total || 0) - (a.total || 0));
+  if (mdPreemptTypeEntries.length) {
+    lines.push('### Preemptions');
+    lines.push('');
+    const mdPreemptRows = mdPreemptTypeEntries.map(([type, acc]) => [
+      type,
+      String(acc.total || 0),
+      Object.entries(acc.byReason || {}).filter(([, n]) => n > 0).map(([r, n]) => `${n} ${r}`).join(', '),
+    ]);
+    lines.push(mdTable(['Entity type', 'Total', 'Reason breakdown'], mdPreemptRows));
     lines.push('');
   }
 

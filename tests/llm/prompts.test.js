@@ -392,6 +392,54 @@ describe("LLM prompt builders", () => {
       expect(nurse.skillUtil).toBeUndefined();
     });
 
+    it("includes activityCounts and preemptCounts in kpis when present", () => {
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        {
+          summary: {
+            total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2,
+            activityCounts: { assign: { name: "Start Service", count: 7 } },
+            preemptCounts: { RepairJob: { total: 4, byReason: { PREEMPT: 3, FAILURE: 1 } } },
+          },
+        }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.kpis.activityCounts).toEqual({ assign: { name: "Start Service", count: 7 } });
+      expect(payload.kpis.preemptCounts).toEqual({ RepairJob: { total: 4, byReason: { PREEMPT: 3, FAILURE: 1 } } });
+    });
+
+    it("omits activityCounts and preemptCounts from kpis when absent", () => {
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.kpis.activityCounts).toBeUndefined();
+      expect(payload.kpis.preemptCounts).toBeUndefined();
+    });
+
+    it("enriches a cEvent with fireCount from summary.activityCounts", () => {
+      const modelWithCEvents = { ...model, cEvents: [{ id: "assign", name: "Start Service", effect: "ASSIGN(Main queue, Nurse)" }] };
+      const prompt = buildSuggestionPrompt(
+        modelWithCEvents, {},
+        { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2, activityCounts: { assign: { name: "Start Service", count: 9 } } } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      const cEvent = payload.model.cEvents.find(e => e.name === "Start Service");
+      expect(cEvent.fireCount).toBe(9);
+    });
+
+    it("omits fireCount from a cEvent when it never fired", () => {
+      const modelWithCEvents = { ...model, cEvents: [{ id: "assign", name: "Start Service", effect: "ASSIGN(Main queue, Nurse)" }] };
+      const prompt = buildSuggestionPrompt(
+        modelWithCEvents, {},
+        { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      const cEvent = payload.model.cEvents.find(e => e.name === "Start Service");
+      expect(cEvent.fireCount).toBeUndefined();
+    });
+
     it("includes warnings and phaseCTruncated in kpis when set", () => {
       const prompt = buildSuggestionPrompt(
         model, {},
