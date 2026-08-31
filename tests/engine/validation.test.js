@@ -2466,3 +2466,48 @@ describe("JOIN validation (Sprint 98)", () => {
     expect(v68.length).toBeGreaterThan(0);
   });
 });
+
+// ── V44: context arriving via a useEntityCtx-scheduled completion bEvent ─────
+// A DELAY (or ASSIGN) completion bEvent whose only effect is SET_ATTR is a
+// sanctioned shape (schema doc §6.2) — its context entity is seeded by the
+// triggering cEvent's cSchedules useEntityCtx:true, not by a macro earlier in
+// its own effect. V44 must recognise that external context and stay quiet,
+// while still catching a genuinely context-less SET_ATTR elsewhere.
+describe("V44: useEntityCtx-scheduled bEvent context", () => {
+  const delayModel = (bEventEffect) => ({
+    entityTypes: [
+      { id: "et_j", name: "Job", role: "customer", attrDefs: [{ name: "taskPriority", mutable: true, valueType: "number", defaultValue: 2 }] },
+      { id: "et_s", name: "Staff", role: "server", count: 1, attrDefs: [] },
+    ],
+    stateVariables: [],
+    queues: [
+      { id: "q_wait", name: "WaitQueue", discipline: "FIFO" },
+      { id: "q_delay", name: "DelayQueue", discipline: "FIFO" },
+    ],
+    bEvents: [
+      { id: "b_arr", name: "Arrival", effect: ["ARRIVE(Job, WaitQueue)"], schedules: [] },
+      { id: "b_delay_done", name: "Delay Done", effect: bEventEffect, schedules: [],
+        probabilisticRouting: [{ probability: 1, queueName: null }] },
+    ],
+    cEvents: [
+      { id: "c_hold", name: "Hold", condition: "queue(WaitQueue).length > 0",
+        effect: "DELAY(WaitQueue)",
+        cSchedules: [{ eventId: "b_delay_done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+    ],
+  });
+
+  it("stays quiet for a bare SET_ATTR on a bEvent scheduled with useEntityCtx:true", () => {
+    const model = delayModel(["SET_ATTR(taskPriority, 2)"]);
+    const { warnings } = validateModel(model);
+    expect(warnings.filter(w => w.code === "V44")).toHaveLength(0);
+  });
+
+  it("still fires for a bare SET_ATTR with no useEntityCtx scheduling anywhere", () => {
+    const model = delayModel(["SET_ATTR(taskPriority, 2)"]);
+    model.cEvents[0].cSchedules[0].useEntityCtx = false;
+    const { warnings } = validateModel(model);
+    expect(warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V44", affectedIds: { eventIds: ["b_delay_done"] } }),
+    ]));
+  });
+});

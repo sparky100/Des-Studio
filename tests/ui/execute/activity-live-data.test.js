@@ -1,7 +1,29 @@
 import { describe, test, expect } from "vitest";
-import { extractServerTypes, buildServerTypeIndex, deriveActivityLiveData } from "../../../src/ui/execute/activityLiveData.js";
+import { extractServerTypes, isDelayEffect, buildServerTypeIndex, deriveActivityLiveData } from "../../../src/ui/execute/activityLiveData.js";
+
+describe("isDelayEffect", () => {
+  test("true for a bare DELAY(...) effect", () => {
+    expect(isDelayEffect("DELAY(Recovery Queue)")).toBe(true);
+  });
+
+  test("true for DELAY with a slot-capacity argument", () => {
+    expect(isDelayEffect("DELAY(BookingQueue, 3)")).toBe(true);
+  });
+
+  test("false for an ASSIGN effect", () => {
+    expect(isDelayEffect("ASSIGN(Queue, Server)")).toBe(false);
+  });
+
+  test("false for no effect", () => {
+    expect(isDelayEffect(null)).toBe(false);
+  });
+});
 
 describe("extractServerTypes", () => {
+  test("DELAY returns no server types (extractServerTypes doesn't recognise it — that's isDelayEffect's job)", () => {
+    expect(extractServerTypes("DELAY(Recovery Queue)")).toEqual([]);
+  });
+
   test("ASSIGN returns a single server type", () => {
     const effect = [{ macro: "ASSIGN", args: ["Queue", "Server"] }];
     expect(extractServerTypes(effect)).toEqual(["Server"]);
@@ -328,5 +350,77 @@ describe("deriveActivityLiveData", () => {
     expect(live.capacity).toBe(3);
     expect(live.busyCount).toBe(1);
     expect(live.activityBusyCount).toBe(1);
+  });
+
+  test("a DELAY activity counts entities genuinely held in delay instead of the model-wide server total (regression)", () => {
+    // Before this fix, DELAY(...) was never matched by extractServerTypes
+    // (it's not ASSIGN/COSEIZE/PREEMPT-family), so this fell through to the
+    // "no serverTypes" branch exactly like the PREEMPT/ASSIGN cases above did
+    // before their own fixes: capacity = every server entity in the whole
+    // model, busyCount/activityBusyCount hardcoded to 0 — "0 active" even
+    // though a HireJob is genuinely delayed here right now.
+    const delayModel = {
+      cEvents: [{ id: "ce-out-on-hire", name: "Bike Out On Hire", effect: "DELAY(Out On Hire Queue)" }],
+    };
+    const serverTypeIndex = buildServerTypeIndex(delayModel.cEvents, [{ name: "Staff", role: "server", count: "3" }]);
+    const snap = makeSnap({
+      entities: [
+        { id: 1, type: "Staff", role: "server", status: "busy" },
+        { id: 2, type: "Staff", role: "server", status: "idle" },
+        { id: 3, type: "Staff", role: "server", status: "idle" },
+        { id: 100, type: "HireJob", role: "customer", status: "serving", _isDelay: true, ceventName: "Bike Out On Hire", serviceStart: 5, arrivalTime: 5 },
+      ],
+    });
+    const live = deriveActivityLiveData(snap, "ce-out-on-hire", serverTypeIndex, delayModel);
+    expect(live.isDelay).toBe(true);
+    expect(live.capacity).toBeNull();
+    expect(live.busyCount).toBe(1);
+    expect(live.activityBusyCount).toBe(1);
+    expect(live.delayedEntities).toHaveLength(1);
+    expect(live.delayedEntities[0].id).toBe(100);
+  });
+
+  test("two different DELAY activities don't bleed counts into each other (regression)", () => {
+    // A model can have more than one DELAY-macro activity (e.g. the bike
+    // shop's "Bike Out On Hire" and "Delay from Notification to Collection"
+    // stages). Each must count only the entities IT put into delay, scoped
+    // by ceventName — not every delayed entity in the whole model.
+    const delayModel = {
+      cEvents: [
+        { id: "ce-out-on-hire", name: "Bike Out On Hire", effect: "DELAY(Out On Hire Queue)" },
+        { id: "ce-travel", name: "Delay from Notification to Collection", effect: "DELAY(Awaiting Collection)" },
+      ],
+    };
+    const serverTypeIndex = buildServerTypeIndex(delayModel.cEvents, [{ name: "Staff", role: "server", count: "3" }]);
+    const snap = makeSnap({
+      entities: [
+        { id: 100, type: "HireJob", role: "customer", status: "serving", _isDelay: true, ceventName: "Bike Out On Hire" },
+        { id: 101, type: "HireJob", role: "customer", status: "serving", _isDelay: true, ceventName: "Bike Out On Hire" },
+        { id: 200, type: "RepairJob", role: "customer", status: "serving", _isDelay: true, ceventName: "Delay from Notification to Collection" },
+      ],
+    });
+    const outOnHireLive = deriveActivityLiveData(snap, "ce-out-on-hire", serverTypeIndex, delayModel);
+    const travelLive = deriveActivityLiveData(snap, "ce-travel", serverTypeIndex, delayModel);
+    expect(outOnHireLive.activityBusyCount).toBe(2);
+    expect(travelLive.activityBusyCount).toBe(1);
+    expect(outOnHireLive.delayedEntities.map(e => e.id)).toEqual([100, 101]);
+    expect(travelLive.delayedEntities.map(e => e.id)).toEqual([200]);
+  });
+
+  test("a DELAY activity excludes entities already routed onward (status no longer serving under this ceventName)", () => {
+    const delayModel = {
+      cEvents: [{ id: "ce-out-on-hire", name: "Bike Out On Hire", effect: "DELAY(Out On Hire Queue)" }],
+    };
+    const serverTypeIndex = buildServerTypeIndex(delayModel.cEvents, [{ name: "Staff", role: "server", count: "3" }]);
+    const snap = makeSnap({
+      entities: [
+        // Already moved on to check-in — waiting, not serving, and no longer
+        // carrying this c-event's name.
+        { id: 100, type: "HireJob", role: "customer", status: "waiting", _isDelay: true, ceventName: "Serve Check-in" },
+      ],
+    });
+    const live = deriveActivityLiveData(snap, "ce-out-on-hire", serverTypeIndex, delayModel);
+    expect(live.activityBusyCount).toBe(0);
+    expect(live.delayedEntities).toHaveLength(0);
   });
 });

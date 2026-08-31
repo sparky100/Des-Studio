@@ -1,9 +1,12 @@
 // ui/execute/ExecuteActivityNode.jsx — live Activity node for the Execute canvas
 // Registered as nodeType "activityNode" in ExecuteCanvas.
 // data.liveData shape: { serverTypeName, capacity, busyCount, activityBusyCount,
-//                        idleCount, utilisation, completionSignal, startSignal }
+//                        idleCount, utilisation, completionSignal, startSignal, isDelay }
 // activityBusyCount = servers currently serving THIS activity only.
 // busyCount = ALL servers of this type currently busy (pool-level).
+// isDelay = true for a DELAY-macro activity (no server ever claimed) — there
+// is no resource pool to show, so activityBusyCount instead counts entities
+// currently held in delay by THIS c-event specifically (see activityLiveData.js).
 // completionSignal is this activity's OWN scheduled-follow-on-event fire count
 // (see activityLiveData.js's completionSignalFor) — strictly increases only
 // when THIS c-event's own work finishes, not the model-wide snap.served total
@@ -289,7 +292,12 @@ export function ExecuteActivityNode({ data }) {
       </div>
 
       {live ? (
-        rows ? (
+        live.isDelay ? (
+          // No resource pool exists for a DELAY activity — show only the
+          // count of entities this activity currently has held in delay,
+          // never a server-square grid (there's no server to draw one for).
+          <ActiveCount activityBusyCount={activityBusyCount} />
+        ) : rows ? (
           <>
             {rows.slice(0, MAX_ROWS_SHOWN).map((row, i) => (
               <div key={row.serverTypeName ?? i} style={{ display: "flex", flexDirection: "column", gap: 5 }}>

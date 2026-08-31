@@ -56,6 +56,18 @@ export function extractAssignAnySkill(effect) {
   return m ? m[1].trim() : null;
 }
 
+// True when a c-event's effect uses the DELAY macro (no server ever claimed).
+// extractServerTypes never matches DELAY(...) — it's not ASSIGN/COSEIZE/
+// PREEMPT-family — so a DELAY-only c-event always falls into the "not
+// indexed" branch of deriveActivityLiveData below. It needs its own live-data
+// shape there: no resource pool exists to show, and the pool math (busy/idle
+// against a server fleet) can never count a delayed *customer* since it isn't
+// a server at all — hence "0 active" for an activity that may well have
+// entities genuinely delayed in it right now.
+export function isDelayEffect(effect) {
+  return /\bDELAY\s*\(/i.test(effectText(effect));
+}
+
 // Build c-event id -> { serverTypes, capacities, ceventName } for activity node enrichment.
 // capacity per type comes from model.entityTypes[role=server].count (defaults to 1).
 export function buildServerTypeIndex(cEvents, entityTypes) {
@@ -195,6 +207,38 @@ export function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
     // same as the indexed path below, rather than the model-wide snap.served.
     const ce = (model?.cEvents || []).find(c => c.id === refId);
     const scheduledEventIds = (ce?.cSchedules || []).map(cs => cs.eventId).filter(Boolean);
+
+    if (isDelayEffect(ce?.effect)) {
+      // DELAY claims no server, so there's no resource pool to show — count
+      // entities THIS specific c-event currently has held in delay instead.
+      // Scoped by ceventName (set by the DELAY macro to ctx.ceventName, same
+      // field ASSIGN uses for activityBusyCount) so a model with more than
+      // one DELAY activity doesn't bleed one activity's count into another's.
+      const delayedEntities = (snap.entities || []).filter(e =>
+        e.role !== "server" && e._isDelay && e.status === "serving" && e.ceventName === ce?.name
+      );
+      return {
+        serverTypeName: null,
+        isDelay: true,
+        capacity: null,
+        busyCount: delayedEntities.length,
+        activityBusyCount: delayedEntities.length,
+        idleCount: 0,
+        failedCount: 0,
+        suspendedCount: 0,
+        utilisation: null,
+        completionSignal: completionSignalFor(scheduledEventIds, snap),
+        startSignal: snap.eventCounts?.[refId] || 0,
+        servers: [],
+        // Full entity objects (not a stripped summary) so the sidebar can list
+        // them the same way ExecuteQueueNode/QueueDetail list waiting entities —
+        // id, type, attrs.entityId, elapsed time via clock - serviceStart.
+        delayedEntities,
+        perType: [],
+        clock: snap.clock,
+      };
+    }
+
     return {
       serverTypeName: null,
       capacity: (snap.entities || []).filter(e => e.role === "server").length,
