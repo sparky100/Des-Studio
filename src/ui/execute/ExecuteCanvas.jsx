@@ -21,7 +21,6 @@ import { ExecuteQueueNode }    from "./ExecuteQueueNode.jsx";
 import { ExecuteActivityNode } from "./ExecuteActivityNode.jsx";
 import { ExecuteSinkNode }     from "./ExecuteSinkNode.jsx";
 import { ExecuteContainerNode } from "./ExecuteContainerNode.jsx";
-import { ExecuteResourceNode } from "./ExecuteResourceNode.jsx";
 import { AnimatedEdge }        from "./AnimatedEdge.jsx";
 import { formatSimWallTime }   from "../../engine/clockUtils.js";
 import { formatDistributionLabel } from "../../model/distributionFormat.js";
@@ -30,7 +29,7 @@ import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_CARD_HEIGHT, computeCanvasF
 import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
-import { buildServerTypeIndex, deriveActivityLiveData, deriveTypeStats } from "./activityLiveData.js";
+import { buildServerTypeIndex, deriveActivityLiveData } from "./activityLiveData.js";
 export { DEFAULT_KPI_SLOTS };
 
 // ── Canvas height (maximise-by-default, F9C.9) ───────────────────────────────
@@ -443,13 +442,12 @@ const liveNodeTypes = {
   activityNode:  ExecuteActivityNode,
   sinkNode:      ExecuteSinkNode,
   containerNode: ExecuteContainerNode,
-  resourceNode:  ExecuteResourceNode,
   sectionPanel:  SectionPanelNode,
 };
 
 const edgeTypes = { animatedEdge: AnimatedEdge };
 
-const FLOW_NODE_TYPE = { source: "sourceNode", queue: "queueNode", activity: "activityNode", sink: "sinkNode", container: "containerNode", resource: "resourceNode" };
+const FLOW_NODE_TYPE = { source: "sourceNode", queue: "queueNode", activity: "activityNode", sink: "sinkNode", container: "containerNode" };
 
 function toFlowNode(node) {
   return {
@@ -895,12 +893,6 @@ export function ExecuteCanvas({
           const level = live?.level ?? (ct?.initialLevel != null ? Number(ct.initialLevel) : 0);
           const capacity = live?.capacity ?? (ct?.capacity != null ? Number(ct.capacity) : null);
           liveData = { level, capacity: Number.isFinite(capacity) ? capacity : null, clock: snap.clock };
-        } else if (node.type === "resource") {
-          // node.refId is the resource (server-role entity type) name.
-          // refId=null here (no c-event scope) since this node covers every
-          // activity that draws from this pool, not just one — see
-          // deriveTypeStats' doc comment.
-          liveData = deriveTypeStats(node.refId, snap, null, model);
         }
       }
       const dimmed = (showSections && focusedSectionId != null && node.sectionId !== focusedSectionId) ||

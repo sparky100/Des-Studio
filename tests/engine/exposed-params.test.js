@@ -27,6 +27,7 @@ const model = {
   ],
   cEvents: [],
   stateVariables: [{ name: "threshold", initialValue: "10" }],
+  containerTypes: [{ id: "BikesAvailable", capacity: 10, initialLevel: 5 }],
 };
 
 describe("resolveExposedParams", () => {
@@ -78,6 +79,24 @@ describe("resolveExposedParams", () => {
     expect(resolved[0].currentValue).toBe(Infinity);
   });
 
+  it("resolves a container's capacity and initial-level params", () => {
+    const { resolved, orphans } = resolveExposedParams({
+      ...model,
+      exposedParams: [
+        { path: "containerTypes.BikesAvailable.capacity", businessLabel: "Bikes in the fleet" },
+        { path: "containerTypes.BikesAvailable.initialLevel" },
+      ],
+    });
+    expect(orphans).toEqual([]);
+    expect(resolved).toHaveLength(2);
+    expect(resolved[0].type).toBe("containerCapacity");
+    expect(resolved[0].targetId).toBe("BikesAvailable");
+    expect(resolved[0].currentValue).toBe(10);
+    expect(resolved[0].displayLabel).toBe("Bikes in the fleet");
+    expect(resolved[1].type).toBe("containerInitialLevel");
+    expect(resolved[1].currentValue).toBe(5);
+  });
+
   it("reports entries whose target no longer exists as orphans, preserving order of the rest", () => {
     const { resolved, orphans } = resolveExposedParams({
       ...model,
@@ -117,6 +136,13 @@ describe("clampExposedValue", () => {
     expect(clampExposedValue({ type: "queueCapacity" }, 7)).toBe(7);
     // An explicit owner-set min overrides the implicit floor
     expect(clampExposedValue({ type: "queueCapacity", min: 5 }, 2)).toBe(5);
+  });
+
+  it("floors containerCapacity at 1 when the owner set no explicit min (0 would mean unlimited)", () => {
+    expect(clampExposedValue({ type: "containerCapacity" }, 0)).toBe(1);
+    expect(clampExposedValue({ type: "containerCapacity" }, -3)).toBe(1);
+    expect(clampExposedValue({ type: "containerCapacity" }, 7)).toBe(7);
+    expect(clampExposedValue({ type: "containerCapacity", min: 5 }, 2)).toBe(5);
   });
 
   it("passes non-finite input through unchanged for the caller to reject", () => {

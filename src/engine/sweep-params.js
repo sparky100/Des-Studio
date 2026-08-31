@@ -171,6 +171,27 @@ export function enumerateSweepableParams(model) {
     });
   }
 
+  // 6. Container capacity and initial level
+  for (const ct of (model.containerTypes || [])) {
+    if (!ct.id) continue;
+    params.push({
+      type: "containerCapacity",
+      targetId: ct.id,
+      label: `${ct.id} — capacity`,
+      description: `Maximum level of container '${ct.id}' (blank = unbounded)`,
+      currentValue: ct.capacity == null || ct.capacity === "" ? Infinity : parseFloat(ct.capacity) || 0,
+      path: `containerTypes.${ct.id}.capacity`,
+    });
+    params.push({
+      type: "containerInitialLevel",
+      targetId: ct.id,
+      label: `${ct.id} — initial level`,
+      description: `Starting level of container '${ct.id}'`,
+      currentValue: parseFloat(ct.initialLevel) || 0,
+      path: `containerTypes.${ct.id}.initialLevel`,
+    });
+  }
+
   return params;
 }
 
@@ -255,6 +276,18 @@ export function applySweepValues(model, sweepConfigs = []) {
       case "stateVarInit": {
         const sv = (clone.stateVariables || []).find((/** @type {any} */ s) => s.name === paramConfig.targetId);
         if (sv) sv.initialValue = String(value);
+        break;
+      }
+      case "containerCapacity": {
+        const ct = (clone.containerTypes || []).find((/** @type {any} */ c) => c.id === paramConfig.targetId);
+        if (ct) {
+          ct.capacity = value === Infinity || value <= 0 ? null : Math.round(value);
+        }
+        break;
+      }
+      case "containerInitialLevel": {
+        const ct = (clone.containerTypes || []).find((/** @type {any} */ c) => c.id === paramConfig.targetId);
+        if (ct) ct.initialLevel = Math.max(0, Math.round(value));
         break;
       }
     }

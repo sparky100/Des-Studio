@@ -29,7 +29,6 @@ export const VISUAL_NODE_TYPES = {
   ACTIVITY: "activity",
   SINK: "sink",
   CONTAINER: "container",
-  RESOURCE: "resource",
 };
 
 // True for an edge representing one of an Activity's outgoing routes (a plain
@@ -134,7 +133,6 @@ export function deriveGraphFromModel(model = {}) {
   const cEvents = model.cEvents || [];
   const queues = model.queues || [];
   const containerTypes = model.containerTypes || [];
-  const resourceTypes = (model.entityTypes || []).filter(et => et.role === "server");
   const dataSources = model.dataSources || [];
   const sections = model.sections || [];
   const graph = model.graph || {};
@@ -503,24 +501,6 @@ export function deriveGraphFromModel(model = {}) {
         ? `cap ${ct.capacity}${ct.initialLevel != null ? `, start ${ct.initialLevel}` : ""}`
         : "unbounded",
       ...sectionByElemId.get(id),
-    });
-  });
-
-  // One node per resource (role: "server" entity) type — like containers,
-  // this is non-spatial state with no flow edges (a resource is seized/
-  // released by any number of activities, not routed through). Gives overall
-  // per-resource-type utilisation one canonical place to live on the canvas,
-  // instead of being repeated on every activity node that references it.
-  resourceTypes.forEach(et => {
-    const name = et.name?.trim();
-    if (!name) return;
-    nodes.push({
-      id: nodeId(VISUAL_NODE_TYPES.RESOURCE, name),
-      type: VISUAL_NODE_TYPES.RESOURCE,
-      refId: name,
-      label: name,
-      sublabel: `cap ${et.count || 1}`,
-      ...sectionByElemId.get(name),
     });
   });
 

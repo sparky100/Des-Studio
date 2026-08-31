@@ -136,6 +136,75 @@ describe("ExecuteActivityNode", () => {
     expect(getBoxShadow()).not.toBe("none");
   });
 
+  test("flashes (distinctly from the finish pulse) only when THIS activity's own startSignal increases", () => {
+    const { container, rerender } = render(
+      <ExecuteActivityNode data={{ label: "Serve Hire Customer", liveData: { ...baseLiveData, completionSignal: 0, startSignal: 3 } }} />
+    );
+    const getBoxShadow = () => container.firstChild.style.boxShadow;
+    expect(getBoxShadow()).toBe("none");
+    expect(screen.queryByText("started")).not.toBeInTheDocument();
+
+    // Unrelated activity's startSignal moved on; this one's own value unchanged.
+    rerender(
+      <ExecuteActivityNode data={{ label: "Serve Hire Customer", liveData: { ...baseLiveData, completionSignal: 0, startSignal: 3 } }} />
+    );
+    expect(getBoxShadow()).toBe("none");
+
+    // This activity's own startSignal increases — flashes with a "started" badge.
+    rerender(
+      <ExecuteActivityNode data={{ label: "Serve Hire Customer", liveData: { ...baseLiveData, completionSignal: 0, startSignal: 4 } }} />
+    );
+    expect(getBoxShadow()).not.toBe("none");
+    expect(screen.getByText("started")).toBeInTheDocument();
+    expect(screen.queryByText("done")).not.toBeInTheDocument();
+  });
+
+  describe("persistent busy/idle/failed state color", () => {
+    // Independent of the transient start/finish pulses above — this is the
+    // "idle=green, busy=amber, blocked/failed=red" convention most DES tools
+    // show continuously on a resource/activity icon. Checked via
+    // borderTopColor (jsdom resolves the shorthand `border` string into
+    // longhand colors — reading back `.style.border` itself comes back empty
+    // here because `borderLeft` is also set, a pre-existing jsdom quirk with
+    // mixed shorthand/longhand border properties, unrelated to this feature).
+    test("idle (no one being served, no failures) shows a green-tinted border", () => {
+      const { container } = render(
+        <ExecuteActivityNode data={{ label: "Serve Hire Customer", liveData: { ...baseLiveData, activityBusyCount: 0, failedCount: 0 } }} />
+      );
+      expect(container.firstChild.style.borderTopColor).toBe("rgba(63, 185, 80, 0.267)"); // #3fb95044
+    });
+
+    test("busy (someone currently being served) shows an amber-tinted border", () => {
+      const { container } = render(
+        <ExecuteActivityNode data={{ label: "Serve Hire Customer", liveData: { ...baseLiveData, activityBusyCount: 1, failedCount: 0 } }} />
+      );
+      expect(container.firstChild.style.borderTopColor).toBe("rgba(240, 136, 62, 0.267)"); // #f0883e44
+    });
+
+    test("failed (a server down) shows a red-tinted border, taking priority over busy", () => {
+      const { container } = render(
+        <ExecuteActivityNode data={{ label: "Serve Hire Customer", liveData: { ...baseLiveData, activityBusyCount: 1, failedCount: 1 } }} />
+      );
+      expect(container.firstChild.style.borderTopColor).toBe("rgba(248, 81, 73, 0.267)"); // #f8514944
+    });
+
+    test("multi-row COSEIZE aggregates worst-first across every resource type, not just the first row", () => {
+      const { container } = render(
+        <ExecuteActivityNode data={{
+          label: "Surgery",
+          liveData: {
+            perType: [
+              { serverTypeName: "Surgeon", capacity: 2, busyCount: 0, activityBusyCount: 0, failedCount: 0 },
+              { serverTypeName: "Anesthetist", capacity: 1, busyCount: 1, activityBusyCount: 0, failedCount: 1 },
+            ],
+          },
+        }} />
+      );
+      // First row is idle/no failures; second row is failed — failed wins.
+      expect(container.firstChild.style.borderTopColor).toBe("rgba(248, 81, 73, 0.267)"); // #f8514944
+    });
+  });
+
   test("renders at the fixed Execute card height regardless of content", () => {
     const { container } = render(
       <ExecuteActivityNode

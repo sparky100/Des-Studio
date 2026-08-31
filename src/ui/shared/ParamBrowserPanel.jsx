@@ -9,6 +9,7 @@ import { alpha, SPACE, RADIUS, TYPO } from "./tokens.js";
 export function paramColor(type, C) {
   if (type === "entityTypeCount" || type === "shiftCapacity") return C.server;
   if (type === "queueCapacity") return C.green;
+  if (type === "containerCapacity" || type === "containerInitialLevel") return C.amber;
   if (type === "bEventDistParam" || type === "bEventPiecewisePeriodParam") return C.bEvent;
   if (type === "cEventDistParam" || type === "cEventPiecewisePeriodParam") return C.cEvent;
   return C.muted;
@@ -90,6 +91,7 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPa
   const bEvents   = params.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam");
   const stateVars = params.filter(p => p.type === "stateVarInit");
   const queues    = params.filter(p => p.type === "queueCapacity");
+  const containers = params.filter(p => p.type === "containerCapacity" || p.type === "containerInitialLevel");
 
   return (
     <div style={{
@@ -177,6 +179,13 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPa
               <SectionPanel label="Queue Capacity" color={C.green} status={String(queues.length)}>
                 {queues.map(p => (
                   <ParamRow key={p.path} p={p} color={C.green} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
+                ))}
+              </SectionPanel>
+            )}
+            {containers.length > 0 && (
+              <SectionPanel label="Containers" color={C.amber} status={String(containers.length)}>
+                {containers.map(p => (
+                  <ParamRow key={p.path} p={p} color={C.amber} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
                 ))}
               </SectionPanel>
             )}
