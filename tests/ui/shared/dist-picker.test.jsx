@@ -212,6 +212,79 @@ describe('DistPicker — piecewise time-varying distributions (F7.5)', () => {
   });
 });
 
+describe('DistPicker — piecewise periods stored in the flat shape', () => {
+  // A period's distribution can legitimately be stored two ways: nested
+  // ({startTime, distribution:{dist,distParams}} — what this editor itself
+  // writes) or flat ({startTime, dist, distParams}, no wrapper — the shape
+  // docs/model-schema-for-llm.md documents for AI-generated/imported
+  // models, and what engine/distributions.js, engine/validation.js, and
+  // engine/sweep-params.js all already tolerate via a `period.distribution
+  // || period` fallback). Regression coverage for the editor adopting that
+  // same fallback instead of silently defaulting every flat-shaped period
+  // to Exponential(mean=1).
+  it('shows a flat-shaped period’s real distribution instead of the hardcoded default', () => {
+    render(
+      <DistPicker
+        value={{
+          dist: 'Piecewise',
+          distParams: {
+            periods: [
+              { startTime: '0', dist: 'Exponential', distParams: { mean: '33' } },
+            ],
+          },
+        }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('spinbutton', { name: 'mean' })).toHaveValue(33);
+  });
+
+  it('renders flat- and nested-shaped periods side by side, each with its own correct value', () => {
+    render(
+      <DistPicker
+        value={{
+          dist: 'Piecewise',
+          distParams: {
+            periods: [
+              { startTime: '0', dist: 'Exponential', distParams: { mean: '33' } },
+              { startTime: '480', distribution: { dist: 'Exponential', distParams: { mean: '20' } } },
+            ],
+          },
+        }}
+        onChange={vi.fn()}
+      />
+    );
+    const meanInputs = screen.getAllByRole('spinbutton', { name: 'mean' });
+    expect(meanInputs.map(i => i.value)).toEqual(['33', '20']);
+  });
+
+  it('editing a flat-shaped period normalizes it to the nested shape with no leftover stale fields', () => {
+    const handleChange = vi.fn();
+    render(
+      <DistPicker
+        value={{
+          dist: 'Piecewise',
+          distParams: {
+            periods: [
+              { startTime: '0', dist: 'Exponential', distParams: { mean: '33' } },
+            ],
+          },
+        }}
+        onChange={handleChange}
+      />
+    );
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'mean' }), { target: { value: '50' } });
+    fireEvent.blur(screen.getByRole('spinbutton', { name: 'mean' }));
+
+    expect(handleChange).toHaveBeenCalled();
+    const period = handleChange.mock.calls.at(-1)[0].distParams.periods[0];
+    expect(period.distribution).toEqual({ dist: 'Exponential', distParams: { mean: '50' } });
+    expect(period.dist).toBeUndefined();
+    expect(period.distParams).toBeUndefined();
+  });
+});
+
 describe('DistPicker — Distance distribution (transport time)', () => {
   const queues = [{ id: 'q1', name: 'WarehouseQueue' }, { id: 'q2', name: 'DepotQueue' }];
   const entityTypes = [
