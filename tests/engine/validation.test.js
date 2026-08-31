@@ -2018,6 +2018,162 @@ describe("V5 — EntityAttr skips dist validation", () => {
     });
   });
 
+  // ── V73–V75: SchedulePattern arrival-rate distribution (B-event/C-event) ──
+
+  describe("V73–V75: SchedulePattern arrival-rate distribution validation", () => {
+    function baseModel(bSchedule) {
+      return {
+        entityTypes: [{ id: "cust", name: "Customer", role: "customer" }],
+        queues: [{ id: "q", name: "Queue", discipline: "FIFO" }],
+        bEvents: [{
+          id: "b_arr", name: "Arrival", effect: "ARRIVE(Customer, Queue)",
+          schedules: [{ eventId: "b_arr", ...bSchedule }],
+        }],
+        cEvents: [],
+        stateVariables: [],
+        epoch: "2026-06-01T00:00:00Z",
+        timeUnit: "minutes",
+        experimentDefaults: { replications: 1, maxSimTime: 10080, warmupPeriod: 0 },
+      };
+    }
+    const validPattern = () => ({
+      type: "weekly", mode: "absolute",
+      periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 10 }],
+      defaultCapacity: 0,
+    });
+
+    it("passes with a valid absolute-mode schedulePattern", () => {
+      const { errors, warnings } = validateModel(baseModel({
+        dist: "SchedulePattern", distParams: { schedulePattern: validPattern() },
+      }));
+      expect(errors.filter(e => ["V50", "V51", "V53", "V55", "V73", "V75"].includes(e.code))).toHaveLength(0);
+      expect(warnings.filter(w => w.code === "V74")).toHaveLength(0);
+    });
+
+    it("requires a schedulePattern object", () => {
+      const { errors } = validateModel(baseModel({ dist: "SchedulePattern", distParams: {} }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V50" }));
+    });
+
+    it("V55: rejects a SchedulePattern arrival distribution without epoch", () => {
+      const model = baseModel({ dist: "SchedulePattern", distParams: { schedulePattern: validPattern() } });
+      delete model.epoch;
+      const { errors } = validateModel(model);
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V55" }));
+    });
+
+    it("V75: rejects multiplier mode for arrival-rate patterns", () => {
+      const { errors } = validateModel(baseModel({
+        dist: "SchedulePattern",
+        distParams: { schedulePattern: { ...validPattern(), mode: "multiplier", baseCapacity: 10 } },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V75" }));
+    });
+
+    it("V54 (warning): warns but does not error when exceptions are present on an arrival pattern", () => {
+      const { errors, warnings } = validateModel(baseModel({
+        dist: "SchedulePattern",
+        distParams: {
+          schedulePattern: {
+            ...validPattern(),
+            exceptions: [{ date: "2026-06-08", periods: [] }],
+          },
+        },
+      }));
+      expect(errors.filter(e => e.code === "V54")).toHaveLength(0);
+      expect(warnings).toContainEqual(expect.objectContaining({ code: "V54" }));
+    });
+
+    it("V73: rejects a negative arrival rate", () => {
+      const { errors } = validateModel(baseModel({
+        dist: "SchedulePattern",
+        distParams: {
+          schedulePattern: { ...validPattern(), periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: -5 }] },
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V73" }));
+    });
+
+    it("V73: rejects a non-numeric arrival rate", () => {
+      const { errors } = validateModel(baseModel({
+        dist: "SchedulePattern",
+        distParams: {
+          schedulePattern: { ...validPattern(), periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: "lots" }] },
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V73" }));
+    });
+
+    it("V74: warns (does not error) on a zero arrival rate period", () => {
+      const { errors, warnings } = validateModel(baseModel({
+        dist: "SchedulePattern",
+        distParams: {
+          schedulePattern: { ...validPattern(), periods: [{ dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 0 }] },
+        },
+      }));
+      expect(errors.filter(e => e.code === "V73")).toHaveLength(0);
+      expect(warnings).toContainEqual(expect.objectContaining({ code: "V74" }));
+    });
+
+    it("reuses shared structural checks: V51 overlapping periods", () => {
+      const { errors } = validateModel(baseModel({
+        dist: "SchedulePattern",
+        distParams: {
+          schedulePattern: {
+            type: "weekly", mode: "absolute",
+            periods: [
+              { dayOfWeek: 1, start: "09:00", end: "17:00", capacity: 10 },
+              { dayOfWeek: 1, start: "12:00", end: "14:00", capacity: 5 },
+            ],
+          },
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V51" }));
+    });
+
+    it("reuses shared structural checks: V53 invalid dayOfWeek", () => {
+      const { errors } = validateModel(baseModel({
+        dist: "SchedulePattern",
+        distParams: {
+          schedulePattern: { ...validPattern(), periods: [{ dayOfWeek: 9, start: "09:00", end: "17:00", capacity: 10 }] },
+        },
+      }));
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V53" }));
+    });
+
+    it("does not touch non-SchedulePattern distributions", () => {
+      const { errors, warnings } = validateModel(baseModel({ dist: "Fixed", distParams: { value: "5" } }));
+      expect(errors.filter(e => ["V50", "V51", "V53", "V54", "V55", "V73", "V75"].includes(e.code))).toHaveLength(0);
+      expect(warnings.filter(w => ["V54", "V74"].includes(w.code))).toHaveLength(0);
+    });
+
+    it("applies the same validation to a C-Event cSchedule", () => {
+      const model = {
+        entityTypes: [
+          { id: "cust", name: "Customer", role: "customer" },
+          { id: "srv", name: "Server", role: "server", count: 1 },
+        ],
+        queues: [{ id: "q", name: "Queue", discipline: "FIFO" }],
+        bEvents: [{ id: "b_done", name: "Done", effect: "RELEASE(Server)", schedules: [] }],
+        cEvents: [{
+          id: "c_assign", name: "Assign",
+          condition: { variable: "Queue.Queue.length", operator: ">", value: 0 },
+          cSchedules: [{
+            eventId: "b_done", useEntityCtx: true,
+            dist: "SchedulePattern",
+            distParams: { schedulePattern: { ...validPattern(), mode: "multiplier", baseCapacity: 10 } },
+          }],
+        }],
+        stateVariables: [],
+        epoch: "2026-06-01T00:00:00Z",
+        timeUnit: "minutes",
+        experimentDefaults: { replications: 1, maxSimTime: 10080, warmupPeriod: 0 },
+      };
+      const { errors } = validateModel(model);
+      expect(errors).toContainEqual(expect.objectContaining({ code: "V75" }));
+    });
+  });
+
   describe("V-SKILL-7: entity-side Categorical skill requirements must be coverable by a server", () => {
     const baseSkillModel = (serverOverrides = {}) => ({
       entityTypes: [

@@ -1856,6 +1856,96 @@ describe('Sprint 71 — persistence layer', () => {
     });
   });
 
+  // ── round-trip: Piecewise cycleLength on B-event schedules ────────────────
+  describe('round-trip — Piecewise cycleLength survives saveModel + norm()', () => {
+    const bEvents = [
+      {
+        id: 'b-pw', name: 'Arrive', scheduledTime: '0', effect: 'ARRIVE(Customer)',
+        schedules: [{
+          eventId: 'b-pw', dist: 'Piecewise',
+          distParams: {
+            periods: [
+              { startTime: '0', dist: 'Exponential', distParams: { mean: '5' } },
+              { startTime: '60', dist: 'Exponential', distParams: { mean: '10' } },
+            ],
+            cycleLength: '10080',
+          },
+        }],
+      },
+    ];
+
+    it('the insert payload preserves cycleLength on bEvents', async () => {
+      const model = { name: 'Piecewise RT Model', entityTypes: [], stateVariables: [], queues: [], bEvents, cEvents: [] };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'rt-id', name: model.name, owner_id: 'u1' }], error: null });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.b_events).toEqual(bEvents);
+      expect(insertArg.b_events[0].schedules[0].distParams.cycleLength).toBe('10080');
+    });
+
+    it('norm() preserves cycleLength on bEvents from a DB row', () => {
+      const result = norm({
+        id: 'm-pw', name: 'Piecewise RT Model',
+        entity_types: [], b_events: bEvents, c_events: [], queues: [],
+        model_json: {},
+      });
+
+      expect(result.bEvents).toEqual(bEvents);
+      expect(result.bEvents[0].schedules[0].distParams.cycleLength).toBe('10080');
+    });
+  });
+
+  // ── round-trip: SchedulePattern arrival-rate distribution on B/C-events ───
+  describe('round-trip — SchedulePattern arrival distParams survive saveModel + norm()', () => {
+    const arrivalPattern = {
+      type: 'weekly', mode: 'absolute',
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: '120' }],
+      defaultCapacity: '0',
+    };
+    const bEvents = [
+      {
+        id: 'b-sp', name: 'Arrive', scheduledTime: '0', effect: 'ARRIVE(Customer)',
+        schedules: [{ eventId: 'b-sp', dist: 'SchedulePattern', distParams: { schedulePattern: arrivalPattern } }],
+      },
+    ];
+    const cEvents = [
+      {
+        id: 'c-sp', name: 'Serve', effect: 'ASSIGN(Customer, Server)',
+        cSchedules: [{ id: 'cs-sp', eventId: 'b-sp', dist: 'SchedulePattern', distParams: { schedulePattern: arrivalPattern }, useEntityCtx: true }],
+      },
+    ];
+
+    it('the insert payload preserves the schedulePattern object on bEvents and cEvents', async () => {
+      const model = { name: 'SchedulePattern RT Model', entityTypes: [], stateVariables: [], queues: [], bEvents, cEvents, epoch: '2026-06-01' };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'rt-id', name: model.name, owner_id: 'u1' }], error: null });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.b_events).toEqual(bEvents);
+      expect(insertArg.c_events).toEqual(cEvents);
+      expect(insertArg.b_events[0].schedules[0].distParams.schedulePattern).toEqual(arrivalPattern);
+    });
+
+    it('norm() preserves the schedulePattern object on bEvents and cEvents from a DB row', () => {
+      const result = norm({
+        id: 'm-sp', name: 'SchedulePattern RT Model',
+        entity_types: [], b_events: bEvents, c_events: cEvents, queues: [],
+        model_json: {},
+      });
+
+      expect(result.bEvents).toEqual(bEvents);
+      expect(result.cEvents).toEqual(cEvents);
+      expect(result.cEvents[0].cSchedules[0].distParams.schedulePattern).toEqual(arrivalPattern);
+    });
+  });
+
   // ── round-trip: unified condition storage format (Part B) ─────────────────
   // toRow()/saveModel() now normalize string-shaped conditions into the canonical
   // predicate-object form before writing — these fields must never persist as strings.

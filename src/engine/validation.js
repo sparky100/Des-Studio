@@ -202,6 +202,20 @@ export function validateModel(model) {
           checkDist(nestedDist, nestedParams, `${context} period ${idx + 1}`, tab);
         }
       });
+      // V71: cycleLength, if present, must be a positive finite number
+      const cycleLength = p.cycleLength != null && p.cycleLength !== '' ? parseFloat(p.cycleLength) : null;
+      if (p.cycleLength != null && p.cycleLength !== '' && !(Number.isFinite(cycleLength) && cycleLength > 0)) {
+        err('V71', `${context}: cycleLength, if set, must be a positive number (got '${p.cycleLength}').`, tab);
+      }
+      // V72: every period's startTime must be strictly less than cycleLength — else unreachable
+      if (Number.isFinite(cycleLength) && cycleLength > 0) {
+        periods.forEach((period, idx) => {
+          const startTime = parseFloat(period.startTime ?? period.time);
+          if (Number.isFinite(startTime) && startTime >= cycleLength) {
+            err('V72', `${context}: Piecewise period ${idx + 1} startTime (${startTime}) must be less than cycleLength (${cycleLength}) — this period would never be reached.`, tab);
+          }
+        });
+      }
       return;
     }
     switch (distName) {
@@ -279,6 +293,100 @@ export function validateModel(model) {
     }
   }
 
+  // ── Shared structural checks for a weekly schedulePattern object ───────────
+  // Used by both the entity-type capacity pattern (V50-V56 below, which layers
+  // its own capacity/mutual-exclusion/initial-capacity checks on top) and the
+  // dist-level SchedulePattern arrival-rate pattern (checkSchedulePatternDist,
+  // which layers its own rate checks on top). Structural rules — non-empty
+  // periods, valid dayOfWeek/HH:MM, non-overlapping periods per day, valid
+  // exception dates — are identical in both cases and shared here rather than
+  // re-derived, so V50/V51/V53/V54 mean exactly the same thing everywhere they
+  // are raised. Returns false (having already raised V50) when there are no
+  // periods to check further, true otherwise.
+  function parseHHMM(/** @type {any} */ str) {
+    if (str == null) return NaN;
+    const parts = String(str).match(/^(\d{1,2}):(\d{2})$/);
+    if (!parts) return NaN;
+    return Number(parts[1]) * 60 + Number(parts[2]);
+  }
+  function checkSchedulePatternShape(/** @type {any} */ pat, /** @type {string} */ label, /** @type {any} */ tab, /** @type {any} */ affectedIds) {
+    if (!Array.isArray(pat.periods) || pat.periods.length === 0) {
+      err('V50', `${label} schedulePattern must have at least one period.`, tab, affectedIds);
+      return false;
+    }
+    /** @type {Record<number, any[]>} */
+    const periodsByDay = {};
+    pat.periods.forEach((/** @type {any} */ period, /** @type {any} */ pi) => {
+      const day = parseInt(period.dayOfWeek, 10);
+      if (!Number.isInteger(day) || day < 1 || day > 7) {
+        err('V53', `${label} period ${pi + 1}: dayOfWeek must be 1 (Mon) to 7 (Sun), got '${period.dayOfWeek}'.`, tab, affectedIds);
+        return;
+      }
+      if (!period.start || !period.end) {
+        err('V50', `${label} period ${pi + 1} (day ${day}): start and end times are required (HH:MM format).`, tab, affectedIds);
+        return;
+      }
+      const startMin = parseHHMM(period.start);
+      const endMin = parseHHMM(period.end);
+      if (isNaN(startMin) || isNaN(endMin)) {
+        err('V50', `${label} period ${pi + 1} (day ${day}): start '${period.start}' and/or end '${period.end}' are not valid HH:MM times.`, tab, affectedIds);
+        return;
+      }
+      if (startMin >= endMin) {
+        err('V50', `${label} period ${pi + 1} (day ${day}): start time ${period.start} must be before end time ${period.end}.`, tab, affectedIds);
+        return;
+      }
+      if (!periodsByDay[day]) periodsByDay[day] = [];
+      periodsByDay[day].forEach((/** @type {any} */ other) => {
+        const oStart = parseHHMM(other.start);
+        const oEnd = parseHHMM(other.end);
+        if (isNaN(oStart) || isNaN(oEnd)) return;
+        if (startMin < oEnd && endMin > oStart) {
+          err('V51', `${label} has overlapping schedule periods on day ${day}: ${other.start}-${other.end} and ${period.start}-${period.end}.`, tab, affectedIds);
+        }
+      });
+      periodsByDay[day].push(period);
+    });
+    if (Array.isArray(pat.exceptions)) {
+      pat.exceptions.forEach((/** @type {any} */ exc) => {
+        if (!exc.date || isNaN(new Date(exc.date).getTime())) {
+          err('V54', `${label} exception date '${exc.date}' is not a valid ISO date.`, tab, affectedIds);
+        }
+      });
+    }
+    return true;
+  }
+
+  // ── V73-V75: SchedulePattern arrival-rate distribution (B-event/C-event) ───
+  function checkSchedulePatternDist(/** @type {any} */ schedule, /** @type {string} */ label, /** @type {any} */ tab) {
+    if (normalizeDistributionName(schedule.dist) !== 'SchedulePattern') return;
+    const pattern = schedule.distParams?.schedulePattern;
+    if (!pattern) {
+      err('V50', `${label}: SchedulePattern distribution requires a schedulePattern object.`, tab);
+      return;
+    }
+    if (!model.epoch || String(model.epoch).trim() === '') {
+      err('V55', `${label} defines a SchedulePattern distribution but no epoch is configured. Set a Real-world start date in experiment settings.`, tab);
+      return;
+    }
+    if (pattern.mode === 'multiplier') {
+      err('V75', `${label}: SchedulePattern arrival distribution does not support multiplier mode in v1 — use absolute arrival-rate values.`, tab);
+      return;
+    }
+    if (Array.isArray(pattern.exceptions) && pattern.exceptions.length) {
+      warn('V54', `${label}: date exceptions on a SchedulePattern arrival distribution are ignored (not yet supported) — the weekly pattern repeats every week including exception dates.`, tab);
+    }
+    if (!checkSchedulePatternShape(pattern, label, tab)) return;
+    (pattern.periods || []).forEach((/** @type {any} */ period, /** @type {any} */ pi) => {
+      const rate = Number(period.capacity);
+      if (!Number.isFinite(rate) || rate < 0) {
+        err('V73', `${label} period ${pi + 1}: arrival rate must be a number ≥ 0, got '${period.capacity}'.`, tab);
+      } else if (rate === 0) {
+        warn('V74', `${label} period ${pi + 1}: arrival rate is 0 — no arrivals will occur during this window.`, tab);
+      }
+    });
+  }
+
   bEvents.forEach(b => {
     const scheduledTime = b.scheduledTime === undefined || b.scheduledTime === null || b.scheduledTime === ""
       ? 0
@@ -293,6 +401,7 @@ export function validateModel(model) {
       if (s.rows || s.times) return; // rows/times entries have no distribution
       checkDist(s.dist, s.distParams,
         `B-Event '${b.name || b.id}' schedule ${j + 1}`, 'bevents');
+      checkSchedulePatternDist(s, `B-Event '${b.name || b.id}' schedule ${j + 1}`, 'bevents');
     });
   });
 
@@ -397,6 +506,7 @@ export function validateModel(model) {
     (c.cSchedules || []).forEach((/** @type {any} */ s, /** @type {any} */ j) => {
       checkDist(s.dist, s.distParams,
         `C-Event '${c.name || c.id}' schedule ${j + 1}`, 'cevents');
+      checkSchedulePatternDist(s, `C-Event '${c.name || c.id}' schedule ${j + 1}`, 'cevents');
     });
   });
 
@@ -1406,12 +1516,6 @@ export function validateModel(model) {
 
   // ── V50–V56: Weekly Schedule Pattern validation ───────────────────────────
   {
-    const parseHHMM = (/** @type {any} */ str) => {
-      if (str == null) return NaN;
-      const parts = String(str).match(/^(\d{1,2}):(\d{2})$/);
-      if (!parts) return NaN;
-      return Number(parts[1]) * 60 + Number(parts[2]);
-    };
     entityTypes.forEach(et => {
       const pat = et.schedulePattern;
       if (!pat) return;
@@ -1421,72 +1525,27 @@ export function validateModel(model) {
           { entityTypeIds: [et.id] });
         return; // skip further checks — without epoch the pattern can't function
       }
-      // V50: non-empty periods
-      if (!Array.isArray(pat.periods) || pat.periods.length === 0) {
-        err('V50', `Entity class '${et.name}' schedulePattern must have at least one period.`, 'entities',
-          { entityTypeIds: [et.id] });
-        return;
-      }
       // schedulePattern and manual shiftSchedule are mutually exclusive
       if (Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) {
         err('V50', `Entity class '${et.name}' has both a weekly schedule pattern and a manual shift schedule — remove one.`, 'entities',
           { entityTypeIds: [et.id] });
       }
-      // Check each period
-      /** @type {Record<number, any[]>} */
-      const periodsByDay = {};
+      // V50/V51/V53/V54: shared structural checks (non-empty periods, valid
+      // dayOfWeek/HH:MM, non-overlapping periods per day, valid exception dates).
+      if (!checkSchedulePatternShape(pat, `Entity class '${et.name}'`, 'entities', { entityTypeIds: [et.id] })) return;
+      // V52: capacity must be integer ≥ 0 (capacity-specific, not part of the
+      // shape shared with the arrival-rate SchedulePattern distribution).
       pat.periods.forEach((/** @type {any} */ period, /** @type {any} */ pi) => {
-        const day = parseInt(period.dayOfWeek, 10);
-        // V53: dayOfWeek must be integer 1-7
-        if (!Number.isInteger(day) || day < 1 || day > 7) {
-          err('V53', `Entity class '${et.name}' period ${pi + 1}: dayOfWeek must be 1 (Mon) to 7 (Sun), got '${period.dayOfWeek}'.`, 'entities',
-            { entityTypeIds: [et.id] });
-          return;
-        }
-        if (!period.start || !period.end) {
-          err('V50', `Entity class '${et.name}' period ${pi + 1} (day ${day}): start and end times are required (HH:MM format).`, 'entities',
-            { entityTypeIds: [et.id] });
-          return;
-        }
-        const startMin = parseHHMM(period.start);
-        const endMin = parseHHMM(period.end);
-        if (isNaN(startMin) || isNaN(endMin)) {
-          err('V50', `Entity class '${et.name}' period ${pi + 1} (day ${day}): start '${period.start}' and/or end '${period.end}' are not valid HH:MM times.`, 'entities',
-            { entityTypeIds: [et.id] });
-          return;
-        }
-        if (startMin >= endMin) {
-          err('V50', `Entity class '${et.name}' period ${pi + 1} (day ${day}): start time ${period.start} must be before end time ${period.end}.`, 'entities',
-            { entityTypeIds: [et.id] });
-          return;
-        }
         const cap = parseInt(period.capacity, 10);
-        // V52: capacity must be integer ≥ 0
         if (!Number.isInteger(cap) || cap < 0) {
           err('V52', `Entity class '${et.name}' period ${pi + 1} capacity must be integer ≥ 0, got '${period.capacity}'.`, 'entities',
             { entityTypeIds: [et.id] });
-          return;
         }
-        // V51: non-overlapping periods per day
-        if (!periodsByDay[day]) periodsByDay[day] = [];
-        periodsByDay[day].forEach((/** @type {any} */ other) => {
-          const oStart = parseHHMM(other.start);
-          const oEnd = parseHHMM(other.end);
-          if (isNaN(oStart) || isNaN(oEnd)) return;
-          if (startMin < oEnd && endMin > oStart) {
-            err('V51', `Entity class '${et.name}' has overlapping schedule periods on day ${day}: ${other.start}-${other.end} and ${period.start}-${period.end}.`, 'entities',
-              { entityTypeIds: [et.id] });
-          }
-        });
-        periodsByDay[day].push(period);
       });
-      // V54: exception dates must be valid ISO dates
+      // Exception-period overrides (capacity-specific — not shared, since the
+      // arrival-rate SchedulePattern distribution ignores exceptions entirely).
       if (Array.isArray(pat.exceptions)) {
         pat.exceptions.forEach((/** @type {any} */ exc, /** @type {any} */ ei) => {
-          if (!exc.date || isNaN(new Date(exc.date).getTime())) {
-            err('V54', `Entity class '${et.name}' exception date '${exc.date}' is not a valid ISO date.`, 'entities',
-              { entityTypeIds: [et.id] });
-          }
           if (Array.isArray(exc.periods)) {
             exc.periods.forEach((/** @type {any} */ ep, /** @type {any} */ epi) => {
               const eStart = parseHHMM(ep.start);

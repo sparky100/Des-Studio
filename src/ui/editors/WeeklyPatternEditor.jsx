@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useMemo } from "react";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { Btn, InfoBox } from "../shared/components.jsx";
-import { parseHHMM, periodLabel as patternPeriodLabel } from "../../engine/schedule-pattern.js";
+import { periodLabel as patternPeriodLabel, mergePeriods } from "../../engine/schedule-pattern.js";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -310,38 +310,5 @@ const WeeklyPatternEditor = ({ pattern, onChange, epoch, disabled }) => {
     </div>
   );
 };
-
-function mergePeriods(periods) {
-  // Merge overlapping periods on the same day with the same capacity
-  const byDay = {};
-  for (const p of periods) {
-    if (!byDay[p.dayOfWeek]) byDay[p.dayOfWeek] = [];
-    byDay[p.dayOfWeek].push(p);
-  }
-  const result = [];
-  for (const [dayStr, ps] of Object.entries(byDay)) {
-    const day = Number(dayStr);
-    // Sort by start time
-    ps.sort((a, b) => parseHHMM(a.start) - parseHHMM(b.start));
-    // Merge consecutive with same capacity
-    const merged = [];
-    for (const p of ps) {
-      const last = merged[merged.length - 1];
-      const pStart = parseHHMM(p.start);
-      const pEnd = parseHHMM(p.end);
-      if (last) {
-        const lStart = parseHHMM(last.start);
-        const lEnd = parseHHMM(last.end);
-        if (pStart <= lEnd && last.capacity === p.capacity) {
-          last.end = lEnd >= pEnd ? last.end : p.end;
-          continue;
-        }
-      }
-      merged.push({ dayOfWeek: day, start: p.start, end: p.end, capacity: p.capacity });
-    }
-    result.push(...merged);
-  }
-  return result;
-}
 
 export { WeeklyPatternEditor, mergePeriods };

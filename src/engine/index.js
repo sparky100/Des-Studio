@@ -17,7 +17,7 @@ import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent, applyShiftChange } from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
 import { nullRegistry }                        from "./adapters/index.js";
-import { expandWeeklyPatternToEvents, getPatternInitialCapacity, buildShiftPeriodLabels, resolveSchedulePattern } from "./schedule-pattern.js";
+import { expandWeeklyPatternToEvents, getPatternInitialCapacity, buildShiftPeriodLabels, resolveSchedulePattern, compileArrivalRatePeriods } from "./schedule-pattern.js";
 import { applyEntityInheritance } from "./entity-inheritance.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
@@ -397,6 +397,37 @@ function modelWithShiftInitialCapacity(model) {
   };
 }
 
+// Compile any B-event/C-event schedule using dist:"SchedulePattern" into a
+// cyclic, Piecewise-equivalent periods list, stashed on distParams._compiled.
+// Runs once per buildEngine() call (piggybacking on the same
+// _runtimeModelCache memoization modelWithShiftInitialCapacity already
+// relies on) — a B-event's self-chaining arrival sampler needs the active
+// period at arbitrary future clock values, not just at FEL-build time, so
+// this precomputes the lookup table rather than re-running the week-
+// expansion loop on every single arrival sample. See schedule-pattern.js's
+// compileArrivalRatePeriods for the rate-conversion/closed-period design.
+/** @param {Record<string, any>} model */
+function compileSchedulePatternDistributions(model) {
+  /** @type {string[]} */
+  const warnings = [];
+  const compileList = (/** @type {any[]} */ list) => (list || []).map((/** @type {any} */ s) => {
+    if (normalizeDistributionName(s.dist) !== "SchedulePattern") return s;
+    const { periods, cycleLength, warnings: w } = compileArrivalRatePeriods(
+      s.distParams?.schedulePattern, model.epoch, model.timeUnit || "minutes"
+    );
+    warnings.push(...w);
+    return { ...s, distParams: { ...(s.distParams || {}), _compiled: { periods, cycleLength } } };
+  });
+  return {
+    model: {
+      ...model,
+      bEvents: (model.bEvents || []).map((/** @type {any} */ b) => ({ ...b, schedules: compileList(b.schedules) })),
+      cEvents: (model.cEvents || []).map((/** @type {any} */ c) => ({ ...c, cSchedules: compileList(c.cSchedules) })),
+    },
+    warnings,
+  };
+}
+
 /** @param {Record<string, any>} model */
 function makeShiftChangeEvents(model) {
   return (model.entityTypes || [])
@@ -445,8 +476,16 @@ function makeRateChangeEvents(model) {
   /** @type {Record<string, any>[]} */
   const events = [];
   const addPeriods = (/** @type {any} */ ownerName, /** @type {any} */ dist, /** @type {any} */ distParams) => {
-    if (normalizeDistributionName(dist) !== "Piecewise") return;
-    for (const period of getPiecewisePeriods(distParams).slice(1)) {
+    const distName = normalizeDistributionName(dist);
+    // SchedulePattern's periods live under _compiled (populated by
+    // compileSchedulePatternDistributions, which runs before this — see
+    // buildEngine's runtimeModel construction) rather than directly on
+    // distParams.periods the way Piecewise stores them.
+    const periods = distName === "Piecewise" ? getPiecewisePeriods(distParams)
+      : distName === "SchedulePattern" ? (distParams?._compiled?.periods || [])
+      : null;
+    if (!periods) return;
+    for (const period of periods.slice(1)) {
       const startTime = parseFloat(period.startTime ?? period.time);
       if (!Number.isFinite(startTime)) continue;
       events.push({
@@ -602,13 +641,19 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // model_schedules table. Falls back to inline rows if no map is provided.
   /** @type {Record<string, any>} */
   let runtimeModel;
+  /** @type {string[]} */
+  let _patternWarnings;
   const _cached = _runtimeModelCache.get(model);
   if (_cached && _cached.schedulesMap === schedulesMap) {
     runtimeModel = _cached.runtimeModel;
+    _patternWarnings = _cached.patternWarnings;
   } else {
     const resolvedModel = resolveInlineSchedules(model, schedulesMap);
-    runtimeModel = modelWithShiftInitialCapacity(applyEntityInheritance(/** @type {any} */ (resolvedModel)));
-    _runtimeModelCache.set(model, { schedulesMap, runtimeModel });
+    const shiftResolved = modelWithShiftInitialCapacity(applyEntityInheritance(/** @type {any} */ (resolvedModel)));
+    const { model: patternCompiled, warnings: patternWarnings } = compileSchedulePatternDistributions(shiftResolved);
+    runtimeModel = patternCompiled;
+    _patternWarnings = patternWarnings;
+    _runtimeModelCache.set(model, { schedulesMap, runtimeModel, patternWarnings });
   }
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
   const rng = mulberry32(seed);
@@ -634,6 +679,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const entityDetail = engineOptions.entityDetail !== false;
   /** @type {string[]} */
   const warnings = [];
+  warnings.push(..._patternWarnings);
 
   // ── Per-queue metrics (F11.4): blockingCount, balkCount per queue name ───────
   /** @type {Record<string, any>} */

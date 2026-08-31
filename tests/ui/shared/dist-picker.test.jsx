@@ -210,6 +210,78 @@ describe('DistPicker — piecewise time-varying distributions (F7.5)', () => {
 
     expect(screen.getByText(/Periods must be sorted by start time/i)).toBeInTheDocument();
   });
+
+  it('renders a cycleLength input that writes back distParams.cycleLength', () => {
+    const handleChange = vi.fn();
+    render(
+      <DistPicker
+        value={{
+          dist: 'Piecewise',
+          distParams: {
+            periods: [{ startTime: '0', distribution: { dist: 'Exponential', distParams: { mean: '3' } } }],
+          },
+        }}
+        onChange={handleChange}
+      />
+    );
+
+    const cycleInput = screen.getByPlaceholderText(/blank = no repeat/i);
+    fireEvent.change(cycleInput, { target: { value: '10080' } });
+
+    expect(handleChange).toHaveBeenCalledOnce();
+    expect(handleChange.mock.calls[0][0].distParams.cycleLength).toBe('10080');
+  });
+
+  it('shows an inline warning for a non-positive cycleLength', () => {
+    render(
+      <DistPicker
+        value={{
+          dist: 'Piecewise',
+          distParams: {
+            periods: [{ startTime: '0', distribution: { dist: 'Exponential', distParams: { mean: '3' } } }],
+            cycleLength: '-5',
+          },
+        }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/Cycle length must be a positive number/i)).toBeInTheDocument();
+  });
+
+  it('shows an inline warning when a period start time is not less than cycleLength', () => {
+    render(
+      <DistPicker
+        value={{
+          dist: 'Piecewise',
+          distParams: {
+            periods: [
+              { startTime: '0', distribution: { dist: 'Fixed', distParams: { value: '1' } } },
+              { startTime: '960', distribution: { dist: 'Fixed', distParams: { value: '2' } } },
+            ],
+            cycleLength: '960',
+          },
+        }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/Every period's start time must be less than the cycle length/i)).toBeInTheDocument();
+  });
+
+  it('shows no cycleLength warnings when blank or valid', () => {
+    render(
+      <DistPicker
+        value={{
+          dist: 'Piecewise',
+          distParams: {
+            periods: [{ startTime: '0', distribution: { dist: 'Fixed', distParams: { value: '1' } } }],
+          },
+        }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByText(/Cycle length must be a positive number/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Every period's start time must be less than the cycle length/i)).not.toBeInTheDocument();
+  });
 });
 
 describe('DistPicker — distribution names stored as an alias (F: audit follow-up)', () => {
@@ -382,5 +454,83 @@ describe('DistPicker — Distance distribution (transport time)', () => {
     fireEvent.change(screen.getByLabelText(/Distance speed source/i), { target: { value: 'entity' } });
     expect(handleChange.mock.calls[0][0].distParams.speedSource).toBe('entity');
     expect(handleChange.mock.calls[0][0].distParams.speedAttr).toBe('');
+  });
+});
+
+describe('DistPicker — SchedulePattern arrival-rate distribution', () => {
+  const emptyRatePattern = { type: 'weekly', mode: 'absolute', periods: [], defaultCapacity: 0 };
+
+  it('is offered in the Time-varying family and renders the weekly grid rate editor', () => {
+    render(
+      <DistPicker value={{ dist: 'SchedulePattern', distParams: { schedulePattern: emptyRatePattern } }} onChange={vi.fn()} />
+    );
+    expect(screen.getByText(/Default off-window arrivals\/hr/i)).toBeInTheDocument();
+    expect(screen.getByText(/Click-drag cells to select/i)).toBeInTheDocument();
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(d => {
+      expect(screen.getByText(d)).toBeInTheDocument();
+    });
+  });
+
+  it('does not show a mode selector or exception-date UI (v1: absolute-only, exceptions unsupported)', () => {
+    render(
+      <DistPicker value={{ dist: 'SchedulePattern', distParams: { schedulePattern: emptyRatePattern } }} onChange={vi.fn()} />
+    );
+    expect(screen.queryByText(/Add Exception Date/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Mode:/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /mode/i })).not.toBeInTheDocument();
+  });
+
+  it('warns that an epoch is required when none is set', () => {
+    render(
+      <DistPicker value={{ dist: 'SchedulePattern', distParams: { schedulePattern: emptyRatePattern } }} onChange={vi.fn()} />
+    );
+    expect(screen.getByText(/Requires a Real-world start date/i)).toBeInTheDocument();
+  });
+
+  it('does not warn about epoch once one is set', () => {
+    render(
+      <DistPicker value={{ dist: 'SchedulePattern', distParams: { schedulePattern: emptyRatePattern } }} onChange={vi.fn()} epoch="2026-06-01" timeUnit="minutes" />
+    );
+    expect(screen.queryByText(/Requires a Real-world start date/i)).not.toBeInTheDocument();
+  });
+
+  it('drag-selecting a cell and clicking Apply writes a period at the entered arrivals/hr rate', () => {
+    const handleChange = vi.fn();
+    const { container } = render(
+      <DistPicker value={{ dist: 'SchedulePattern', distParams: { schedulePattern: emptyRatePattern } }} onChange={handleChange} epoch="2026-06-01" timeUnit="minutes" />
+    );
+    const rows = container.querySelectorAll('table tbody tr');
+    const mondayNineAM = rows[9].querySelectorAll('td')[1]; // hour=9 row, day col 0 = Mon (col 0 is the hour label)
+    fireEvent.mouseDown(mondayNineAM);
+    fireEvent.mouseUp(mondayNineAM);
+    expect(screen.getByText('1 cell selected')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Apply'));
+    expect(handleChange).toHaveBeenCalledOnce();
+    const written = handleChange.mock.calls[0][0];
+    expect(written.dist).toBe('SchedulePattern');
+    expect(written.distParams.schedulePattern.periods).toContainEqual(
+      expect.objectContaining({ dayOfWeek: 1, start: '09:00', end: '10:00', capacity: 10 })
+    );
+  });
+
+  it('renders existing period rates in the grid', () => {
+    const pattern = { type: 'weekly', mode: 'absolute', defaultCapacity: 0,
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '12:00', capacity: 120 }] };
+    render(
+      <DistPicker value={{ dist: 'SchedulePattern', distParams: { schedulePattern: pattern } }} onChange={vi.fn()} epoch="2026-06-01" timeUnit="minutes" />
+    );
+    expect(screen.getAllByText('120').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('Clear All empties the periods', () => {
+    const handleChange = vi.fn();
+    const pattern = { type: 'weekly', mode: 'absolute', defaultCapacity: 5,
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '12:00', capacity: 120 }] };
+    render(
+      <DistPicker value={{ dist: 'SchedulePattern', distParams: { schedulePattern: pattern } }} onChange={handleChange} epoch="2026-06-01" timeUnit="minutes" />
+    );
+    fireEvent.click(screen.getByText('Clear All'));
+    expect(handleChange.mock.calls[0][0].distParams.schedulePattern.periods).toEqual([]);
   });
 });
