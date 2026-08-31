@@ -80,6 +80,7 @@ const DIST_ALIASES = {
   "entity-attr": "EntityAttr",
   entity_attr: "EntityAttr",
   piecewise: "Piecewise",
+  schedulepattern: "SchedulePattern",
   schedule: "Schedule",
   plan: "Schedule",
   categorical: "Categorical",
@@ -105,7 +106,14 @@ export function getPiecewisePeriods(params = {}) {
 export function getActivePiecewisePeriod(params = {}, clock = 0) {
   const periods = getPiecewisePeriods(params);
   if (!periods.length) return null;
-  const t = Number.isFinite(Number(clock)) ? Number(clock) : 0;
+  let t = Number.isFinite(Number(clock)) ? Number(clock) : 0;
+  // Optional cycleLength lets a hand-authored period list (e.g. one week)
+  // repeat indefinitely instead of holding the last period's rate forever
+  // past the defined horizon — without it, behavior is unchanged (raw clock).
+  const cycleLength = Number(params.cycleLength);
+  if (Number.isFinite(cycleLength) && cycleLength > 0) {
+    t = ((t % cycleLength) + cycleLength) % cycleLength; // guard against negative clock
+  }
   let active = periods[0];
   for (const period of periods) {
     const startTime = parseFloat(period.startTime ?? period.time ?? 0);
@@ -223,12 +231,42 @@ export const DISTRIBUTIONS = /** @type {Record<string, DistributionDef>} */ ({
   Piecewise: {
     params: [],
     label: "Time-varying (piecewise)",
-    hint: "Uses the period active at the current simulation clock",
+    hint: "Uses the period active at the current simulation clock. Optionally set cycleLength to repeat the pattern (e.g. one week) instead of holding the last period forever.",
     sample: (p, rng, serverAttrs, context = {}) => {
       const active = getActivePiecewisePeriod(p, context.clock ?? 0);
       if (!active) return 0;
       const { dist, params } = periodDistribution(active);
       if (dist === "Piecewise") return 0;
+      return sample(dist, params, rng, serverAttrs, context);
+    },
+  },
+  // A weekly schedulePattern (the same 24×7 grid used for server capacity)
+  // compiled into a cyclic Piecewise-equivalent arrival rate. Compilation
+  // happens once per buildEngine() call (see index.js's
+  // compileSchedulePatternDistributions) and is stashed on distParams._compiled
+  // — this sampler is a pure lookup against that pre-compiled representation,
+  // never re-running the week-expansion loop per sample. See
+  // schedule-pattern.js's compileArrivalRatePeriods for the closed-period
+  // ("_closed") collapse rationale.
+  SchedulePattern: {
+    params: [],
+    label: "Weekly schedule pattern (rate)",
+    hint: "Time-varying Poisson arrival rate compiled from a weekly arrivals/hr grid — see the weekly pattern editor below.",
+    sample: (p, rng, serverAttrs, context = {}) => {
+      const compiled = p._compiled;
+      if (!compiled || !compiled.periods?.length) return 1e9; // unconfigured/empty pattern — effectively never arrives
+      const clock = context.clock ?? 0;
+      const active = getActivePiecewisePeriod({ periods: compiled.periods, cycleLength: compiled.cycleLength }, clock);
+      if (!active) return 1e9;
+      if (active._closed) {
+        const cl = compiled.cycleLength;
+        const t = ((clock % cl) + cl) % cl;
+        const idx = compiled.periods.indexOf(active);
+        const next = compiled.periods[(idx + 1) % compiled.periods.length];
+        const nextStart = (idx + 1 < compiled.periods.length) ? Number(next.startTime) : cl;
+        return Math.max(1e-6, nextStart - t);
+      }
+      const { dist, params } = periodDistribution(active);
       return sample(dist, params, rng, serverAttrs, context);
     },
   },

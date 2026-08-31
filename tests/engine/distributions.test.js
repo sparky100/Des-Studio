@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { mulberry32, sample, normalizeDistributionName, DISTRIBUTIONS } from '../../src/engine/distributions.js';
+import { mulberry32, sample, normalizeDistributionName, DISTRIBUTIONS, getActivePiecewisePeriod } from '../../src/engine/distributions.js';
 import { buildEngine } from '../../src/engine/index.js';
 
 // Tests for seeded PRNG reproducibility (Sprint 1 Task 4).
@@ -252,6 +252,109 @@ describe('Lognormal distribution — Sprint 86 (F86.5)', () => {
     const a = sample('lognormal', params, mulberry32(5));
     const b = sample('Lognormal', params, mulberry32(5));
     expect(a).toBe(b);
+  });
+});
+
+// ── getActivePiecewisePeriod — optional cycleLength ─────────────────────────
+
+describe('getActivePiecewisePeriod — cycleLength', () => {
+  const periods = [
+    { startTime: '0', label: 'a' },
+    { startTime: '480', label: 'b' },
+  ];
+
+  test('with no cycleLength, clock beyond the last period holds that period forever (unchanged regression)', () => {
+    expect(getActivePiecewisePeriod({ periods }, 999999).label).toBe('b');
+  });
+
+  test('with cycleLength set, clock wraps and repeats the pattern', () => {
+    const params = { periods, cycleLength: 960 };
+    expect(getActivePiecewisePeriod(params, 0).label).toBe('a');
+    expect(getActivePiecewisePeriod(params, 480).label).toBe('b');
+    expect(getActivePiecewisePeriod(params, 960).label).toBe('a');   // one full cycle later
+    expect(getActivePiecewisePeriod(params, 1440).label).toBe('b');  // 1.5 cycles later
+    expect(getActivePiecewisePeriod(params, 960 * 5 + 480).label).toBe('b'); // several cycles later
+  });
+
+  test('clock exactly at the cycle boundary wraps to t=0, not an out-of-range result', () => {
+    const params = { periods, cycleLength: 960 };
+    expect(getActivePiecewisePeriod(params, 960).label).toBe('a');
+  });
+
+  test('negative clock is handled defensively, not NaN/undefined-driven', () => {
+    const params = { periods, cycleLength: 960 };
+    const active = getActivePiecewisePeriod(params, -10);
+    expect(active).toBeDefined();
+    expect(['a', 'b']).toContain(active.label);
+  });
+
+  test('cycleLength of 0, blank, or invalid leaves behavior unchanged (treated as no cycling)', () => {
+    expect(getActivePiecewisePeriod({ periods, cycleLength: 0 }, 999999).label).toBe('b');
+    expect(getActivePiecewisePeriod({ periods, cycleLength: '' }, 999999).label).toBe('b');
+    expect(getActivePiecewisePeriod({ periods, cycleLength: 'abc' }, 999999).label).toBe('b');
+  });
+});
+
+// ── DISTRIBUTIONS.SchedulePattern.sample ────────────────────────────────────
+
+describe('DISTRIBUTIONS.SchedulePattern.sample', () => {
+  test('an open period samples a positive Exponential delay', () => {
+    const compiled = {
+      cycleLength: 1000,
+      periods: [
+        { startTime: '0', _closed: true },
+        { startTime: '100', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+      ],
+    };
+    const rng = mulberry32(1);
+    for (let i = 0; i < 20; i++) {
+      const v = DISTRIBUTIONS.SchedulePattern.sample({ _compiled: compiled }, rng, null, { clock: 150 });
+      expect(v).toBeGreaterThan(0);
+    }
+  });
+
+  test('a closed period returns exactly nextStart - t, without ever invoking the rng', () => {
+    const compiled = {
+      cycleLength: 1000,
+      periods: [
+        { startTime: '0', _closed: true },
+        { startTime: '400', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+      ],
+    };
+    const throwingRng = () => { throw new Error('rng should not be called for a closed period'); };
+    const v = DISTRIBUTIONS.SchedulePattern.sample({ _compiled: compiled }, throwingRng, null, { clock: 150 });
+    expect(v).toBe(400 - 150);
+  });
+
+  test('a closed period as the LAST entry wraps delay to the cycle boundary', () => {
+    const compiled = {
+      cycleLength: 1000,
+      periods: [
+        { startTime: '0', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+        { startTime: '800', _closed: true },
+      ],
+    };
+    const v = DISTRIBUTIONS.SchedulePattern.sample({ _compiled: compiled }, mulberry32(1), null, { clock: 900 });
+    expect(v).toBe(1000 - 900);
+  });
+
+  test('missing _compiled returns the "never arrives" sentinel, does not throw', () => {
+    expect(() => DISTRIBUTIONS.SchedulePattern.sample({}, mulberry32(1), null, { clock: 0 })).not.toThrow();
+    expect(DISTRIBUTIONS.SchedulePattern.sample({}, mulberry32(1), null, { clock: 0 })).toBe(1e9);
+  });
+
+  test('an empty compiled periods list returns the sentinel, not a throw', () => {
+    const v = DISTRIBUTIONS.SchedulePattern.sample({ _compiled: { periods: [], cycleLength: 1000 } }, mulberry32(1), null, { clock: 0 });
+    expect(v).toBe(1e9);
+  });
+
+  test('a fully-closed cycle returns cycleLength - t across a spread of clocks, never 0/negative/NaN', () => {
+    const compiled = { cycleLength: 1000, periods: [{ startTime: '0', _closed: true }] };
+    for (const clock of [0, 1, 500, 999, 1000, 1999.9999]) {
+      const v = DISTRIBUTIONS.SchedulePattern.sample({ _compiled: compiled }, mulberry32(1), null, { clock });
+      expect(Number.isFinite(v)).toBe(true);
+      expect(v).toBeGreaterThan(0);
+    }
   });
 });
 

@@ -9,6 +9,9 @@ import {
   summarizePattern,
   periodLabel,
   resolveSchedulePattern,
+  rateToMean,
+  collapseSameState,
+  compileArrivalRatePeriods,
 } from '../../src/engine/schedule-pattern.js';
 
 // ── parseHHMM ──────────────────────────────────────────────────────────────────
@@ -543,5 +546,155 @@ describe('resolveSchedulePattern', () => {
     const { pattern: resolved, warnings } = resolveSchedulePattern(pattern);
     expect(resolved).toBe(pattern);
     expect(warnings).toEqual([]);
+  });
+});
+
+// ── rateToMean ────────────────────────────────────────────────────────────────
+
+describe('rateToMean', () => {
+  test('converts arrivals/hour to mean inter-arrival time across time units', () => {
+    expect(rateToMean(10, 'minutes')).toBe(6);     // 60 min/hr / 10 = 6
+    expect(rateToMean(10, 'hours')).toBeCloseTo(0.1, 10);
+    expect(rateToMean(10, 'seconds')).toBe(360);   // 3600 sec/hr / 10 = 360
+    expect(rateToMean(10, 'days')).toBeCloseTo(1 / 240, 10); // (1/24 day/hr) / 10
+  });
+
+  test('defaults to minutes when timeUnit is omitted', () => {
+    expect(rateToMean(10)).toBe(6);
+  });
+
+  test('returns null for a non-positive or non-finite rate — caller must treat as "closed"', () => {
+    expect(rateToMean(0)).toBeNull();
+    expect(rateToMean(-5)).toBeNull();
+    expect(rateToMean('abc')).toBeNull();
+    expect(rateToMean(NaN)).toBeNull();
+    expect(rateToMean(Infinity)).toBeNull();
+  });
+});
+
+// ── collapseSameState ──────────────────────────────────────────────────────────
+
+describe('collapseSameState', () => {
+  test('merges contiguous closed periods into one', () => {
+    const periods = [
+      { startTime: '0', _closed: true },
+      { startTime: '100', _closed: true },
+      { startTime: '200', _closed: true },
+      { startTime: '300', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+    ];
+    const out = collapseSameState(periods);
+    expect(out).toEqual([
+      { startTime: '0', _closed: true },
+      { startTime: '300', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+    ]);
+  });
+
+  test('merges contiguous open periods sharing the same mean into one', () => {
+    const periods = [
+      { startTime: '0', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+      { startTime: '100', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+      { startTime: '200', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+    ];
+    expect(collapseSameState(periods)).toEqual([
+      { startTime: '0', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+    ]);
+  });
+
+  test('does not merge open periods with different means', () => {
+    const periods = [
+      { startTime: '0', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+      { startTime: '100', distribution: { dist: 'Exponential', distParams: { mean: '8' } } },
+    ];
+    expect(collapseSameState(periods)).toEqual(periods);
+  });
+
+  test('does not merge a closed period into an adjacent open one', () => {
+    const periods = [
+      { startTime: '0', _closed: true },
+      { startTime: '100', distribution: { dist: 'Exponential', distParams: { mean: '5' } } },
+    ];
+    expect(collapseSameState(periods)).toEqual(periods);
+  });
+
+  test('empty input returns empty output', () => {
+    expect(collapseSameState([])).toEqual([]);
+  });
+});
+
+// ── compileArrivalRatePeriods ────────────────────────────────────────────────
+
+describe('compileArrivalRatePeriods', () => {
+  const epoch = '2026-06-01'; // Monday
+
+  test('compiles a Mon-Fri 09:00-17:00 @ 10/hr pattern into exact Exponential periods and cycleLength', () => {
+    const pattern = {
+      mode: 'absolute',
+      periods: [
+        { dayOfWeek: 1, start: '09:00', end: '17:00', capacity: '10' },
+        { dayOfWeek: 2, start: '09:00', end: '17:00', capacity: '10' },
+        { dayOfWeek: 3, start: '09:00', end: '17:00', capacity: '10' },
+        { dayOfWeek: 4, start: '09:00', end: '17:00', capacity: '10' },
+        { dayOfWeek: 5, start: '09:00', end: '17:00', capacity: '10' },
+      ],
+      defaultCapacity: '0',
+    };
+    const { periods, cycleLength, warnings } = compileArrivalRatePeriods(pattern, epoch, 'minutes');
+    expect(warnings).toEqual([]);
+    expect(cycleLength).toBe(10080); // one week in minutes
+    // First period always starts at exactly 0.
+    expect(periods[0].startTime).toBe('0');
+    expect(periods[0]._closed).toBe(true); // epoch (Mon 00:00) is before the first 09:00 open window
+    // An open window shows the rate correctly converted to a mean (60/10 = 6).
+    const open = periods.find(p => p.startTime === '540');
+    expect(open.distribution).toEqual({ dist: 'Exponential', distParams: { mean: '6' } });
+    // Closes again at 17:00 (1020 min).
+    expect(periods.find(p => p.startTime === '1020')._closed).toBe(true);
+  });
+
+  test('a fully-closed pattern (every period at rate 0) collapses to one closed period spanning the whole cycle', () => {
+    const pattern = {
+      mode: 'absolute',
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: '0' }],
+      defaultCapacity: '0',
+    };
+    const { periods } = compileArrivalRatePeriods(pattern, epoch, 'minutes');
+    expect(periods).toEqual([{ startTime: '0', _closed: true }]);
+  });
+
+  test('multiplier mode is not supported — returns empty periods and a warning, never attempts a rate conversion', () => {
+    const pattern = {
+      mode: 'multiplier',
+      baseCapacity: 20,
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 0.5 }],
+    };
+    const { periods, cycleLength, warnings } = compileArrivalRatePeriods(pattern, epoch, 'minutes');
+    expect(periods).toEqual([]);
+    expect(cycleLength).toBeNull();
+    expect(warnings.some(w => w.includes('multiplier'))).toBe(true);
+  });
+
+  test('date exceptions are ignored — compiled periods are identical with or without them', () => {
+    const withoutExceptions = {
+      mode: 'absolute',
+      periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: '10' }],
+      defaultCapacity: '0',
+    };
+    const withExceptions = {
+      ...withoutExceptions,
+      exceptions: [{ date: '2026-06-08', periods: [{ start: '00:00', end: '23:59', capacity: '999' }] }],
+    };
+    const a = compileArrivalRatePeriods(withoutExceptions, epoch, 'minutes');
+    const b = compileArrivalRatePeriods(withExceptions, epoch, 'minutes');
+    expect(b.periods).toEqual(a.periods);
+  });
+
+  test('returns empty periods for a pattern with no periods', () => {
+    expect(compileArrivalRatePeriods({ periods: [] }, epoch, 'minutes')).toEqual({ periods: [], cycleLength: null, warnings: [] });
+    expect(compileArrivalRatePeriods(null, epoch, 'minutes')).toEqual({ periods: [], cycleLength: null, warnings: [] });
+  });
+
+  test('cycleLength scales with timeUnit', () => {
+    const pattern = { periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: '10' }], defaultCapacity: '0' };
+    expect(compileArrivalRatePeriods(pattern, epoch, 'hours').cycleLength).toBe(168); // one week in hours
   });
 });

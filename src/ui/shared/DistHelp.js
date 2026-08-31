@@ -9,7 +9,7 @@ export const DIST_GROUPS = [
   {
     id: "timevarying",
     label: "Time-varying",
-    dists: ["Piecewise", "Schedule"],
+    dists: ["Piecewise", "Schedule", "SchedulePattern"],
   },
   {
     id: "fromdata",
@@ -72,11 +72,15 @@ export const DIST_HELP = {
     params: {},
   },
   Piecewise: {
-    summary: "Time-varying rate — different distributions in different time windows of the simulation.",
+    summary: "Time-varying rate — different distributions in different time windows of the simulation. Optionally set cycleLength to repeat the pattern (e.g. one week) instead of holding the last period's rate forever.",
     params: {},
   },
   Schedule: {
     summary: "Planned arrival times from a timetable. Use for buses, trains, or known appointment slots.",
+    params: {},
+  },
+  SchedulePattern: {
+    summary: "Weekly schedule pattern, reused as an arrival/completion rate (arrivals per hour per period) instead of capacity. Requires an epoch. Absolute mode only — exceptions are ignored (the weekly pattern repeats every week, including exception dates). A period with rate 0 is closed; by design, a closed period may produce one extra arrival at the instant it reopens.",
     params: {},
   },
   ServerAttr: {

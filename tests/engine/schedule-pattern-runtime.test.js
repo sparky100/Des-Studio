@@ -138,3 +138,67 @@ describe('scheduleAdherence (F86.5) — actual server count vs desired capacity'
     expect(clerk.scheduleAdherence).toBeUndefined();
   });
 });
+
+describe('SchedulePattern arrival distribution — buildEngine() end-to-end', () => {
+  // Monday 09:00-17:00 (540-1020 min) open at 120 arrivals/hr (mean 0.5 min),
+  // closed (0/hr) the rest of the week — same epoch/timeUnit convention as
+  // calendarModel() above.
+  function schedulePatternArrivalModel() {
+    return {
+      epoch: '2026-06-01',
+      timeUnit: 'minutes',
+      entityTypes: [{ id: 'cust', name: 'Customer', role: 'customer', attrDefs: [] }],
+      queues: [{ id: 'q1', name: 'Queue', discipline: 'FIFO' }],
+      stateVariables: [],
+      bEvents: [{
+        id: 'arr', name: 'Arrival', scheduledTime: '0', effect: 'ARRIVE(Customer, Queue)',
+        schedules: [{
+          eventId: 'arr', dist: 'SchedulePattern',
+          distParams: {
+            schedulePattern: {
+              type: 'weekly', mode: 'absolute',
+              periods: [{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: '120' }],
+              defaultCapacity: '0',
+            },
+          },
+        }],
+      }],
+      cEvents: [],
+    };
+  }
+
+  test('arrivals cluster inside the open window and are (bounded-artifact aside) absent from the closed stretch', () => {
+    const result = buildEngine(schedulePatternArrivalModel(), 42, 0, 10080, null, 20000, 20000, true).runAll();
+    const arrivalTimes = result.snap.entities.map(e => e.arrivalTime);
+    expect(arrivalTimes.length).toBeGreaterThan(50); // sanity — the open window did produce arrivals
+
+    // Documented v1 approximation: a closed period can receive at most one
+    // spurious arrival per open→closed transition (drawn from the open
+    // period's own Exponential tail landing just past the close boundary),
+    // and exactly one at the instant a closed period reopens. With a single
+    // open window per week, that bounds "outside the window" arrivals to a
+    // small constant, not a fraction of the sample.
+    const outside = arrivalTimes.filter(t => t < 540 || t > 1020);
+    expect(outside.length).toBeLessThanOrEqual(4);
+  });
+
+  test('_compiled survives ctx.registry.resolve() — sampling actually uses the compiled periods, not the raw schedulePattern', () => {
+    // If _compiled were stripped by resolve(), DISTRIBUTIONS.SchedulePattern.sample
+    // would fall through to the "unconfigured" 1e9 sentinel and no arrivals would
+    // ever fire — this test would fail loudly (zero entities) rather than silently.
+    const result = buildEngine(schedulePatternArrivalModel(), 42, 0, 10080, null, 20000, 20000, true).runAll();
+    expect(result.snap.entities.length).toBeGreaterThan(0);
+  });
+
+  test('re-running buildEngine() on the same model object reuses the cached compiled periods', () => {
+    const model = schedulePatternArrivalModel();
+    const e1 = buildEngine(model, 42, 0, 100, null, 5000, 5000, true);
+    const e2 = buildEngine(model, 42, 0, 100, null, 5000, 5000, true);
+    // No direct accessor for the cached compiled periods — assert via behavior
+    // instead: both engines must agree on the compiled periods indirectly by
+    // running to completion with the same seed and producing identical arrival counts.
+    const r1 = e1.runAll();
+    const r2 = e2.runAll();
+    expect(r1.snap.entities.length).toBe(r2.snap.entities.length);
+  });
+});

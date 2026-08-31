@@ -321,6 +321,65 @@ describe('CEventEditor — expanding a state.<name> condition must not mark the 
   });
 });
 
+describe('CEventEditor — collapsed condition summary for structured (post-save) predicate conditions', () => {
+  // Regression: normalizeModelConditions converts every condition to the
+  // structured predicate-object shape at save time, so a real, persisted
+  // condition is (almost) never a string — the old string-only check showed
+  // "no condition" for essentially every C-event that actually has one.
+  it('shows the real condition text for a leaf predicate object, not "no condition"', () => {
+    const events = [{
+      id: 'c1', name: 'Start Service', priority: 1,
+      condition: { variable: 'queue(Waiting).length', operator: '>', value: 0 },
+      effect: '', cSchedules: [], description: '',
+    }];
+    render(
+      <CEventEditor
+        events={events}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[{ id: 'waiting', name: 'Waiting', customerType: 'Customer', discipline: 'FIFO' }]}
+      />
+    );
+    expect(screen.getByText('queue(Waiting).length > 0')).toBeInTheDocument();
+    expect(screen.queryByText('no condition')).not.toBeInTheDocument();
+  });
+
+  it('shows a joined AND compound condition summary', () => {
+    const events = [{
+      id: 'c2', name: 'Priority Service', priority: 1,
+      condition: { operator: 'AND', clauses: [
+        { variable: 'queue(Waiting).length', operator: '>', value: 0 },
+        { variable: 'idle(Nurse).count', operator: '>', value: 0 },
+      ] },
+      effect: '', cSchedules: [], description: '',
+    }];
+    render(
+      <CEventEditor
+        events={events}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[{ id: 'waiting', name: 'Waiting', customerType: 'Customer', discipline: 'FIFO' }]}
+      />
+    );
+    expect(screen.getByText('queue(Waiting).length > 0 AND idle(Nurse).count > 0')).toBeInTheDocument();
+  });
+
+  it('still shows "no condition" when there genuinely is none', () => {
+    const events = [{
+      id: 'c3', name: 'No Condition', priority: 1, condition: null,
+      effect: '', cSchedules: [], description: '',
+    }];
+    render(
+      <CEventEditor events={events} onChange={vi.fn()} bEvents={[]} entityTypes={[]} stateVariables={[]} queues={[]} />
+    );
+    expect(screen.getByText('no condition')).toBeInTheDocument();
+  });
+});
+
 describe('CEventEditor — follow-on B-event labels', () => {
   it('uses service language for queue-based ASSIGN options', () => {
     render(

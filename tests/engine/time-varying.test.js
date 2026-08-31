@@ -118,6 +118,56 @@ describe('time-varying model validation', () => {
     expect(validateModel(model).errors.some(error => error.code === 'V13')).toBe(true);
   });
 
+  function piecewiseArrivalModel(periods, cycleLength) {
+    return {
+      ...base,
+      bEvents: [{
+        id: 'arrival',
+        name: 'Arrival',
+        scheduledTime: '0',
+        effect: 'ARRIVE(Customer)',
+        schedules: [{
+          eventId: 'arrival',
+          dist: 'Piecewise',
+          distParams: { periods, ...(cycleLength !== undefined ? { cycleLength } : {}) },
+        }],
+      }],
+    };
+  }
+
+  test('blocks a non-positive or non-numeric cycleLength', () => {
+    const validPeriods = [{ startTime: '0', distribution: { dist: 'Fixed', distParams: { value: '1' } } }];
+    for (const bad of [0, -5, 'abc']) {
+      const errors = validateModel(piecewiseArrivalModel(validPeriods, bad)).errors.map(e => e.code);
+      expect(errors).toContain('V71');
+    }
+  });
+
+  test('does not flag V71 when cycleLength is blank/unset', () => {
+    const validPeriods = [{ startTime: '0', distribution: { dist: 'Fixed', distParams: { value: '1' } } }];
+    const errors = validateModel(piecewiseArrivalModel(validPeriods)).errors.map(e => e.code);
+    expect(errors).not.toContain('V71');
+  });
+
+  test('blocks a period startTime that would never be reached under cycleLength', () => {
+    const periods = [
+      { startTime: '0', distribution: { dist: 'Fixed', distParams: { value: '1' } } },
+      { startTime: '960', distribution: { dist: 'Fixed', distParams: { value: '2' } } },
+    ];
+    const errors = validateModel(piecewiseArrivalModel(periods, 960)).errors.map(e => e.code);
+    expect(errors).toContain('V72');
+  });
+
+  test('allows a valid cycleLength with every period below it', () => {
+    const periods = [
+      { startTime: '0', distribution: { dist: 'Fixed', distParams: { value: '1' } } },
+      { startTime: '480', distribution: { dist: 'Fixed', distParams: { value: '2' } } },
+    ];
+    const errors = validateModel(piecewiseArrivalModel(periods, 960)).errors.map(e => e.code);
+    expect(errors).not.toContain('V71');
+    expect(errors).not.toContain('V72');
+  });
+
   test('blocks invalid shift schedules', () => {
     const model = {
       ...base,

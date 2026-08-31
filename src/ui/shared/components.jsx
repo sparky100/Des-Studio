@@ -1,8 +1,9 @@
 // ui/shared/components.jsx — Reusable micro-components
-import React, { Component, useEffect, useId, useState, useRef } from "react";
+import React, { Component, useEffect, useId, useState, useRef, useMemo, useCallback } from "react";
 import { SPACE, RADIUS, TYPO, alpha } from "./tokens.js";
 import { useTheme, PALETTES } from "./ThemeContext.jsx";
 import { DISTRIBUTIONS, normalizeDistributionName } from "../../engine/distributions.js";
+import { mergePeriods, compileArrivalRatePeriods } from "../../engine/schedule-pattern.js";
 import { DIST_GROUPS, DIST_HELP, getDistGroup, validateDistParams } from "./DistHelp.js";
 import { DistSparkline } from "./DistSparkline.jsx";
 import { parsePlanCsv } from "./planCsvParser.js";
@@ -288,6 +289,24 @@ const PiecewiseEditor=({value,onChange,compact})=>{
       {periods.length===0&&<span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>No periods yet. Add a period starting at t=0.</span>}
       {unsorted&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>Periods must be sorted by start time.</span>}
       {periods[0]&&parseFloat(periods[0].startTime)!==0&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>First period must start at t=0.</span>}
+      {(() => {
+        const cycleLength = value?.distParams?.cycleLength;
+        const cl = cycleLength != null && cycleLength !== "" ? parseFloat(cycleLength) : null;
+        const badCycle = cl != null && !(Number.isFinite(cl) && cl > 0);
+        const badBounds = Number.isFinite(cl) && cl > 0 && periods.some(p => (parseFloat(p.startTime) || 0) >= cl);
+        return (
+          <div style={{display:"flex",flexDirection:"column",gap:2}}>
+            <label style={{display:"flex",alignItems:"center",gap:4}}>
+              <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>repeat every (cycle length):</span>
+              <input type="number" value={cycleLength??""} placeholder="blank = no repeat"
+                onChange={e=>onChange({...value,dist:"Piecewise",distParams:{...(value.distParams||{}),cycleLength:e.target.value}})}
+                style={{width:90,background:C.bg,border:`1px solid ${badCycle||badBounds?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px"}}/>
+            </label>
+            {badCycle&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>Cycle length must be a positive number.</span>}
+            {badBounds&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>Every period's start time must be less than the cycle length.</span>}
+          </div>
+        );
+      })()}
       <Btn small variant="ghost" onClick={add} style={{alignSelf:"flex-start"}}>+ Add Period</Btn>
     </div>
   );
@@ -632,6 +651,179 @@ const DistanceEditor=({value,onChange,queues=[],entityTypes=[]})=>{
   );
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// WEEKLY PATTERN RATE EDITOR — drives a B-event/C-event's SchedulePattern
+// arrival/completion rate from the same 24×7 weekly grid used for server
+// capacity (WeeklyPatternEditor.jsx), but relabeled "arrivals/hr" and
+// absolute-mode only (no mode selector, no exception-date UI — matches the
+// v1 scope: exceptions are ignored and multiplier mode is blocked by V75).
+// A separate, simpler component rather than a retrofit of the 300+ line
+// capacity editor (which has its own mode/exceptions/baseCapacity state) —
+// the grid/drag-select mechanics below are the only part actually shared,
+// and they're small enough not to warrant extracting a hook yet.
+// ═══════════════════════════════════════════════════════════════════════════════
+const RATE_DAYS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const RATE_HOURS=Array.from({length:24},(_,i)=>i);
+
+function rateHoursToPeriods(selectedHours,rate){
+  const periods=[];
+  for(const [dayStr,hours] of selectedHours){
+    const dayOfWeek=Number(dayStr);
+    const sorted=[...hours].sort((a,b)=>a-b);
+    let start=sorted[0];
+    let prev=sorted[0];
+    for(let i=1;i<=sorted.length;i++){
+      const h=sorted[i];
+      if(i<sorted.length&&h===prev+1){prev=h;}
+      else{
+        periods.push({dayOfWeek,start:`${String(start).padStart(2,"0")}:00`,end:`${String(prev+1).padStart(2,"0")}:00`,capacity:rate});
+        if(i<sorted.length){start=h;prev=h;}
+      }
+    }
+  }
+  return periods;
+}
+
+function rateGridLookup(periods){
+  const grid=new Map();
+  for(const p of periods||[]){
+    if(!grid.has(p.dayOfWeek))grid.set(p.dayOfWeek,new Map());
+    const startH=parseInt(p.start,10);
+    const endH=parseInt(p.end,10);
+    for(let h=startH;h<endH;h++)grid.get(p.dayOfWeek).set(h,p.capacity);
+  }
+  return grid;
+}
+
+const WeeklyPatternRateEditor=({value,onChange,epoch,timeUnit})=>{
+  const {C,FONT}=useTheme();
+  const pattern=value?.distParams?.schedulePattern||{type:"weekly",mode:"absolute",defaultCapacity:0,periods:[]};
+  const periods=pattern.periods||[];
+  const [defaultRate,setDefaultRate]=useState(pattern.defaultCapacity??0);
+  const [selecting,setSelecting]=useState(false);
+  const [selection,setSelection]=useState(()=>new Map()); // Map<dayOfWeek, Set<hour>>
+  const [rateVal,setRateVal]=useState(10);
+
+  const emit=useCallback((patch)=>{
+    onChange({...value,dist:"SchedulePattern",distParams:{...(value.distParams||{}),schedulePattern:{...pattern,type:"weekly",mode:"absolute",...patch}}});
+  },[value,onChange,pattern]);
+
+  const grid=useMemo(()=>rateGridLookup(periods),[periods]);
+  const cellRate=useCallback((dayIdx,hour)=>grid.get(dayIdx+1)?.get(hour)??null,[grid]);
+  const selHas=useCallback((dayIdx,hour)=>selection.get(dayIdx+1)?.has(hour)??false,[selection]);
+
+  const onCellMouseDown=useCallback((dayIdx,hour)=>{
+    setSelecting(true);
+    const day=dayIdx+1;
+    setSelection(prev=>{
+      const next=new Map(prev);
+      const set=new Set(next.get(day)||[]);
+      if(set.has(hour))set.delete(hour);else set.add(hour);
+      if(set.size)next.set(day,set);else next.delete(day);
+      return next;
+    });
+  },[]);
+  const onCellMouseEnter=useCallback((dayIdx,hour)=>{
+    if(!selecting)return;
+    const day=dayIdx+1;
+    setSelection(prev=>{
+      const next=new Map(prev);
+      const set=new Set(next.get(day)||[]);
+      set.add(hour);
+      next.set(day,set);
+      return next;
+    });
+  },[selecting]);
+  const onMouseUp=useCallback(()=>setSelecting(false),[]);
+  const selCount=[...selection.values()].reduce((sum,s)=>sum+s.size,0);
+
+  const applySelection=useCallback(()=>{
+    if(selection.size===0)return;
+    const newPeriods=rateHoursToPeriods(selection,rateVal);
+    const merged=mergePeriods([...periods,...newPeriods]);
+    emit({periods:merged,defaultCapacity:defaultRate});
+    setSelection(new Map());
+  },[selection,rateVal,periods,defaultRate,emit]);
+  const clearSelection=useCallback(()=>setSelection(new Map()),[]);
+  const clearAll=useCallback(()=>emit({periods:[],defaultCapacity:defaultRate}),[emit,defaultRate]);
+
+  const compiled=useMemo(()=>{
+    if(!periods.length||!epoch)return null;
+    try{return compileArrivalRatePeriods(pattern,epoch,timeUnit||"minutes");}
+    catch{return null;}
+  },[pattern,epoch,timeUnit,periods.length]);
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>Default off-window arrivals/hr:</span>
+        <input type="number" min="0" step="1" value={defaultRate}
+          onChange={e=>{const v=parseFloat(e.target.value)||0;setDefaultRate(v);emit({defaultCapacity:v});}}
+          style={{width:60,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"3px 6px"}}/>
+      </div>
+      <div style={{overflowX:"auto"}} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}>
+        <table style={{borderCollapse:"collapse",fontFamily:FONT,fontSize:10,userSelect:"none"}}>
+          <thead>
+            <tr>
+              <th style={{width:28,padding:"2px 4px",color:C.muted,fontWeight:400,textAlign:"right"}}></th>
+              {RATE_DAYS.map(d=><th key={d} style={{width:44,padding:"2px 0",color:C.text,fontWeight:600,textAlign:"center",fontSize:10}}>{d}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {RATE_HOURS.map(hour=>(
+              <tr key={hour}>
+                <td style={{padding:"2px 4px",color:C.muted,textAlign:"right",fontSize:9}}>{String(hour).padStart(2,"0")}</td>
+                {RATE_DAYS.map((_,di)=>{
+                  const rate=cellRate(di,hour);
+                  const isSelected=selHas(di,hour);
+                  const bg=isSelected
+                    ? `${C.cEvent}${Math.min(255,80+rateVal*4).toString(16).padStart(2,"0")}`
+                    : rate!=null
+                      ? `${C.green}${Math.min(255,60+rate*4).toString(16).padStart(2,"0")}`
+                      : `${C.border}22`;
+                  const borderColor=isSelected?C.cEvent:rate!=null?C.green:C.border;
+                  return (
+                    <td key={di}
+                      onMouseDown={()=>onCellMouseDown(di,hour)}
+                      onMouseEnter={()=>onCellMouseEnter(di,hour)}
+                      style={{width:44,height:22,background:bg,border:`1px solid ${borderColor}44`,cursor:"pointer",
+                        textAlign:"center",fontSize:8,color:isSelected||rate!=null?C.text:C.muted,transition:"background 0.1s"}}>
+                      {rate!=null?rate:""}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>
+          {selCount>0?`${selCount} cell${selCount!==1?"s":""} selected`:"Click-drag cells to select"}
+        </span>
+        {selCount>0&&<>
+          <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Arrivals/hr:</span>
+          <input type="number" min="0" step="1" value={rateVal}
+            onChange={e=>setRateVal(parseFloat(e.target.value)||0)}
+            style={{width:60,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"3px 6px"}}/>
+          <Btn small variant="primary" onClick={applySelection}>Apply</Btn>
+          <Btn small variant="ghost" onClick={clearSelection}>Clear selection</Btn>
+        </>}
+      </div>
+      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+        <Btn small variant="ghost" onClick={clearAll}>Clear All</Btn>
+      </div>
+      {compiled?.warnings?.length>0&&compiled.warnings.map((w,i)=>(
+        <span key={i} style={{fontSize:10,color:C.amber,fontFamily:FONT}}>{w}</span>
+      ))}
+      {!epoch&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>Requires a Real-world start date (Epoch) in experiment settings to align days of the week.</span>}
+      <InfoBox color={C.cEvent}>
+        Define arrivals per hour by day/time — a period with rate 0 is closed (no arrivals). The pattern repeats every week; date exceptions are not supported here. Absolute values only — no multiplier mode.
+      </InfoBox>
+    </div>
+  );
+};
+
 const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=false,attrDefs=[],queues=[],entityTypes=[],epoch,timeUnit})=>{
   const {C,FONT}=useTheme();
   const {confirm,confirmDialog}=useConfirm();
@@ -656,6 +848,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
   const isPiecewise=normDist==="Piecewise";
   const isSchedule=normDist==="Schedule";
   const isDistance=normDist==="Distance";
+  const isSchedulePattern=normDist==="SchedulePattern";
 
   // Derive current family from distribution
   const currentGroup=getDistGroup(normDist)||DIST_GROUPS[0];
@@ -672,6 +865,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
     const defaultParams=
       sel==="Piecewise" ? {periods:[{startTime:"0",distribution:{dist:"Exponential",distParams:{mean:"1"}}}]}
       :sel==="Schedule" ? {times:[]}
+      :sel==="SchedulePattern" ? {schedulePattern:{type:"weekly",mode:"absolute",defaultCapacity:0,periods:[]}}
       :{};
     onChange({...v,dist:sel,distParams:defaultParams});
     setCsvParse(null);
@@ -786,7 +980,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
           </select>
 
           {/* Param inputs with blur validation */}
-          {!isImported&&!isPiecewise&&!isSchedule&&!isDistance&&dd.params.map(param=>{
+          {!isImported&&!isPiecewise&&!isSchedule&&!isDistance&&!isSchedulePattern&&dd.params.map(param=>{
             const helpTxt=distHelp?.params?.[param];
             const errMsg=blurErrors[param];
             return (
@@ -847,6 +1041,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
       {isPiecewise&&<PiecewiseEditor value={v} onChange={onChange} compact={compact}/>}
       {isSchedule&&<ScheduleEditor value={v} onChange={onChange} attrDefs={attrDefs} epoch={epoch} timeUnit={timeUnit}/>}
       {isDistance&&<DistanceEditor value={v} onChange={onChange} queues={queues} entityTypes={entityTypes}/>}
+      {isSchedulePattern&&<WeeklyPatternRateEditor value={v} onChange={onChange} epoch={epoch} timeUnit={timeUnit}/>}
 
       {/* CSV column picker */}
       {csvParse&&(
@@ -877,7 +1072,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
       )}
 
       {/* Preview toggle + sparkline */}
-      {!isImported&&!csvParse&&!isPiecewise&&!isSchedule&&(
+      {!isImported&&!csvParse&&!isPiecewise&&!isSchedule&&!isSchedulePattern&&(
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic",flex:1}}>{dd.hint}</span>

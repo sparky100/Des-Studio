@@ -615,13 +615,14 @@ All stochastic delays — inter-arrival times, service durations, patience times
 | `fixed` | `value: number` (value > 0) | value | Deterministic constant. No randomness. Useful for M/D/1 benchmarks. |
 | `lognormal` | `logMean: number, logStdDev: number` (logStdDev > 0) | exp(logMean + logStdDev²/2) | **Implemented (Sprint 86).** Always positive — no zero-clamping needed. Recommended for heavily right-skewed durations (repair times, complex task durations with a long tail). Parameters are the mean and stddev of the underlying normal distribution, not the mean/stddev of the sampled values themselves. |
 | `empirical` | `values: number[]` (non-empty), optional `sourceFile`, `column` | mean(values) | Samples uniformly from list. Values may be entered inline or imported from CSV. |
-| `piecewise` | `periods: { startTime, distribution }[]` | active period mean | Selects the period with the greatest `startTime <= clock`, then delegates sampling to that period's distribution. |
+| `piecewise` | `periods: { startTime, distribution }[]`, optional `cycleLength: number` | active period mean | Selects the period with the greatest `startTime <= clock`, then delegates sampling to that period's distribution. If `cycleLength` is set, `clock` is wrapped `% cycleLength` first so the period list repeats indefinitely (e.g. `cycleLength: 10080` repeats a one-week pattern) instead of holding the last period forever past the defined horizon. |
 | `erlang` | `k: integer` (≥ 1), `mean: number` (> 0) | mean | k-phase service process. `Sample = -ln(∏ᵢ₌₁ᵏ Uᵢ) / (k / mean)`. Generalises exponential (k=1). |
 | `serverAttr` | `attr: string` (default: `"serviceTime"`) | attribute value | Reads the named attribute from the matched server entity at service-scheduling time. Allows per-server-instance service time variation. Returns `max(0, value)` or 1 if not found. |
 | `entityAttr` | `attr: string` | attribute value | Reads the named attribute from the arriving customer entity. Resolved at runtime via entity context. Returns the attribute value or 0 if not found. |
 | `schedule` | `times: number[]` or `rows: {time, attrs}[]`, optional `jitterDist`, `jitterParams` | per-plan | Generates arrivals at planned absolute times. `rows[]` supports per-arrival entity attribute overrides (S40.2). Returns `1e9` when the plan is exhausted (no further arrivals). Supports optional Normal or Uniform jitter. |
 | `categorical` | `options: { value, weight }[]` | n/a — non-numeric | Weighted random selection from a list of values (string/boolean/`null`). Not usable for time delays — only for entity attributes. |
 | `distance` | `from: string, to: string, speedAttr: string, speedSource: "entity"\|"server"` | distance / speed | Duration = a declared `distances[]` entry between the two named queues ÷ the named numeric attribute on the matched server or arriving entity (per `speedSource`). Resolved at cSchedule-resolution time via `phases.js`, not `sample()` — same mechanism as `serverAttr`/`entityAttr`. Falls back to 0 (with a log message) if the pair or attribute isn't found. Only meaningful on a C-event's `cSchedules`. |
+| `schedulePattern` | `schedulePattern: WeeklyPattern` (the same shape used for server `shiftSchedule`/`schedulePattern` capacity, §2.1) | active period's implied Exponential mean | Reuses the weekly 24×7 capacity grid to instead drive a B-event's (or C-event's) rate — each period's `capacity` is reinterpreted as **arrivals per hour**, compiled once per run into a `cycleLength`-wrapped `piecewise` internally (`1/(capacity in units-per-hour)` → Exponential mean). Absolute mode only; date exceptions are structurally checked but not applied (the weekly pattern repeats every week regardless). A rate-0 period is closed — no arrivals occur during it, and by design at most one extra arrival can fire at the instant a closed window reopens. Requires the model's `epoch` to be set. |
 
 ### 6.2 Distribution JSON Schema
 
@@ -694,7 +695,20 @@ Piecewise time-varying distribution:
 }
 ```
 
-simmodlr stores UI-authored piecewise distributions in the existing schedule shape as `dist: "Piecewise"` with `distParams.periods[]`. The engine accepts both the lower-case schema form above and the UI form.
+Piecewise with an optional `cycleLength` to repeat a one-week pattern indefinitely instead of enumerating every week of a multi-week run by hand:
+
+```json
+{
+  "type": "piecewise",
+  "cycleLength": 10080,
+  "periods": [
+    { "startTime": 0,   "distribution": { "type": "exponential", "rate": 0.5 } },
+    { "startTime": 480, "distribution": { "type": "exponential", "rate": 1.5 } }
+  ]
+}
+```
+
+simmodlr stores UI-authored piecewise distributions in the existing schedule shape as `dist: "Piecewise"` with `distParams.periods[]` (and `distParams.cycleLength`, if set). The engine accepts both the lower-case schema form above and the UI form.
 
 ### 6.3 CSV Import Rules
 

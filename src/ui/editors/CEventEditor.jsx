@@ -6,10 +6,11 @@ import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 import { EffectPicker, assignOptions, displayEventName, SectionFilterTabs, filterBySection, reorderCEventByPriority } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { summarizeBEventEffect } from "../../model/effectSummary.js";
+import { conditionLabel } from "../../model/conditionFormat.js";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter, onCreateBEvent, focusCEventId=null, onFocusHandled, onGoToBEvent, skills=[]})=>{
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter, onCreateBEvent, focusCEventId=null, onFocusHandled, onGoToBEvent, skills=[], epoch, timeUnit})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -161,9 +162,12 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         const i=events.findIndex(e=>e.id===ev.id);
         if(i===-1)return null;
         const isExpanded=effectiveExpanded.has(ev.id);
-        const condSummary=typeof ev.condition==='string'&&ev.condition.trim()
-          ?(ev.condition.length>30?ev.condition.slice(0,28)+"…":ev.condition)
-          :"no condition";
+        // ev.condition is almost always a structured predicate object once a
+        // model has been saved — normalizeModelConditions (model/conditionFormat.js)
+        // converts every condition to that shape at save time. A string-only
+        // check here (the old code) matched essentially nothing, showing
+        // "no condition" for every real, persisted condition.
+        const condSummary=ev.condition?conditionLabel(ev.condition):"no condition";
         const rowEffectArr=Array.isArray(ev.effect)?ev.effect.filter(Boolean):(ev.effect?ev.effect.split(';').map(s=>s.trim()).filter(Boolean):[]);
         const rowIsDelay=rowEffectArr.some(e=>typeof e==='string'&&/^DELAY\(/i.test(e));
 
@@ -428,7 +432,8 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                         <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:60}}>delay via:</span>
                         <DistPicker value={{dist:s.dist||"ServerAttr",distParams:s.distParams||{attr:"serviceTime"}}}
                           onChange={v=>updSched(i,j,{dist:v.dist,distParams:v.distParams})} compact
-                          allowDistance queues={queues} entityTypes={entityTypes}/>
+                          allowDistance queues={queues} entityTypes={entityTypes}
+                          epoch={epoch} timeUnit={timeUnit}/>
                       </div>
                       {rowIsDelay&&s.dist==="ServerAttr"&&(
                         <div style={{fontSize:10,color:C.amber,fontFamily:FONT,lineHeight:1.5}}>

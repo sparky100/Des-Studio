@@ -356,3 +356,134 @@ export function buildShiftPeriodLabels(pattern) {
   }
   return labels;
 }
+
+// ── SchedulePattern-driven B-event/C-event arrival rates ────────────────────
+// A weekly schedulePattern can also drive a B-event's arrival rate (or a
+// C-event's service rate) — the "SchedulePattern" distribution in
+// distributions.js. Unlike server capacity (a headcount, expanded into
+// SHIFT_CHANGE events consumed by the FEL), an arrival rate needs to be
+// sampled at arbitrary future clock values by the self-chaining B-event, so
+// the pattern is compiled ONCE per buildEngine() call into a cyclic,
+// Piecewise-equivalent periods list (see getActivePiecewisePeriod's
+// cycleLength support) rather than expanded into absolute-time FEL events.
+
+// Convert an hourly arrival rate into the mean inter-arrival time in the
+// model's own timeUnit. Exact for Exponential (mean = 1/rate); the standard
+// representation of a time-varying-rate Poisson process.
+/**
+ * @param {number|string} ratePerHour
+ * @param {string} [timeUnit]
+ * @returns {number|null} null means "closed" — caller must not build an Exponential from this
+ */
+export function rateToMean(ratePerHour, timeUnit = "minutes") {
+  const rate = Number(ratePerHour);
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+  const unitsPerHour = UNIT_MS.hours / (UNIT_MS[timeUnit] ?? UNIT_MS.minutes);
+  return unitsPerHour / rate;
+}
+
+// Merge contiguous periods sharing the same "state" (both closed, or both
+// open with the same mean) into one — so a whole closed stretch (however
+// many grid cells it spans) becomes exactly one period. Without this, every
+// internal boundary between adjacent closed cells would still fire one
+// spurious arrival (sample() only controls delay, never whether the
+// *current* firing's effect executes — see distributions.js's
+// DISTRIBUTIONS.SchedulePattern.sample for the full explanation), multiplying
+// bogus arrivals per closed cell instead of per closed window.
+/** @param {Array<{startTime: string, distribution?: {distParams:{mean:string}}, _closed?: boolean}>} periods */
+export function collapseSameState(periods) {
+  /** @type {typeof periods} */
+  const out = [];
+  for (const p of periods) {
+    const prev = out[out.length - 1];
+    const same = prev && (!!prev._closed === !!p._closed) &&
+      (p._closed || prev.distribution?.distParams?.mean === p.distribution?.distParams?.mean);
+    if (same) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+// Compile a weekly schedulePattern into an arrival-rate Piecewise-equivalent
+// representation: a sorted, gap-free, cyclic list of periods covering
+// [0, cycleLength) in the model's timeUnit, each either an Exponential
+// period (rate > 0) or a `_closed: true` sentinel period (rate === 0), with
+// all contiguous same-state periods merged (collapseSameState). Reuses
+// expandWeeklyPatternToEvents/getPatternInitialCapacity — the same proven
+// epoch/day-of-week alignment already used for server shift changes —
+// rather than re-deriving week-rotation math for this new caller.
+//
+// Date exceptions are intentionally NOT applied: a date-specific exception
+// cannot be faithfully represented once folded into a cyclic (not
+// absolute-sim-time) week. Multiplier mode is also not supported for v1 —
+// the grid's cell value is a rate, not a headcount/multiplier pair.
+/**
+ * @param {SchedulePattern} pattern
+ * @param {string|null|undefined} epoch
+ * @param {string} [timeUnit]
+ */
+export function compileArrivalRatePeriods(pattern, epoch, timeUnit = "minutes") {
+  /** @type {string[]} */
+  const warnings = [];
+  if (!pattern?.periods?.length) return { periods: [], cycleLength: null, warnings };
+  if (pattern.mode === "multiplier") {
+    warnings.push("SchedulePattern arrival distribution does not support multiplier mode — treat as unconfigured");
+    return { periods: [], cycleLength: null, warnings };
+  }
+  const ms = UNIT_MS[timeUnit] ?? UNIT_MS.minutes;
+  const cycleLength = MS_PER_WEEK / ms;
+  const initialRate = getPatternInitialCapacity(pattern, epoch, timeUnit) ?? 0;
+  const { events, warnings: pw } = expandWeeklyPatternToEvents(
+    { ...pattern, exceptions: undefined }, epoch, cycleLength, timeUnit
+  );
+  warnings.push(...pw);
+  const raw = [{ time: 0, capacity: initialRate }, ...events.filter(ev => ev.time > 1e-9)];
+  const periods = raw.map(ev => {
+    const rate = Math.max(0, Number(ev.capacity) || 0);
+    const mean = rateToMean(rate, timeUnit);
+    return mean != null
+      ? { startTime: String(ev.time), distribution: { dist: "Exponential", distParams: { mean: String(mean) } } }
+      : { startTime: String(ev.time), _closed: true };
+  });
+  return { periods: collapseSameState(periods), cycleLength, warnings };
+}
+
+/**
+ * Merge overlapping/adjacent weekly periods that share the same day and
+ * capacity/rate value into a single period each. Used by the weekly-grid
+ * editors (capacity `WeeklyPatternEditor` and arrival-rate
+ * `WeeklyPatternRateEditor`) after a drag-select "Apply" — both editors
+ * produce the identical `{dayOfWeek,start,end,capacity}` period shape, so
+ * this merge logic is shared rather than duplicated per editor.
+ * @param {Array<{dayOfWeek:number,start:string,end:string,capacity:number}>} periods
+ */
+export function mergePeriods(periods) {
+  /** @type {Record<number, any[]>} */
+  const byDay = {};
+  for (const p of periods) {
+    if (!byDay[p.dayOfWeek]) byDay[p.dayOfWeek] = [];
+    byDay[p.dayOfWeek].push(p);
+  }
+  const result = [];
+  for (const [dayStr, ps] of Object.entries(byDay)) {
+    const day = Number(dayStr);
+    ps.sort((a, b) => parseHHMM(a.start) - parseHHMM(b.start));
+    const merged = [];
+    for (const p of ps) {
+      const last = merged[merged.length - 1];
+      const pStart = parseHHMM(p.start);
+      const pEnd = parseHHMM(p.end);
+      if (last) {
+        const lStart = parseHHMM(last.start);
+        const lEnd = parseHHMM(last.end);
+        if (pStart <= lEnd && last.capacity === p.capacity) {
+          last.end = lEnd >= pEnd ? last.end : p.end;
+          continue;
+        }
+      }
+      merged.push({ dayOfWeek: day, start: p.start, end: p.end, capacity: p.capacity });
+    }
+    result.push(...merged);
+  }
+  return result;
+}
