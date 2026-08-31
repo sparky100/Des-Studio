@@ -455,4 +455,85 @@ describe('buildModelDefinitionHtml', () => {
     expect(html).toContain('Engineer');
     expect(html).toContain('Paperwork');
   });
+
+  test('renders a Description column for containers, B-events, C-events, and goals', () => {
+    const model = {
+      name: 'Test',
+      entityTypes: [{ id: 'e1', name: 'Customer', role: 'customer' }],
+      queues: [{ id: 'q1', name: 'Queue', discipline: 'FIFO' }],
+      containerTypes: [{ id: 'Fuel', capacity: 100, initialLevel: 50, description: 'Fuel reserve tank' }],
+      bEvents: [{ id: 'b1', name: 'Arrival', effect: 'ARRIVE(Customer, Queue)', description: 'Customers arrive here' }],
+      cEvents: [{ id: 'c1', name: 'Assign', effect: 'ASSIGN(Queue, Server)', condition: '', priority: 1, cSchedules: [], description: 'Hands out a server' }],
+      goals: [{ label: 'Wait under 5', metric: 'avgWait', operator: '<', target: 5, description: 'Customer-facing target' }],
+    };
+    const html = buildModelDefinitionHtml(model);
+    expect(html).toContain('Fuel reserve tank');
+    expect(html).toContain('Customers arrive here');
+    expect(html).toContain('Hands out a server');
+    expect(html).toContain('Customer-facing target');
+  });
+
+  test('renders an Effect column and a Type classification for C-events', () => {
+    const model = {
+      name: 'Test',
+      entityTypes: [{ id: 'e1', name: 'Customer', role: 'customer' }, { id: 'e2', name: 'Staff', role: 'server', count: 2 }],
+      queues: [{ id: 'q1', name: 'Queue', discipline: 'FIFO' }],
+      bEvents: [],
+      cEvents: [
+        { id: 'c1', name: 'Repair', effect: 'DELAY(Repair Queue)', cSchedules: [{ dist: 'Fixed', distParams: { value: '5' } }] },
+        { id: 'c2', name: 'Preempt Trigger', effect: 'PREEMPT(Staff, PRIORITY(taskPriority))', condition: 'queue(Queue).length > 0', cSchedules: [] },
+        { id: 'c3', name: 'Serve', effect: 'ASSIGN(Queue, Staff)', cSchedules: [{ dist: 'Fixed', distParams: { value: '3' } }] },
+        { id: 'c4', name: 'Condition Only', effect: '', condition: 'idle(Staff).count > 0', cSchedules: [] },
+      ],
+    };
+    const html = buildModelDefinitionHtml(model);
+    expect(html).toContain('DELAY(Repair Queue)');
+    expect(html).toContain('PREEMPT(Staff, PRIORITY(taskPriority))');
+    expect(html).toContain('ASSIGN(Queue, Staff)');
+    expect(html).toContain('>Delay<');
+    expect(html).toContain('>Preempt<');
+    expect(html).toContain('>Service<');
+    expect(html).toContain('>Condition<');
+  });
+
+  test('renders routing info for a B-event with probabilisticRouting/routing/defaultQueueName/loopConfig, and "—" when none', () => {
+    const model = {
+      name: 'Test',
+      entityTypes: [{ id: 'e1', name: 'Customer', role: 'customer' }],
+      queues: [{ id: 'q1', name: 'A', discipline: 'FIFO' }, { id: 'q2', name: 'B', discipline: 'FIFO' }],
+      bEvents: [
+        {
+          id: 'b1', name: 'Routed Release', effect: 'RELEASE(Server)',
+          probabilisticRouting: [{ probability: 60, queueName: 'A' }, { probability: 40, queueName: 'B' }],
+          defaultQueueName: 'A',
+          loopConfig: { exitQueueName: 'B' },
+        },
+        { id: 'b2', name: 'Plain Release', effect: 'RELEASE(Server)' },
+      ],
+      cEvents: [],
+    };
+    const html = buildModelDefinitionHtml(model);
+    expect(html).toContain('60% → A');
+    expect(html).toContain('40% → B');
+    expect(html).toContain('default → A');
+    expect(html).toContain('loop exit → B');
+    // The plain-release row (no routing fields at all) still shows a dash,
+    // not an empty cell — confirms fmtRouting's fallback path.
+    const plainRow = html.slice(html.indexOf('Plain Release'));
+    expect(plainRow.slice(0, 400)).toContain('—');
+  });
+
+  test('printSection colWidths param emits <col style="width:..."> and table-layout:fixed', () => {
+    const model = {
+      name: 'Test',
+      entityTypes: [{ id: 'e1', name: 'Customer', role: 'customer' }],
+      queues: [{ id: 'q1', name: 'Queue', discipline: 'FIFO' }],
+      bEvents: [{ id: 'b1', name: 'Arrival', effect: 'ARRIVE(Customer, Queue)' }],
+      cEvents: [],
+    };
+    const html = buildModelDefinitionHtml(model);
+    expect(html).toContain('<col style="width:90px">');
+    expect(html).toContain('<col style="width:110px">');
+    expect(html).toContain('table-layout:fixed');
+  });
 });

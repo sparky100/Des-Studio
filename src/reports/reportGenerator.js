@@ -1546,11 +1546,20 @@ function fmtSchedule(sched = []) {
   return desc ? (unit ? `${desc} ${unit}` : desc) : null;
 }
 
-function printSection(title, rows) {
+// colWidths: optional { [headerName]: cssWidth } — fixes a short enum-like
+// column (e.g. "Type", "Priority") to a sensible width via <col> so a long
+// value in another column can't squeeze it into wrapping (e.g. "Completion").
+function printSection(title, rows, colWidths = {}) {
   if (!rows.length) return '';
+  const hasColWidths = Object.keys(colWidths).length > 0;
+  const colgroup = rows[0].map(h => `<col${colWidths[h] ? ` style="width:${colWidths[h]}"` : ''}>`).join('');
+  // table-layout:fixed makes <col> widths authoritative — without it, "auto"
+  // layout treats them as weak hints a long value in another column can
+  // still override, which is exactly how "Completion" ended up wrapping.
   return `<section>
   <h2>${esc(title)}</h2>
-  <table>
+  <table${hasColWidths ? ' style="table-layout:fixed"' : ''}>
+    <colgroup>${colgroup}</colgroup>
     <thead><tr>${rows[0].map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
     <tbody>
       ${rows.slice(1).map(r => `<tr>${r.map(c => `<td>${c ?? '—'}</td>`).join('')}</tr>`).join('\n      ')}
@@ -1640,12 +1649,36 @@ export function buildModelDefinitionHtml(model = {}) {
     if (Array.isArray(effect)) return effect.map(e => esc(String(e))).join(' → ');
     return esc(String(effect || ''));
   }
+  // Routing destinations live in dedicated fields, not the effect string — the
+  // same fields engine/index.js's compileEventImpactTemplate treats as real
+  // routing destinations (conditional branches, probabilistic branches, a
+  // default fallback queue, and a loop-guard exit queue). Without this, a
+  // section titled "Arrivals & routing" never actually shows any routing.
+  function fmtRouting(ev) {
+    const parts = [];
+    for (const b of ev.routing || []) {
+      if (b?.queueName) parts.push(`if ${formatCondition(b.condition)} → ${esc(b.queueName)}`);
+    }
+    for (const b of ev.probabilisticRouting || []) {
+      if (b?.queueName) parts.push(`${esc(String(b.probability ?? ''))}${typeof b.probability === 'number' ? '%' : ''} → ${esc(b.queueName)}`);
+    }
+    if (ev.defaultQueueName) parts.push(`default → ${esc(ev.defaultQueueName)}`);
+    if (ev.loopConfig?.exitQueueName) parts.push(`loop exit → ${esc(ev.loopConfig.exitQueueName)}`);
+    return parts.length ? parts.join('; ') : '—';
+  }
 
   const bEventRows = bEvents.length ? [
-    ['Name', 'Type', 'Timing', 'Effect'],
+    ['Name', 'Type', 'Timing', 'Effect', 'Routing', 'Description'],
     ...bEvents.map(ev => {
       const sched = fmtSchedule(ev.schedules);
-      return [esc(ev.name), bEventType(ev.effect), sched ? `${sched} ${timeUnit}` : '—', fmtEffect(ev.effect)];
+      return [
+        esc(ev.name),
+        bEventType(ev.effect),
+        sched ? `${sched} ${timeUnit}` : '—',
+        fmtEffect(ev.effect),
+        fmtRouting(ev),
+        esc(ev.description || ''),
+      ];
     })
   ] : [];
 
@@ -1681,9 +1714,22 @@ export function buildModelDefinitionHtml(model = {}) {
     if (coseizeMatch) return coseizeMatch[2].trim();
     return '—';
   }
+  // A blank Server cell above collapses several genuinely different kinds of
+  // C-event into the same "—" (a Delay activity, a pure PREEMPT trigger, a
+  // condition-only gate with no schedules) — this classifier tells them
+  // apart, mirroring bEventType's regex-on-effect-string style.
+  function cEventType(ev) {
+    const e = Array.isArray(ev.effect) ? ev.effect.join(';') : String(ev.effect || '');
+    if (/DELAY\s*\(/i.test(e)) return 'Delay';
+    if (/PREEMPT\s*\(/i.test(e)) return 'Preempt';
+    if (/FAIL\s*\(/i.test(e)) return 'Fail';
+    if (/ASSIGN\s*\(/i.test(e) || /COSEIZE\s*\(/i.test(e)) return 'Service';
+    if (!e && !(ev.cSchedules || []).length) return 'Condition';
+    return 'Event';
+  }
 
   const cEventRows = cEvents.length ? [
-    ['Name', 'Server', 'Service time', 'Schedules', 'Condition', 'Priority'],
+    ['Name', 'Type', 'Server', 'Service time', 'Schedules', 'Effect', 'Condition', 'Priority', 'Description'],
     ...cEvents.map(ev => {
       const sched = fmtSchedule(ev.cSchedules);
       const scheduledEvents = (ev.cSchedules || [])
@@ -1697,11 +1743,14 @@ export function buildModelDefinitionHtml(model = {}) {
         .join(', ');
       return [
         esc(ev.name),
+        cEventType(ev),
         esc(cEventServer(ev)),
         sched ? `${sched} ${timeUnit}` : '—',
         scheduledEvents || '—',
+        fmtEffect(ev.effect),
         formatCondition(ev.condition),
         esc(String(ev.priority ?? 1)),
+        esc(ev.description || ''),
       ];
     })
   ] : [];
@@ -1709,18 +1758,23 @@ export function buildModelDefinitionHtml(model = {}) {
   // ── Containers ─────────────────────────────────────────────────────────────
   const containerTypes = model.containerTypes || [];
   const containerRows = containerTypes.length ? [
-    ['Name', 'Capacity', 'Initial level'],
+    ['Name', 'Capacity', 'Initial level', 'Description'],
     ...containerTypes.map(ct => [
       esc(ct.id),
       ct.capacity != null ? esc(String(ct.capacity)) : 'Unlimited',
       esc(String(ct.initialLevel ?? 0)),
+      esc(ct.description || ''),
     ])
   ] : [];
 
   // ── Goals ──────────────────────────────────────────────────────────────────
   const goalRows = goals.length ? [
-    ['Goal', 'Target'],
-    ...goals.map(g => [esc(g.label || g.metric || ''), esc(g.target != null ? `${g.operator || '≤'} ${g.target}` : '')])
+    ['Goal', 'Target', 'Description'],
+    ...goals.map(g => [
+      esc(g.label || g.metric || ''),
+      esc(g.target != null ? `${g.operator || '≤'} ${g.target}` : ''),
+      esc(g.description || ''),
+    ])
   ] : [];
 
   const sections = [
@@ -1730,8 +1784,8 @@ export function buildModelDefinitionHtml(model = {}) {
     stateVars.length ? printSection('State variables', stateVarRows) : '',
     queues.length ? printSection('Queues', queueRows) : '',
     containerTypes.length ? printSection('Containers', containerRows) : '',
-    bEvents.length ? printSection('B Events (Arrivals & routing)', bEventRows) : '',
-    cEvents.length ? printSection('C Events (Activities)', cEventRows) : '',
+    bEvents.length ? printSection('B Events (Arrivals & routing)', bEventRows, { Type: '90px', Timing: '110px' }) : '',
+    cEvents.length ? printSection('C Events (Activities)', cEventRows, { Type: '80px', Priority: '60px' }) : '',
     goals.length ? printSection('Performance goals', goalRows) : '',
   ].filter(Boolean).join('\n');
 
