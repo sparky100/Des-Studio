@@ -68,6 +68,27 @@ export function isDelayEffect(effect) {
   return /\bDELAY\s*\(/i.test(effectText(effect));
 }
 
+// True when a c-event's effect uses the PREEMPT macro — used to show a
+// persistent "N preempted" count (see deriveActivityLiveData's isPreempt
+// field) instead of relying solely on the transient start-flash pulse,
+// which is easy to miss for an event that only fires occasionally.
+export function isPreemptEffect(effect) {
+  return /\bPREEMPT\s*\(/i.test(effectText(effect));
+}
+
+// Extract the queue an ASSIGN/COSEIZE effect draws its next customer from.
+// Used to scope "N interrupted, waiting to resume" (see deriveActivityLiveData's
+// interruptedCount) to the specific queue this activity feeds from, not every
+// waiting entity in the model. Mirrors extractServerTypes's own ASSIGN/COSEIZE
+// matching but captures the first argument (the queue) instead of the
+// server type(s).
+export function extractSourceQueueName(effect) {
+  const text = effectText(effect);
+  if (!text) return null;
+  const m = text.match(/(?:ASSIGN|COSEIZE)\s*\(\s*([^,)]+)\s*,/i);
+  return m ? m[1].trim() : null;
+}
+
 // Build c-event id -> { serverTypes, capacities, ceventName } for activity node enrichment.
 // capacity per type comes from model.entityTypes[role=server].count (defaults to 1).
 export function buildServerTypeIndex(cEvents, entityTypes) {
@@ -200,12 +221,15 @@ export function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
   if (!snap) return null;
   const meta = serverTypeIndex.get(refId);
   const serverTypes = meta?.serverTypes ?? [];
+  // Hoisted so both branches below can use it — the indexed branch needs it
+  // for interruptedCount/isPreempt, the not-indexed branch already needed it
+  // for scheduledEventIds/isDelayEffect.
+  const ce = (model?.cEvents || []).find(c => c.id === refId);
 
   if (!serverTypes.length) {
     // Not indexed (e.g. no ASSIGN/COSEIZE server type resolved) — fall back to
     // looking the c-event up directly by id for its own scheduled event(s),
     // same as the indexed path below, rather than the model-wide snap.served.
-    const ce = (model?.cEvents || []).find(c => c.id === refId);
     const scheduledEventIds = (ce?.cSchedules || []).map(cs => cs.eventId).filter(Boolean);
 
     if (isDelayEffect(ce?.effect)) {
@@ -265,11 +289,29 @@ export function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
   );
   const first = perType[0];
 
+  // Whole-activity stats, not per-server-type — computed once regardless of
+  // single-resource vs COSEIZE multi-row shape.
+  const sourceQueue = extractSourceQueueName(ce?.effect);
+  const interruptedCount = sourceQueue
+    ? (snap.entities || []).filter(e =>
+        e.role !== "server" && e.queue === sourceQueue && e.status === "waiting" && e._remainingService != null
+      ).length
+    : 0;
+
   return {
     ...first,
     completionSignal: completionSignalFor(meta?.scheduledEventIds, snap),
     startSignal: snap.eventCounts?.[refId] || 0,
     clock: snap.clock,
     perType,
+    // Entities that started here, got PREEMPT/FAIL-interrupted, and are now
+    // waiting in this activity's own feeder queue to resume (as opposed to
+    // waiting fresh, never started) — see extractSourceQueueName above.
+    interruptedCount,
+    // True for a PREEMPT-only c-event ("Preempt Repair for X") — its own
+    // startSignal above is the count worth showing persistently, not just
+    // flashing transiently, since it fires occasionally and the flash is
+    // easy to miss.
+    isPreempt: isPreemptEffect(ce?.effect),
   };
 }

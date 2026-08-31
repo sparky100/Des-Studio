@@ -93,6 +93,35 @@ function ActiveCount({ activityBusyCount }) {
   );
 }
 
+// Entities that started at this activity, got preempted/failed off it, and
+// are now waiting in its feeder queue to resume — a supplementary, exceptional
+// stat (like the failedCount warning above), so it's hidden at zero rather
+// than always shown the way ActiveCount is.
+function InterruptedNote({ count }) {
+  const { C, FONT } = useTheme();
+  if (!count) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 1 }}>
+      <span style={{ fontSize: 9, color: C.amber, fontFamily: FONT, fontWeight: 600 }}>
+        ⏸ {count} interrupted
+      </span>
+    </div>
+  );
+}
+
+// Persistent running total for a PREEMPT activity — this card's own fire
+// count (startSignal) is its primary metric, so shown continuously rather
+// than only via the transient start-flash pulse, which is easy to miss for
+// an event that fires occasionally.
+function PreemptCount({ count }) {
+  const { C, FONT } = useTheme();
+  return (
+    <div style={{ fontSize: 11, fontWeight: 700, color: C.amber, fontFamily: FONT, marginTop: 2 }}>
+      {count} preempted
+    </div>
+  );
+}
+
 function SkillBadges({ skillBreakdown }) {
   const { C, FONT } = useTheme();
   if (!skillBreakdown) return null;
@@ -201,6 +230,7 @@ export function ExecuteActivityNode({ data }) {
   const serverName         = live?.serverTypeName     ?? null;
   const rows               = live?.perType?.length > 1 ? live.perType : null;
   const skillBreakdown     = live?.skillBreakdown     ?? null;
+  const interruptedCount   = live?.interruptedCount   ?? 0;
 
   // Persistent busy/idle/failed state color (independent of the transient
   // pulses above) — the convention most DES tools use on a resource/activity
@@ -292,7 +322,8 @@ export function ExecuteActivityNode({ data }) {
       </div>
 
       {live ? (
-        live.isDelay ? (
+        <>
+        {live.isDelay ? (
           // No resource pool exists for a DELAY activity — show only the
           // count of entities this activity currently has held in delay,
           // never a server-square grid (there's no server to draw one for).
@@ -334,7 +365,14 @@ export function ExecuteActivityNode({ data }) {
               skillBreakdown={skillBreakdown}
             />
           </>
-        )
+        )}
+        {/* Whole-activity stats, independent of the rows/single-resource
+            shape above — an interrupted-and-waiting-to-resume count applies
+            to any ASSIGN/COSEIZE activity, and the persistent preempt total
+            applies only to a PREEMPT activity. */}
+        <InterruptedNote count={interruptedCount} />
+        {live.isPreempt && <PreemptCount count={live.startSignal ?? 0} />}
+        </>
       ) : (
         <div style={{ fontSize: 9, color: C.muted }}>—</div>
       )}
