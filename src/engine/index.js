@@ -1573,11 +1573,26 @@ const cycleLog = [];
       const byType = stepSnap?.byType ?? liteSnap?.byType;
       if (byType && state.__desiredServerCapacity) {
         state.__scheduleAdherenceSamples = state.__scheduleAdherenceSamples || {};
+        // byType is keyed by the entity type's actual-case name (e.g. "Nurse");
+        // __desiredServerCapacity keys are normalized lowercase (see
+        // applyShiftChange in phases.js). Comparing srvType against byType
+        // directly always missed for any type name containing an uppercase
+        // letter — bt came back undefined, so `matching` never incremented and
+        // scheduleAdherence read 0% regardless of actual adherence. Look up
+        // through a lowercase-keyed view instead, matching the normName/match
+        // convention used elsewhere for this same map (macros.js, phases.js).
+        const byTypeNorm = {};
+        for (const [t, bt] of Object.entries(byType)) byTypeNorm[String(t).trim().toLowerCase()] = bt;
         for (const [srvType, desired] of Object.entries(state.__desiredServerCapacity)) {
           if (!state.__scheduleAdherenceSamples[srvType]) state.__scheduleAdherenceSamples[srvType] = { total: 0, matching: 0 };
           state.__scheduleAdherenceSamples[srvType].total++;
-          const bt = byType[srvType];
-          if (bt && (bt.busy + bt.idle) === desired) {
+          // A type with zero live instances (e.g. fully retired during a
+          // capacity-0/closed period) has no entry in byType at all — that's a
+          // legitimate actual count of 0, not a missing sample, so it must
+          // still be comparable against `desired` rather than short-circuiting
+          // the match on `bt` being undefined.
+          const bt = byTypeNorm[srvType] || { busy: 0, idle: 0 };
+          if ((bt.busy + bt.idle) === desired) {
             state.__scheduleAdherenceSamples[srvType].matching++;
           }
         }
