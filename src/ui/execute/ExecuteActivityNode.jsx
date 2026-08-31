@@ -96,13 +96,14 @@ function ActiveCount({ activityBusyCount }) {
 // Entities that started at this activity, got preempted/failed off it, and
 // are now waiting in its feeder queue to resume — a supplementary, exceptional
 // stat (like the failedCount warning above), so it's hidden at zero rather
-// than always shown the way ActiveCount is.
+// than always shown the way ActiveCount is. Font size matches ActiveCount's
+// so the two read at the same visual weight when both are shown together.
 function InterruptedNote({ count }) {
   const { C, FONT } = useTheme();
   if (!count) return null;
   return (
     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 1 }}>
-      <span style={{ fontSize: 9, color: C.amber, fontFamily: FONT, fontWeight: 600 }}>
+      <span style={{ fontSize: 11, color: C.amber, fontFamily: FONT, fontWeight: 600 }}>
         ⏸ {count} interrupted
       </span>
     </div>
@@ -112,12 +113,17 @@ function InterruptedNote({ count }) {
 // Persistent running total for a PREEMPT activity — this card's own fire
 // count (startSignal) is its primary metric, so shown continuously rather
 // than only via the transient start-flash pulse, which is easy to miss for
-// an event that fires occasionally.
+// an event that fires occasionally. Styled like ExecuteSinkNode's "served"
+// headline stat (large, light-weight number + small label) since it's this
+// card's one and only metric, not a supplementary line.
 function PreemptCount({ count }) {
   const { C, FONT } = useTheme();
   return (
-    <div style={{ fontSize: 11, fontWeight: 700, color: C.amber, fontFamily: FONT, marginTop: 2 }}>
-      {count} preempted
+    <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 2 }}>
+      <div style={{ fontFamily: FONT, fontSize: 28, fontWeight: 300, color: C.amber, lineHeight: 1 }}>
+        {count}
+      </div>
+      <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>preempted</span>
     </div>
   );
 }
@@ -323,7 +329,15 @@ export function ExecuteActivityNode({ data }) {
 
       {live ? (
         <>
-        {live.isDelay ? (
+        {live.isPreempt ? (
+          // A Preempt activity never claims a server "for itself" the way a
+          // service does (see isDelay below for the analogous no-resource
+          // case) — its own resource pool/dot-grid/"N active" would always
+          // read 0 and just add noise next to its one real metric. Show only
+          // the persistent preempted count; a Preempt card is never itself
+          // the interrupted activity, so no InterruptedNote either.
+          <PreemptCount count={live.startSignal ?? 0} />
+        ) : live.isDelay ? (
           // No resource pool exists for a DELAY activity — show only the
           // count of entities this activity currently has held in delay,
           // never a server-square grid (there's no server to draw one for).
@@ -366,12 +380,10 @@ export function ExecuteActivityNode({ data }) {
             />
           </>
         )}
-        {/* Whole-activity stats, independent of the rows/single-resource
-            shape above — an interrupted-and-waiting-to-resume count applies
-            to any ASSIGN/COSEIZE activity, and the persistent preempt total
-            applies only to a PREEMPT activity. */}
-        <InterruptedNote count={interruptedCount} />
-        {live.isPreempt && <PreemptCount count={live.startSignal ?? 0} />}
+        {/* Interrupted-and-waiting-to-resume count, independent of the rows/
+            single-resource shape above — applies to any ASSIGN/COSEIZE
+            activity. Not shown on a Preempt card itself (handled above). */}
+        {!live.isPreempt && <InterruptedNote count={interruptedCount} />}
         </>
       ) : (
         <div style={{ fontSize: 9, color: C.muted }}>—</div>
