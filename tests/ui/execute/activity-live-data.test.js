@@ -1,5 +1,8 @@
 import { describe, test, expect } from "vitest";
-import { extractServerTypes, isDelayEffect, buildServerTypeIndex, deriveActivityLiveData } from "../../../src/ui/execute/activityLiveData.js";
+import {
+  extractServerTypes, isDelayEffect, isPreemptEffect, extractSourceQueueName,
+  buildServerTypeIndex, deriveActivityLiveData,
+} from "../../../src/ui/execute/activityLiveData.js";
 
 describe("isDelayEffect", () => {
   test("true for a bare DELAY(...) effect", () => {
@@ -16,6 +19,50 @@ describe("isDelayEffect", () => {
 
   test("false for no effect", () => {
     expect(isDelayEffect(null)).toBe(false);
+  });
+});
+
+describe("isPreemptEffect", () => {
+  test("true for a PREEMPT(...) effect", () => {
+    expect(isPreemptEffect("PREEMPT(Staff, PRIORITY(taskPriority))")).toBe(true);
+  });
+
+  test("false for an ASSIGN effect", () => {
+    expect(isPreemptEffect("ASSIGN(Queue, Server)")).toBe(false);
+  });
+
+  test("false for a DELAY effect", () => {
+    expect(isPreemptEffect("DELAY(Recovery Queue)")).toBe(false);
+  });
+
+  test("false for no effect", () => {
+    expect(isPreemptEffect(null)).toBe(false);
+  });
+});
+
+describe("extractSourceQueueName", () => {
+  test("ASSIGN returns the queue (first argument)", () => {
+    expect(extractSourceQueueName("ASSIGN(Repair Queue, Staff)")).toBe("Repair Queue");
+  });
+
+  test("ASSIGN with a trailing container-claim still returns the queue", () => {
+    expect(extractSourceQueueName("ASSIGN(Hire Queue, Staff, BikesAvailable:1)")).toBe("Hire Queue");
+  });
+
+  test("COSEIZE returns the queue (first argument)", () => {
+    expect(extractSourceQueueName("COSEIZE(SurgeryQueue, Surgeon, Anesthetist)")).toBe("SurgeryQueue");
+  });
+
+  test("null for a PREEMPT effect (no queue argument)", () => {
+    expect(extractSourceQueueName("PREEMPT(Staff, PRIORITY(taskPriority))")).toBeNull();
+  });
+
+  test("null for a DELAY effect", () => {
+    expect(extractSourceQueueName("DELAY(Recovery Queue)")).toBeNull();
+  });
+
+  test("null for no effect", () => {
+    expect(extractSourceQueueName(null)).toBeNull();
   });
 });
 
@@ -283,11 +330,55 @@ describe("deriveActivityLiveData", () => {
         { id: 2, type: "Staff", role: "server", status: "idle" },
         ...Array.from({ length: 10 }, (_, i) => ({ id: 10 + i, type: "TimeAway", role: "server", status: "idle" })),
       ],
+      eventCounts: { "ce-preempt": 3 },
     });
     const live = deriveActivityLiveData(snap, "ce-preempt", serverTypeIndex, preemptModel);
     expect(live.serverTypeName).toBe("Staff");
     expect(live.capacity).toBe(2);
     expect(live.busyCount).toBe(1);
+    // isPreempt flags this activity for a persistent "N preempted" count
+    // (startSignal, already computed generically for every activity) instead
+    // of relying solely on the easy-to-miss transient start-flash pulse.
+    expect(live.isPreempt).toBe(true);
+    expect(live.startSignal).toBe(3);
+  });
+
+  test("interruptedCount counts entities that started here, got preempted, and are waiting to resume — not fresh arrivals (regression)", () => {
+    // preemptCustomer() (engine/entities.js) sets _remainingService on a
+    // victim entity the instant it's kicked off a server and rejoins its
+    // queue — nothing else sets that field, so it's an unambiguous marker
+    // for "waiting to resume" as opposed to "waiting fresh, never started".
+    const repairModel = {
+      cEvents: [{ id: "ce-repair", name: "Repair Bike", effect: "ASSIGN(Repair Queue, Staff)" }],
+    };
+    const serverTypeIndex = buildServerTypeIndex(repairModel.cEvents, [{ name: "Staff", role: "server", count: "3" }]);
+    const snap = makeSnap({
+      entities: [
+        { id: 1, type: "Staff", role: "server", status: "busy", currentCustId: 100 },
+        { id: 100, type: "RepairJob", role: "customer", status: "busy", ceventName: "Repair Bike" },
+        // Interrupted mid-repair, waiting to resume.
+        { id: 101, type: "RepairJob", role: "customer", status: "waiting", queue: "Repair Queue", _remainingService: 12.5 },
+        // Fresh arrival, never started — must NOT be counted.
+        { id: 102, type: "RepairJob", role: "customer", status: "waiting", queue: "Repair Queue" },
+        // Waiting in a different queue entirely — must NOT be counted even
+        // though it happens to carry _remainingService (e.g. from an earlier
+        // preemption at a different activity).
+        { id: 103, type: "RepairJob", role: "customer", status: "waiting", queue: "Some Other Queue", _remainingService: 5 },
+      ],
+    });
+    const live = deriveActivityLiveData(snap, "ce-repair", serverTypeIndex, repairModel);
+    expect(live.interruptedCount).toBe(1);
+    expect(live.isPreempt).toBe(false);
+  });
+
+  test("interruptedCount is 0 when the c-event's effect has no resolvable source queue", () => {
+    const model2 = {
+      cEvents: [{ id: "ce-preempt", name: "Preempt Repair for Hire Customer", effect: "PREEMPT(Staff, PRIORITY(taskPriority))" }],
+    };
+    const serverTypeIndex = buildServerTypeIndex(model2.cEvents, [{ name: "Staff", role: "server", count: "2" }]);
+    const snap = makeSnap({ entities: [{ id: 1, type: "Staff", role: "server", status: "idle" }] });
+    const live = deriveActivityLiveData(snap, "ce-preempt", serverTypeIndex, model2);
+    expect(live.interruptedCount).toBe(0);
   });
 
   test("COSEIZE with per-type [Skill] filters still matches real entities (regression)", () => {
