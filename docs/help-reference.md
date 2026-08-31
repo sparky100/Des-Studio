@@ -3,7 +3,7 @@
 **Purpose:** System context for Help Assistant LLM responses  
 **Audience:** LLM consuming as prompt context (machine-readable)  
 **Maintenance:** Updated at end of each sprint alongside core documents  
-**Last updated:** 2026-08-27
+**Last updated:** 2026-08-31
 
 ---
 
@@ -99,6 +99,8 @@ Level-based resource pools. Defined in `containerTypes[]` array.
 **Operations:** FILL adds quantity (clamped to capacity); DRAIN removes quantity (only fires when sufficient level exists).
 
 Edited in the UI via the **Model Data** tab, which also holds Skills, the **Distances** registry, and State Variables.
+
+**Capacity and initial level as run-time parameters:** Container `capacity` and initial `level` are adjustable and sweepable like any other parameter — via the Execute canvas's **Adjust Parameters** panel, the Scenario Manager, a parametric sweep, or (for Business view sharing) Access-tab owner curation — not only via the Model Data tab.
 
 ### Distances
 
@@ -269,6 +271,8 @@ All 6 queue disciplines.
 
 **Watching entities move:** entity animation (coloured dots travelling the edges — arrivals, seizes, routing hops including probabilistic branches, and completions) runs during **Step** and **Auto Run** only. **⚡ Batch Run** computes replications at full speed without animation. The "Show entity movement (Step and Auto Run)" checkbox in Run Setup controls it and the choice is remembered; it defaults off when the operating system requests reduced motion.
 
+**Live node visual language:** Activity nodes flash a start-of-service pulse and hold a persistent border colour for busy/idle/failed state, so status is visible even between animation frames. Source nodes show a running arrival count (mirroring Sink's "served" count). Queue nodes show a colour-coded label per entity type waiting and a simplified "N waiting" caption. Balking and reneging are animated rather than silent: declined/abandoning entities render as distinctly coloured tokens, the destination Sink shows running "N balked"/"N reneged" totals, and the Queue node pulses when a balk or renege occurs. All Execute canvas node types render at a fixed height; rows beyond the first three collapse to a "+N more" indicator instead of growing the node.
+
 **Adjust parameters (quick, ad-hoc run):** the **🎛 Adjust parameters** button next to the run settings summary opens the same searchable, grouped parameter browser used by the Business view curation and Scenario manager (`ParamBrowserPanel`) — but over the full set of sweepable parameters, not an owner-curated subset. Pick a parameter, type a new value, and it patches the model for every run mode (Step, Auto Run, Batch Run) via the same `effectiveModel`/`applySweepValues` mechanism a loaded Experiment already used — no Experiment or Scenario has to exist first. Changes are ad-hoc: they reset when you switch models or reload the page, and are never written to the database. **Reset all** clears them immediately; **Save as Experiment…** carries the current overrides and run settings into a new saved Experiment, if you decide to keep them. If a saved Experiment is also loaded, an ad-hoc change to the same parameter takes priority over the loaded value.
 
 ### Warmup Period
@@ -401,6 +405,7 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | servedRatio | Service completion rate (served / total, 0–1) | Most entities complete service | Many entities still in system or reneging |
 | served | Count of entities completing service | High throughput | Low throughput or insufficient run time |
 | reneged | Count of entities abandoning before service | Impatience or excessive waits | Patient customers or fast service |
+| balked | Count of entities declining to join a queue on arrival (never entered) | Undersized capacity or an aggressive balk condition/probability | Adequate capacity or a lenient/absent balk rule |
 | totalCost | Cumulative cost from COST macro | High operational cost | Low cost (may indicate under-investment) |
 | costPerServed | totalCost / served | High cost per unit served | Efficient cost utilisation |
 | avgWIP | Time-average work-in-progress (Little's Law integral) | High inventory or queue buildup | Lean operation |
@@ -438,6 +443,22 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | starvationPct | Fraction of post-warmup time server was starved | High value indicates upstream supply problem, not a capacity problem |
 | perShiftUtil[] | Per-shift utilisation breakdown for weekly-pattern servers | Array of `{ shiftLabel, utilPct, entitiesPerCap, totalUtilTime, shiftDuration }` — only present for server types with `schedulePattern.type === 'weekly'` |
 | scheduleAdherence | Ratio of actual utilisation to expected schedule utilisation (0–1+) for weekly-pattern servers | < 1.0 = actual below plan; > 1.0 = actual exceeds plan. Displayed as colour-coded badge: green ≤ 10 % deviation from 1.0, amber ≤ 25 %, red > 25 %. |
+
+### Activity Throughput
+
+Per-activity completion cards showing how many entities each Activity node finished processing. Complements the queue- and resource-level metrics above by attributing throughput to the process step itself rather than only to the resource serving it — useful when several activities share one resource pool or one activity draws from several queues.
+
+### Interruptions
+
+Per-resource count of preemption events (PREEMPT/FAIL macro firings that cut off in-progress service). A high count alongside a low `scheduleAdherence` or high `starvationPct` usually points to a failure/MTBF-MTTR model or a higher-priority job repeatedly bumping lower-priority work — see Server Failure Model above.
+
+### Queue Rejections
+
+Balked and blocked entity counts, reported per queue independently of the general capacity-blocking checks in the Results Health Flags. Shows where in the topology entities are declining to join (balking) or being turned away at capacity (blocking), which the top-level `balked`/`reneged` summary metrics alone don't localise.
+
+### Skill Utilisation
+
+Per-skill utilisation stats, aggregated correctly across multi-replication batch runs. Shows how busy each named skill is across every server instance that offers it, independent of any single server's own utilisation figure — useful for spotting a scarce skill that is the true bottleneck even when overall resource utilisation looks moderate.
 
 ---
 
@@ -846,7 +867,15 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 
 **Access:** Design mode → **Visual** sub-tab. Also available from the New Model dialog via **Draw**.
 
-**Strengths:** Visual flow; node badges show advanced config (`feed` for a live data source on an arrival, `when` for attribute-conditional completion schedules); bidirectional sync with Forms/Tabs. New blank models open with a starter flow pre-placed on the canvas — no unsaved changes until you make your first edit. Multi-select nodes (Shift/Ctrl-click or box-drag) to bulk-move or bulk-delete; copy/paste (Ctrl+C/Ctrl+V) or duplicate in place (Ctrl+D). Selecting an edge for a probabilistic-routing branch shows an inline `%` input on the edge label — edit the split without leaving the canvas or opening the Bound Events editor.
+**Strengths:** Visual flow; node badges show advanced config (`feed` for a live data source on an arrival, `when` for attribute-conditional completion schedules) plus at-a-glance design detail — a Source/Activity's distribution label, a Queue's discipline and capacity badge, an edge's "N routes" badge for multi-way routing, and a Container node's capacity/initial-level; bidirectional sync with Forms/Tabs. New blank models open with a starter flow pre-placed on the canvas — no unsaved changes until you make your first edit. Multi-select nodes (Shift/Ctrl-click or box-drag) to bulk-move or bulk-delete; copy/paste (Ctrl+C/Ctrl+V) or duplicate in place (Ctrl+D). Selecting an edge for a probabilistic-routing branch shows an inline `%` input on the edge label — edit the split without leaving the canvas or opening the Bound Events editor.
+
+**Container canvas node:** Containers get their own dedicated canvas node (replacing the earlier gauge-strip panel), showing capacity and current/initial level alongside the rest of the topology instead of in a separate strip.
+
+**Balking, reneging, and activity-type badges:** Queue nodes show a badge when a balk probability/condition or renege distribution is configured; Activity nodes always show an activity-type badge (service / delay / advanced) so the processing model is visible without opening the inspector.
+
+**Rework and loop-back edges:** Edges that route an entity backward to an earlier stage (rework/retry loops) are drawn through a dedicated lane below the main canvas instead of crossing over unrelated nodes, keeping the primary flow readable.
+
+**Editing without leaving Draw:** The inspector supports inline description editing directly on Queue, Source, Sink, and Activity nodes. Where a field can only be edited in a Define tab, the inspector's "Edit in the X tab" pointer is a clickable jump link that opens the corresponding tab with the exact card already expanded.
 
 **Advanced effects and the canvas:** Layout edits (dragging, aligning, panning) never change model logic — they only save positions. Structural canvas edits that would overwrite an advanced effect (COSEIZE, skill-gated ASSIGN, BATCH, MATCH, multi-macro effects, attribute-conditional `when` schedules) are refused with a message pointing at the Define editors — the Conditional Events/Bound Events editors remain the home of the advanced macro vocabulary. Simpler edits near advanced constructs are surgical: switching a sink between COMPLETE and RENEGE, changing a source's queue, or deleting a queue preserves any co-located macros (COST, SET, …) instead of rewriting the whole effect.
 

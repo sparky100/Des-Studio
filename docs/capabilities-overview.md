@@ -11,7 +11,7 @@ People work differently. simmodlr provides four authoring modes, all working fro
 | Mode | Best for |
 |---|---|
 | **Forms & Tabs** | Precise, structured entry — entities, queues, events configured step by step |
-| **Visual Designer** | Drag-and-drop canvas — see your process as a flow diagram while you build it |
+| **Visual Designer** | Drag-and-drop canvas — see your process as a flow diagram while you build it, with dedicated nodes for every element (including a Container node for tanks/buffers) and inline editing without leaving the canvas |
 | **AI Model Builder** | Describe the system in plain language; the built-in AI generates a first model to review and refine |
 | **External LLM Import** | Share simmodlr's published schema with any external AI (ChatGPT, Claude, Gemini, etc.); import the resulting model JSON directly — especially powerful when you can provide the AI with your own domain documents alongside the schema |
 
@@ -51,7 +51,7 @@ The engine vocabulary covers all standard DES patterns without free-text scripti
 
 **Three routing modes:** Fixed next queue, conditional routing (first-match predicate), probabilistic routing (weighted random split).
 
-**Queue controls:** Finite capacity with overflow destination, balking probability (entities that never join), patience-based reneging.
+**Queue controls:** Finite capacity with overflow destination, balking probability (entities that never join), patience-based reneging. Balked and blocked entities are tracked as first-class terminal outcomes — not simply dropped — with their own summary counts and per-queue breakdowns in Results.
 
 ---
 
@@ -89,8 +89,10 @@ Servers can be configured with **failure distributions** (MTBF, MTTR, failureSco
 
 ## Statistical Output
 
-- **Per-queue:** mean length, mean wait, max length, throughput, renege count, confidence intervals
-- **Per-resource:** mean utilisation, busy count, failure statistics
+- **Per-queue:** mean length, mean wait, max length, throughput, renege count, balked/blocked (Queue Rejections) count, confidence intervals
+- **Per-resource:** mean utilisation, busy count, failure statistics, interruption (preemption) counts, schedule adherence and per-shift utilisation for shift-scheduled resources
+- **Per-activity:** completion throughput, attributing output to the process step rather than only the resource behind it
+- **Per-skill:** utilisation across every server instance offering a skill, aggregated correctly across multi-replication batch runs
 - **Per-entity-class:** mean time-in-system, wait and service time histograms
 - **Experiment-level:** one-way ANOVA to test whether scenario differences are statistically significant; Tukey HSD post-hoc comparisons to identify which specific pairs differ
 - **Cost tracking:** cumulative model-wide cost and per-entity cost via the COST macro
