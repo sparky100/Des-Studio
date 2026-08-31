@@ -1192,12 +1192,26 @@ export function validateModel(model) {
     );
     const CTX_MACRO_RE = /(?:ARRIVE|ASSIGN|SEIZE|COSEIZE|BATCH|SPLIT|JOIN)\s*\(/i;
 
-    const checkEffects = (/** @type {any} */ events, /** @type {any} */ tab) => {
+    // A bEvent can also receive its context entity externally: any cEvent whose
+    // cSchedules entry targets this bEvent's id with useEntityCtx:true seeds
+    // felRef._contextCustId before the bEvent's own effect ever runs (see
+    // phases.js `lastCustId = felRef?._contextCustId ?? null`) — e.g. the
+    // sanctioned "DELAY completion does nothing but SET_ATTR" shape (schema
+    // doc §6.2). Only bEvents can be scheduling targets, so this set is never
+    // consulted for cEvents' own effects.
+    const bEventIdsWithEntityCtxSchedule = new Set(
+      (cEvents || [])
+        .flatMap((/** @type {any} */ c) => c.cSchedules || [])
+        .filter((/** @type {any} */ cs) => cs?.useEntityCtx && cs?.eventId)
+        .map((/** @type {any} */ cs) => cs.eventId)
+    );
+
+    const checkEffects = (/** @type {any} */ events, /** @type {any} */ tab, /** @type {Set<string>} */ externalCtxIds) => {
       events.forEach((/** @type {any} */ ev) => {
         const text = effectText(ev.effect);
         if (!text) return;
         const parts = text.split(';').map(s => s.trim()).filter(Boolean);
-        let hasCtx = false;
+        let hasCtx = externalCtxIds.has(ev.id);
         parts.forEach(part => {
           if (CTX_MACRO_RE.test(part)) { hasCtx = true; return; }
           const m = part.match(/^SET_ATTR\s*\(\s*(?:Entity\.)?(\w+)/i);
@@ -1217,8 +1231,8 @@ export function validateModel(model) {
         });
       });
     };
-    checkEffects(bEvents, 'bevents');
-    checkEffects(cEvents, 'cevents');
+    checkEffects(bEvents, 'bevents', bEventIdsWithEntityCtxSchedule);
+    checkEffects(cEvents, 'cevents', new Set());
   }
 
   // ── V42: SPT discipline but entity has no serviceTime / processingTime ─────
