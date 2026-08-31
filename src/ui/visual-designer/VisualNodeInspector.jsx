@@ -7,6 +7,7 @@ import { VISUAL_NODE_TYPES, conditionLabel } from "./graph.js";
 import { classifyActivityEffect, macroCalls } from "../../model/macroParser.js";
 import { describeBalking, describeReneging, hasBalking, hasReneging } from "../../model/balkRenegeFormat.js";
 import { summarizeBEventEffect } from "../../model/effectSummary.js";
+import { summarizePattern } from "../../engine/schedule-pattern.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { disciplineAttr, disciplineBase } from "../shared/utils.js";
 
@@ -431,6 +432,18 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               </SelectField>
               {(() => {
                 const selServer = servers.find(s => s.name === activityServer);
+                // A weekly schedulePattern is a second, separate way this
+                // resource's capacity can vary over time (alongside
+                // shiftSchedule below) — checked first since the engine
+                // treats it as taking priority when both are present.
+                if (selServer && Array.isArray(selServer.schedulePattern?.periods) && selServer.schedulePattern.periods.length > 0) {
+                  return (
+                    <DefinePointer label="Shift Schedule" color={C.server}
+                      status="weekly pattern"
+                      summary={`Pool size varies on a recurring weekly schedule: ${summarizePattern(selServer.schedulePattern)}.`}
+                      tab="Entity Types" onGoTo={goTo(onGoToDefine, "Entity Types", selServer.id)} />
+                  );
+                }
                 const ss = selServer && Array.isArray(selServer.shiftSchedule) && selServer.shiftSchedule.length > 0 ? selServer.shiftSchedule : null;
                 if (!ss) return null;
                 const firstCap = parseInt(ss[0]?.capacity, 10) || 1;

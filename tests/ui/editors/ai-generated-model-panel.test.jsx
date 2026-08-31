@@ -1082,4 +1082,45 @@ describe("AiGeneratedModelPanel", () => {
     expect(sched.distParams.times).toEqual([10, 20, 30]);
     expect(sched.distParams.jitterParams).toEqual({ stddev: "3" });
   });
+
+  // Regression: the local DIST_NAMES alias map here had drifted from the
+  // canonical engine/distributions.js one and was missing lognormal/
+  // categorical/entityattr — now delegates to normalizeDistributionName
+  // directly instead of a second, independently-maintained copy.
+  it("normalizes a lowercase 'lognormal' distribution name to the canonical 'Lognormal'", async () => {
+    const handleApply = vi.fn();
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      const response = {
+        intent: "build",
+        questions: null,
+        explanation: "Built a model with a lognormal service time.",
+        proposedModel: {
+          entityTypes: [{ id: "cust", name: "Customer", role: "customer", attrDefs: [] }],
+          stateVariables: [],
+          bEvents: [{
+            id: "arr", name: "Arrive", scheduledTime: "0", effect: "ARRIVE(Customer, Queue)",
+            schedules: [{ eventId: "arr", dist: "exponential", distParams: { mean: "5" } }],
+          }],
+          cEvents: [{
+            id: "svc", name: "Service", priority: 1,
+            condition: "queue(Queue).length > 0",
+            effect: "ASSIGN(Queue, Server)",
+            cSchedules: [{ eventId: "svc", dist: "lognormal", distParams: { logMean: "2", logStdDev: "0.5" } }],
+          }],
+          queues: [{ id: "q", name: "Queue", customerType: "Customer", discipline: "FIFO" }],
+        },
+      };
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Lognormal service time" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    await screen.findByLabelText(/model proposal preview/i);
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
+
+    const applied = handleApply.mock.calls[0][0];
+    expect(applied.cEvents[0].cSchedules[0].dist).toBe("Lognormal");
+  });
 });

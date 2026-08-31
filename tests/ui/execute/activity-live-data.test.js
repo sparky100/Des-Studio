@@ -25,6 +25,21 @@ describe("extractServerTypes", () => {
     expect(extractServerTypes("COSEIZE(Queue, Surgeon, Anesthetist)")).toEqual(["Surgeon", "Anesthetist"]);
   });
 
+  // extractServerTypes goes through model/macroParser.js's effectText — the
+  // canonical, fully-tolerant parser already reused by graph.js/validation.js
+  // — instead of a local reimplementation that used to silently return []
+  // (and fall through to the whole-model-total-server-count fallback) for
+  // either of these two shapes.
+  test("handles an effect.effect string-wrapper object", () => {
+    const effect = { effect: "ASSIGN(Queue, Server)" };
+    expect(extractServerTypes(effect)).toEqual(["Server"]);
+  });
+
+  test("handles an args-less object effect with individual named fields", () => {
+    const effect = { macro: "ASSIGN", queue: "Queue1", serverType: "Nurse" };
+    expect(extractServerTypes(effect)).toEqual(["Nurse"]);
+  });
+
   test("strips the per-type [Skill] filter so the plain type name is returned", () => {
     const effect = "COSEIZE(Biopsy Queue, Surgeon[Surgery], Anaesthetist[Anaesthesia])";
     expect(extractServerTypes(effect)).toEqual(["Surgeon", "Anaesthetist"]);

@@ -2,6 +2,8 @@
 // sweep-params.js — Enumerate sweepable model parameters and apply values
 // No React, no DOM. Pure JS — can run in workers.
 
+import { periodLabel } from "./schedule-pattern.js";
+
 /** @param {any} obj */
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
@@ -30,10 +32,15 @@ export function enumerateSweepableParams(model) {
   /** @type {any[]} */
   const params = [];
 
-  // 1a. Entity type count — only for servers WITHOUT a shift schedule
+  // 1a. Entity type count — only for servers WITHOUT a shift schedule or a
+  // weekly schedulePattern (both override count with a time-varying
+  // capacity at runtime — see engine/index.js's server-entityTypes map,
+  // which unconditionally replaces `count` with the pattern's initial
+  // capacity — so sweeping `count` on either would be a silent no-op).
   for (const et of (model.entityTypes || [])) {
     if (et.role !== "server") continue;
     if (Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) continue;
+    if (et.schedulePattern?.periods?.length) continue;
     params.push({
       type: "entityTypeCount",
       targetId: et.id,
@@ -62,6 +69,50 @@ export function enumerateSweepableParams(model) {
         path: `entityTypes.${et.id}.shiftSchedule[${pi}].capacity`,
       });
     });
+  }
+
+  // 1c. Weekly schedulePattern capacities — servers WITH a recurring
+  // weekly pattern (a second, separate way to express time-varying
+  // capacity — see 1a's comment). "multiplier" mode has one scalar
+  // (baseCapacity) that scales every period proportionally; "absolute"
+  // mode (the default) needs one param per period, mirroring 1b's
+  // one-param-per-shift convention exactly.
+  for (const et of (model.entityTypes || [])) {
+    if (et.role !== "server") continue;
+    const pattern = et.schedulePattern;
+    if (!pattern?.periods?.length) continue;
+    if ((pattern.mode || "absolute") === "multiplier") {
+      params.push({
+        type: "schedulePatternBaseCapacity",
+        targetId: et.id,
+        label: `${et.name} — base capacity (weekly pattern)`,
+        description: `Base capacity the weekly pattern's per-period multipliers scale from for ${et.name}`,
+        currentValue: parseFloat(pattern.baseCapacity) || 0,
+        path: `entityTypes.${et.id}.schedulePattern.baseCapacity`,
+      });
+      continue;
+    }
+    pattern.periods.forEach((/** @type {any} */ period, /** @type {number} */ pi) => {
+      params.push({
+        type: "schedulePatternPeriodCapacity",
+        targetId: et.id,
+        periodIndex: pi,
+        label: `${et.name} — ${periodLabel(period)} capacity`,
+        description: `Number of ${et.name} available ${periodLabel(period)}`,
+        currentValue: parseInt(period.capacity, 10) || 0,
+        path: `entityTypes.${et.id}.schedulePattern.periods[${pi}].capacity`,
+      });
+    });
+    if (pattern.defaultCapacity != null) {
+      params.push({
+        type: "schedulePatternDefaultCapacity",
+        targetId: et.id,
+        label: `${et.name} — default capacity (outside scheduled periods)`,
+        description: `Number of ${et.name} available outside any scheduled period`,
+        currentValue: parseInt(pattern.defaultCapacity, 10) || 0,
+        path: `entityTypes.${et.id}.schedulePattern.defaultCapacity`,
+      });
+    }
   }
 
   // 2. Queue capacity
@@ -222,6 +273,24 @@ export function applySweepValues(model, sweepConfigs = []) {
         const et = (clone.entityTypes || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
         const period = et?.shiftSchedule?.[paramConfig.periodIndex];
         if (period) period.capacity = String(Math.max(1, Math.round(value)));
+        break;
+      }
+      case "schedulePatternBaseCapacity": {
+        const et = (clone.entityTypes || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
+        if (et?.schedulePattern) et.schedulePattern.baseCapacity = value;
+        break;
+      }
+      case "schedulePatternPeriodCapacity": {
+        const et = (clone.entityTypes || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
+        const period = et?.schedulePattern?.periods?.[paramConfig.periodIndex];
+        // 0 is a legitimate "closed" capacity for a scheduled period, unlike
+        // shiftCapacity's min-1 floor above.
+        if (period) period.capacity = Math.max(0, Math.round(value));
+        break;
+      }
+      case "schedulePatternDefaultCapacity": {
+        const et = (clone.entityTypes || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
+        if (et?.schedulePattern) et.schedulePattern.defaultCapacity = Math.max(0, Math.round(value));
         break;
       }
       case "queueCapacity": {

@@ -239,9 +239,16 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
         if(i===-1)return null;
         const isExpanded=effectiveExpanded.has(et.id);
         const attrCount=(Array.isArray(et.attrDefs)?et.attrDefs:[]).length;
+        // A weekly schedulePattern is a second, separate way to express
+        // time-varying capacity (alongside shiftSchedule) — checked first
+        // since the engine treats it as taking priority when both would
+        // otherwise apply (see engine/index.js's server-entityTypes map).
+        const hasPattern=et.role==="server"&&!!et.schedulePattern?.periods?.length;
         const hasShifts=et.role==="server"&&Array.isArray(et.shiftSchedule)&&et.shiftSchedule.length>0;
         const shiftFirstCap=hasShifts?parseInt(et.shiftSchedule[0]?.capacity,10)||1:null;
-        const roleSummary=et.role==="server"?(hasShifts?`resource · pool ${shiftFirstCap} · ${et.shiftSchedule.length} shift${et.shiftSchedule.length!==1?"s":""}`:`resource · pool ${et.count||1}`):"arriving entity";
+        const roleSummary=et.role==="server"
+          ?(hasPattern?"resource · weekly pattern":hasShifts?`resource · pool ${shiftFirstCap} · ${et.shiftSchedule.length} shift${et.shiftSchedule.length!==1?"s":""}`:`resource · pool ${et.count||1}`)
+          :"arriving entity";
 
         return (
           <div key={et.id} ref={el=>cardRefs.current[et.id]=el} style={{background:C.bg,border:`1px solid ${et.role==="server"?C.server+"44":C.cEvent+"33"}`,
