@@ -300,10 +300,84 @@ function ActivityResourceBlock({ typeStats, clock, onEntitySelect }) {
   );
 }
 
+// DELAY activities claim no server, so ActivityResourceBlock's capacity/
+// utilisation/server-list layout doesn't apply (utilisation is null here —
+// rendering that block would crash on `.toFixed()`). Mirrors QueueDetail's
+// entity-list style instead: a count plus a click-through list of who's
+// actually held in delay right now.
+function DelayActivityDetail({ label, typeStats, clock, onEntitySelect }) {
+  const { C, FONT } = useTheme();
+  const { activityBusyCount = 0, delayedEntities = [] } = typeStats || {};
+  const sorted = [...delayedEntities].sort((a, b) => (a.serviceStart ?? 0) - (b.serviceStart ?? 0));
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: SPACE.sm, marginBottom: SPACE.md }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: FONT }}>{label}</span>
+        <span style={{
+          fontSize: 10, fontWeight: 700, color: C.cEvent, background: `${C.cEvent}18`,
+          padding: "2px 6px", borderRadius: RADIUS.sm, fontFamily: FONT,
+        }}>
+          DELAY
+        </span>
+        <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+          {activityBusyCount} in delay
+        </span>
+      </div>
+      {sorted.length === 0 ? (
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic", padding: SPACE.lg, textAlign: "center" }}>
+          Nothing currently held in delay
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          {sorted.map((entity, i) => {
+            const elapsed = clock - (entity.serviceStart ?? entity.arrivalTime);
+            return (
+              <div
+                key={entity.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "28px 1fr auto",
+                  gap: SPACE.sm,
+                  alignItems: "center",
+                  padding: `${SPACE.sm}px ${SPACE.sm}px`,
+                  background: i % 2 === 0 ? "transparent" : `${C.surface}80`,
+                  borderRadius: RADIUS.sm,
+                  cursor: "pointer",
+                }}
+                onClick={() => onEntitySelect?.(entity.id)}
+                title={`Click to inspect entity #${entity.id}`}
+              >
+                <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, fontWeight: 700 }}>
+                  #{i + 1}
+                </span>
+                <span style={{ fontSize: 11, color: C.text, fontFamily: FONT }}>
+                  #{entity.id}
+                  {entity.attrs?.entityId != null && (
+                    <span style={{ color: C.muted }}> ({entity.attrs.entityId})</span>
+                  )}{" "}
+                  <span style={{ color: C.muted }}>{entity.type}</span>
+                </span>
+                <span style={{ fontSize: 10, color: C.amber, fontFamily: FONT }}>
+                  t={elapsed.toFixed(1)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ActivityDetail({ label, liveData, onEntitySelect }) {
   const { C, FONT } = useTheme();
   const blocks = liveData?.perType?.length > 1 ? liveData.perType : [liveData || {}];
   const single = blocks.length === 1 ? blocks[0] : null;
+
+  if (single?.isDelay) {
+    return <DelayActivityDetail label={label} typeStats={single} clock={liveData?.clock} onEntitySelect={onEntitySelect} />;
+  }
 
   return (
     <div>
