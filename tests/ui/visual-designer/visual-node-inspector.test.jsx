@@ -592,4 +592,29 @@ describe('VisualNodeInspector — DefinePointer jump links', () => {
     fireEvent.click(screen.getByRole('button', { name: /edit in the entity types tab/i }));
     expect(onGoToDefine).toHaveBeenCalledWith('entities', 'server-1');
   });
+
+  it('shows the Shift Schedule pointer with a pattern summary for a server using a weekly schedulePattern instead of shiftSchedule', () => {
+    // A weekly schedulePattern is a second, separate way (alongside
+    // shiftSchedule) a server's capacity can vary over time — this card
+    // used to only check shiftSchedule and silently render nothing here.
+    const model = makeModel({
+      entityTypes: [
+        { id: 'customer-1', name: 'Customer', role: 'customer' },
+        {
+          id: 'server-1', name: 'Server', role: 'server', count: 4,
+          schedulePattern: {
+            mode: 'absolute', type: 'weekly',
+            periods: [{ dayOfWeek: 1, start: '08:00', end: '22:00', capacity: 4 }],
+            defaultCapacity: 2,
+          },
+        },
+      ],
+    });
+    const graph = deriveGraphFromModel(model);
+    const activityNode = findNode(graph, 'activity');
+    render(<VisualNodeInspector model={model} graph={graph} selectedNodeId={activityNode.id} canEdit onPatchNode={vi.fn()} onGoToDefine={vi.fn()} />);
+
+    expect(screen.getByText('weekly pattern')).toBeInTheDocument();
+    expect(screen.getByText(/Mon 08:00-22:00/)).toBeInTheDocument();
+  });
 });

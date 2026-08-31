@@ -7,7 +7,8 @@ import { Btn, SectionPanel } from "./components.jsx";
 import { alpha, SPACE, RADIUS, TYPO } from "./tokens.js";
 
 export function paramColor(type, C) {
-  if (type === "entityTypeCount" || type === "shiftCapacity") return C.server;
+  if (type === "entityTypeCount" || type === "shiftCapacity" || type === "schedulePatternBaseCapacity"
+    || type === "schedulePatternPeriodCapacity" || type === "schedulePatternDefaultCapacity") return C.server;
   if (type === "queueCapacity") return C.green;
   if (type === "containerCapacity" || type === "containerInitialLevel") return C.amber;
   if (type === "bEventDistParam" || type === "bEventPiecewisePeriodParam") return C.bEvent;
@@ -86,7 +87,8 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPa
     if (singleSelect) onClose();
   }
 
-  const servers   = params.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity");
+  const servers   = params.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity"
+    || p.type === "schedulePatternBaseCapacity" || p.type === "schedulePatternPeriodCapacity" || p.type === "schedulePatternDefaultCapacity");
   const cEvents   = params.filter(p => p.type === "cEventDistParam" || p.type === "cEventPiecewisePeriodParam");
   const bEvents   = params.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam");
   const stateVars = params.filter(p => p.type === "stateVarInit");

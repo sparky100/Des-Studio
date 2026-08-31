@@ -2,7 +2,7 @@
 import React, { Component, useEffect, useId, useState, useRef } from "react";
 import { SPACE, RADIUS, TYPO, alpha } from "./tokens.js";
 import { useTheme, PALETTES } from "./ThemeContext.jsx";
-import { DISTRIBUTIONS } from "../../engine/distributions.js";
+import { DISTRIBUTIONS, normalizeDistributionName } from "../../engine/distributions.js";
 import { DIST_GROUPS, DIST_HELP, getDistGroup, validateDistParams } from "./DistHelp.js";
 import { DistSparkline } from "./DistSparkline.jsx";
 import { parsePlanCsv } from "./planCsvParser.js";
@@ -642,18 +642,27 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
   const [blurErrors,setBlurErrors]=useState({}); // { param: errorMsg }
 
   const v=value||{dist:"Exponential",distParams:{}};
-  const isImported=v.dist==="Empirical"&&Array.isArray(v.distParams?.values)&&v.distParams.values.length>0;
-  const dd=DISTRIBUTIONS[v.dist||"Fixed"]||DISTRIBUTIONS.Fixed;
-  const isPiecewise=v.dist==="Piecewise";
-  const isSchedule=v.dist==="Schedule";
-  const isDistance=v.dist==="Distance";
+  // A model's `dist` can legitimately be stored in an alias/case-varied form
+  // (e.g. "lognormal", "log-normal", "piecewise") — the engine tolerates
+  // this via normalizeDistributionName everywhere it samples/validates.
+  // Without the same normalization here, an alias-cased value matches
+  // neither DISTRIBUTIONS' canonical keys nor any DIST_GROUPS entry,
+  // silently falling back to Fixed and risking overwriting the real
+  // distribution the instant a param in that wrongly-rendered picker is
+  // edited.
+  const normDist=normalizeDistributionName(v.dist);
+  const isImported=normDist==="Empirical"&&Array.isArray(v.distParams?.values)&&v.distParams.values.length>0;
+  const dd=DISTRIBUTIONS[normDist||"Fixed"]||DISTRIBUTIONS.Fixed;
+  const isPiecewise=normDist==="Piecewise";
+  const isSchedule=normDist==="Schedule";
+  const isDistance=normDist==="Distance";
 
   // Derive current family from distribution
-  const currentGroup=getDistGroup(v.dist)||DIST_GROUPS[0];
+  const currentGroup=getDistGroup(normDist)||DIST_GROUPS[0];
   const [selectedFamily,setSelectedFamily]=useState(currentGroup.id);
 
   // Keep selectedFamily in sync when distribution changes externally
-  const syncedFamily=getDistGroup(v.dist)?.id||selectedFamily;
+  const syncedFamily=getDistGroup(normDist)?.id||selectedFamily;
 
   const selSt={width:compact?160:200,background:C.bg,border:`1px solid ${C.cEvent}55`,
     borderRadius:4,color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"4px 8px"};
@@ -672,9 +681,9 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
   const handleFamilyChange=async (fid)=>{
     const group=DIST_GROUPS.find(g=>g.id===fid);
     if(!group)return;
-    if(!group.dists.includes(v.dist)){
-      const hasScheduleData=v.dist==="Schedule"&&Array.isArray(v.distParams?.rows)&&v.distParams.rows.length>0;
-      const hasPiecewiseData=v.dist==="Piecewise"&&Array.isArray(v.distParams?.periods)&&v.distParams.periods.length>1;
+    if(!group.dists.includes(normDist)){
+      const hasScheduleData=isSchedule&&Array.isArray(v.distParams?.rows)&&v.distParams.rows.length>0;
+      const hasPiecewiseData=isPiecewise&&Array.isArray(v.distParams?.periods)&&v.distParams.periods.length>1;
       if((hasScheduleData||hasPiecewiseData)&&!(await confirm("Changing the distribution family will clear the current schedule data. Continue?")))return;
       const first=group.dists.find(d=>(allowPiecewise||d!=="Piecewise")&&(allowDistance||d!=="Distance"))||group.dists[0];
       if(first) handleDistChange(first);
@@ -687,7 +696,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
   };
 
   const handleParamBlur=(param)=>{
-    const errors=validateDistParams(v.dist,v.distParams||{});
+    const errors=validateDistParams(normDist,v.distParams||{});
     const err=errors.find(e=>e.param===param);
     setBlurErrors(prev=>({...prev,[param]:err?err.message:null}));
   };
@@ -739,7 +748,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
   const btnSt=(col)=>({background:col+"18",border:`1px solid ${col}55`,borderRadius:4,
     color:col,fontFamily:FONT,fontSize:11,padding:"3px 10px",cursor:"pointer"});
 
-  const distHelp=DIST_HELP[v.dist]||null;
+  const distHelp=DIST_HELP[normDist]||null;
   const activeFamilyId=syncedFamily;
 
   return (
@@ -767,7 +776,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
       {/* Distribution selector row */}
       <div style={{display:"flex",gap:6,alignItems:"flex-start",flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flex:1}}>
-          <select value={v.dist||"Exponential"} onChange={e=>handleDistChange(e.target.value)} style={selSt}>
+          <select value={normDist||"Exponential"} onChange={e=>handleDistChange(e.target.value)} style={selSt}>
             {(DIST_GROUPS.find(g=>g.id===activeFamilyId)?.dists||[])
               .filter(d=>allowPiecewise||d!=="Piecewise")
               .filter(d=>allowDistance||d!=="Distance")
@@ -880,7 +889,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,allowDistance=fals
             </button>
           </div>
           {showPreview&&(
-            <DistSparkline dist={v.dist} distParams={v.distParams||{}}/>
+            <DistSparkline dist={normDist} distParams={v.distParams||{}}/>
           )}
         </div>
       )}

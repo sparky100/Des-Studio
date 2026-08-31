@@ -7,22 +7,7 @@ import { useViewport } from "../shared/hooks.js";
 import { ModelDiffPreview } from "./ModelDiffPreview.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { predicateToLegacyString, rowsToPredicate, parseConditionString, mapConditionVariables, variableToLegacyToken } from "../../model/conditionFormat.js";
-
-const DIST_NAMES = {
-  fixed: "Fixed",
-  uniform: "Uniform",
-  exponential: "Exponential",
-  normal: "Normal",
-  triangular: "Triangular",
-  erlang: "Erlang",
-  empirical: "Empirical",
-  piecewise: "Piecewise",
-  serverattr: "ServerAttr",
-  "server-attr": "ServerAttr",
-  server_attr: "ServerAttr",
-  schedule: "Schedule",
-  plan: "Schedule",
-};
+import { normalizeDistributionName } from "../../engine/distributions.js";
 
 function unwrapProposedModel(proposedModel = {}) {
   const source = proposedModel.model_json || proposedModel.modelJson || proposedModel.model || proposedModel;
@@ -148,12 +133,6 @@ function normalizeBEventScheduledTime(event = {}) {
   return /\bARRIVE\(/i.test(text) ? "0" : "9999";
 }
 
-function normalizeDistName(dist) {
-  if (!dist) return "Fixed";
-  const text = String(dist).trim();
-  return DIST_NAMES[text.toLowerCase()] || text;
-}
-
 function numericString(value) {
   if (value == null || value === "") return "";
   return String(value);
@@ -161,7 +140,7 @@ function numericString(value) {
 
 function normalizeDistribution(input = {}, fallback = { dist: "Fixed", distParams: { value: "0" } }) {
   const raw = input.distribution || input.delayDistribution || input.durationDistribution || input.serviceDistribution || input;
-  const dist = normalizeDistName(raw.dist || raw.type || input.dist || input.type || fallback.dist);
+  const dist = normalizeDistributionName(raw.dist || raw.type || input.dist || input.type || fallback.dist);
   const params = {
     ...(raw.distParams || raw.params || raw.parameters || input.distParams || input.params || input.parameters || {}),
   };

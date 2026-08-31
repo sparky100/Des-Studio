@@ -30,6 +30,7 @@ import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
 import { buildServerTypeIndex, deriveActivityLiveData } from "./activityLiveData.js";
+import { effectText } from "../../model/macroParser.js";
 export { DEFAULT_KPI_SLOTS };
 
 // ── Canvas height (maximise-by-default, F9C.9) ───────────────────────────────
@@ -274,27 +275,15 @@ function getInterArrivalLabel(bEvent) {
 }
 
 // Parse customer type from a b-event's ARRIVE(CustomerType, ...) effect.
+// effectText (model/macroParser.js) is the canonical, fully-tolerant effect
+// parser already reused by graph.js/validation.js/simpy-export.js — handles
+// every shape effect.effect (an .effect-wrapper object, and an args-less
+// object with individual named fields) that a hand-rolled string/array/
+// {macro,args}-only parser here would silently drop.
 function parseArriveCustomerType(bEvent) {
   if (!bEvent) return null;
   const effect = bEvent.effect || bEvent.effects || bEvent.schedule || bEvent.action || "";
-  let text = "";
-  if (typeof effect === "string") {
-    text = effect;
-  } else if (Array.isArray(effect)) {
-    text = effect.map(e => {
-      if (typeof e === "string") return e;
-      if (e && typeof e === "object") {
-        const macro = String(e.macro || e.type || "").toUpperCase();
-        const args = Array.isArray(e.args) ? e.args.join(",") : "";
-        return `${macro}(${args})`;
-      }
-      return "";
-    }).join(";");
-  } else if (typeof effect === "object") {
-    const macro = String(effect.macro || effect.type || "").toUpperCase();
-    const args = Array.isArray(effect.args) ? effect.args.join(",") : "";
-    text = `${macro}(${args})`;
-  }
+  const text = effectText(effect);
   const match = text.match(/ARRIVE\s*\(\s*([^,)]+)/i);
   return match ? match[1].trim() : null;
 }

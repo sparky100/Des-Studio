@@ -165,6 +165,76 @@ describe("enumerateSweepableParams", () => {
     expect(shiftParams[0].label).toBe("Nurse — shift 1 capacity");
   });
 
+  // ── Weekly schedulePattern tests ────────────────────────────────────────────
+  // schedulePattern is a second, separate way (alongside shiftSchedule) a
+  // server's capacity can vary over time. engine/index.js unconditionally
+  // overwrites `count` with the pattern's own capacity at runtime, so
+  // sweeping `count` for such a type would silently do nothing.
+
+  test("skips entityTypeCount for servers with a weekly schedulePattern", () => {
+    const model = {
+      entityTypes: [{
+        id: "et_nurse", name: "TriageNurse", role: "server", count: "4",
+        schedulePattern: {
+          mode: "absolute", type: "weekly",
+          periods: [{ dayOfWeek: 1, start: "08:00", end: "22:00", capacity: 4 }],
+          defaultCapacity: 2,
+        },
+      }],
+    };
+    const params = enumerateSweepableParams(model);
+    expect(params.filter(p => p.type === "entityTypeCount")).toHaveLength(0);
+  });
+
+  test("enumerates schedulePatternPeriodCapacity + schedulePatternDefaultCapacity for absolute-mode patterns", () => {
+    const model = {
+      entityTypes: [{
+        id: "et_nurse", name: "TriageNurse", role: "server", count: "4",
+        schedulePattern: {
+          mode: "absolute", type: "weekly",
+          periods: [
+            { dayOfWeek: 1, start: "08:00", end: "22:00", capacity: 4 },
+            { dayOfWeek: 2, start: "08:00", end: "22:00", capacity: 4 },
+          ],
+          defaultCapacity: 2,
+        },
+      }],
+    };
+    const params = enumerateSweepableParams(model);
+    const periodParams = params.filter(p => p.type === "schedulePatternPeriodCapacity");
+    expect(periodParams).toHaveLength(2);
+    expect(periodParams[0].label).toBe("TriageNurse — Mon 08:00-22:00 capacity");
+    expect(periodParams[0].currentValue).toBe(4);
+    expect(periodParams[0].path).toBe("entityTypes.et_nurse.schedulePattern.periods[0].capacity");
+    expect(periodParams[1].label).toBe("TriageNurse — Tue 08:00-22:00 capacity");
+
+    const defaultParams = params.filter(p => p.type === "schedulePatternDefaultCapacity");
+    expect(defaultParams).toHaveLength(1);
+    expect(defaultParams[0].label).toBe("TriageNurse — default capacity (outside scheduled periods)");
+    expect(defaultParams[0].currentValue).toBe(2);
+    expect(defaultParams[0].path).toBe("entityTypes.et_nurse.schedulePattern.defaultCapacity");
+  });
+
+  test("enumerates a single schedulePatternBaseCapacity param for multiplier-mode patterns", () => {
+    const model = {
+      entityTypes: [{
+        id: "et_nurse", name: "TriageNurse", role: "server",
+        schedulePattern: {
+          mode: "multiplier", type: "weekly", baseCapacity: 4,
+          periods: [{ dayOfWeek: 1, start: "08:00", end: "22:00", capacity: 1 }],
+        },
+      }],
+    };
+    const params = enumerateSweepableParams(model);
+    const baseParams = params.filter(p => p.type === "schedulePatternBaseCapacity");
+    expect(baseParams).toHaveLength(1);
+    expect(baseParams[0].currentValue).toBe(4);
+    expect(baseParams[0].path).toBe("entityTypes.et_nurse.schedulePattern.baseCapacity");
+    // Multiplier mode doesn't enumerate one param per period — a single
+    // scalar scales all of them proportionally.
+    expect(params.filter(p => p.type === "schedulePatternPeriodCapacity")).toHaveLength(0);
+  });
+
   // ── Piecewise distribution tests ────────────────────────────────────────────
 
   test("enumerates piecewise period params for B-events, not a broken 'periods' entry", () => {
@@ -342,6 +412,49 @@ describe("applySweepValue", () => {
     const param = { type: "shiftCapacity", targetId: "et_srv", periodIndex: 0 };
     const cloned = applySweepValue(model, param, 0);
     expect(parseInt(cloned.entityTypes[0].shiftSchedule[0].capacity, 10)).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── Weekly schedulePattern capacity ─────────────────────────────────────────
+
+  test("modifies a schedulePattern period's capacity, allowing 0 (a legitimate closed period)", () => {
+    const model = {
+      entityTypes: [{
+        id: "et_nurse", name: "TriageNurse", role: "server",
+        schedulePattern: {
+          mode: "absolute", type: "weekly",
+          periods: [{ dayOfWeek: 1, start: "08:00", end: "22:00", capacity: 4 }],
+          defaultCapacity: 2,
+        },
+      }],
+    };
+    const param = { type: "schedulePatternPeriodCapacity", targetId: "et_nurse", periodIndex: 0 };
+    const cloned = applySweepValue(model, param, 0);
+    expect(cloned.entityTypes[0].schedulePattern.periods[0].capacity).toBe(0);
+    expect(model.entityTypes[0].schedulePattern.periods[0].capacity).toBe(4); // original unchanged
+  });
+
+  test("modifies a schedulePattern's defaultCapacity", () => {
+    const model = {
+      entityTypes: [{
+        id: "et_nurse", name: "TriageNurse", role: "server",
+        schedulePattern: { mode: "absolute", type: "weekly", periods: [], defaultCapacity: 2 },
+      }],
+    };
+    const param = { type: "schedulePatternDefaultCapacity", targetId: "et_nurse" };
+    const cloned = applySweepValue(model, param, 5);
+    expect(cloned.entityTypes[0].schedulePattern.defaultCapacity).toBe(5);
+  });
+
+  test("modifies a multiplier-mode schedulePattern's baseCapacity", () => {
+    const model = {
+      entityTypes: [{
+        id: "et_nurse", name: "TriageNurse", role: "server",
+        schedulePattern: { mode: "multiplier", type: "weekly", baseCapacity: 4, periods: [] },
+      }],
+    };
+    const param = { type: "schedulePatternBaseCapacity", targetId: "et_nurse" };
+    const cloned = applySweepValue(model, param, 8);
+    expect(cloned.entityTypes[0].schedulePattern.baseCapacity).toBe(8);
   });
 
   // ── Piecewise period params ─────────────────────────────────────────────────

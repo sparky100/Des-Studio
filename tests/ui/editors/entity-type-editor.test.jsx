@@ -38,6 +38,29 @@ describe('EntityTypeEditor — shift schedules (F7.6)', () => {
     expect(handleChange.mock.calls[0][0][0].shiftSchedule).toEqual([{ time: '0', capacity: '1' }]);
   });
 
+  it('collapsed card shows "weekly pattern" (not a static pool number) for a schedulePattern-driven server', () => {
+    // A weekly schedulePattern is a second, separate way (alongside
+    // shiftSchedule above) a server's capacity can vary over time — the
+    // engine overwrites `count` with the pattern's own capacity at
+    // runtime, so a static "pool N" summary would be misleading here.
+    render(
+      <EntityTypeEditor
+        types={[{
+          ...serverType,
+          name: 'TriageNurse',
+          schedulePattern: {
+            mode: 'absolute', type: 'weekly',
+            periods: [{ dayOfWeek: 1, start: '08:00', end: '22:00', capacity: 4 }],
+            defaultCapacity: 2,
+          },
+        }]}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/resource · weekly pattern/i)).toBeInTheDocument();
+    expect(screen.queryByText(/resource · pool \d/i)).not.toBeInTheDocument();
+  });
+
   it('renders existing shift rows and locks the first start time', () => {
     const { container } = render(
       <EntityTypeEditor

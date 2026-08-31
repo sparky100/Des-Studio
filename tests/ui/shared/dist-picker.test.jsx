@@ -212,6 +212,38 @@ describe('DistPicker — piecewise time-varying distributions (F7.5)', () => {
   });
 });
 
+describe('DistPicker — distribution names stored as an alias (F: audit follow-up)', () => {
+  // engine/distributions.js's normalizeDistributionName lets a model store a
+  // distribution name in an alias/case-varied form (e.g. "lognormal") and
+  // still simulate correctly. Without the same normalization in the
+  // picker, an alias-cased dist matched neither DISTRIBUTIONS' canonical
+  // keys nor any DIST_GROUPS entry, so it silently fell back to displaying
+  // Fixed's own param UI ("value") instead of the real distribution's.
+  it('displays the real distribution and its params for a lowercase alias, not Fixed', () => {
+    render(
+      <DistPicker
+        value={{ dist: 'lognormal', distParams: { logMean: '2', logStdDev: '0.5' } }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('combobox').value).toBe('Lognormal');
+    expect(screen.getByRole('spinbutton', { name: 'logMean' })).toHaveValue(2);
+    expect(screen.getByRole('spinbutton', { name: 'logStdDev' })).toHaveValue(0.5);
+    // Fixed's own param ("value") must not be shown instead.
+    expect(screen.queryByRole('spinbutton', { name: 'value' })).not.toBeInTheDocument();
+  });
+
+  it('displays the real distribution for a hyphenated alias too', () => {
+    render(
+      <DistPicker
+        value={{ dist: 'log-normal', distParams: { logMean: '1', logStdDev: '0.3' } }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('combobox').value).toBe('Lognormal');
+  });
+});
+
 describe('DistPicker — piecewise periods stored in the flat shape', () => {
   // A period's distribution can legitimately be stored two ways: nested
   // ({startTime, distribution:{dist,distParams}} — what this editor itself

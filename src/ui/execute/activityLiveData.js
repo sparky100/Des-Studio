@@ -2,28 +2,7 @@
 // Used by both ExecuteCanvas.jsx (canvas node rendering) and NodeDetailSidebar.jsx (detail panel)
 // so multi-resource (COSEIZE) activities are tracked identically in both places.
 
-// Render an effect (string | array-of-strings/objects | object) into a flat macro-call text blob.
-function effectToText(effect) {
-  if (!effect) return "";
-  if (typeof effect === "string") return effect;
-  if (Array.isArray(effect)) {
-    return effect.map(e => {
-      if (typeof e === "string") return e;
-      if (e && typeof e === "object") {
-        const macro = String(e.macro || e.type || "").toUpperCase();
-        const args = Array.isArray(e.args) ? e.args.join(",") : "";
-        return `${macro}(${args})`;
-      }
-      return "";
-    }).join(";");
-  }
-  if (typeof effect === "object") {
-    const macro = String(effect.macro || effect.type || "").toUpperCase();
-    const args = Array.isArray(effect.args) ? effect.args.join(",") : "";
-    return `${macro}(${args})`;
-  }
-  return "";
-}
+import { effectText } from "../../model/macroParser.js";
 
 // Extract all server types a c-event's effect seizes.
 // ASSIGN(Queue, ServerType) -> [ServerType]
@@ -37,7 +16,7 @@ function effectToText(effect) {
 // type in the whole model — a meaningless number, mislabeled exactly like a real per-resource
 // pool card.
 export function extractServerTypes(effect) {
-  const text = effectToText(effect);
+  const text = effectText(effect);
   if (!text) return [];
   // Only require the 2nd argument to be followed by a comma or the closing
   // paren — not the closing paren directly — so this still matches when
@@ -72,7 +51,7 @@ export function extractServerTypes(effect) {
 
 // Extract the skill literal from a cross-type ASSIGN(Queue, ANY, "Skill") effect, if any.
 export function extractAssignAnySkill(effect) {
-  const text = effectToText(effect);
+  const text = effectText(effect);
   const m = text.match(/ASSIGN\s*\(\s*[^,)]+,\s*ANY\s*,\s*"([^"]+)"\s*\)/i);
   return m ? m[1].trim() : null;
 }

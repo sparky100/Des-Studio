@@ -15,6 +15,7 @@ const PARAMS = [
   { type: "stateVarInit", label: "stock — starting value", description: "Initial stock level", currentValue: 10, path: "stateVariables.stock.init" },
   { type: "containerCapacity", label: "BikesAvailable — capacity", description: "Maximum level of container 'BikesAvailable'", currentValue: 10, path: "containerTypes.BikesAvailable.capacity" },
   { type: "containerInitialLevel", label: "BikesAvailable — initial level", description: "Starting level of container 'BikesAvailable'", currentValue: 10, path: "containerTypes.BikesAvailable.initialLevel" },
+  { type: "schedulePatternPeriodCapacity", label: "TriageNurse — Mon 08:00-22:00 capacity", description: "Weekly-pattern capacity", currentValue: 4, path: "entityTypes.et-3.schedulePattern.periods[0].capacity" },
 ];
 
 function renderPanel(props = {}) {
@@ -33,10 +34,12 @@ describe("ParamBrowserPanel", () => {
     expect(screen.getByText("State Variables")).toBeInTheDocument();
     expect(screen.getByText("Queue Capacity")).toBeInTheDocument();
     expect(screen.getByText("Containers")).toBeInTheDocument();
-    // Servers & Capacity holds both the plain count and the shift-capacity
-    // param, and opens by default (it's the first non-empty group).
+    // Servers & Capacity holds the plain count, the shift-capacity param,
+    // and the weekly schedulePattern param, and opens by default (it's the
+    // first non-empty group).
     expect(screen.getByRole("button", { name: /^number of teller/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /shift 3 capacity/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /mon 08:00-22:00 capacity/i })).toBeInTheDocument();
   });
 
   test("Containers group holds both a container's capacity and initial-level params", () => {
@@ -110,6 +113,9 @@ describe("ParamBrowserPanel", () => {
     const C = { server: "s", green: "g", amber: "a", bEvent: "b", cEvent: "c", muted: "m" };
     expect(paramColor("entityTypeCount", C)).toBe("s");
     expect(paramColor("shiftCapacity", C)).toBe("s");
+    expect(paramColor("schedulePatternBaseCapacity", C)).toBe("s");
+    expect(paramColor("schedulePatternPeriodCapacity", C)).toBe("s");
+    expect(paramColor("schedulePatternDefaultCapacity", C)).toBe("s");
     expect(paramColor("queueCapacity", C)).toBe("g");
     expect(paramColor("containerCapacity", C)).toBe("a");
     expect(paramColor("containerInitialLevel", C)).toBe("a");
