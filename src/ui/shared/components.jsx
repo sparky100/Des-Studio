@@ -232,12 +232,35 @@ const Empty=({icon,msg,action})=>{
 // ═══════════════════════════════════════════════════════════════════════════════
 // DISTRIBUTION PICKER — reusable widget used by both B-event schedules and C-events
 // ═══════════════════════════════════════════════════════════════════════════════
+// A piecewise period's distribution can legitimately be stored two ways —
+// nested (`{startTime, distribution:{dist,distParams}}`, what this editor
+// itself always writes) or flat (`{startTime, dist, distParams}`, no
+// wrapper — the shape docs/model-schema-for-llm.md documents for
+// AI-generated/imported models). engine/distributions.js's
+// periodDistribution(), engine/validation.js's checkDist, and
+// engine/sweep-params.js's piecewise handling all already tolerate both via
+// the same `period.distribution || period` fallback — mirrored here so a
+// flat-shaped period displays its real distribution instead of silently
+// falling back to the hardcoded Exponential(mean=1) default.
+function periodDistValue(period){
+  if(period.distribution)return period.distribution;
+  if(period.dist!=null||period.distParams!=null)return{dist:period.dist,distParams:period.distParams};
+  return{dist:"Exponential",distParams:{mean:"1"}};
+}
+
 const PiecewiseEditor=({value,onChange,compact})=>{
   const {C,FONT}=useTheme();
   const periods=Array.isArray(value?.distParams?.periods)?value.distParams.periods:[];
   const upd=(i,patch)=>{
     const next=[...periods];
-    next[i]={...next[i],...patch};
+    const merged={...next[i],...patch};
+    // Once a period's distribution is edited through this picker, normalize
+    // it fully to the nested shape — drop any stale flat dist/distParams so
+    // the period never carries two conflicting representations at once
+    // (the nested one would silently win everywhere downstream, masking
+    // whatever the flat fields said).
+    if(patch.distribution){delete merged.dist;delete merged.distParams;}
+    next[i]=merged;
     onChange({...value,dist:"Piecewise",distParams:{...(value.distParams||{}),periods:next}});
   };
   const add=()=>{
@@ -257,7 +280,7 @@ const PiecewiseEditor=({value,onChange,compact})=>{
             <input type="number" value={period.startTime??""} disabled={i===0} onChange={e=>upd(i,{startTime:e.target.value})}
               style={{width:70,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",opacity:i===0?0.7:1}}/>
           </label>
-          <DistPicker value={period.distribution||{dist:"Exponential",distParams:{mean:"1"}}}
+          <DistPicker value={periodDistValue(period)}
             onChange={distribution=>upd(i,{distribution})} compact={compact} allowPiecewise={false}/>
           <Btn small variant="danger" ariaLabel={`Remove piecewise period ${i + 1}`} onClick={()=>rem(i)}>x</Btn>
         </div>
