@@ -1,0 +1,1103 @@
+{
+  "name": "Bike Shop — Hire, Return, Purchase & Repair",
+  "model_json": {
+    "schemaVersion": 1,
+    "entityTypes": [
+      {
+        "id": "et_hire_job",
+        "name": "HireJob",
+        "role": "customer",
+        "count": 0,
+        "attrDefs": [
+          {
+            "name": "taskPriority",
+            "mutable": true,
+            "valueType": "number",
+            "defaultValue": 2
+          }
+        ]
+      },
+      {
+        "id": "et_purchase",
+        "name": "PurchaseCustomer",
+        "role": "customer",
+        "count": 0,
+        "attrDefs": [
+          {
+            "name": "taskPriority",
+            "mutable": true,
+            "valueType": "number",
+            "defaultValue": 2
+          }
+        ]
+      },
+      {
+        "id": "et_repair_job",
+        "name": "RepairJob",
+        "role": "customer",
+        "count": 0,
+        "attrDefs": [
+          {
+            "name": "taskPriority",
+            "mutable": true,
+            "valueType": "number",
+            "defaultValue": 2
+          }
+        ]
+      },
+      {
+        "id": "et_staff",
+        "name": "Staff",
+        "role": "server",
+        "count": 3,
+        "attrDefs": []
+      },
+      {
+        "id": "et_on_hire",
+        "name": "OnHire",
+        "role": "server",
+        "count": 15,
+        "attrDefs": []
+      },
+      {
+        "id": "et_time_away",
+        "name": "TimeAway",
+        "role": "server",
+        "count": 100,
+        "attrDefs": []
+      }
+    ],
+    "stateVariables": [
+      {
+        "id": "sv_repairs_in_progress",
+        "name": "repairsInProgress",
+        "valueType": "number",
+        "initialValue": 0,
+        "resetOnWarmup": true
+      }
+    ],
+    "bEvents": [
+      {
+        "id": "b_arrive_hire",
+        "name": "Hire Arrival",
+        "effect": [
+          "ARRIVE(HireJob, Hire Queue)",
+          "SET_ATTR(taskPriority, 2)"
+        ],
+        "schedules": [
+          {
+            "dist": "Uniform",
+            "eventId": "b_arrive_hire",
+            "distParams": {
+              "max": "240",
+              "min": "60"
+            }
+          }
+        ],
+        "description": "Generates a hire job arrival (checkout stage)",
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_arrive_purchase",
+        "name": "Purchase Arrival",
+        "effect": [
+          "ARRIVE(PurchaseCustomer, Purchase Queue)",
+          "SET_ATTR(taskPriority, 2)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_purchase",
+            "distParams": {
+              "mean": "12"
+            }
+          }
+        ],
+        "description": "Generates a bike/component purchase customer arrival",
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_arrive_repair_job",
+        "name": "Repair Job Arrival",
+        "effect": [
+          "ARRIVE(RepairJob, Repair Drop-off Queue)",
+          "SET_ATTR(taskPriority, 2)"
+        ],
+        "schedules": [
+          {
+            "dist": "Exponential",
+            "eventId": "b_arrive_repair_job",
+            "distParams": {
+              "mean": "40"
+            }
+          }
+        ],
+        "description": "Generates a repair job arrival (customer drops bike off later)",
+        "scheduledTime": "0"
+      },
+      {
+        "id": "b_hire_done",
+        "name": "Hire Complete",
+        "effect": [
+          "RELEASE(Staff, Out On Hire Queue)"
+        ],
+        "schedules": [],
+        "description": "Completes checkout, frees the staff member, and sends the job out on hire",
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_hire_period_done",
+        "name": "Hire Period Ends",
+        "effect": [
+          "RELEASE(OnHire, Return Queue)"
+        ],
+        "schedules": [],
+        "description": "Fires once the customer's rental period ends; routes the job to the Return Queue for check-in",
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_return_done",
+        "name": "Check-in Complete",
+        "effect": [
+          "FILL(BikesAvailable, 1)",
+          "COMPLETE()"
+        ],
+        "schedules": [],
+        "description": "Completes the check-in transaction, frees the staff member, and returns the bike to the available pool",
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_purchase_done",
+        "name": "Purchase Complete",
+        "effect": [
+          "COMPLETE()"
+        ],
+        "schedules": [],
+        "description": "Completes a purchase transaction and frees the staff member",
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_repair_dropoff_done",
+        "name": "Repair Drop-off Complete",
+        "effect": [
+          "RELEASE(Staff, Repair Queue)"
+        ],
+        "schedules": [],
+        "description": "Frees the staff member after hand-over and moves the same job into the Repair Queue for actual repair work",
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_repair_done",
+        "name": "Repair Job Complete",
+        "effect": [
+          "SET(repairsInProgress, repairsInProgress - 1)",
+          "RELEASE(Staff, Travel Queue)"
+        ],
+        "schedules": [],
+        "description": "Completes the repair, frees the staff member, and notifies the customer — the job now waits for them to travel back",
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_travel_done",
+        "name": "Customer Arrives for Pickup",
+        "effect": [
+          "RELEASE(TimeAway, Pickup Queue)"
+        ],
+        "schedules": [],
+        "description": "Fires once the customer's short post-notification travel delay ends; routes the job to the Pickup Queue",
+        "scheduledTime": "9999"
+      },
+      {
+        "id": "b_pickup_done",
+        "name": "Pickup Complete",
+        "effect": [
+          "COMPLETE()"
+        ],
+        "schedules": [],
+        "description": "Completes the pickup hand-over; the job leaves the system",
+        "scheduledTime": "9999"
+      }
+    ],
+    "cEvents": [
+      {
+        "id": "c_preempt_for_hire",
+        "name": "Preempt Repair for Hire Customer",
+        "effect": [
+          "PREEMPT(Staff, PRIORITY(taskPriority))",
+          "SET(repairsInProgress, repairsInProgress - 1)"
+        ],
+        "priority": 0,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Hire Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": "==",
+              "value": 0
+            },
+            {
+              "variable": "state.repairsInProgress",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [],
+        "description": "Interrupts an in-progress bike repair when a hire customer is waiting and both staff are busy"
+      },
+      {
+        "id": "c_preempt_for_return",
+        "name": "Preempt Repair for Return Customer",
+        "effect": [
+          "PREEMPT(Staff, PRIORITY(taskPriority))",
+          "SET(repairsInProgress, repairsInProgress - 1)"
+        ],
+        "priority": 0,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Return Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": "==",
+              "value": 0
+            },
+            {
+              "variable": "state.repairsInProgress",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [],
+        "description": "Interrupts an in-progress bike repair when a customer is waiting to check a bike back in and both staff are busy"
+      },
+      {
+        "id": "c_preempt_for_purchase",
+        "name": "Preempt Repair for Purchase Customer",
+        "effect": [
+          "PREEMPT(Staff, PRIORITY(taskPriority))",
+          "SET(repairsInProgress, repairsInProgress - 1)"
+        ],
+        "priority": 0,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Purchase Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": "==",
+              "value": 0
+            },
+            {
+              "variable": "state.repairsInProgress",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [],
+        "description": "Interrupts an in-progress bike repair when a purchase customer is waiting and both staff are busy"
+      },
+      {
+        "id": "c_preempt_for_repair_dropoff",
+        "name": "Preempt Repair for Repair Drop-off Customer",
+        "effect": [
+          "PREEMPT(Staff, PRIORITY(taskPriority))",
+          "SET(repairsInProgress, repairsInProgress - 1)"
+        ],
+        "priority": 0,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Repair Drop-off Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": "==",
+              "value": 0
+            },
+            {
+              "variable": "state.repairsInProgress",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [],
+        "description": "Interrupts an in-progress repair when a repair drop-off customer is waiting and both staff are busy"
+      },
+      {
+        "id": "c_preempt_for_pickup",
+        "name": "Preempt Repair for Pickup Customer",
+        "effect": [
+          "PREEMPT(Staff, PRIORITY(taskPriority))",
+          "SET(repairsInProgress, repairsInProgress - 1)"
+        ],
+        "priority": 0,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Pickup Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": "==",
+              "value": 0
+            },
+            {
+              "variable": "state.repairsInProgress",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [],
+        "description": "Interrupts an in-progress repair when a customer is waiting to collect a finished bike and both staff are busy"
+      },
+      {
+        "id": "c_assign_hire",
+        "name": "Serve Hire Customer",
+        "effect": [
+          "ASSIGN(Hire Queue, Staff, BikesAvailable:1)"
+        ],
+        "priority": 1,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Hire Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "container(BikesAvailable).level",
+              "operator": ">=",
+              "value": 1
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_hire_done",
+            "distParams": {
+              "max": "8",
+              "min": "3",
+              "mode": "5"
+            },
+            "useEntityCtx": true
+          }
+        ],
+        "description": "Seizes an idle staff member for the next waiting hire customer, atomically taking one bike out of the available pool; blocks if no bikes are available"
+      },
+      {
+        "id": "c_assign_out_on_hire",
+        "name": "Send Customer Out On Hire",
+        "effect": [
+          "ASSIGN(Out On Hire Queue, OnHire)"
+        ],
+        "priority": 2,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Out On Hire Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(OnHire).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Uniform",
+            "eventId": "b_hire_period_done",
+            "distParams": {
+              "max": "480",
+              "min": "60"
+            },
+            "useEntityCtx": true
+          }
+        ],
+        "description": "Models the actual rental period — an unlimited-in-practice dummy resource used purely to produce the hire duration (naturally capped near fleet size, since a job can't reach this stage without having drained BikesAvailable)"
+      },
+      {
+        "id": "c_assign_return",
+        "name": "Serve Check-in",
+        "effect": [
+          "ASSIGN(Return Queue, Staff)"
+        ],
+        "priority": 3,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Return Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_return_done",
+            "distParams": {
+              "max": "6",
+              "min": "2",
+              "mode": "4"
+            },
+            "useEntityCtx": true
+          }
+        ],
+        "description": "Seizes an idle staff member for the next waiting check-in"
+      },
+      {
+        "id": "c_assign_purchase",
+        "name": "Serve Purchase Customer",
+        "effect": [
+          "ASSIGN(Purchase Queue, Staff)"
+        ],
+        "priority": 4,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Purchase Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_purchase_done",
+            "distParams": {
+              "max": "10",
+              "min": "3",
+              "mode": "6"
+            },
+            "useEntityCtx": true
+          }
+        ],
+        "description": "Seizes an idle staff member for the next waiting purchase customer"
+      },
+      {
+        "id": "c_assign_repair_dropoff",
+        "name": "Serve Repair Drop-off Customer",
+        "effect": [
+          "ASSIGN(Repair Drop-off Queue, Staff)"
+        ],
+        "priority": 5,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Repair Drop-off Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_repair_dropoff_done",
+            "distParams": {
+              "max": "5",
+              "min": "2",
+              "mode": "3"
+            },
+            "useEntityCtx": true
+          }
+        ],
+        "description": "Seizes an idle staff member for the next waiting repair drop-off customer"
+      },
+      {
+        "id": "c_assign_travel",
+        "name": "Send Customer Travelling Back",
+        "effect": [
+          "ASSIGN(Travel Queue, TimeAway)",
+          "SET_ATTR(taskPriority, 2)"
+        ],
+        "priority": 6,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Travel Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(TimeAway).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Uniform",
+            "eventId": "b_travel_done",
+            "distParams": {
+              "max": "90",
+              "min": "15"
+            },
+            "useEntityCtx": true
+          }
+        ],
+        "description": "Models the short delay after notification before the customer physically returns; also restores taskPriority to protected now repair work is over"
+      },
+      {
+        "id": "c_assign_pickup",
+        "name": "Serve Pickup",
+        "effect": [
+          "ASSIGN(Pickup Queue, Staff)"
+        ],
+        "priority": 7,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Pickup Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Triangular",
+            "eventId": "b_pickup_done",
+            "distParams": {
+              "max": "5",
+              "min": "2",
+              "mode": "3"
+            },
+            "useEntityCtx": true
+          }
+        ],
+        "description": "Seizes an idle staff member to hand over the finished bike"
+      },
+      {
+        "id": "c_start_repair_work",
+        "name": "Start Repair Work",
+        "effect": [
+          "ASSIGN(Repair Queue, Staff)",
+          "SET_ATTR(taskPriority, 1)",
+          "SET(repairsInProgress, repairsInProgress + 1)"
+        ],
+        "priority": 8,
+        "condition": {
+          "operator": "AND",
+          "clauses": [
+            {
+              "variable": "queue(Repair Queue).length",
+              "operator": ">",
+              "value": 0
+            },
+            {
+              "variable": "idle(Staff).count",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        "cSchedules": [
+          {
+            "dist": "Lognormal",
+            "eventId": "b_repair_done",
+            "distParams": {
+              "logMean": "3.681",
+              "logStdDev": "0.5"
+            },
+            "useEntityCtx": true
+          }
+        ],
+        "description": "Seizes an idle staff member to actually repair the next waiting job, and marks it preemptable"
+      }
+    ],
+    "queues": [
+      {
+        "id": "q_hire",
+        "name": "Hire Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "HireJob",
+        "balkCondition": {
+          "variable": "container(BikesAvailable).level",
+          "operator": "==",
+          "value": 0
+        }
+      },
+      {
+        "id": "q_out_on_hire",
+        "name": "Out On Hire Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "HireJob"
+      },
+      {
+        "id": "q_return",
+        "name": "Return Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "HireJob"
+      },
+      {
+        "id": "q_purchase",
+        "name": "Purchase Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "PurchaseCustomer"
+      },
+      {
+        "id": "q_repair_dropoff",
+        "name": "Repair Drop-off Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "RepairJob"
+      },
+      {
+        "id": "q_repair",
+        "name": "Repair Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "RepairJob"
+      },
+      {
+        "id": "q_travel",
+        "name": "Travel Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "description": "Customer waits to be notified that repair job has completed",
+        "customerType": "RepairJob"
+      },
+      {
+        "id": "q_pickup",
+        "name": "Pickup Queue",
+        "capacity": "",
+        "discipline": "FIFO",
+        "customerType": "RepairJob"
+      }
+    ],
+    "containerTypes": [
+      {
+        "id": "BikesAvailable",
+        "capacity": "15",
+        "initialLevel": "5"
+      }
+    ],
+    "distances": [],
+    "goals": [
+      {
+        "label": "Staff utilisation under 90%",
+        "scope": {
+          "id": "et_staff",
+          "name": "Staff",
+          "type": "resource"
+        },
+        "metric": "resource.utilisation",
+        "target": 0.9,
+        "operator": "<"
+      },
+      {
+        "label": "Customer-facing drop-off wait under 5 min",
+        "scope": {
+          "id": "q_repair_dropoff",
+          "name": "Repair Drop-off Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWait",
+        "target": 5,
+        "operator": "<"
+      },
+      {
+        "label": "Backend repair job wait under 30 min",
+        "scope": {
+          "id": "q_repair",
+          "name": "Repair Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWait",
+        "target": 30,
+        "operator": "<"
+      },
+      {
+        "label": "Customer-facing pickup wait under 5 min",
+        "scope": {
+          "id": "q_pickup",
+          "name": "Pickup Queue",
+          "type": "queue"
+        },
+        "metric": "summary.avgWait",
+        "target": 5,
+        "operator": "<"
+      },
+      {
+        "label": "Never fully out of bikes to hire",
+        "scope": {
+          "id": "BikesAvailable",
+          "name": "BikesAvailable",
+          "type": "container"
+        },
+        "metric": "container.minLevel",
+        "target": 0,
+        "operator": ">"
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "x": -203.06138107416905,
+          "y": 319.47570332480836,
+          "id": "queue:q_hire",
+          "type": "queue",
+          "refId": "q_hire"
+        },
+        {
+          "x": 230.93861892583095,
+          "y": 224.47570332480836,
+          "id": "queue:q_out_on_hire",
+          "type": "queue",
+          "refId": "q_out_on_hire"
+        },
+        {
+          "x": 666.8832311598414,
+          "y": 224.47570332480836,
+          "id": "queue:q_return",
+          "type": "queue",
+          "refId": "q_return"
+        },
+        {
+          "x": -208.06138107416905,
+          "y": 1265.4757033248084,
+          "id": "queue:q_purchase",
+          "type": "queue",
+          "refId": "q_purchase"
+        },
+        {
+          "x": -203.06138107416905,
+          "y": 828.4757033248084,
+          "id": "queue:q_repair_dropoff",
+          "type": "queue",
+          "refId": "q_repair_dropoff"
+        },
+        {
+          "x": 230.93861892583095,
+          "y": 691.4757033248084,
+          "id": "queue:q_repair",
+          "type": "queue",
+          "refId": "q_repair"
+        },
+        {
+          "x": 666.8832311598414,
+          "y": 691.4757033248084,
+          "id": "queue:q_travel",
+          "type": "queue",
+          "refId": "q_travel"
+        },
+        {
+          "x": 1086.8832311598414,
+          "y": 691.4757033248084,
+          "id": "queue:q_pickup",
+          "type": "queue",
+          "refId": "q_pickup"
+        },
+        {
+          "x": -413.06138107416905,
+          "y": 319.47570332480836,
+          "id": "source:b_arrive_hire-0",
+          "type": "source",
+          "refId": "b_arrive_hire"
+        },
+        {
+          "x": -413.06138107416905,
+          "y": 1265.4757033248084,
+          "id": "source:b_arrive_purchase-0",
+          "type": "source",
+          "refId": "b_arrive_purchase"
+        },
+        {
+          "x": -413.06138107416905,
+          "y": 828.4757033248084,
+          "id": "source:b_arrive_repair_job-0",
+          "type": "source",
+          "refId": "b_arrive_repair_job"
+        },
+        {
+          "x": 1086.8832311598414,
+          "y": 128.47570332480836,
+          "id": "sink:b_return_done",
+          "type": "sink",
+          "refId": "b_return_done"
+        },
+        {
+          "x": 230.93861892583095,
+          "y": 1170.4757033248084,
+          "id": "sink:b_purchase_done",
+          "type": "sink",
+          "refId": "b_purchase_done"
+        },
+        {
+          "x": 1505.846305982515,
+          "y": 691.4757033248084,
+          "id": "sink:b_pickup_done",
+          "type": "sink",
+          "refId": "b_pickup_done"
+        },
+        {
+          "x": 9.938618925830951,
+          "y": 458.0253808777354,
+          "id": "activity:c_preempt_for_hire",
+          "type": "activity",
+          "refId": "c_preempt_for_hire"
+        },
+        {
+          "x": 876.8832311598414,
+          "y": 319.47570332480836,
+          "id": "activity:c_preempt_for_return",
+          "type": "activity",
+          "refId": "c_preempt_for_return"
+        },
+        {
+          "x": 6.938618925830951,
+          "y": 1361.4757033248084,
+          "id": "activity:c_preempt_for_purchase",
+          "type": "activity",
+          "refId": "c_preempt_for_purchase"
+        },
+        {
+          "x": 9.938618925830951,
+          "y": 938.4457016182307,
+          "id": "activity:c_preempt_for_repair_dropoff",
+          "type": "activity",
+          "refId": "c_preempt_for_repair_dropoff"
+        },
+        {
+          "x": 1305.830151217435,
+          "y": 938.4457016182307,
+          "id": "activity:c_preempt_for_pickup",
+          "type": "activity",
+          "refId": "c_preempt_for_pickup"
+        },
+        {
+          "x": 9.938618925830951,
+          "y": 224.47570332480836,
+          "id": "activity:c_assign_hire",
+          "type": "activity",
+          "refId": "c_assign_hire"
+        },
+        {
+          "x": 456.88323115984156,
+          "y": 224.47570332480836,
+          "id": "activity:c_assign_out_on_hire",
+          "type": "activity",
+          "refId": "c_assign_out_on_hire"
+        },
+        {
+          "x": 876.8832311598414,
+          "y": 128.47570332480836,
+          "id": "activity:c_assign_return",
+          "type": "activity",
+          "refId": "c_assign_return"
+        },
+        {
+          "x": 6.938618925830951,
+          "y": 1170.4757033248084,
+          "id": "activity:c_assign_purchase",
+          "type": "activity",
+          "refId": "c_assign_purchase"
+        },
+        {
+          "x": 9.938618925830951,
+          "y": 691.4757033248084,
+          "id": "activity:c_assign_repair_dropoff",
+          "type": "activity",
+          "refId": "c_assign_repair_dropoff"
+        },
+        {
+          "x": 876.8832311598414,
+          "y": 691.4757033248084,
+          "id": "activity:c_assign_travel",
+          "type": "activity",
+          "refId": "c_assign_travel"
+        },
+        {
+          "x": 1305.830151217435,
+          "y": 691.4757033248084,
+          "id": "activity:c_assign_pickup",
+          "type": "activity",
+          "refId": "c_assign_pickup"
+        },
+        {
+          "x": 456.88323115984156,
+          "y": 691.4757033248084,
+          "id": "activity:c_start_repair_work",
+          "type": "activity",
+          "refId": "c_start_repair_work"
+        },
+        {
+          "x": -413.06138107416905,
+          "y": 128.47570332480836,
+          "id": "container:BikesAvailable",
+          "type": "container",
+          "refId": "BikesAvailable"
+        },
+        {
+          "x": -656.587712813064,
+          "y": 87.96740501947579,
+          "id": "resource:Staff",
+          "type": "resource",
+          "refId": "Staff"
+        },
+        {
+          "x": -656.587712813064,
+          "y": 283.47570332480836,
+          "id": "resource:OnHire",
+          "type": "resource",
+          "refId": "OnHire"
+        },
+        {
+          "x": -656.587712813064,
+          "y": 474.47570332480836,
+          "id": "resource:TimeAway",
+          "type": "resource",
+          "refId": "TimeAway"
+        }
+      ],
+      "version": 1,
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "zoom": 1
+      }
+    },
+    "experimentDefaults": {
+      "seed": 918386913,
+      "maxSimTime": 2400,
+      "liveDataMode": null,
+      "replications": 50,
+      "warmupPeriod": 0,
+      "terminationMode": "time",
+      "resultDetailLevel": "compact",
+      "terminationCondition": null
+    },
+    "timeUnit": "minutes",
+    "sections": [
+      {
+        "id": "sec_1788080404181",
+        "name": "Hire and Return",
+        "color": "#4A90D9",
+        "memberIds": [
+          "q_hire",
+          "q_out_on_hire",
+          "q_return",
+          "et_hire_job",
+          "et_on_hire",
+          "b_arrive_hire",
+          "b_hire_done",
+          "b_hire_period_done",
+          "b_return_done",
+          "c_assign_hire",
+          "c_assign_out_on_hire",
+          "c_assign_return",
+          "c_preempt_for_hire",
+          "c_preempt_for_return",
+          "BikesAvailable"
+        ]
+      },
+      {
+        "id": "sec_1788080706783",
+        "name": "Purchase",
+        "color": "#27AE60",
+        "memberIds": [
+          "q_purchase",
+          "et_purchase",
+          "b_arrive_purchase",
+          "b_purchase_done",
+          "c_assign_purchase",
+          "c_preempt_for_purchase"
+        ]
+      },
+      {
+        "id": "sec_1788080783350",
+        "name": "Repair",
+        "color": "#E74C3C",
+        "memberIds": [
+          "q_repair_dropoff",
+          "q_repair",
+          "q_travel",
+          "q_pickup",
+          "et_repair_job",
+          "et_time_away",
+          "b_arrive_repair_job",
+          "b_repair_dropoff_done",
+          "b_repair_done",
+          "b_travel_done",
+          "b_pickup_done",
+          "c_start_repair_work",
+          "c_assign_pickup",
+          "c_assign_repair_dropoff",
+          "c_assign_travel",
+          "c_preempt_for_repair_dropoff",
+          "c_preempt_for_pickup"
+        ]
+      }
+    ]
+  },
+  "exportedAt": "2026-08-31T07:29:00.782Z",
+  "appVersion": "0.9.0",
+  "description": "Two shared staff serve four counter transactions (checkout, check-in, purchase, repair drop-off) plus a final pickup hand-over. Hire is a single entity (HireJob) moved through stages via RELEASE: checkout (draws one bike atomically from a 15-bike inventory container, BikesAvailable, and balks if the pool is empty), then an Out On Hire stage (an unlimited-in-practice dummy resource, OnHire, used purely to model the rental duration), then check-in (fills BikesAvailable back). Return is no longer an independent arrival stream — every check-in corresponds to an actual earlier hire. A repair job is a separate single entity moved through stages via RELEASE: drop-off, then the Repair Queue for the actual repair. Once repaired, the shop notifies the customer and the job waits in a Travel Queue for a short return delay (another dummy resource, TimeAway) before reaching the Pickup Queue for the final hand-over. The repair job is protected (taskPriority=2) throughout, except while actual repair work is in progress (taskPriority=1), during which it is preemptable: any waiting checkout/check-in/purchase/drop-off/pickup customer interrupts an in-progress repair once both staff are busy, and the interrupted repair re-queues and resumes later."
+}
