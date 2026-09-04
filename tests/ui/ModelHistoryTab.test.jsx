@@ -34,7 +34,8 @@ vi.mock('../../src/engine/index.js', () => ({
   buildEngine: mockBuildEngine,
 }));
 
-vi.mock('../../src/engine/statistics.js', () => ({
+vi.mock('../../src/engine/statistics.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   compareScenarios: mockCompareScenarios,
 }));
 

@@ -5,14 +5,34 @@
 // concurrent slots use separate replication pools to satisfy the INIT_RUN constraint.
 
 import { runReplications, createReplicationPool } from "./replication-runner.js";
-import { summarizeReplicationResults } from "./statistics.js";
+import {
+  summarizeReplicationResults, confidenceInterval95,
+  SUMMARY_METRICS, scopedGoalKey, resolveGoalValueForReplication,
+} from "./statistics.js";
 import { applySweepValues, applySweepValue, generateSweepValues, generate2DSweepValues } from "./sweep-params.js";
 
-const SWEEP_METRICS = [
-  "summary.total", "summary.avgWait", "summary.avgSvc", "summary.avgSojourn",
-  "summary.avgTimeInSystem", "summary.served", "summary.servedRatio", "summary.reneged",
-  "summary.totalCost", "summary.costPerServed",
-];
+// Add each of the model's scoped goals as its own CI-summarized aggregateStats
+// entry (keyed via scopedGoalKey), computed per-replication and reduced the
+// same way as every other sweep metric. Without this, scoped goals (the only
+// kind most real models have — see examples/bike-shop.json) have nothing in
+// aggregateStats for src/llm/prompts.js's evaluateSweepPointGoals to read,
+// which is what made "N/N meet all goals" always report true.
+/**
+ * @param {any[]|undefined} goals
+ * @param {any[]} replicationPayloads
+ * @param {Record<string, any>} aggregateStats
+ */
+function addScopedGoalStats(goals, replicationPayloads, aggregateStats) {
+  for (const g of goals || []) {
+    if (!g?.scope || !g.metric || g.target == null) continue;
+    const key = scopedGoalKey(g.metric, g.scope);
+    if (!key) continue;
+    const values = replicationPayloads
+      .map(rp => resolveGoalValueForReplication(g, rp))
+      .filter(v => v != null && Number.isFinite(v));
+    if (values.length) aggregateStats[key] = confidenceInterval95(values);
+  }
+}
 
 // Compute how many grid points to run in parallel and how many replication workers
 // each slot gets, given the available hardware concurrency.
@@ -189,7 +209,8 @@ export function runSweep({
           return;
         }
 
-        const aggregateStats = summarizeReplicationResults(replicationPayloads, SWEEP_METRICS);
+        const aggregateStats = summarizeReplicationResults(replicationPayloads, SUMMARY_METRICS);
+        addScopedGoalStats(model?.goals, replicationPayloads, aggregateStats);
         const pointResult = {
           value,
           seed: pointSeed,
@@ -382,7 +403,8 @@ export function run2DSweep({
           return;
         }
 
-        const aggregateStats = summarizeReplicationResults(replicationPayloads, SWEEP_METRICS);
+        const aggregateStats = summarizeReplicationResults(replicationPayloads, SUMMARY_METRICS);
+        addScopedGoalStats(model?.goals, replicationPayloads, aggregateStats);
         const pointResult = {
           valueA,
           valueB,

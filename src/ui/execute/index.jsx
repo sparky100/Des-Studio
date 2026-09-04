@@ -4,7 +4,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 const ExecuteCanvas = lazy(() => import("./ExecuteCanvas.jsx").then(m => ({ default: m.ExecuteCanvas })));
 ;
 import { Tag, PhaseTag, Btn, SH, InfoBox } from "../shared/components.jsx";
-import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { buildEngine } from "../../engine/index.js";
 import { AdapterRegistry } from "../../engine/adapters/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
@@ -20,7 +19,7 @@ import { OverrideChipList } from "./OverrideChipList.jsx";
 import { SavedExperimentsTab } from "./SavedExperimentsTab.jsx";
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
 import { callLLMOnce } from "../../llm/apiClient.js";
-import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
+import { buildNarrativePrompt, buildModelDescriptionPrompt, evaluateSweepPointGoals } from "../../llm/prompts.js";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { saveLocalRun } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
@@ -34,7 +33,7 @@ import { getRunAdmission } from "../../engine/run-admission.js";
 import { enumerateSweepableParams, applySweepValues, generate2DSweepValues } from "../../engine/sweep-params.js";
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
-import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, sweepGoalKpiOptions, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
@@ -1159,7 +1158,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     terminationCondition: terminationMode === "condition" ? terminationCondition : null,
   }), [modelId, effectiveRunLabel, replications, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
   const exportPartial = partialBatchStatus && replicationResults.length > 0;
-  const resultFilenameBase = `flow-results-${slugifyResultName(model.name)}${exportPartial ? "-partial" : ""}-${timestampForFilename()}`;
   const comparisonRuns = useMemo(() => {
     const savedRuns = savedRunHistory.map(row => ({
       id: `saved-${row.id}`,
@@ -1732,9 +1730,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                     value={sweepKpiMetric}
                     onChange={e => setSweepKpiMetric(e.target.value)}
                     style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px" }}>
-                    {CI_METRICS.map(m => (
-                      <option key={m} value={m}>{METRIC_LABELS[m]}</option>
-                    ))}
+                    {CI_METRICS.map(m => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
+                    {sweepGoalKpiOptions(model.goals || []).map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
                   </select>
                 </div>
 
@@ -1757,16 +1754,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         </thead>
                         <tbody>
                           {sweepResults.map((pt, i) => {
-                            const goals = model.goals || [];
-                            const STAT_KEY = { avgWait:"summary.avgWait", avgSvc:"summary.avgSvc", avgSojourn:"summary.avgSojourn", avgTimeInSystem:"summary.avgTimeInSystem", avgWIP:"summary.avgWIP", maxWIP:"summary.maxWIP", served:"summary.served", servedRatio:"summary.servedRatio", reneged:"summary.reneged", totalCost:"summary.totalCost", costPerServed:"summary.costPerServed" };
-                            const feasible = goals.length
-                              ? goals.filter(g=>g.metric&&g.target&&!g.scope&&!(typeof g.operator==="string"&&g.operator.startsWith("p"))).every(g=>{
-                                  const k=STAT_KEY[g.metric]||(g.metric?.startsWith("summary.")?g.metric:null); if(!k) return true;
-                                  const v=pt.aggregateStats[k]?.mean; if(v==null||!Number.isFinite(v)) return true;
-                                  const t=parseFloat(g.target); const op=g.operator||"<";
-                                  return op==="<"?v<t:op==="<="?v<=t:op===">"?v>t:op===">="?v>=t:Math.abs(v-t)<0.001;
-                                })
-                              : null;
+                            const goals = model.goals || [], feasible = evaluateSweepPointGoals(goals, pt.aggregateStats).feasible;
                             return (
                               <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, opacity: feasible===false?0.5:1 }}>
                                 <td style={{ padding: "6px 8px", color: C.amber, fontWeight: 700 }}>

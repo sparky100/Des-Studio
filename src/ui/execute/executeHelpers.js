@@ -2,12 +2,14 @@
 
 import { TOKEN_COLORS } from "../shared/tokens.js";
 import { slugifyResultName, timestampForFilename, csvEscape, downloadTextFile } from "../shared/utils.js";
-import { buildWaitDistEntry, finalizeWeightedStats } from "../../engine/statistics.js";
+import { buildWaitDistEntry, finalizeWeightedStats, SUMMARY_METRICS } from "../../engine/statistics.js";
 import { downloadWorkbook } from "../shared/workbook.js";
 export { downloadTextFile };
 
 export const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
-export const CI_METRICS = ["summary.total", "summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.avgTimeInSystem", "summary.served", "summary.reneged", "summary.balked", "summary.servedRatio", "summary.totalCost", "summary.costPerServed"];
+// Re-exported from the engine so this list and the one sweeps use
+// (engine/sweep-runner.js) can't drift apart the way they once did.
+export const CI_METRICS = SUMMARY_METRICS;
 export const METRIC_LABELS = {
   "summary.total": "Arrived",
   "summary.avgWait": "Avg wait",
@@ -21,6 +23,29 @@ export const METRIC_LABELS = {
   "summary.totalCost": "Total cost",
   "summary.costPerServed": "Cost / served",
 };
+
+// Resolve a display label for a sweep KPI metric key — either a fixed
+// dot-path (METRIC_LABELS) or a goal-derived "goal:<index>" key (see
+// SweepViews.jsx / execute/index.jsx), which takes its label from the
+// model's own goal instead.
+export const metricLabel = (metric, goals = []) => {
+  if (typeof metric === "string" && metric.startsWith("goal:")) {
+    const idx = parseInt(metric.slice(5), 10);
+    return goals[idx]?.label || `Goal ${idx + 1}`;
+  }
+  return METRIC_LABELS[metric] || metric;
+};
+
+// Goal-derived options for the sweep KPI dropdown (execute/index.jsx) — lets a
+// sweep be read directly against what the model's own goals measure, not just
+// the fixed CI_METRICS list. Percentile-operator goals are excluded: sweep
+// points don't retain each replication's raw wait sample, so they aren't
+// resolvable (see engine/sweep-runner.js / SweepViews.jsx's sweepMetricStats).
+export function sweepGoalKpiOptions(goals = []) {
+  return goals
+    .map((g, i) => ({ value: `goal:${i}`, label: g.label || `Goal ${i + 1}`, g }))
+    .filter(({ g }) => g.metric && g.target != null && !(typeof g.operator === "string" && g.operator.startsWith("p")));
+}
 
 export const fmt = (value, digits = 0) => Number.isFinite(value) ? value.toFixed(digits) : "—";
 

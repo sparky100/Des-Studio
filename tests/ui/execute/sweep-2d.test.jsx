@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExecutePanel } from '../../../src/ui/execute/index.jsx';
 
@@ -338,5 +338,88 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     const call = mockRunSweepOffthread.mock.calls[0][0];
     expect(call.ranges[1].step).toBe(2.5);
     expect(typeof call.ranges[1].step).toBe('number');
+  });
+
+  // Regression: pointIsFeasible in SweepViews.jsx used to skip every scoped
+  // goal (`if (g.scope || ...) continue`), so with an all-scoped goal set —
+  // the only kind most real models have (see examples/bike-shop.json) — the
+  // loop body never ran and every point read as "meets all goals" regardless
+  // of its actual data. evaluateSweepPointGoals (src/llm/prompts.js) is the
+  // real, un-mocked function SweepViews.jsx now uses, so feeding it a scoped
+  // goal via aggregateStats here exercises the real fix end to end.
+  it('the "meet all goals" count reflects a scoped goal\'s actual results, not always all points (regression)', async () => {
+    const modelWithGoal = {
+      ...validModel,
+      goals: [{
+        label: 'Server util under 90%',
+        metric: 'resource.utilisation',
+        target: 0.9,
+        operator: '<',
+        scope: { type: 'resource', id: 'et_server', name: 'Server' },
+      }],
+    };
+    const results = [
+      { valueA: 1, valueB: 10, aggregateStats: { 'summary.avgWait': { mean: 5, n: 3 }, 'resource.utilisation.Server': { mean: 0.5, n: 3 } } },
+      { valueA: 2, valueB: 20, aggregateStats: { 'summary.avgWait': { mean: 4, n: 3 }, 'resource.utilisation.Server': { mean: 0.95, n: 3 } } },
+    ];
+    mockGenerate2DSweepValues.mockReturnValue([
+      { valueA: 1, valueB: 10 },
+      { valueA: 2, valueB: 20 },
+    ]);
+    mock2DSweepRunner(results);
+
+    render(<ExecutePanel model={modelWithGoal} modelId="model-1" userId="user-1" />);
+    openSweepSection();
+    fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
+    await selectParam(0, /server\.count/i);
+    await selectParam(0, /waiting\.capacity/i, 'waiting');
+
+    fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
+
+    await waitFor(() => {
+      expect(mockRunSweepOffthread).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(/meet all goals/i)).toBeInTheDocument();
+    });
+
+    // Before the fix this always read "2 / 2" regardless of data. One point
+    // (0.95) misses the 90% target, so only 1 of 2 should be feasible.
+    expect(screen.getByText(/1 \/ 2 meet all goals/i)).toBeInTheDocument();
+  });
+
+  // Regression / new feature: the sweep KPI dropdown now also lists the
+  // model's own goals (not just the fixed CI_METRICS list), so a sweep can
+  // be colored/read directly against what a goal measures.
+  it('a model goal is selectable as a sweep KPI and its resolved value is shown', async () => {
+    const modelWithGoal = {
+      ...validModel,
+      goals: [{
+        label: 'Server util under 90%',
+        metric: 'resource.utilisation',
+        target: 0.9,
+        operator: '<',
+        scope: { type: 'resource', id: 'et_server', name: 'Server' },
+      }],
+    };
+    const results = [
+      { valueA: 1, valueB: 10, aggregateStats: { 'summary.avgWait': { mean: 5, n: 3 }, 'resource.utilisation.Server': { mean: 0.42, n: 3 } } },
+    ];
+    mockGenerate2DSweepValues.mockReturnValue([{ valueA: 1, valueB: 10 }]);
+    mock2DSweepRunner(results);
+
+    render(<ExecutePanel model={modelWithGoal} modelId="model-1" userId="user-1" />);
+    openSweepSection();
+    fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
+    await selectParam(0, /server\.count/i);
+    await selectParam(0, /waiting\.capacity/i, 'waiting');
+
+    fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
+    await waitFor(() => expect(mockRunSweepOffthread).toHaveBeenCalledTimes(1));
+
+    const kpiSelect = screen.getByLabelText(/sweep kpi metric/i);
+    expect(within(kpiSelect).getByRole('option', { name: /server util under 90%/i })).toBeInTheDocument();
+
+    fireEvent.change(kpiSelect, { target: { value: 'goal:0' } });
+
+    await waitFor(() => expect(screen.getAllByText('0.4').length).toBeGreaterThanOrEqual(1));
   });
 });

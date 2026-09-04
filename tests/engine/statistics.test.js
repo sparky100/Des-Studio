@@ -22,6 +22,11 @@ import {
   summarizeReplicationResults,
   tCritical95,
   tukeyHSD,
+  SUMMARY_METRICS,
+  CONTAINER_METRIC_KEY,
+  scopedGoalKey,
+  resolveGoalValueForReplication,
+  getPathValue,
 } from '../../src/engine/statistics.js';
 
 describe('statistics helpers', () => {
@@ -733,5 +738,93 @@ describe('G13: Tukey HSD post-hoc test', () => {
     // When msWithin=0, Tukey HSD returns empty comparisons
     expect(result.comparisons.length).toBe(0);
     expect(result.anySignificant).toBe(false);
+  });
+});
+
+describe('SUMMARY_METRICS', () => {
+  test('includes summary.balked (regression: sweep-runner.js used to keep a separate, drifted copy missing it)', () => {
+    expect(SUMMARY_METRICS).toContain('summary.balked');
+  });
+});
+
+describe('scopedGoalKey', () => {
+  test('builds a queue key from the metric (summary. prefix stripped) and scope id', () => {
+    expect(scopedGoalKey('summary.avgWait', { type: 'queue', id: 'q_repair', name: 'Repair Queue' }))
+      .toBe('queue.avgWait.q_repair');
+  });
+  test('builds a resource key from the scope name (falling back to id)', () => {
+    expect(scopedGoalKey('resource.utilisation', { type: 'resource', id: 'et_staff', name: 'Staff' }))
+      .toBe('resource.utilisation.Staff');
+    expect(scopedGoalKey('resource.utilisation', { type: 'resource', id: 'et_staff' }))
+      .toBe('resource.utilisation.et_staff');
+  });
+  test('builds a container key from the metric (container. prefix stripped) and scope name', () => {
+    expect(scopedGoalKey('container.minLevel', { type: 'container', id: 'BikesAvailable', name: 'BikesAvailable' }))
+      .toBe('container.minLevel.BikesAvailable');
+  });
+  test('returns null for an unscoped goal', () => {
+    expect(scopedGoalKey('summary.avgWait', undefined)).toBeNull();
+  });
+});
+
+describe('resolveGoalValueForReplication', () => {
+  test('resolves a resource-scoped goal from perResource, preferring calendarUtilisation', () => {
+    const goal = { metric: 'resource.utilisation', scope: { type: 'resource', id: 'et_staff', name: 'Staff' } };
+    const rep = { result: { summary: { perResource: { Staff: { utilisation: 0.4, calendarUtilisation: 0.63 } } } } };
+    expect(resolveGoalValueForReplication(goal, rep)).toBe(0.63);
+  });
+  test('falls back to plain utilisation when calendarUtilisation is absent', () => {
+    const goal = { metric: 'resource.utilisation', scope: { type: 'resource', id: 'et_staff', name: 'Staff' } };
+    const rep = { result: { summary: { perResource: { Staff: { utilisation: 0.4 } } } } };
+    expect(resolveGoalValueForReplication(goal, rep)).toBe(0.4);
+  });
+  test('resolves a queue-scoped avgWait goal from waitDist', () => {
+    const goal = { metric: 'summary.avgWait', scope: { type: 'queue', id: 'q_repair', name: 'Repair Queue' } };
+    const rep = { result: { waitDist: { 'Repair Queue': { n: 20, mean: 42.5 } } } };
+    expect(resolveGoalValueForReplication(goal, rep)).toBe(42.5);
+  });
+  test('resolves a queue-scoped served goal from waitDist.n', () => {
+    const goal = { metric: 'summary.served', scope: { type: 'queue', id: 'q_repair', name: 'Repair Queue' } };
+    const rep = { result: { waitDist: { 'Repair Queue': { n: 20, mean: 42.5 } } } };
+    expect(resolveGoalValueForReplication(goal, rep)).toBe(20);
+  });
+  test('resolves a container-scoped goal, normalizing container.minLevel to the engine\'s actual "min" field', () => {
+    const goal = { metric: 'container.minLevel', scope: { type: 'container', id: 'BikesAvailable', name: 'BikesAvailable' } };
+    const rep = { result: { summary: { containerLevels: { BikesAvailable: { min: 2, max: 15, avg: 8, final: 5 } } } } };
+    expect(resolveGoalValueForReplication(goal, rep)).toBe(2);
+  });
+  test('resolves an unscoped goal via a plain dot-path lookup', () => {
+    const goal = { metric: 'summary.avgWait' };
+    const rep = { result: { summary: { avgWait: 3.2 } } };
+    expect(resolveGoalValueForReplication(goal, rep)).toBe(3.2);
+  });
+  test('returns null for a percentile-operator goal (no raw sample retained per sweep point)', () => {
+    const goal = { metric: 'summary.avgWait', operator: 'p90', scope: { type: 'queue', id: 'q_repair', name: 'Repair Queue' } };
+    const rep = { result: { waitDist: { 'Repair Queue': { n: 20, mean: 42.5, p90: 80 } } } };
+    expect(resolveGoalValueForReplication(goal, rep)).toBeNull();
+  });
+  test('returns null when the scoped data is missing rather than throwing', () => {
+    const goal = { metric: 'resource.utilisation', scope: { type: 'resource', id: 'et_staff', name: 'Staff' } };
+    expect(resolveGoalValueForReplication(goal, { result: { summary: {} } })).toBeNull();
+    expect(resolveGoalValueForReplication(goal, {})).toBeNull();
+  });
+});
+
+describe('CONTAINER_METRIC_KEY', () => {
+  test('maps the goal-style *Level metric names to the engine\'s actual containerLevels field names', () => {
+    expect(CONTAINER_METRIC_KEY.minLevel).toBe('min');
+    expect(CONTAINER_METRIC_KEY.maxLevel).toBe('max');
+    expect(CONTAINER_METRIC_KEY.avgLevel).toBe('avg');
+    expect(CONTAINER_METRIC_KEY.finalLevel).toBe('final');
+  });
+});
+
+describe('getPathValue (exported for cross-module reuse by sweep goal resolution)', () => {
+  test('resolves a nested dot-path', () => {
+    expect(getPathValue({ summary: { avgWait: 4.2 } }, 'summary.avgWait')).toBe(4.2);
+  });
+  test('returns undefined for a missing path rather than throwing', () => {
+    expect(getPathValue({ summary: {} }, 'summary.avgWait')).toBeUndefined();
+    expect(getPathValue(null, 'summary.avgWait')).toBeUndefined();
   });
 });

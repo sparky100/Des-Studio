@@ -1,3 +1,5 @@
+import { scopedGoalKey, CONTAINER_METRIC_KEY } from "../engine/statistics.js";
+
 const DEFAULT_MODEL_NAME = "Untitled model";
 // Word budget for the JSON data block sent to the LLM. This used to be 2000, which
 // sounds generous but isn't: a batch/results payload for a model with ~25+ queues
@@ -17,6 +19,9 @@ const NO_INVENTED_METRICS_GUARDRAIL = "Every current-state KPI value (utilisatio
   "This model may resemble ones you have seen before, but the numbers in this prompt's data are specific to this run. Do not use memorized, example, or previously-seen values from similar-looking problems — use only the values provided in this payload.";
 
 function finiteOrNull(value) {
+  if (value == null) return null; // Number(null) is 0, not NaN — coerce explicitly first so a
+                                   // genuinely absent value (e.g. an unresolvable scoped goal)
+                                   // reads as "no value" rather than a false, misleading 0.
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -786,11 +791,10 @@ function resolveWaitDistEntry(waitDist, scopeName, scopeId) {
 }
 
 function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}) {
+  const aggKey = scopedGoalKey(metric, scope);
+  if (aggKey && aggregateStats[aggKey]?.mean != null) return aggregateStats[aggKey].mean;
   if (scope?.type === "queue") {
     const qId = scope.id;
-    if (aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`]?.mean != null) {
-      return aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`].mean;
-    }
     if (metric === "summary.maxWIP") {
       const maxLengths = summary.runtimeMetrics?.max_queue_length_by_queue;
       if (maxLengths && typeof maxLengths === "object") {
@@ -815,9 +819,6 @@ function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}
   }
   if (scope?.type === "resource") {
     const rName = scope.name || scope.id;
-    if (aggregateStats[`resource.utilisation.${rName}`]?.mean != null) {
-      return aggregateStats[`resource.utilisation.${rName}`].mean;
-    }
     // Prefer the calendar-aware figure (open-hours-only denominator) for any
     // resource with a weekly schedulePattern — the plain `utilisation` field's
     // wall-clock denominator understates true busy-while-open utilisation.
@@ -827,17 +828,15 @@ function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}
   }
   if (scope?.type === "container") {
     const cName = scope.name || scope.id;
-    const key = metric.replace("container.", "");
-    if (aggregateStats[`container.${key}.${cName}`]?.mean != null) {
-      return aggregateStats[`container.${key}.${cName}`].mean;
-    }
+    const rawKey = metric.replace("container.", "");
+    const key = CONTAINER_METRIC_KEY[rawKey] || rawKey;
     return summary.containerLevels?.[cName]?.[key] ?? null;
   }
   return null;
 }
 
 // Maps goal metric names (without summary. prefix for legacy) to aggregateStats keys
-const GOAL_STAT_KEY = {
+export const GOAL_STAT_KEY = {
   avgWait:    "summary.avgWait",
   avgSvc:     "summary.avgSvc",
   avgSojourn: "summary.avgSojourn",
@@ -911,7 +910,7 @@ export function buildGoalGapsFromResults(model = {}, results = {}) {
 export function buildGoalGaps(model = {}, aggregateStats = {}, summary = {}) {
   const goals = model.goals || [];
   if (!goals.length) return null;
-  return goals.filter(g => g.metric && g.target).map(g => {
+  return goals.filter(g => g.metric && g.target != null).map(g => {
     const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
     let current = null;
     if (isPercentile) {
@@ -948,27 +947,42 @@ export function buildGoalGaps(model = {}, aggregateStats = {}, summary = {}) {
   });
 }
 
+// Resolve one goal's "current" value from a sweep point's aggregateStats.
+// Percentile goals aren't resolvable here — a sweep point doesn't retain
+// each replication's raw wait-time sample, only the CI-summarized means
+// engine/sweep-runner.js populates — so they return null and are excluded
+// from feasibility below, same as any other un-evaluable goal.
+export function resolveSweepGoalCurrent(g, aggregateStats) {
+  const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
+  if (isPercentile) return null;
+  if (g.scope) return finiteOrNull(resolveScopedGoalValue(g.metric, g.scope, aggregateStats, {}));
+  return finiteOrNull(aggregateStats[g.metric]?.mean) ?? finiteOrNull(aggregateStats[GOAL_STAT_KEY[g.metric]]?.mean);
+}
+
 // Evaluate whether a single sweep point's aggregateStats satisfies all goals.
+// A goal with no resolvable current value doesn't count against feasibility
+// (met stays null, not false) — only a goal that IS evaluable and misses its
+// target makes the point infeasible. If none of the point's goals were
+// evaluable, feasible is null ("unknown"), not true.
 export function evaluateSweepPointGoals(goals = [], aggregateStats = {}) {
   if (!goals.length) return { feasible: null, gaps: [] };
-  const gaps = goals.filter(g => g.metric && g.target).map(g => {
-    const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
-    const statKey = !isPercentile && !g.scope ? (GOAL_STAT_KEY[g.metric] || null) : null;
-    const current = statKey ? finiteOrNull(aggregateStats[statKey]?.mean) : null;
+  let evaluated = false;
+  const gaps = goals.filter(g => g.metric && g.target != null).map(g => {
+    const current = resolveSweepGoalCurrent(g, aggregateStats);
     const target = parseFloat(g.target);
     const op = g.operator || "<";
     let met = null;
     if (current != null) {
-      if (isPercentile) met = current < target;
-      else if (op === "<")  met = current < target;
+      evaluated = true;
+      if (op === "<")  met = current < target;
       else if (op === "<=") met = current <= target;
       else if (op === ">")  met = current > target;
       else if (op === ">=") met = current >= target;
-      else if (op === "==") met = Math.abs(current - target) < 0.001;
+      else met = Math.abs(current - target) < 0.001;
     }
-    return { metric: g.metric, label: g.label || (g.scope?.name ? `${g.scope.name} — ${g.metric} ${op} ${target}` : `${g.metric} ${op} ${target}`), operator: op, target, current, met };
+    return { metric: g.metric, label: g.label || (g.scope?.name ? `${g.scope.name} — ${g.metric} ${op} ${target}` : `${g.metric} ${op} ${target}`), scope: g.scope || null, operator: op, target, current, met };
   });
-  const feasible = gaps.every(g => g.met === true);
+  const feasible = evaluated ? gaps.every(g => g.met !== false) : null;
   return { feasible, gaps };
 }
 

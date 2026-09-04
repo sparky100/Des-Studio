@@ -15,6 +15,7 @@ import {
   buildSuggestionPrompt,
   buildUtilisationMap,
   correctUtilisationFigures,
+  evaluateSweepPointGoals,
   parsePlanRefinementResponse,
   parseSuggestionResponse,
   promptWordEstimate,
@@ -843,6 +844,108 @@ describe("Sprint 46 — AI apply & verify", () => {
       const gaps = buildGoalGaps(model, {}, summary);
       expect(gaps[0].current).toBe(20);
       expect(gaps[0].met).toBe(false);
+    });
+
+    it("resolves a container.minLevel goal, normalizing to the engine's actual 'min' field (regression: examples/bike-shop.json's own goal)", () => {
+      const model = {
+        goals: [{
+          metric: "container.minLevel",
+          operator: ">",
+          target: 0,
+          scope: { type: "container", id: "BikesAvailable", name: "BikesAvailable" },
+        }],
+      };
+      const summary = { containerLevels: { BikesAvailable: { min: 0, max: 15, avg: 6, final: 5 } } };
+      const gaps = buildGoalGaps(model, {}, summary);
+      expect(gaps[0].current).toBe(0);
+      expect(gaps[0].met).toBe(false); // 0 > 0 is false — pool fully emptied at some point
+    });
+
+    it("resolves a resource-scoped utilisation goal from summary.perResource", () => {
+      const model = {
+        goals: [{
+          metric: "resource.utilisation",
+          operator: "<",
+          target: 0.9,
+          scope: { type: "resource", id: "et_staff", name: "Staff" },
+        }],
+      };
+      const summary = { perResource: { Staff: { utilisation: 0.4, calendarUtilisation: 0.63 } } };
+      const gaps = buildGoalGaps(model, {}, summary);
+      expect(gaps[0].current).toBe(0.63); // prefers calendarUtilisation
+      expect(gaps[0].met).toBe(true);
+    });
+  });
+
+  // Regression coverage for the "N/N meet all goals" bug: evaluateSweepPointGoals
+  // used to only resolve unscoped, non-percentile goals — every scoped goal
+  // (the only kind most real models have, e.g. examples/bike-shop.json) was
+  // silently skipped, so `feasible` was always true regardless of the point's
+  // actual results.
+  describe("evaluateSweepPointGoals", () => {
+    it("a scoped goal that is met makes the point feasible", () => {
+      const goals = [{
+        label: "Staff util under 90%", metric: "resource.utilisation", target: 0.9, operator: "<",
+        scope: { type: "resource", id: "et_staff", name: "Staff" },
+      }];
+      const aggregateStats = { "resource.utilisation.Staff": { mean: 0.5, n: 5 } };
+      const { feasible, gaps } = evaluateSweepPointGoals(goals, aggregateStats);
+      expect(feasible).toBe(true);
+      expect(gaps[0].current).toBe(0.5);
+      expect(gaps[0].met).toBe(true);
+    });
+
+    it("a scoped goal that is missed makes the point infeasible (this is the bug that was always reporting true)", () => {
+      const goals = [{
+        label: "Staff util under 90%", metric: "resource.utilisation", target: 0.9, operator: "<",
+        scope: { type: "resource", id: "et_staff", name: "Staff" },
+      }];
+      const aggregateStats = { "resource.utilisation.Staff": { mean: 0.95, n: 5 } };
+      const { feasible, gaps } = evaluateSweepPointGoals(goals, aggregateStats);
+      expect(feasible).toBe(false);
+      expect(gaps[0].met).toBe(false);
+    });
+
+    it("a mix of scoped and unscoped goals: one missed goal (of either kind) makes the point infeasible", () => {
+      const goals = [
+        { metric: "summary.avgWait", target: 5, operator: "<" },
+        {
+          metric: "summary.avgWait", target: 30, operator: "<",
+          scope: { type: "queue", id: "q_repair", name: "Repair Queue" },
+        },
+      ];
+      const aggregateStats = {
+        "summary.avgWait": { mean: 2, n: 5 },
+        "queue.avgWait.q_repair": { mean: 45, n: 5 }, // misses target of 30
+      };
+      const { feasible } = evaluateSweepPointGoals(goals, aggregateStats);
+      expect(feasible).toBe(false);
+    });
+
+    it("a goal with no resolvable current value doesn't count against feasibility", () => {
+      const goals = [{
+        metric: "resource.utilisation", target: 0.9, operator: "<",
+        scope: { type: "resource", id: "et_staff", name: "Staff" },
+      }];
+      // No aggregateStats entry for this scope at all.
+      const { feasible, gaps } = evaluateSweepPointGoals(goals, {});
+      expect(gaps[0].current).toBeNull();
+      expect(gaps[0].met).toBeNull();
+      expect(feasible).toBeNull(); // "unknown", not silently true
+    });
+
+    it("no goals at all returns feasible: null", () => {
+      expect(evaluateSweepPointGoals([], {})).toEqual({ feasible: null, gaps: [] });
+    });
+
+    it("percentile-operator goals are excluded from evaluation (no raw sample retained per sweep point)", () => {
+      const goals = [{
+        metric: "summary.avgWait", target: 30, operator: "p90",
+        scope: { type: "queue", id: "q_repair", name: "Repair Queue" },
+      }];
+      const { feasible, gaps } = evaluateSweepPointGoals(goals, { "queue.avgWait.q_repair": { mean: 45 } });
+      expect(gaps[0].current).toBeNull();
+      expect(feasible).toBeNull();
     });
   });
 
