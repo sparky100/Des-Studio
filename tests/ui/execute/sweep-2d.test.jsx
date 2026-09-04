@@ -293,4 +293,50 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     await waitFor(() => expect(screen.getByText(/grid:/i)).toBeInTheDocument());
     expect(screen.getByText(/2 x 2/i)).toBeInTheDocument();
   });
+
+  // Regression: the range inputs used to store parseFloat(e.target.value) || 0
+  // directly, so every keystroke fed a coerced *number* straight back into the
+  // controlled input's value. That clobbers exactly the intermediate states a
+  // user types through — a trailing decimal point ("4." -> parseFloat -> 4,
+  // dropping the dot the user just typed) or a fully-cleared field ("" ->
+  // parseFloat -> NaN -> || 0 -> "0", so the field can never actually go
+  // blank while retyping) — which reads as the field "locking up" mid-edit.
+  // The fix stores the raw string while typing and only parses at the point
+  // of use (handleRunSweep / the grid-size preview).
+  it('a decimal value in a range field round-trips exactly, not rounded or reformatted', async () => {
+    setup2DPanel();
+    await selectParam(0, /server\.count/i);
+    await selectParam(0, /waiting\.capacity/i, 'waiting');
+
+    const stepYInput = screen.getByLabelText(/sweep step y/i);
+    fireEvent.change(stepYInput, { target: { value: '4.5' } });
+    expect(stepYInput.value).toBe('4.5');
+  });
+
+  it('clearing a range field leaves it blank instead of forcing it to 0', async () => {
+    setup2DPanel();
+    await selectParam(0, /server\.count/i);
+    await selectParam(0, /waiting\.capacity/i, 'waiting');
+
+    const stepYInput = screen.getByLabelText(/sweep step y/i);
+    fireEvent.change(stepYInput, { target: { value: '' } });
+    expect(stepYInput.value).toBe('');
+  });
+
+  it('a typed range value is still parsed to a real number when the sweep runs', async () => {
+    mockGenerate2DSweepValues.mockReturnValue([{ valueA: 1, valueB: 10 }]);
+    mock2DSweepRunner([]);
+
+    setup2DPanel();
+    await selectParam(0, /server\.count/i);
+    await selectParam(0, /waiting\.capacity/i, 'waiting');
+
+    fireEvent.change(screen.getByLabelText(/sweep step y/i), { target: { value: '2.5' } });
+    fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
+
+    await waitFor(() => expect(mockRunSweepOffthread).toHaveBeenCalledTimes(1));
+    const call = mockRunSweepOffthread.mock.calls[0][0];
+    expect(call.ranges[1].step).toBe(2.5);
+    expect(typeof call.ranges[1].step).toBe('number');
+  });
 });

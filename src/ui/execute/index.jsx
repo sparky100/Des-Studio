@@ -1305,6 +1305,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (sweepMode === "1d" && !sweepSelectedParam) return;
     if (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB)) return;
 
+    // Range fields hold the raw typed string while editing (see the MIN/MAX/STEP
+    // inputs below — storing the parsed number there fought the browser's own
+    // number-input editing and made typing a decimal point or a leading zero
+    // feel locked). Parse once here, at the point of use.
+    const min = parseFloat(sweepMin) || 0;
+    const max = parseFloat(sweepMax) || 0;
+    const step = parseFloat(sweepStep) || 0;
+    const minB = parseFloat(sweepMinB) || 0;
+    const maxB = parseFloat(sweepMaxB) || 0;
+    const stepB = parseFloat(sweepStepB) || 0;
+
     setSweepStatus("running");
     setSweepResults(null);
     setSweepProgress(null);
@@ -1313,8 +1324,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (sweepMode === "2d") {
       try {
         generate2DSweepValues(
-          { min: sweepMin, max: sweepMax, step: sweepStep },
-          { min: sweepMinB, max: sweepMaxB, step: sweepStepB }
+          { min, max, step },
+          { min: minB, max: maxB, step: stepB }
         );
       } catch (err) {
         setSweepGridError(err.message);
@@ -1326,8 +1337,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         model,
         paramConfigs: [sweepSelectedParam, sweepSelectedParamB],
         ranges: [
-          { min: sweepMin, max: sweepMax, step: sweepStep },
-          { min: sweepMinB, max: sweepMaxB, step: sweepStepB },
+          { min, max, step },
+          { min: minB, max: maxB, step: stepB },
         ],
         replications,
         baseSeed: seed,
@@ -1361,9 +1372,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       sweepRunnerRef.current = runSweep({
         model,
         paramConfig: sweepSelectedParam,
-        min: sweepMin,
-        max: sweepMax,
-        step: sweepStep,
+        min,
+        max,
+        step,
         replications,
         baseSeed: seed,
         warmupPeriod,
@@ -1614,20 +1625,20 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                     <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN {sweepMode === "2d" ? "X" : ""}</span>
-                    <input type="number" aria-label="Sweep min" value={sweepMin}
-                      onChange={e => setSweepMin(parseFloat(e.target.value) || 0)}
+                    <input type="number" aria-label="Sweep min" value={sweepMin ?? ""}
+                      onChange={e => setSweepMin(e.target.value)}
                       style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                     <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX {sweepMode === "2d" ? "X" : ""}</span>
-                    <input type="number" aria-label="Sweep max" value={sweepMax}
-                      onChange={e => setSweepMax(parseFloat(e.target.value) || 0)}
+                    <input type="number" aria-label="Sweep max" value={sweepMax ?? ""}
+                      onChange={e => setSweepMax(e.target.value)}
                       style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                     <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP {sweepMode === "2d" ? "X" : ""}</span>
-                    <input type="number" aria-label="Sweep step" value={sweepStep}
-                      onChange={e => setSweepStep(parseFloat(e.target.value) || 0)}
+                    <input type="number" aria-label="Sweep step" value={sweepStep ?? ""}
+                      onChange={e => setSweepStep(e.target.value)}
                       style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                   </div>
                 </div>
@@ -1636,20 +1647,20 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                       <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN Y</span>
-                      <input type="number" aria-label="Sweep min Y" value={sweepMinB}
-                        onChange={e => setSweepMinB(parseFloat(e.target.value) || 0)}
+                      <input type="number" aria-label="Sweep min Y" value={sweepMinB ?? ""}
+                        onChange={e => setSweepMinB(e.target.value)}
                         style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                       <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX Y</span>
-                      <input type="number" aria-label="Sweep max Y" value={sweepMaxB}
-                        onChange={e => setSweepMaxB(parseFloat(e.target.value) || 0)}
+                      <input type="number" aria-label="Sweep max Y" value={sweepMaxB ?? ""}
+                        onChange={e => setSweepMaxB(e.target.value)}
                         style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                       <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP Y</span>
-                      <input type="number" aria-label="Sweep step Y" value={sweepStepB}
-                        onChange={e => setSweepStepB(parseFloat(e.target.value) || 0)}
+                      <input type="number" aria-label="Sweep step Y" value={sweepStepB ?? ""}
+                        onChange={e => setSweepStepB(e.target.value)}
                         style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
                     </div>
                   </div>
@@ -1661,8 +1672,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       {(() => {
                         try {
                           const grid = generate2DSweepValues(
-                            { min: sweepMin, max: sweepMax, step: sweepStep },
-                            { min: sweepMinB, max: sweepMaxB, step: sweepStepB }
+                            { min: parseFloat(sweepMin) || 0, max: parseFloat(sweepMax) || 0, step: parseFloat(sweepStep) || 0 },
+                            { min: parseFloat(sweepMinB) || 0, max: parseFloat(sweepMaxB) || 0, step: parseFloat(sweepStepB) || 0 }
                           );
                           const rows = Math.round(grid.length / (grid.filter(p => p.valueA === grid[0].valueA).length || 1));
                           const cols = grid.filter(p => p.valueA === grid[0].valueA).length;
