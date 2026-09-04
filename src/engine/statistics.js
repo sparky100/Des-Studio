@@ -126,7 +126,7 @@ export function confidenceInterval95(values = []) {
  * @param {any} object
  * @param {string} path
  */
-function getPathValue(object, path) {
+export function getPathValue(object, path) {
   return path.split(".").reduce((current, key) => current?.[key], object);
 }
 
@@ -143,6 +143,90 @@ export function summarizeReplicationResults(results = [], metricPaths = []) {
     );
   }
   return summaries;
+}
+
+// The canonical set of unscoped, single-run summary metric dot-paths used
+// everywhere a run's results get replication-CI'd — single runs (as
+// CI_METRICS, re-exported from ui/execute/executeHelpers.js) and sweeps
+// (as SWEEP_METRICS, formerly a separately-maintained copy in
+// engine/sweep-runner.js that had drifted out of sync — see summary.balked).
+export const SUMMARY_METRICS = [
+  "summary.total", "summary.avgWait", "summary.avgSvc", "summary.avgSojourn",
+  "summary.avgTimeInSystem", "summary.served", "summary.reneged", "summary.balked",
+  "summary.servedRatio", "summary.totalCost", "summary.costPerServed",
+];
+
+// A goal's `metric` field for a container scope is written as `container.<key>`,
+// e.g. `container.minLevel` (see examples/bike-shop.json), but the engine's
+// per-replication `containerLevels` entries (built in engine/index.js) are
+// shaped `{ min, max, avg, final }` — not `minLevel`/`maxLevel`/etc. Normalize
+// between the two here so both single-run goal resolution (src/llm/prompts.js
+// resolveScopedGoalValue) and per-replication sweep resolution below read the
+// same, correct field.
+/** @type {Record<string, string>} */
+export const CONTAINER_METRIC_KEY = { minLevel: "min", maxLevel: "max", avgLevel: "avg", finalLevel: "final" };
+
+/**
+ * Build the aggregateStats key a scoped goal's CI-summarized value is stored
+ * under, given the goal's `metric` and `scope`. Shared so sweep-runner.js
+ * (which populates these keys per point) and src/llm/prompts.js's
+ * resolveScopedGoalValue (which reads them) can't drift apart.
+ * @param {string} metric
+ * @param {{ type?: string, id?: string, name?: string }} [scope]
+ * @returns {string|null}
+ */
+export function scopedGoalKey(metric, scope) {
+  if (!scope) return null;
+  if (scope.type === "queue") return `queue.${metric.replace("summary.", "")}.${scope.id}`;
+  if (scope.type === "resource") return `resource.utilisation.${scope.name || scope.id}`;
+  if (scope.type === "container") return `container.${metric.replace("container.", "")}.${scope.name || scope.id}`;
+  return null;
+}
+
+/**
+ * Resolve one goal's value from a single replication's raw engine result
+ * (shape: `{ result: { summary, waitDist, ... } }` or the bare result
+ * object itself). Mirrors resolveScopedGoalValue in src/llm/prompts.js,
+ * which resolves the same goal shapes from a single run's *aggregated*
+ * summary — this is the per-replication counterpart used to build sweep
+ * points' CI stats for scoped goals (see sweep-runner.js). Percentile goals
+ * (`operator` starting with "p") aren't resolvable here — a sweep point
+ * doesn't retain each replication's raw wait-time sample — so they return
+ * null and are excluded from sweep goal-feasibility, same as any other
+ * un-evaluable goal.
+ * @param {{ metric?: string, scope?: { type?: string, id?: string, name?: string }, operator?: string }} goal
+ * @param {any} replicationResult
+ * @returns {number|null}
+ */
+export function resolveGoalValueForReplication(goal, replicationResult) {
+  const { metric, scope, operator } = goal || {};
+  if (!metric) return null;
+  if (typeof operator === "string" && operator.startsWith("p")) return null;
+  const result = replicationResult?.result || replicationResult;
+  if (!result) return null;
+
+  if (scope?.type === "resource") {
+    const r = result.summary?.perResource?.[scope.name || scope.id || ""];
+    const v = r?.calendarUtilisation ?? r?.utilisation;
+    return Number.isFinite(v) ? v : null;
+  }
+  if (scope?.type === "queue") {
+    const q = result.waitDist?.[scope.name || ""] ?? result.waitDist?.[scope.id || ""];
+    if (!q) return null;
+    let v = null;
+    if (metric === "summary.avgWait") v = q.mean;
+    else if (metric === "summary.served") v = q.n;
+    else if (metric === "summary.avgWIP" || metric === "summary.maxWIP") v = q.avgDepth;
+    return Number.isFinite(v) ? v : null;
+  }
+  if (scope?.type === "container") {
+    const rawKey = metric.replace("container.", "");
+    const key = CONTAINER_METRIC_KEY[rawKey] || rawKey;
+    const v = result.summary?.containerLevels?.[scope.name || scope.id || ""]?.[key];
+    return Number.isFinite(v) ? v : null;
+  }
+  const v = getPathValue(result, metric);
+  return Number.isFinite(v) ? v : null;
 }
 
 /**
