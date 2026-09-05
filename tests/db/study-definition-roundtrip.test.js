@@ -13,6 +13,8 @@ import {
   isAllowedMetricRef,
   metricRefToPath,
   summaryPathToMetricRef,
+  validateStudyProposal,
+  buildStudyDefinitionFromProposal,
 } from '../../src/contracts/study';
 
 /** @type {import('../../src/contracts/study').StudyDefinition} */
@@ -155,5 +157,107 @@ describe('MetricRef helpers', () => {
   it('summaryPathToMetricRef returns null for a non-summary or unknown path', () => {
     expect(summaryPathToMetricRef('runtimeMetrics.events_processed')).toBeNull();
     expect(summaryPathToMetricRef('summary.notAField')).toBeNull();
+  });
+});
+
+// Phase 3: AI-authored study proposals (propose-study / propose-next-study,
+// src/llm/prompts.js) must be validated against the model's own sweepable
+// parameters and the allowed MetricRef lists before being trusted — an AI
+// response is untrusted input, same as any other LLM JSON output.
+describe('validateStudyProposal', () => {
+  const sweepableParams = [
+    { type: 'entityTypeCount', targetId: 'et1', path: 'entityTypes.et1.count', label: 'Number of Nurse', currentValue: 2 },
+    { type: 'queueCapacity', targetId: 'q1', path: 'queues.q1.capacity', label: 'TriageQueue capacity', currentValue: 10 },
+  ];
+
+  const validProposal = {
+    name: 'Nurse count vs wait time',
+    planType: 'sampled',
+    parameters: [
+      { type: 'entityTypeCount', targetId: 'et1', range: { min: 1, max: 6, step: 1 } },
+    ],
+    objective: { metricRef: { kind: 'summary', field: 'avgWait' }, direction: 'min' },
+    runBudget: { points: 20, replicationsPerPoint: 10 },
+  };
+
+  it('accepts a proposal whose parameters and objective are all allowed', () => {
+    const result = validateStudyProposal(validProposal, sweepableParams);
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  it('rejects a parameter not present in the model\'s sweepable-parameter list', () => {
+    const proposal = { ...validProposal, parameters: [{ type: 'entityTypeCount', targetId: 'not-a-real-id', range: { min: 1, max: 6, step: 1 } }] };
+    const result = validateStudyProposal(proposal, sweepableParams);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('not one of this model\'s sweepable parameters'))).toBe(true);
+  });
+
+  it('rejects an objective metricRef outside the allowed MetricRef lists', () => {
+    const proposal = { ...validProposal, objective: { metricRef: { kind: 'summary', field: 'notARealField' }, direction: 'min' } };
+    const result = validateStudyProposal(proposal, sweepableParams);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('objective.metricRef'))).toBe(true);
+  });
+
+  it('rejects an unrecognised planType', () => {
+    const result = validateStudyProposal({ ...validProposal, planType: 'random-walk' }, sweepableParams);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('planType'))).toBe(true);
+  });
+
+  it('rejects a runBudget with a non-positive points or replicationsPerPoint', () => {
+    const result = validateStudyProposal({ ...validProposal, runBudget: { points: 0, replicationsPerPoint: 10 } }, sweepableParams);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('runBudget'))).toBe(true);
+  });
+
+  it('rejects a non-object candidate', () => {
+    expect(validateStudyProposal(null, sweepableParams).valid).toBe(false);
+    expect(validateStudyProposal('not json', sweepableParams).valid).toBe(false);
+  });
+});
+
+describe('buildStudyDefinitionFromProposal', () => {
+  const sweepableParams = [
+    { type: 'entityTypeCount', targetId: 'et1', path: 'entityTypes.et1.count', label: 'Number of Nurse', description: 'How many Nurse servers are available', currentValue: 2 },
+  ];
+
+  it('merges a validated proposal with model goals/baseSeed/origin the AI never saw', () => {
+    const proposal = {
+      name: 'Nurse count vs wait time',
+      planType: 'sampled',
+      parameters: [{ type: 'entityTypeCount', targetId: 'et1', range: { min: 1, max: 6, step: 1 } }],
+      objective: { metricRef: { kind: 'summary', field: 'avgWait' }, direction: 'min' },
+      runBudget: { points: 20, replicationsPerPoint: 10 },
+      rationale: 'Nurse count is the top-ranked sensitivity driver.',
+    };
+    const goals = [{ id: 'g1', metric: 'summary.avgWait', target: 10, operator: '<' }];
+    const origin = { kind: 'ai', refId: 'diag-1' };
+
+    const definition = buildStudyDefinitionFromProposal(proposal, sweepableParams, { goals, baseSeed: 42, origin });
+
+    expect(definition.goals).toBe(goals);
+    expect(definition.baseSeed).toBe(42);
+    expect(definition.origin).toEqual(origin);
+    // The full StudyParameter (path/label/description/currentValue) is looked
+    // up from sweepableParams, not taken from the AI — the AI cannot
+    // hallucinate a path that doesn't exist in the model.
+    expect(definition.parameters).toEqual([
+      {
+        type: 'entityTypeCount', targetId: 'et1', path: 'entityTypes.et1.count',
+        label: 'Number of Nurse', description: 'How many Nurse servers are available', currentValue: 2,
+        range: { min: 1, max: 6, step: 1 },
+      },
+    ]);
+  });
+
+  it('drops a parameter that cannot be matched against sweepableParams', () => {
+    const proposal = {
+      name: 'x', planType: 'sampled',
+      parameters: [{ type: 'entityTypeCount', targetId: 'unknown-id', range: { min: 1, max: 6, step: 1 } }],
+      objective: null, runBudget: { points: 5, replicationsPerPoint: 5 },
+    };
+    const definition = buildStudyDefinitionFromProposal(proposal, sweepableParams, { goals: [], baseSeed: 1, origin: { kind: 'ai' } });
+    expect(definition.parameters).toEqual([]);
   });
 });

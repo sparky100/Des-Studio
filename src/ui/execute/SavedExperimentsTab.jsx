@@ -44,6 +44,11 @@ export function SavedExperimentsTab({
   const [expFormName, setExpFormName] = useState("");
   const [expFormDesc, setExpFormDesc] = useState("");
   const [expFormOverrides, setExpFormOverrides] = useState([]);
+  // Set when the New form was pre-filled by "Promote to Experiment" on a
+  // Study point (src/contracts/study.ts's StudyPoint) — carried through to
+  // saveExperiment() as source_study_point_id, then cleared on any other
+  // form open so a later manually-created experiment doesn't inherit it.
+  const [expFormSourceStudyPointId, setExpFormSourceStudyPointId] = useState(null);
   const [expFormPickerOpen, setExpFormPickerOpen] = useState(false);
   const [expFormSaving, setExpFormSaving] = useState(false);
   const [expandedExpIds, setExpandedExpIds] = useState(new Set());
@@ -77,6 +82,7 @@ export function SavedExperimentsTab({
     setExpFormName("");
     setExpFormDesc("");
     setExpFormOverrides(formSeed.overrides || []);
+    setExpFormSourceStudyPointId(formSeed.sourceStudyPointId || null);
     setExpFormPickerOpen(false);
     setExpFormOpen(true);
     onFormSeedConsumed?.();
@@ -84,6 +90,7 @@ export function SavedExperimentsTab({
 
   const openNewForm = () => {
     setExpEditId(null); setExpFormName(""); setExpFormDesc(""); setExpFormOverrides([]);
+    setExpFormSourceStudyPointId(null);
     setExpFormPickerOpen(false);
     ensureSweepParams();
     setExpFormOpen(true);
@@ -98,7 +105,7 @@ export function SavedExperimentsTab({
   const handleCreate = async () => {
     setExpFormSaving(true);
     try {
-      const created = await saveExperiment({ modelId, userId, name: expFormName.trim(), description: expFormDesc.trim() || null, config: buildFormConfig() });
+      const created = await saveExperiment({ modelId, userId, name: expFormName.trim(), description: expFormDesc.trim() || null, config: buildFormConfig(), sourceStudyPointId: expFormSourceStudyPointId || undefined });
       setExperiments(prev => [created, ...prev]);
       setExpFormOpen(false);
     } catch (err) { setExperimentsError(err?.message || "Save failed"); } finally { setExpFormSaving(false); }
@@ -157,7 +164,9 @@ export function SavedExperimentsTab({
       {/* New experiment form */}
       {expFormOpen && !expEditId && (
         <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-            <span style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>NEW EXPERIMENT</span>
+            <span style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+              NEW EXPERIMENT{expFormSourceStudyPointId ? " — PROMOTED FROM A STUDY POINT" : ""}
+            </span>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Name *</span>
               <input aria-label="Experiment name" type="text" value={expFormName} onChange={e => setExpFormName(e.target.value)} placeholder="e.g. High-load scenario"

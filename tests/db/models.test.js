@@ -26,6 +26,9 @@ import {
   getStudy,
   listStudies,
   deleteStudy,
+  saveExperiment,
+  saveDiagnosis,
+  listDiagnosesForRun,
   getRun,
   updateModelTags,
 } from '../../src/db/models.js';
@@ -1189,6 +1192,135 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from('studies').delete).toHaveBeenCalled();
       expect(supabase.from('studies').eq).toHaveBeenCalledWith('id', 'study-1');
       expect(supabase.from('studies').eq).toHaveBeenCalledWith('run_by', 'user-1');
+    });
+
+    // Phase 3: sequential studies denormalise their seed study's id onto
+    // parent_study_id (from origin.refId) — see study.ts's StudyOrigin and
+    // 20260905100000_studies_phase3.sql.
+    it('saveStudy derives parent_study_id from a "study"-kind origin', async () => {
+      const sequentialDefinition = { ...definition, planType: 'sequential', origin: { kind: 'study', refId: 'study-0' } };
+      supabase.from('studies').single.mockResolvedValueOnce({
+        data: { id: 'study-1', definition: sequentialDefinition, schema_version: 2, status: 'complete', origin: sequentialDefinition.origin, parent_study_id: 'study-0', created_at: '2026-09-05T12:00:00Z' },
+        error: null,
+      });
+
+      const result = await saveStudy('model-1', 'user-1', sequentialDefinition, []);
+
+      expect(result.parentStudyId).toBe('study-0');
+      expect(supabase.from('studies').insert).toHaveBeenCalledWith(
+        expect.objectContaining({ parent_study_id: 'study-0', origin: sequentialDefinition.origin })
+      );
+    });
+
+    it('saveStudy leaves parent_study_id null for a non-"study" origin', async () => {
+      supabase.from('studies').single.mockResolvedValueOnce({
+        data: { id: 'study-2', definition, schema_version: 2, status: 'complete', origin: { kind: 'user' }, parent_study_id: null, created_at: '2026-09-05T12:00:00Z' },
+        error: null,
+      });
+
+      await saveStudy('model-1', 'user-1', definition, []);
+
+      expect(supabase.from('studies').insert).toHaveBeenCalledWith(
+        expect.objectContaining({ parent_study_id: null })
+      );
+    });
+  });
+
+  describe('experiments — source_study_point_id (Phase 3 "Promote to Experiment")', () => {
+    beforeEach(() => {
+      const qb = {
+        select: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockReturnThis(),
+        update: vi.fn().mockReturnThis(),
+        delete: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      };
+      supabase.from.mockReturnValue(qb);
+    });
+
+    it('saveExperiment writes source_study_point_id when promoting a study point', async () => {
+      supabase.from('experiments').single.mockResolvedValueOnce({
+        data: {
+          id: 'exp-1', model_id: 'model-1', user_id: 'user-1', name: 'Promoted point',
+          description: null, config: { overrides: [{ path: 'entityTypes.et1.count', value: '3' }] },
+          source_study_point_id: 'pt-1', created_at: '2026-09-05T12:00:00Z', updated_at: '2026-09-05T12:00:00Z',
+        },
+        error: null,
+      });
+
+      const result = await saveExperiment({
+        modelId: 'model-1', userId: 'user-1', name: 'Promoted point',
+        config: { overrides: [{ path: 'entityTypes.et1.count', value: '3' }] },
+        sourceStudyPointId: 'pt-1',
+      });
+
+      expect(result.sourceStudyPointId).toBe('pt-1');
+      expect(supabase.from('experiments').insert).toHaveBeenCalledWith(
+        expect.objectContaining({ source_study_point_id: 'pt-1' })
+      );
+    });
+
+    it('saveExperiment leaves source_study_point_id null for an ordinary experiment', async () => {
+      supabase.from('experiments').single.mockResolvedValueOnce({
+        data: { id: 'exp-2', model_id: 'model-1', user_id: 'user-1', name: 'Baseline', description: null, config: {}, source_study_point_id: null, created_at: '2026-09-05T12:00:00Z', updated_at: '2026-09-05T12:00:00Z' },
+        error: null,
+      });
+
+      const result = await saveExperiment({ modelId: 'model-1', userId: 'user-1', name: 'Baseline', config: {} });
+
+      expect(result.sourceStudyPointId).toBeNull();
+      expect(supabase.from('experiments').insert).toHaveBeenCalledWith(
+        expect.objectContaining({ source_study_point_id: null })
+      );
+    });
+  });
+
+  describe('diagnoses (Phase 3: persisted AI diagnosis results)', () => {
+    beforeEach(() => {
+      const qb = {
+        select: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      };
+      supabase.from.mockReturnValue(qb);
+    });
+
+    const diagnosisResult = {
+      findings: [{ severity: 'CRITICAL', title: 'Queue never drains', explanation: 'x', affectedNodeId: 'q1', affectedNodeName: 'Waiting Room', suggestedFix: 'Add a server' }],
+      overallAssessment: 'The model is under-resourced.',
+    };
+
+    it('saveDiagnosis inserts a diagnoses row keyed to the run', async () => {
+      supabase.from('diagnoses').single.mockResolvedValueOnce({
+        data: { id: 'diag-1', run_id: 'run-1', user_id: 'user-1', version_id: 'ver-1', result: diagnosisResult, created_at: '2026-09-05T12:00:00Z' },
+        error: null,
+      });
+
+      const result = await saveDiagnosis('run-1', 'user-1', diagnosisResult, 'ver-1');
+
+      expect(result.id).toBe('diag-1');
+      expect(result.result).toEqual(diagnosisResult);
+      expect(supabase.from).toHaveBeenCalledWith('diagnoses');
+      expect(supabase.from('diagnoses').insert).toHaveBeenCalledWith(
+        expect.objectContaining({ run_id: 'run-1', user_id: 'user-1', version_id: 'ver-1', result: diagnosisResult })
+      );
+    });
+
+    it('listDiagnosesForRun returns diagnoses ordered newest-first', async () => {
+      supabase.from('diagnoses').order.mockResolvedValueOnce({
+        data: [{ id: 'diag-2', run_id: 'run-1', user_id: 'user-1', version_id: null, result: diagnosisResult, created_at: '2026-09-05T13:00:00Z' }],
+        error: null,
+      });
+
+      const diagnoses = await listDiagnosesForRun('run-1');
+
+      expect(diagnoses).toHaveLength(1);
+      expect(diagnoses[0]).toMatchObject({ id: 'diag-2', runId: 'run-1', result: diagnosisResult });
+      expect(supabase.from('diagnoses').eq).toHaveBeenCalledWith('run_id', 'run-1');
     });
   });
 

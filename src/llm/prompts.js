@@ -1,4 +1,7 @@
 import { scopedGoalKey, CONTAINER_METRIC_KEY } from "../engine/statistics.js";
+import { MAX_STUDY_REPLICATIONS } from "../engine/sweep-params.js";
+import { SUMMARY_METRIC_FIELDS } from "../contracts/study";
+import { LLM_TASKS } from "./contracts.js";
 
 const DEFAULT_MODEL_NAME = "Untitled model";
 // Word budget for the JSON data block sent to the LLM. This used to be 2000, which
@@ -2156,5 +2159,124 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
     kind: "suggestion",
     messages: makeMessages(system, payload, instruction),
     max_tokens: 800,
+  };
+}
+
+// ── Study proposals (Phase 3) ────────────────────────────────────────────────
+//
+// Both prompts below produce a StudyProposalPayload (src/contracts/study.ts)
+// — the AI is only asked for the technical core of a Study (name/planType/
+// parameters/objective/runBudget); `goals`/`baseSeed`/`origin` are always
+// bound locally from context and never requested from or echoed by the AI
+// (see the design note on StudyProposalPayload for why). Callers MUST run
+// the response through validateStudyProposal() before trusting it, and MUST
+// treat the result as a review/edit-only proposal — nothing runs until the
+// user clicks Run.
+//
+// Objective metrics are restricted to the "summary.*" fields, matching the
+// existing Studies-tab objective picker's own scope cut (see study.ts's
+// Phase-1 note on this) — proposing a perResource/perQueue objective would
+// require exposing resourceTypeId/queueId to the AI, which is out of scope
+// here.
+
+function sweepableParamsForPrompt(sweepableParams = []) {
+  return sweepableParams.map(p => ({
+    type: p.type,
+    targetId: p.targetId,
+    label: p.label,
+    description: p.description,
+    currentValue: p.currentValue,
+    ...(p.scheduleIndex != null ? { scheduleIndex: p.scheduleIndex } : {}),
+    ...(p.periodIndex != null ? { periodIndex: p.periodIndex } : {}),
+    ...(p.paramKey != null ? { paramKey: p.paramKey } : {}),
+  }));
+}
+
+const STUDY_PROPOSAL_PARAM_RULE = `Only propose parameters that appear in the "sweepableParams" list provided, referenced by their exact "type" and "targetId" (and "scheduleIndex"/"periodIndex"/"paramKey" when the listed parameter has them) — never invent a parameter, path, or id that is not listed.`;
+const STUDY_PROPOSAL_OBJECTIVE_RULE = `Only propose an objective metric from this fixed list of summary metric fields: ${SUMMARY_METRIC_FIELDS.join(", ")}. objective.metricRef must be exactly { "kind": "summary", "field": "<one of those>" }, or objective may be null if no single metric should be optimised.`;
+// A function, not a top-level constant: reads MAX_STUDY_REPLICATIONS lazily
+// at prompt-build time rather than at module-import time, so importing this
+// module never touches sweep-params.js's exports unless a Study-proposal
+// prompt is actually built — tests that mock sweep-params.js without that
+// export (most do; it predates this Phase-3 dependency) keep working.
+function studyProposalBudgetRule() {
+  return `runBudget.points * runBudget.replicationsPerPoint must not exceed ${MAX_STUDY_REPLICATIONS}. Prefer replicationsPerPoint of 5-10 for confidence-interval stability and spend the remaining budget on points.`;
+}
+const STUDY_PROPOSAL_SCHEMA = '{ "name": "<short study name>", "planType": "<plan type — see rule above>", "parameters": [ { "type": "<param type from sweepableParams>", "targetId": "<targetId from sweepableParams>", "range": { "min": <number>, "max": <number>, "step": <number> } } ], "objective": { "metricRef": { "kind": "summary", "field": "<summary field>" }, "direction": "min"|"max" } | null, "runBudget": { "points": <integer>, "replicationsPerPoint": <integer> } }';
+
+/**
+ * propose-study: input = an AI diagnosis result (DiagnosticsTab.jsx's
+ * `diagnosisResult`) + the model's sweepable-parameter list; output = a
+ * StudyDefinition proposal grounded in the diagnosis's findings.
+ */
+export function buildProposeStudyPrompt(diagnosisResult = {}, sweepableParams = []) {
+  const system = [
+    "You are a discrete-event simulation experiment designer.",
+    "You are given an AI diagnosis of why a simulation model behaved unexpectedly, and a list of the model's sweepable parameters.",
+    "Propose a Study: a plan to vary one or more of these parameters across a RANGE and evaluate the effect on a chosen metric — not a single fixed change.",
+    STUDY_PROPOSAL_PARAM_RULE,
+    STUDY_PROPOSAL_OBJECTIVE_RULE,
+    'planType must be "grid1d" (exactly one parameter, a simple sweep), "grid2d" (exactly two parameters, a full grid), or "sampled" (one or more parameters, sampled together via Latin hypercube) — never "sequential" here, since that plan type requires seeding from a specific prior point, which a diagnosis does not provide.',
+    studyProposalBudgetRule(),
+    "Ground every proposed range in the diagnosis findings: if a finding points at a specific resource or queue as a bottleneck or cause, prefer a parameter that changes that resource/queue's capacity, with a range that plausibly resolves the finding without being wastefully wide.",
+    "Respond ONLY with a single JSON object — no markdown fences, no preamble, no trailing commentary.",
+    `Schema: ${STUDY_PROPOSAL_SCHEMA}`,
+  ].join(" ");
+
+  const payload = {
+    diagnosis: diagnosisResult,
+    sweepableParams: sweepableParamsForPrompt(sweepableParams),
+  };
+
+  return {
+    kind: LLM_TASKS.PROPOSE_STUDY,
+    messages: makeMessages(system, payload),
+    max_tokens: 1200,
+  };
+}
+
+/**
+ * propose-next-study: input = a finished study's definition, its points
+ * (params/metrics/feasible — never per-replication detail), and its
+ * sensitivity ranking; output = a StudyDefinition with narrowed ranges
+ * around the most promising region found, plus a short plain-language
+ * rationale.
+ */
+export function buildProposeNextStudyPrompt(study = {}, points = [], sensitivity = null, sweepableParams = []) {
+  const system = [
+    "You are a discrete-event simulation experiment designer planning the NEXT Study in a sequence, given a completed Study's results.",
+    "You are given: the finished Study's definition (parameters/ranges studied, objective, goals), its points (each point's parameter values, resulting metrics, and whether it met all goals), and a sensitivity ranking of which parameters most affect the objective.",
+    "Propose a follow-up Study that narrows the parameter ranges around the most promising region found so far (the point(s) closest to or best satisfying the objective/goals) — a tighter, more targeted search, not a repeat of the same ranges.",
+    "If the sensitivity ranking shows a parameter has little effect on the objective, consider dropping it or narrowing it more aggressively than a highly sensitive parameter.",
+    "If no point in the finished study is close to feasible/optimal, you may instead propose a broader or shifted range — use judgement, and explain your reasoning in `rationale`.",
+    STUDY_PROPOSAL_PARAM_RULE,
+    STUDY_PROPOSAL_OBJECTIVE_RULE,
+    'planType should usually be "sequential" (narrowing around the best point found) but may be "sampled" if you are deliberately broadening the search again — never "grid1d"/"grid2d" here, since Study parameters here come from a multi-parameter sampled/sequential lineage.',
+    studyProposalBudgetRule(),
+    "Respond ONLY with a single JSON object — no markdown fences, no preamble, no trailing commentary.",
+    `Schema: ${STUDY_PROPOSAL_SCHEMA.replace(/\}$/, ', "rationale": "<1-3 sentence plain-language explanation of why these ranges, in terms a non-statistician modeller can follow>" }')}`,
+  ].join(" ");
+
+  const payload = {
+    previousStudy: {
+      name: study?.name,
+      planType: study?.planType,
+      parameters: study?.parameters,
+      objective: study?.objective,
+      goals: study?.goals,
+    },
+    points: (points || []).map(p => ({
+      params: p.params,
+      metrics: p.metrics,
+      feasible: p.feasible,
+    })),
+    sensitivity,
+    sweepableParams: sweepableParamsForPrompt(sweepableParams),
+  };
+
+  return {
+    kind: LLM_TASKS.PROPOSE_NEXT_STUDY,
+    messages: makeMessages(system, payload),
+    max_tokens: 1400,
   };
 }

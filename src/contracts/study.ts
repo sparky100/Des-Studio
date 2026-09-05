@@ -311,3 +311,150 @@ export interface StudyPoint {
   seed: number | null;
   createdAt?: string;
 }
+
+// ── AI-authored study proposals (Phase 3) ───────────────────────────────────
+//
+// Two flows produce these: "propose-study" (from a diagnosis result) and
+// "propose-next-study" (from a finished study's definition/points/sensitivity
+// ranking). Both go through src/llm/prompts.js's buildProposeStudyPrompt()/
+// buildProposeNextStudyPrompt() + callLLMOnce(), and both are proposals only
+// — shown for review/edit in the Studies tab, nothing runs until the user
+// clicks Run.
+//
+// Design choice: the AI is only asked to produce the technical core of a
+// StudyDefinition (name/planType/parameters/objective/runBudget) — never
+// `goals` (moved verbatim from the model, per Phase 1's "goals moved
+// verbatim" rule), `baseSeed`, or `origin` (both are bound locally from
+// context the AI doesn't need to see or invent). This keeps the AI from
+// having to reproduce path/label/description bookkeeping it could get wrong
+// — parameters only need `type`+`targetId` (+ the disambiguating
+// scheduleIndex/periodIndex/paramKey some param types require); the full
+// StudyParameter (path, label, description, currentValue, ...) is looked up
+// from the model's own enumerateSweepableParams() output by
+// buildStudyDefinitionFromProposal() below, so the AI cannot hallucinate a
+// path that doesn't exist.
+
+/** The subset of a StudyParameter the AI needs to specify — enough to identify *which* sweepable parameter, plus the range to study it across. */
+export interface StudyProposalParameter {
+  type: SweepableParamType;
+  targetId: string;
+  scheduleIndex?: number;
+  periodIndex?: number;
+  paramKey?: string;
+  range: StudyParamRange;
+}
+
+/** Raw shape returned by the AI for both propose-study and propose-next-study (propose-next-study additionally sets `rationale`). */
+export interface StudyProposalPayload {
+  name: string;
+  planType: StudyPlanType;
+  parameters: StudyProposalParameter[];
+  objective: StudyObjective | null;
+  runBudget: StudyRunBudget;
+  /** Short plain-language explanation of the proposal — always present for propose-next-study, optional/absent for propose-study. */
+  rationale?: string;
+}
+
+/** Identifies "which sweepable parameter" independent of range — used to match a proposal's parameters against enumerateSweepableParams() output. */
+function sweepableParamKey(p: {
+  type: string;
+  targetId: string;
+  scheduleIndex?: number;
+  periodIndex?: number;
+  paramKey?: string;
+}): string {
+  return [p.type, p.targetId, p.scheduleIndex ?? "", p.periodIndex ?? "", p.paramKey ?? ""].join("::");
+}
+
+export interface StudyProposalValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+/**
+ * Validates a raw AI response against the allowed-parameters list
+ * (enumerateSweepableParams() output for the model in question) and the
+ * allowed MetricRef lists (isAllowedMetricRef, above). Does not check
+ * `goals`/`baseSeed`/`origin` — those are never part of the AI payload (see
+ * the design note above).
+ */
+export function validateStudyProposal(
+  candidate: unknown,
+  sweepableParams: Pick<StudyParameter, "type" | "targetId" | "scheduleIndex" | "periodIndex" | "paramKey">[],
+): StudyProposalValidationResult {
+  const errors: string[] = [];
+  if (!candidate || typeof candidate !== "object") {
+    return { valid: false, errors: ["Proposal is not a JSON object."] };
+  }
+  const c = candidate as Record<string, unknown>;
+
+  if (typeof c.name !== "string" || !c.name.trim()) errors.push("name must be a non-empty string.");
+  if (!["grid1d", "grid2d", "sampled", "sequential"].includes(c.planType as string)) {
+    errors.push(`planType "${String(c.planType)}" is not a recognised plan type.`);
+  }
+
+  const allowedKeys = new Set(sweepableParams.map(sweepableParamKey));
+  const parameters = Array.isArray(c.parameters) ? c.parameters : [];
+  if (!parameters.length) errors.push("parameters must be a non-empty array.");
+  parameters.forEach((p, i) => {
+    if (!p || typeof p !== "object") { errors.push(`parameters[${i}] is not an object.`); return; }
+    const param = p as Record<string, unknown>;
+    if (!allowedKeys.has(sweepableParamKey(param as any))) {
+      errors.push(`parameters[${i}] (type "${param.type}", targetId "${param.targetId}") is not one of this model's sweepable parameters.`);
+    }
+    const range = param.range as Record<string, unknown> | undefined;
+    if (!range || typeof range.min !== "number" || typeof range.max !== "number" || !(Number(range.max) > Number(range.min))) {
+      errors.push(`parameters[${i}].range must have numeric min/max with max > min.`);
+    }
+  });
+
+  const objective = c.objective as Record<string, unknown> | null | undefined;
+  if (objective != null) {
+    if (!isAllowedMetricRef(objective.metricRef)) {
+      errors.push("objective.metricRef is not an allowed metric reference.");
+    }
+    if (objective.direction !== "min" && objective.direction !== "max") {
+      errors.push('objective.direction must be "min" or "max".');
+    }
+  }
+
+  const runBudget = c.runBudget as Record<string, unknown> | undefined;
+  if (!runBudget || !(Number(runBudget.points) > 0) || !(Number(runBudget.replicationsPerPoint) > 0)) {
+    errors.push("runBudget.points and runBudget.replicationsPerPoint must both be positive numbers.");
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Merges a validated StudyProposalPayload with model/context fields the AI
+ * never sees (goals, baseSeed, origin) plus the full StudyParameter shape
+ * looked up from `sweepableParams` (by the same key validateStudyProposal()
+ * matches on), producing a complete, editable StudyDefinition. Caller is
+ * responsible for calling validateStudyProposal() first — this does not
+ * re-validate, and silently drops any parameter it can't match (defensive
+ * only; validateStudyProposal() should already have rejected those).
+ */
+export function buildStudyDefinitionFromProposal(
+  proposal: StudyProposalPayload,
+  sweepableParams: StudyParameter[],
+  context: { goals: StudyGoal[]; baseSeed: number; origin: StudyOrigin },
+): StudyDefinition {
+  const byKey = new Map(sweepableParams.map(p => [sweepableParamKey(p as any), p]));
+  const parameters: StudyParameter[] = [];
+  for (const p of proposal.parameters) {
+    const match = byKey.get(sweepableParamKey(p as any));
+    if (match) parameters.push({ ...match, range: p.range });
+  }
+
+  return {
+    name: proposal.name,
+    planType: proposal.planType,
+    parameters,
+    goals: context.goals,
+    objective: proposal.objective,
+    runBudget: proposal.runBudget,
+    baseSeed: context.baseSeed,
+    origin: context.origin,
+  };
+}

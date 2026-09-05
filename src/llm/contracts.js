@@ -8,6 +8,8 @@ export const LLM_TASKS = Object.freeze({
   SUGGESTION: "suggestion",
   QUERY: "query",
   BATCH_ANALYSIS: "batch_analysis",
+  PROPOSE_STUDY: "propose_study",
+  PROPOSE_NEXT_STUDY: "propose_next_study",
 });
 
 export const LLM_RESPONSE_FORMATS = Object.freeze({

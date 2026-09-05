@@ -465,7 +465,9 @@ export function runSampledStudy({
 // in-thread when Worker is unavailable (node / tests).
 /** @param {Record<string, any>} [options] */
 export function runStudyOffthread(options = {}) {
-  const runInThread = options.planType === "sampled" ? runSampledStudy : run2DSweep;
+  // "sequential" (Phase 3) reuses runSampledStudy unchanged — see the
+  // matching dispatch/comment in sweep-worker.js.
+  const runInThread = (options.planType === "sampled" || options.planType === "sequential") ? runSampledStudy : run2DSweep;
   if (typeof Worker === "undefined") return runInThread(options);
 
   const { onProgress, onPointComplete, onComplete, onError, onCancelled, ...payload } = options;

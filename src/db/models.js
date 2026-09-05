@@ -870,6 +870,7 @@ export async function revokeShareLink(id, userId) {
  * @param {import('../contracts/study').StudyStatus} [status]
  */
 export async function saveStudy(modelId, userId, definition, points = [], status = "complete") {
+  const origin = definition?.origin || { kind: "user" };
   const { data, error } = await supabase
     .from("studies")
     .insert({
@@ -878,9 +879,14 @@ export async function saveStudy(modelId, userId, definition, points = [], status
       definition,
       schema_version: STUDY_SCHEMA_VERSION,
       status,
-      origin: definition?.origin || { kind: "user" },
+      origin,
+      // Denormalised from origin.refId when this study was seeded from a
+      // previous one (sequential plans) — see study.ts's StudyOrigin and
+      // 20260905100000_studies_phase3.sql. Any other origin kind (user/
+      // experiment/ai) leaves this null.
+      parent_study_id: origin.kind === "study" ? origin.refId || null : null,
     })
-    .select("id, definition, schema_version, status, origin, created_at")
+    .select("id, definition, schema_version, status, origin, parent_study_id, created_at")
     .single();
   if (error) throw error;
 
@@ -905,6 +911,7 @@ export async function saveStudy(modelId, userId, definition, points = [], status
     schemaVersion: data.schema_version,
     status: data.status,
     origin: data.origin,
+    parentStudyId: data.parent_study_id ?? null,
     createdAt: data.created_at,
   };
 }
@@ -913,7 +920,7 @@ export async function saveStudy(modelId, userId, definition, points = [], status
 export async function getStudy(id) {
   const { data, error } = await supabase
     .from("studies")
-    .select("id, model_id, definition, config, results, schema_version, status, origin, created_at")
+    .select("id, model_id, definition, config, results, schema_version, status, origin, parent_study_id, created_at")
     .eq("id", id)
     .single();
   if (error) throw error;
@@ -946,6 +953,7 @@ export async function getStudy(id) {
     schemaVersion: data.schema_version,
     status: data.status,
     origin: data.origin,
+    parentStudyId: data.parent_study_id ?? null,
     createdAt: data.created_at,
     points: (pointRows || []).map(r => ({
       id: r.id,
@@ -1160,6 +1168,10 @@ function normalizeExperiment(row = {}) {
     name: row.name,
     description: row.description ?? null,
     config: row.config ?? {},
+    // Set when this experiment was created via the Studies tab's "Promote to
+    // Experiment" action (src/contracts/study.ts's StudyPoint) — null for
+    // every other experiment. See 20260905100000_studies_phase3.sql.
+    sourceStudyPointId: row.source_study_point_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1176,11 +1188,18 @@ export async function fetchExperiments(modelId) {
   return (data || []).map(normalizeExperiment);
 }
 
-/** @param {{ modelId: string, userId: string, name: string, description?: string, config: Record<string, any> }} params */
-export async function saveExperiment({ modelId, userId, name, description, config }) {
+/** @param {{ modelId: string, userId: string, name: string, description?: string, config: Record<string, any>, sourceStudyPointId?: string }} params */
+export async function saveExperiment({ modelId, userId, name, description, config, sourceStudyPointId }) {
   const { data, error } = await supabase
     .from("experiments")
-    .insert({ model_id: modelId, user_id: userId, name, description: description || null, config })
+    .insert({
+      model_id: modelId,
+      user_id: userId,
+      name,
+      description: description || null,
+      config,
+      source_study_point_id: sourceStudyPointId || null,
+    })
     .select()
     .single();
   if (error) throw error;
@@ -1241,6 +1260,51 @@ export async function deleteExperiment(id) {
     .eq("id", id);
   if (error) throw error;
   return { ok: true };
+}
+
+// ── Diagnoses ────────────────────────────────────────────────────────────────
+// Persists DiagnosticsTab.jsx's AI diagnosis result, keyed to the
+// simulation_runs row it was run against (previously ephemeral React state
+// only — see 20260905100000_studies_phase3.sql). Rows are immutable after
+// insert (enforced by a DB trigger), matching study_points' write-once shape.
+
+/** @param {Record<string, any>} row */
+function normalizeDiagnosis(row = {}) {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    userId: row.user_id,
+    versionId: row.version_id ?? null,
+    result: row.result,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * @param {string} runId
+ * @param {string} userId
+ * @param {Record<string, any>} result the parsed diagnosis JSON (findings/overallAssessment)
+ * @param {string|null} [versionId]
+ */
+export async function saveDiagnosis(runId, userId, result, versionId = null) {
+  const { data, error } = await supabase
+    .from("diagnoses")
+    .insert({ run_id: runId, user_id: userId, version_id: versionId, result })
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeDiagnosis(data);
+}
+
+/** @param {string} runId */
+export async function listDiagnosesForRun(runId) {
+  const { data, error } = await supabase
+    .from("diagnoses")
+    .select("*")
+    .eq("run_id", runId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(normalizeDiagnosis);
 }
 
 // ── Model Versions ────────────────────────────────────────────────────────────

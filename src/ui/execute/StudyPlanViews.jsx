@@ -63,7 +63,7 @@ export function SampledParamRangeList({ sampledParams, setSampledParams, sweepPa
 // N-parameter results table for a sampled study — one column per parameter
 // plus the objective metric and a feasibility marker, sorted by the
 // objective (ascending for "min", descending for "max").
-export function SampledResultsTable({ results, parameters, objectiveMetric, objectiveDirection = "min", goals = [], evaluateFeasible }) {
+export function SampledResultsTable({ results, parameters, objectiveMetric, objectiveDirection = "min", goals = [], evaluateFeasible, onPromote }) {
   const { C, FONT } = useTheme();
   const [sortAsc, setSortAsc] = useState(objectiveDirection !== "max");
 
@@ -104,6 +104,7 @@ export function SampledResultsTable({ results, parameters, objectiveMetric, obje
               <th scope="col" style={{ padding: "6px 8px", cursor: "pointer" }} onClick={() => setSortAsc(a => !a)}>
                 {METRIC_LABELS[objectiveMetric] || objectiveMetric} {sortAsc ? "▲" : "▼"}
               </th>
+              {onPromote && <th scope="col" style={{ padding: "6px 8px" }} />}
             </tr>
           </thead>
           <tbody>
@@ -125,6 +126,11 @@ export function SampledResultsTable({ results, parameters, objectiveMetric, obje
                   {fmtMetric(objectiveMetric, row.objectiveMean)}
                   {row.index === bestIndex && <span style={{ marginLeft: 6, fontSize: 9, color: C.green, fontWeight: 900 }}>BEST</span>}
                 </td>
+                {onPromote && (
+                  <td style={{ padding: "6px 8px" }}>
+                    <Btn small variant="ghost" onClick={() => onPromote(results[row.index])}>Promote to Experiment</Btn>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

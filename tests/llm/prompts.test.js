@@ -9,6 +9,8 @@ import {
   buildGoalGaps,
   buildNarrativePrompt,
   buildPlanRefinementPrompt,
+  buildProposeNextStudyPrompt,
+  buildProposeStudyPrompt,
   buildReportRecommendationsPrompt,
   buildResultsQueryPrompt,
   buildSensitivityPrompt,
@@ -1605,3 +1607,62 @@ describe("correctUtilisationFigures / buildUtilisationMap", () => {
 });
 
 
+
+describe("Phase 3 — Study proposal prompts", () => {
+  const sweepableParams = [
+    { type: "entityTypeCount", targetId: "server-nurse", label: "Number of Nurse", description: "How many Nurse servers are available", currentValue: 2, path: "entityTypes.server-nurse.count" },
+  ];
+
+  describe("buildProposeStudyPrompt", () => {
+    const diagnosisResult = {
+      findings: [{ severity: "CRITICAL", title: "Nurse queue never drains", explanation: "Arrivals exceed capacity.", affectedNodeId: "server-nurse", affectedNodeName: "Nurse", suggestedFix: "Add a nurse" }],
+      overallAssessment: "The clinic is under-resourced.",
+    };
+
+    it("returns a propose_study request carrying the diagnosis and sweepable params", () => {
+      const prompt = buildProposeStudyPrompt(diagnosisResult, sweepableParams);
+      expect(prompt.kind).toBe("propose_study");
+      expect(prompt.messages).toHaveLength(2);
+      const userPayload = JSON.parse(prompt.messages[1].content);
+      expect(userPayload.diagnosis).toEqual(diagnosisResult);
+      expect(userPayload.sweepableParams).toEqual([
+        { type: "entityTypeCount", targetId: "server-nurse", label: "Number of Nurse", description: "How many Nurse servers are available", currentValue: 2 },
+      ]);
+    });
+
+    it("restricts the objective instruction to summary metric fields and excludes planType sequential", () => {
+      const prompt = buildProposeStudyPrompt(diagnosisResult, sweepableParams);
+      const system = prompt.messages[0].content;
+      expect(system).toMatch(/avgWait/);
+      expect(system).toMatch(/never "sequential" here/);
+    });
+  });
+
+  describe("buildProposeNextStudyPrompt", () => {
+    const study = {
+      name: "Nurse count vs wait",
+      planType: "sampled",
+      parameters: [{ type: "entityTypeCount", targetId: "server-nurse", range: { min: 1, max: 6, step: 1 } }],
+      objective: { metricRef: { kind: "summary", field: "avgWait" }, direction: "min" },
+      goals: [],
+    };
+    const points = [
+      { params: [{ path: "entityTypes.server-nurse.count", value: 4 }], metrics: { "summary.avgWait": { mean: 3.1, ci95Low: 2.8, ci95High: 3.4, min: null, max: null } }, feasible: true },
+    ];
+    const sensitivity = { method: "pearson-correlation", ranking: [{ path: "entityTypes.server-nurse.count", score: 0.82 }] };
+
+    it("returns a propose_next_study request carrying the previous study, points, and sensitivity ranking", () => {
+      const prompt = buildProposeNextStudyPrompt(study, points, sensitivity, sweepableParams);
+      expect(prompt.kind).toBe("propose_next_study");
+      const userPayload = JSON.parse(prompt.messages[1].content);
+      expect(userPayload.previousStudy.name).toBe("Nurse count vs wait");
+      expect(userPayload.points).toEqual([{ params: points[0].params, metrics: points[0].metrics, feasible: true }]);
+      expect(userPayload.sensitivity).toEqual(sensitivity);
+    });
+
+    it("asks for a rationale field in its schema instruction", () => {
+      const prompt = buildProposeNextStudyPrompt(study, points, sensitivity, sweepableParams);
+      expect(prompt.messages[0].content).toMatch(/"rationale"/);
+    });
+  });
+});

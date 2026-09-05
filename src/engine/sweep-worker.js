@@ -23,8 +23,12 @@ if (typeof self !== "undefined" && typeof self.postMessage === "function") {
 
     // planType selects the plan; absent/"grid2d" keeps the pre-existing
     // default so every caller that predates the "sampled" plan type (i.e.
-    // every caller before Phase 2) is unaffected.
-    const runPlan = payload?.planType === "sampled" ? runSampledStudy : run2DSweep;
+    // every caller before Phase 2) is unaffected. "sequential" (Phase 3)
+    // reuses runSampledStudy unchanged — narrowing ranges around a seed
+    // point is a study-construction-time concern (computed by the caller
+    // before points/parameters ever reach the worker), not something the
+    // sampler itself needs to know about.
+    const runPlan = (payload?.planType === "sampled" || payload?.planType === "sequential") ? runSampledStudy : run2DSweep;
     cancelHandle = runPlan({
       ...payload,
       onProgress(/** @type {any} */ p) {
