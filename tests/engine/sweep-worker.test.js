@@ -10,11 +10,14 @@ const mockPostMessage = vi.hoisted(() => {
 });
 
 const mockRun2DSweep = vi.hoisted(() => vi.fn());
+const mockRunSampledStudy = vi.hoisted(() => vi.fn());
 
 vi.mock("../../src/engine/sweep-runner.js", () => ({
   run2DSweep: (...args) => mockRun2DSweep(...args),
+  runSampledStudy: (...args) => mockRunSampledStudy(...args),
   runSweep: vi.fn(),
   runSweepOffthread: vi.fn(),
+  runStudyOffthread: vi.fn(),
 }));
 
 // Import executes the module body — sets globalThis.self.onmessage.
@@ -31,10 +34,11 @@ function postedTypes() {
 beforeEach(() => {
   mockPostMessage.mockClear();
   mockRun2DSweep.mockClear();
+  mockRunSampledStudy.mockClear();
 });
 
 describe("sweep-worker message protocol", () => {
-  test("SWEEP_START calls run2DSweep with payload fields", () => {
+  test("SWEEP_START calls run2DSweep with payload fields (no planType — the default)", () => {
     mockRun2DSweep.mockReturnValue({ cancel: vi.fn() });
 
     const payload = {
@@ -47,9 +51,30 @@ describe("sweep-worker message protocol", () => {
     sendMessage({ type: "SWEEP_START", payload });
 
     expect(mockRun2DSweep).toHaveBeenCalledOnce();
+    expect(mockRunSampledStudy).not.toHaveBeenCalled();
     const opts = mockRun2DSweep.mock.calls[0][0];
     expect(opts.model).toEqual(payload.model);
     expect(opts.paramConfigs).toEqual(payload.paramConfigs);
+  });
+
+  test("SWEEP_START with planType:'sampled' calls runSampledStudy instead of run2DSweep", () => {
+    mockRunSampledStudy.mockReturnValue({ cancel: vi.fn() });
+
+    const payload = {
+      model: { entityTypes: [] },
+      planType: "sampled",
+      parameters: [{ path: "entityTypes.et1.count", range: { min: 1, max: 5 } }],
+      points: 10,
+      replications: 1,
+      baseSeed: 0,
+    };
+    sendMessage({ type: "SWEEP_START", payload });
+
+    expect(mockRunSampledStudy).toHaveBeenCalledOnce();
+    expect(mockRun2DSweep).not.toHaveBeenCalled();
+    const opts = mockRunSampledStudy.mock.calls[0][0];
+    expect(opts.parameters).toEqual(payload.parameters);
+    expect(opts.points).toBe(10);
   });
 
   test("SWEEP_PROGRESS is posted when onProgress is called", () => {

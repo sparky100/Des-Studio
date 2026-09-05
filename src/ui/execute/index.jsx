@@ -32,11 +32,13 @@ import { CustomerToken, VisualView } from "./VisualView.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { estimateRunComplexity, estimateMaxCycles, computeEstimateAccuracy } from "../../engine/complexity-estimator.js";
 import { getRunAdmission } from "../../engine/run-admission.js";
-import { enumerateSweepableParams, applySweepValues, generate2DSweepValues } from "../../engine/sweep-params.js";
+import { enumerateSweepableParams, applySweepValues, generate2DSweepValues, MAX_STUDY_REPLICATIONS } from "../../engine/sweep-params.js";
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
+import { computeSensitivityRanking } from "../../engine/sweep-sensitivity.js";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
 import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
+import { SampledParamRangeList, SampledResultsTable, SensitivityPanel } from "./StudyPlanViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
@@ -259,7 +261,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [studyListStatus, setStudyListStatus] = useState("idle"); // idle | loading | loaded | error
   const [studyName, setStudyName] = useState("");
   const [loadedStudyId, setLoadedStudyId] = useState(null);
-  const [sweepMode, setSweepMode] = useState("1d");
+  const [sweepMode, setSweepMode] = useState("1d"); // "1d" | "2d" | "sampled"
+  // F-Study Phase 2: sampled plan state. Each entry: { ...paramDescriptor, min, max }.
+  const [sampledParams, setSampledParams] = useState([]);
+  const [sampledPickerOpen, setSampledPickerOpen] = useState(false);
+  const [sampledPointCount, setSampledPointCount] = useState(10);
+  const [sensitivityRanking, setSensitivityRanking] = useState(null); // { method, ranking } | null
   const [sweepSelectedParamB, setSweepSelectedParamB] = useState(null);
   const [sweepMinB, setSweepMinB] = useState(1);
   const [sweepMaxB, setSweepMaxB] = useState(5);
@@ -1334,31 +1341,41 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     }
   }, [executeSection, userId, modelId, refreshStudyList]);
 
-  const buildStudyDefinition = useCallback((results) => {
+  // The StudyParameter list for the current planType — [{...descriptor, range}]
+  // in every mode, so buildStudyPoints/handleLoadStudy/the sensitivity panel
+  // can all treat "which parameters, and their ranges" uniformly regardless
+  // of grid1d/grid2d/sampled.
+  const currentStudyParameters = useCallback(() => {
+    if (sweepMode === "sampled") {
+      return sampledParams.map(p => ({ ...p, range: { min: p.min, max: p.max, step: (p.max - p.min) / 10 || 1 } }));
+    }
     const parameters = [{ ...sweepSelectedParam, range: { min: sweepMin, max: sweepMax, step: sweepStep } }];
     if (sweepMode === "2d" && sweepSelectedParamB) {
       parameters.push({ ...sweepSelectedParamB, range: { min: sweepMinB, max: sweepMaxB, step: sweepStepB } });
     }
+    return parameters;
+  }, [sweepMode, sampledParams, sweepSelectedParam, sweepSelectedParamB, sweepMin, sweepMax, sweepStep, sweepMinB, sweepMaxB, sweepStepB]);
+
+  const buildStudyDefinition = useCallback((results) => {
     const metricRef = summaryPathToMetricRef(sweepKpiMetric) || { kind: "summary", field: "avgWait" };
     return {
       name: studyName.trim() || `Study — ${new Date().toLocaleDateString()}`,
-      planType: sweepMode === "2d" ? "grid2d" : "grid1d",
-      parameters,
+      planType: sweepMode === "sampled" ? "sampled" : sweepMode === "2d" ? "grid2d" : "grid1d",
+      parameters: currentStudyParameters(),
       goals: model.goals || [],
       objective: { metricRef, direction: sweepObjectiveDirection },
       runBudget: { points: results.length, replicationsPerPoint: replications },
       baseSeed: seed,
       origin: { kind: "user" },
     };
-  }, [sweepSelectedParam, sweepSelectedParamB, sweepMin, sweepMax, sweepStep, sweepMinB, sweepMaxB, sweepStepB,
-      sweepMode, sweepKpiMetric, sweepObjectiveDirection, studyName, model, replications, seed]);
+  }, [sweepMode, currentStudyParameters, sweepKpiMetric, sweepObjectiveDirection, studyName, model, replications, seed]);
 
   // Aggregated per-point metrics only — never per-replication detail (see
   // src/db/results-persistence.js's 800KB payload guard and study_points'
   // schema, which has no field for it).
   const buildStudyPoints = useCallback((results) => results.map((pt, i) => {
-    const params = sweepMode === "2d"
-      ? [{ path: sweepSelectedParam?.path, value: pt.valueA }, { path: sweepSelectedParamB?.path, value: pt.valueB }]
+    const params = sweepMode === "sampled" ? pt.params
+      : sweepMode === "2d" ? [{ path: sweepSelectedParam?.path, value: pt.valueA }, { path: sweepSelectedParamB?.path, value: pt.valueB }]
       : [{ path: sweepSelectedParam?.path, value: pt.value }];
     const metrics = Object.fromEntries(Object.entries(pt.aggregateStats || {}).map(([path, stat]) => [
       path,
@@ -1375,7 +1392,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }), [sweepMode, sweepSelectedParam, sweepSelectedParamB, replications, model]);
 
   const handleSaveStudy = useCallback(async (results) => {
-    if (!userId || !sweepSelectedParam || !results?.length) return;
+    if (!userId || !results?.length) return;
     try {
       const definition = buildStudyDefinition(results);
       const points = buildStudyPoints(results);
@@ -1404,9 +1421,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       }
       const def = study.definition || {};
       const isGrid2d = def.planType === "grid2d";
-      setSweepMode(isGrid2d ? "2d" : "1d");
-      setSweepSelectedParam(def.parameters?.[0] || null);
-      setSweepSelectedParamB(isGrid2d ? (def.parameters?.[1] || null) : null);
+      const isSampled = def.planType === "sampled";
+      const newMode = isSampled ? "sampled" : isGrid2d ? "2d" : "1d";
+      setSweepMode(newMode);
+      if (isSampled) {
+        setSampledParams((def.parameters || []).map(p => ({ ...p, min: p.range?.min, max: p.range?.max })));
+        setSweepSelectedParam(null);
+        setSweepSelectedParamB(null);
+      } else {
+        setSweepSelectedParam(def.parameters?.[0] || null);
+        setSweepSelectedParamB(isGrid2d ? (def.parameters?.[1] || null) : null);
+      }
       if (def.objective?.metricRef?.kind === "summary") {
         setSweepKpiMetric(`summary.${def.objective.metricRef.field}`);
       }
@@ -1420,12 +1445,16 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         // reads .length) renders correctly, without carrying back any
         // per-replication detail that was never persisted in the first place.
         const replicationsPlaceholder = new Array(p.replications || 0).fill(null);
+        if (isSampled) return { params: p.params, seed: p.seed, replications: replicationsPlaceholder, aggregateStats };
         return isGrid2d
           ? { valueA: p.params?.[0]?.value, valueB: p.params?.[1]?.value, seed: p.seed, replications: replicationsPlaceholder, aggregateStats }
           : { value: p.params?.[0]?.value, seed: p.seed, replications: replicationsPlaceholder, aggregateStats };
       });
       setSweepResults(rebuilt);
       setSweepStatus(rebuilt.length ? "complete" : "idle");
+      setSensitivityRanking(isSampled && rebuilt.length
+        ? computeSensitivityRanking(rebuilt, def.parameters || [], def.objective?.metricRef ? `summary.${def.objective.metricRef.field}` : null)
+        : null);
       setLoadedStudyId(id);
     } catch (err) {
       setSaveStatus({ state: "error", message: `Failed to load study: ${err?.message || "unknown error"}` });
@@ -1436,18 +1465,65 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (hasAdmissionErrors) return;
     if (sweepMode === "1d" && !sweepSelectedParam) return;
     if (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB)) return;
+    if (sweepMode === "sampled" && (!sampledParams.length || sampledParams.some(p => !(p.max > p.min)))) return;
 
     setSweepStatus("running");
     setSweepResults(null);
     setSweepProgress(null);
     setSweepGridError(null);
+    setSensitivityRanking(null);
     setLoadedStudyId(null);
 
-    if (sweepMode === "2d") {
+    if (sweepMode === "sampled") {
+      const objectivePath = sweepKpiMetric;
+      const parameters = currentStudyParameters();
+
+      const onSampledComplete = (results) => {
+        setSensitivityRanking(computeSensitivityRanking(results, parameters, objectivePath));
+        void handleSaveStudy(results);
+      };
+
+      sweepRunnerRef.current = runSweepOffthread({
+        model,
+        planType: "sampled",
+        parameters,
+        points: sampledPointCount,
+        replications,
+        baseSeed: seed,
+        warmupPeriod,
+        maxSimTime: terminationMode === "time" ? maxSimTime : null,
+        terminationCondition: terminationMode === "condition" ? terminationCondition : null,
+        collectTimeSeries: runAdmission.effectiveSettings.collectTimeSeries,
+        schedulesMap: activeSchedulesMap,
+        onProgress(progress) {
+          setSweepProgress(progress);
+        },
+        onPointComplete(pointResult) {
+          setSweepResults(prev => [...(prev || []), pointResult]);
+        },
+        onError(error) {
+          setSweepStatus("error");
+          setSaveStatus({ state: "error", message: error?.pointIndex != null ? `Study error at point ${error.pointIndex}: ${error.message}` : `Study error: ${error.message}` });
+        },
+        onComplete(results) {
+          setSweepStatus("complete");
+          setSweepResults(results);
+          setSaveStatus({ state: "success", message: `Study complete: ${results.length} points run.` });
+          onSampledComplete(results);
+        },
+        onCancelled(partial) {
+          setSweepStatus("complete");
+          setSweepResults(partial.results);
+          setSaveStatus({ state: "success", message: `Study cancelled after ${partial.completedPoints} points.` });
+          onSampledComplete(partial.results);
+        },
+      });
+    } else if (sweepMode === "2d") {
       try {
         generate2DSweepValues(
           { min: sweepMin, max: sweepMax, step: sweepStep },
-          { min: sweepMinB, max: sweepMaxB, step: sweepStepB }
+          { min: sweepMinB, max: sweepMaxB, step: sweepStepB },
+          replications
         );
       } catch (err) {
         setSweepGridError(err.message);
@@ -1531,7 +1607,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       });
     }
   }, [model, sweepMode, sweepSelectedParam, sweepSelectedParamB, sweepMin, sweepMax, sweepStep,
-      sweepMinB, sweepMaxB, sweepStepB, replications, seed, warmupPeriod, maxSimTime,
+      sweepMinB, sweepMaxB, sweepStepB, sampledParams, sampledPointCount, sweepKpiMetric,
+      currentStudyParameters, replications, seed, warmupPeriod, maxSimTime,
       terminationMode, terminationCondition, collectTimeSeries, hasAdmissionErrors, runAdmission,
       handleSaveStudy]);
 
@@ -1693,9 +1770,44 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 style={{ background: sweepMode === "2d" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepMode === "2d" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
                 2D Sweep
               </button>
+              <button
+                onClick={() => { setSweepMode("sampled"); setSweepResults(null); setComparisonResult(null); setSensitivityRanking(null); }}
+                style={{ background: sweepMode === "sampled" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepMode === "sampled" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
+                Sampled
+              </button>
             </div>
 
-            {/* Parameter picker(s) */}
+            {sweepMode === "sampled" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                  Draws a Latin hypercube sample across every parameter added below — spread evenly across each
+                  parameter's range rather than a fixed grid — and ranks which parameters matter most to the objective.
+                </div>
+                <SampledParamRangeList
+                  sampledParams={sampledParams}
+                  setSampledParams={setSampledParams}
+                  sweepParams={sweepParams}
+                  pickerOpen={sampledPickerOpen}
+                  setPickerOpen={setSampledPickerOpen}
+                />
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 100 }}>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>POINTS</span>
+                    <input type="number" aria-label="Sampled study point count" min={1} value={sampledPointCount}
+                      onChange={e => setSampledPointCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: 90 }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+                    {sampledPointCount * replications > MAX_STUDY_REPLICATIONS
+                      ? `⚠ ${sampledPointCount} points x ${replications} replications = ${sampledPointCount * replications} replications, exceeding the ${MAX_STUDY_REPLICATIONS.toLocaleString()}-replication budget.`
+                      : `${sampledPointCount} points x ${replications} replications = ${sampledPointCount * replications} replications`}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Parameter picker(s) — 1D/2D only; sampled uses SampledParamRangeList above */}
+            {sweepMode !== "sampled" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>{sweepMode === "2d" ? "PARAMETER X" : "PARAMETER"}</span>
               {sweepSelectedParam ? (
@@ -1738,6 +1850,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 />
               )}
             </div>
+            )}
 
             {sweepMode === "2d" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1785,8 +1898,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             )}
 
             {/* Range config */}
-            {sweepSelectedParam && (
+            {(sweepMode === "sampled" ? sampledParams.length > 0 : sweepSelectedParam) && (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {sweepMode !== "sampled" && (
+                <>
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                     <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN {sweepMode === "2d" ? "X" : ""}</span>
@@ -1838,11 +1953,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         try {
                           const grid = generate2DSweepValues(
                             { min: sweepMin, max: sweepMax, step: sweepStep },
-                            { min: sweepMinB, max: sweepMaxB, step: sweepStepB }
+                            { min: sweepMinB, max: sweepMaxB, step: sweepStepB },
+                            replications
                           );
-                          const rows = Math.round(grid.length / (grid.filter(p => p.valueA === grid[0].valueA).length || 1));
-                          const cols = grid.filter(p => p.valueA === grid[0].valueA).length;
-                          return `${rows} x ${cols} = ${grid.length} points`;
+                          const rows = new Set(grid.map(p => p.valueA)).size;
+                          const cols = new Set(grid.map(p => p.valueB)).size;
+                          return `${rows} x ${cols} = ${grid.length} points (${grid.length * replications} replications)`;
                         } catch (err) {
                           return err.message;
                         }
@@ -1861,6 +1977,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   <div style={{ background: `${C.amber}12`, border: `1px solid ${C.amber}44`, borderRadius: 6, padding: "8px 10px", fontSize: 11, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
                     ⚠ 2D sweeps run all grid points sequentially and can take 30–90s for larger grids. Consider a 1D sweep for quicker feedback.
                   </div>
+                )}
+                </>
                 )}
 
                 {/* F-Study: name + objective — saved with the study when the run completes */}
@@ -1895,7 +2013,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <Btn variant="primary" onClick={handleRunSweep}
-                    disabled={sweepStatus === "running" || hasAdmissionErrors || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))}>
+                    disabled={sweepStatus === "running" || hasAdmissionErrors
+                      || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))
+                      || (sweepMode === "sampled" && (!sampledParams.length || sampledParams.some(p => !(p.max > p.min))))}>
                     {sweepStatus === "running" ? "Running..." : "Run Sweep"}
                   </Btn>
                   {sweepStatus === "running" && (
@@ -1985,6 +2105,23 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         </tbody>
                       </table>
                     </div>
+                  </>
+                )}
+
+                {/* Sampled results: N-parameter table + sensitivity ranking */}
+                {sweepMode === "sampled" && (
+                  <>
+                    <SampledResultsTable
+                      results={sweepResults}
+                      parameters={currentStudyParameters()}
+                      objectiveMetric={sweepKpiMetric}
+                      objectiveDirection={sweepObjectiveDirection}
+                      goals={model.goals || []}
+                      evaluateFeasible={aggregateStats => evaluateSweepPointGoals(model.goals || [], aggregateStats).feasible}
+                    />
+                    {sensitivityRanking && (
+                      <SensitivityPanel method={sensitivityRanking.method} ranking={sensitivityRanking.ranking} />
+                    )}
                   </>
                 )}
 

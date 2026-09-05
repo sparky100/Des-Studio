@@ -6,7 +6,7 @@
 
 import { runReplications, createReplicationPool } from "./replication-runner.js";
 import { summarizeReplicationResults } from "./statistics.js";
-import { applySweepValues, applySweepValue, generateSweepValues, generate2DSweepValues } from "./sweep-params.js";
+import { applySweepValues, applySweepValue, generateSweepValues, generate2DSweepValues, sampleLatinHypercube, checkStudyBudget } from "./sweep-params.js";
 
 const SWEEP_METRICS = [
   "summary.total", "summary.avgWait", "summary.avgSvc", "summary.avgSojourn",
@@ -53,12 +53,21 @@ function wrapReplications(options) {
 }
 
 /**
+ * Generic, plan-type-agnostic points runner. grid1d (runSweep), grid2d
+ * (run2DSweep), and sampled (runSampledStudy) all funnel through this —
+ * they differ only in how `points` is produced and how a point maps onto a
+ * model patch / seed / result shape, via the four callbacks below. This is
+ * "the runner takes a list of points" from the Studies plan: adding a new
+ * plan type (e.g. Phase 3's sequential) means generating a new points[]
+ * array and passing new callbacks, not touching this loop.
+ *
  * @param {{
- *   model?: import('../contracts/model').DesModelJson,
- *   paramConfig?: Record<string, any>,
- *   min?: number,
- *   max?: number,
- *   step?: number,
+ *   model?: any,
+ *   points: any[],
+ *   applyPointToModel: (model: any, point: any) => any,
+ *   seedForPoint: (baseSeed: number, pointIndex: number) => number,
+ *   buildProgressExtra: (pointIndex: number) => Record<string, any>,
+ *   buildPointResult: (point: any, pointIndex: number, seed: number, replicationPayloads: any[], aggregateStats: Record<string, any>) => any,
  *   replications?: number,
  *   baseSeed?: number,
  *   warmupPeriod?: number,
@@ -71,30 +80,30 @@ function wrapReplications(options) {
  *   onError?: (error: Record<string, any>) => void,
  *   onComplete?: (results: any[]) => void,
  *   onCancelled?: (info: Record<string, any>) => void,
- * }} [options]
+ * }} options
  * @returns {{ cancel: () => void }}
  */
-export function runSweep({
+function runPointsPlan({
   model,
-  paramConfig,
-  min = 0,
-  max = 0,
-  step = 1,
+  points,
+  applyPointToModel,
+  seedForPoint,
+  buildProgressExtra,
+  buildPointResult,
   replications = 1,
   baseSeed = 0,
   warmupPeriod = 0,
   maxSimTime = null,
   terminationCondition = null,
   collectTimeSeries = false,
-  schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
+  schedulesMap,
   onProgress,
   onPointComplete,
   onError,
   onComplete,
   onCancelled,
-} = {}) {
-  const values = generateSweepValues(min, max, step);
-  const totalPoints = values.length;
+}) {
+  const totalPoints = points.length;
   /** @type {any[]} */
   const results = [];
   let nextPoint = 0;
@@ -138,18 +147,13 @@ export function runSweep({
       }
 
       const pointIndex = nextPoint++;
-      const value = values[pointIndex];
+      const point = points[pointIndex];
 
-      onProgress?.({
-        totalPoints,
-        currentPoint: pointIndex,
-        values,
-        paramLabel: paramConfig?.label || "Parameter",
-      });
+      onProgress?.({ totalPoints, currentPoint: pointIndex, ...buildProgressExtra(pointIndex) });
 
       try {
-        const pointModel = applySweepValue(/** @type {any} */ (model), /** @type {any} */ (paramConfig), value);
-        const pointSeed = baseSeed + pointIndex * 10000;
+        const pointModel = applyPointToModel(model, point);
+        const pointSeed = seedForPoint(baseSeed, pointIndex);
 
         const replicationPayloads = await wrapReplications({
           model: pointModel,
@@ -164,22 +168,10 @@ export function runSweep({
           workerCount: workersPerPoint,
           _cancelRef: pointCancelRef,
           onProgress(/** @type {any} */ progress) {
-            onProgress?.({
-              totalPoints,
-              currentPoint: pointIndex,
-              values,
-              paramLabel: paramConfig?.label || "Parameter",
-              pointReplications: progress,
-            });
+            onProgress?.({ totalPoints, currentPoint: pointIndex, ...buildProgressExtra(pointIndex), pointReplications: progress });
           },
-          onReplicationComplete(/** @type {any} */ payload, /** @type {any} */ progress) {
-            onProgress?.({
-              totalPoints,
-              currentPoint: pointIndex,
-              values,
-              paramLabel: paramConfig?.label || "Parameter",
-              pointReplications: progress,
-            });
+          onReplicationComplete(/** @type {any} */ _payload, /** @type {any} */ progress) {
+            onProgress?.({ totalPoints, currentPoint: pointIndex, ...buildProgressExtra(pointIndex), pointReplications: progress });
           },
         });
 
@@ -190,20 +182,11 @@ export function runSweep({
         }
 
         const aggregateStats = summarizeReplicationResults(replicationPayloads, SWEEP_METRICS);
-        const pointResult = {
-          value,
-          seed: pointSeed,
-          replications: replicationPayloads,
-          aggregateStats,
-        };
+        const pointResult = buildPointResult(point, pointIndex, pointSeed, replicationPayloads, aggregateStats);
 
         results.push(pointResult);
         completedCount++;
-        onPointComplete?.(pointResult, {
-          completedPoints: completedCount,
-          totalPoints,
-          value,
-        });
+        onPointComplete?.(pointResult, { completedPoints: completedCount, totalPoints, point });
 
         runNext();
       } catch (/** @type {any} */ error) {
@@ -211,7 +194,6 @@ export function runSweep({
           errored = true;
           cancel();
           onError?.({
-            value,
             pointIndex,
             message: error?.message || String(error),
             stack: error?.stack,
@@ -235,6 +217,81 @@ export function runSweep({
   }
 
   return { cancel };
+}
+
+// A plan-level error (e.g. the budget guard, or an invalid range) happens
+// synchronously, before any point has run. Report it through onError on a
+// microtask — same async contract every other error path in this runner
+// already uses — rather than throwing out of the run*() call itself, so
+// callers never need a try/catch around a run*() invocation to stay safe.
+/**
+ * @param {((error: any) => void) | undefined} onError
+ * @param {string} message
+ */
+function reportPlanError(onError, message) {
+  Promise.resolve().then(() => onError?.({ message, results: [], completedPoints: 0, totalPoints: 0 }));
+  return { cancel() {} };
+}
+
+/**
+ * @param {{
+ *   model?: import('../contracts/model').DesModelJson,
+ *   paramConfig?: Record<string, any>,
+ *   min?: number,
+ *   max?: number,
+ *   step?: number,
+ *   replications?: number,
+ *   baseSeed?: number,
+ *   warmupPeriod?: number,
+ *   maxSimTime?: number|null,
+ *   terminationCondition?: any,
+ *   collectTimeSeries?: boolean,
+ *   schedulesMap?: Record<string, any>,
+ *   onProgress?: (progress: Record<string, any>) => void,
+ *   onPointComplete?: (pointResult: Record<string, any>, meta: Record<string, any>) => void,
+ *   onError?: (error: Record<string, any>) => void,
+ *   onComplete?: (results: any[]) => void,
+ *   onCancelled?: (info: Record<string, any>) => void,
+ * }} [options]
+ * @returns {{ cancel: () => void }}
+ */
+export function runSweep({
+  model,
+  paramConfig,
+  min = 0,
+  max = 0,
+  step = 1,
+  replications = 1,
+  baseSeed = 0,
+  warmupPeriod = 0,
+  maxSimTime = null,
+  terminationCondition = null,
+  collectTimeSeries = false,
+  schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
+  onProgress,
+  onPointComplete,
+  onError,
+  onComplete,
+  onCancelled,
+} = {}) {
+  /** @type {number[]} */
+  let values;
+  try {
+    values = generateSweepValues(min, max, step, replications);
+  } catch (/** @type {any} */ error) {
+    return reportPlanError(onError, error?.message || String(error));
+  }
+
+  return runPointsPlan({
+    model, points: values, replications, baseSeed, warmupPeriod, maxSimTime, terminationCondition,
+    collectTimeSeries, schedulesMap, onProgress, onPointComplete, onError, onComplete, onCancelled,
+    applyPointToModel: (m, value) => applySweepValue(/** @type {any} */ (m), /** @type {any} */ (paramConfig), value),
+    seedForPoint: (base, i) => base + i * 10000,
+    buildProgressExtra: () => ({ values, paramLabel: paramConfig?.label || "Parameter" }),
+    buildPointResult: (value, _pointIndex, seed, replicationPayloads, aggregateStats) => ({
+      value, seed, replications: replicationPayloads, aggregateStats,
+    }),
+  });
 }
 
 /**
@@ -281,163 +338,114 @@ export function run2DSweep({
   const [paramA, paramB] = paramConfigs;
   const [rangeA, rangeB] = ranges;
 
-  const grid = generate2DSweepValues(rangeA, rangeB);
-  const rows = generateSweepValues(rangeA.min, rangeA.max, rangeA.step).length;
-  const cols = generateSweepValues(rangeB.min, rangeB.max, rangeB.step).length;
-  const totalPoints = grid.length;
-  /** @type {any[]} */
-  const results = [];
-  let nextPoint = 0;
-  let completedCount = 0;
-  let cancelled = false;
-  let errored = false;
-  let activeSlots = 0;
-  /** @type {Set<() => void>} */
-  const activeCancelFns = new Set();
-
-  const { concurrentPoints, workersPerPoint } = sweepParallelism(totalPoints, replications);
-
-  const cancel = () => {
-    cancelled = true;
-    for (const fn of activeCancelFns) fn();
-  };
-
-  const finalize = () => {
-    if (errored) return;
-    if (cancelled) {
-      onCancelled?.({ results, completedPoints: completedCount, totalPoints });
-    } else {
-      onComplete?.(results);
-    }
-  };
-
-  const makeSlot = () => {
-    const pool = createReplicationPool();
-    /** @type {{ current: (() => void) | null }} */
-    const pointCancelRef = { current: null };
-    const slotCancel = () => pointCancelRef.current?.();
-    activeCancelFns.add(slotCancel);
-
-    const runNext = async () => {
-      if (cancelled || nextPoint >= totalPoints) {
-        activeCancelFns.delete(slotCancel);
-        pool.destroy();
-        activeSlots--;
-        if (activeSlots === 0) finalize();
-        return;
-      }
-
-      const pointIndex = nextPoint++;
-      const { valueA, valueB } = grid[pointIndex];
-
-      onProgress?.({
-        totalPoints,
-        currentPoint: pointIndex,
-        gridSize: { rows, cols },
-        paramLabels: [paramA?.label || "X", paramB?.label || "Y"],
-      });
-
-      try {
-        const pointModel = applySweepValues(/** @type {any} */ (model), [
-          { paramConfig: paramA, value: valueA },
-          { paramConfig: paramB, value: valueB },
-        ]);
-        const pointSeed = baseSeed + pointIndex * 10000;
-
-        const replicationPayloads = await wrapReplications({
-          model: pointModel,
-          replications,
-          baseSeed: pointSeed,
-          warmupPeriod,
-          maxSimTime,
-          terminationCondition,
-          collectTimeSeries,
-          schedulesMap,
-          pool,
-          workerCount: workersPerPoint,
-          _cancelRef: pointCancelRef,
-          onProgress(/** @type {any} */ progress) {
-            onProgress?.({
-              totalPoints,
-              currentPoint: pointIndex,
-              gridSize: { rows, cols },
-              paramLabels: [paramA?.label || "X", paramB?.label || "Y"],
-              pointReplications: progress,
-            });
-          },
-          onReplicationComplete(/** @type {any} */ payload, /** @type {any} */ progress) {
-            onProgress?.({
-              totalPoints,
-              currentPoint: pointIndex,
-              gridSize: { rows, cols },
-              paramLabels: [paramA?.label || "X", paramB?.label || "Y"],
-              pointReplications: progress,
-            });
-          },
-        });
-
-        if (!replicationPayloads) {
-          if (!cancelled) cancel();
-          runNext();
-          return;
-        }
-
-        const aggregateStats = summarizeReplicationResults(replicationPayloads, SWEEP_METRICS);
-        const pointResult = {
-          valueA,
-          valueB,
-          seed: pointSeed,
-          replications: replicationPayloads,
-          aggregateStats,
-        };
-
-        results.push(pointResult);
-        completedCount++;
-        onPointComplete?.(pointResult, {
-          completedPoints: completedCount,
-          totalPoints,
-          valueA,
-          valueB,
-        });
-
-        runNext();
-      } catch (/** @type {any} */ error) {
-        if (!errored) {
-          errored = true;
-          cancel();
-          onError?.({
-            valueA,
-            valueB,
-            pointIndex,
-            message: error?.message || String(error),
-            stack: error?.stack,
-            results,
-            completedPoints: completedCount,
-            totalPoints,
-          });
-        }
-        activeCancelFns.delete(slotCancel);
-        pool.destroy();
-        activeSlots--;
-      }
-    };
-
-    return runNext;
-  };
-
-  for (let i = 0; i < concurrentPoints; i++) {
-    activeSlots++;
-    makeSlot()();
+  /** @type {Array<{ valueA: number, valueB: number }>} */
+  let grid;
+  try {
+    grid = generate2DSweepValues(rangeA, rangeB, replications);
+  } catch (/** @type {any} */ error) {
+    return reportPlanError(onError, error?.message || String(error));
   }
+  const rows = new Set(grid.map(p => p.valueA)).size;
+  const cols = new Set(grid.map(p => p.valueB)).size;
+  const paramLabels = [paramA?.label || "X", paramB?.label || "Y"];
 
-  return { cancel };
+  return runPointsPlan({
+    model, points: grid, replications, baseSeed, warmupPeriod, maxSimTime, terminationCondition,
+    collectTimeSeries, schedulesMap, onProgress, onPointComplete, onError, onComplete, onCancelled,
+    applyPointToModel: (m, point) => applySweepValues(/** @type {any} */ (m), [
+      { paramConfig: paramA, value: point.valueA },
+      { paramConfig: paramB, value: point.valueB },
+    ]),
+    seedForPoint: (base, i) => base + i * 10000,
+    buildProgressExtra: () => ({ gridSize: { rows, cols }, paramLabels }),
+    buildPointResult: (point, _pointIndex, seed, replicationPayloads, aggregateStats) => ({
+      valueA: point.valueA, valueB: point.valueB, seed, replications: replicationPayloads, aggregateStats,
+    }),
+  });
 }
 
-// Runs run2DSweep inside a dedicated Web Worker so the main thread stays free.
-// Falls back to run2DSweep() in-thread when Worker is unavailable (node / tests).
+/**
+ * Sampled study — Latin hypercube sample over N sweepable parameters (a
+ * Study's "sampled" plan type). Unlike grid1d/grid2d, the number of points
+ * is chosen directly (`points`) rather than derived from a step size, and
+ * the replication budget guard (points x replications) is the primary way
+ * a modeller controls total run cost.
+ *
+ * @param {{
+ *   model?: import('../contracts/model').DesModelJson,
+ *   parameters?: Array<{ path: string, label?: string, type?: string, range?: { min: number, max: number } }>,
+ *   points?: number,
+ *   replications?: number,
+ *   baseSeed?: number,
+ *   warmupPeriod?: number,
+ *   maxSimTime?: number|null,
+ *   terminationCondition?: any,
+ *   collectTimeSeries?: boolean,
+ *   schedulesMap?: Record<string, any>,
+ *   onProgress?: (progress: Record<string, any>) => void,
+ *   onPointComplete?: (pointResult: Record<string, any>, meta: Record<string, any>) => void,
+ *   onError?: (error: Record<string, any>) => void,
+ *   onComplete?: (results: any[]) => void,
+ *   onCancelled?: (info: Record<string, any>) => void,
+ * }} [options]
+ * @returns {{ cancel: () => void }}
+ */
+export function runSampledStudy({
+  model,
+  parameters = [],
+  points: pointCount = 1,
+  replications = 1,
+  baseSeed = 0,
+  warmupPeriod = 0,
+  maxSimTime = null,
+  terminationCondition = null,
+  collectTimeSeries = false,
+  schedulesMap,
+  onProgress,
+  onPointComplete,
+  onError,
+  onComplete,
+  onCancelled,
+} = {}) {
+  if (!parameters.length) {
+    return reportPlanError(onError, "runSampledStudy requires at least one parameter.");
+  }
+
+  /** @type {Array<{ params: Array<{ path: string, value: number }> }>} */
+  let sampledPoints;
+  try {
+    checkStudyBudget(pointCount, replications);
+    sampledPoints = sampleLatinHypercube(parameters, { points: pointCount, baseSeed });
+  } catch (/** @type {any} */ error) {
+    return reportPlanError(onError, error?.message || String(error));
+  }
+
+  const paramLabels = parameters.map(p => p.label || p.path);
+
+  return runPointsPlan({
+    model, points: sampledPoints, replications, baseSeed, warmupPeriod, maxSimTime, terminationCondition,
+    collectTimeSeries, schedulesMap, onProgress, onPointComplete, onError, onComplete, onCancelled,
+    applyPointToModel: (m, point) => applySweepValues(/** @type {any} */ (m), point.params.map(
+      (/** @type {any} */ p, /** @type {number} */ i) => ({ paramConfig: parameters[i], value: p.value })
+    )),
+    seedForPoint: (base, i) => base + i * 10000,
+    buildProgressExtra: () => ({ paramLabels }),
+    buildPointResult: (point, _pointIndex, seed, replicationPayloads, aggregateStats) => ({
+      params: point.params, seed, replications: replicationPayloads, aggregateStats,
+    }),
+  });
+}
+
+// Runs run2DSweep or runSampledStudy inside a dedicated Web Worker so the main
+// thread stays free. `options.planType` selects which ("sampled" or, by
+// default, the grid2d path — kept as the default for backward compatibility
+// with every existing caller of runSweepOffthread(), which predates the
+// sampled plan type and never passes planType). Falls back to running
+// in-thread when Worker is unavailable (node / tests).
 /** @param {Record<string, any>} [options] */
-export function runSweepOffthread(options = {}) {
-  if (typeof Worker === "undefined") return run2DSweep(options);
+export function runStudyOffthread(options = {}) {
+  const runInThread = options.planType === "sampled" ? runSampledStudy : run2DSweep;
+  if (typeof Worker === "undefined") return runInThread(options);
 
   const { onProgress, onPointComplete, onComplete, onError, onCancelled, ...payload } = options;
   const worker = new Worker(new URL("./sweep-worker.js", import.meta.url), { type: "module" });
@@ -470,3 +478,8 @@ export function runSweepOffthread(options = {}) {
     },
   };
 }
+
+// Pre-Phase-2 name, kept as an alias — every existing caller (execute/index.jsx,
+// tests) imports runSweepOffthread and never passed planType, so this is a
+// drop-in rename with identical (grid2d) default behaviour.
+export const runSweepOffthread = runStudyOffthread;

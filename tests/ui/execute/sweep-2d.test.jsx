@@ -290,7 +290,11 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
-    await waitFor(() => expect(screen.getByText(/grid:/i)).toBeInTheDocument());
-    expect(screen.getByText(/2 x 2/i)).toBeInTheDocument();
+    // Scoped to the progress banner's own element (not a page-wide getByText)
+    // because the pre-run grid-size preview text can also read "2 x 2" for a
+    // real (non-mocked) square grid — both are legitimately correct, so a
+    // global text query for "2 x 2" is ambiguous once both are present.
+    const progressText = await waitFor(() => screen.getByText(/grid:/i));
+    expect(progressText.textContent).toMatch(/2 x 2/i);
   });
 });

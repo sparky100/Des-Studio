@@ -1,10 +1,11 @@
 // @ts-check
-// sweep-worker.js — Web Worker entry point for 2D sweep orchestration.
-// Vite detects this file as a worker via the new Worker(new URL(...)) call in runSweepOffthread().
-// run2DSweep() internally creates per-slot replication pools (nested workers), which are
-// supported in Chrome 80+, Firefox 114+, and Safari 16.4+.
+// sweep-worker.js — Web Worker entry point for off-thread Study orchestration
+// (grid2d via run2DSweep, sampled via runSampledStudy — see planType below).
+// Vite detects this file as a worker via the new Worker(new URL(...)) call in runStudyOffthread().
+// Both run2DSweep() and runSampledStudy() internally create per-slot replication
+// pools (nested workers), which are supported in Chrome 80+, Firefox 114+, and Safari 16.4+.
 
-import { run2DSweep } from "./sweep-runner.js";
+import { run2DSweep, runSampledStudy } from "./sweep-runner.js";
 
 if (typeof self !== "undefined" && typeof self.postMessage === "function") {
   /** @type {{ cancel: () => void }|null} */
@@ -20,7 +21,11 @@ if (typeof self !== "undefined" && typeof self.postMessage === "function") {
 
     if (type !== "SWEEP_START") return;
 
-    cancelHandle = run2DSweep({
+    // planType selects the plan; absent/"grid2d" keeps the pre-existing
+    // default so every caller that predates the "sampled" plan type (i.e.
+    // every caller before Phase 2) is unaffected.
+    const runPlan = payload?.planType === "sampled" ? runSampledStudy : run2DSweep;
+    cancelHandle = runPlan({
       ...payload,
       onProgress(/** @type {any} */ p) {
         self.postMessage({ type: "SWEEP_PROGRESS", payload: p });
