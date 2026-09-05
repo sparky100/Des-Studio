@@ -22,10 +22,10 @@ import {
   getShareLink,
   revokeShareLink,
   listShareLinks,
-  saveSweep,
-  getSweep,
-  listSweeps,
-  deleteSweep,
+  saveStudy,
+  getStudy,
+  listStudies,
+  deleteStudy,
   getRun,
   updateModelTags,
 } from '../../src/db/models.js';
@@ -1048,7 +1048,19 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
     });
   });
 
-  describe('sweeps (Sprint 16)', () => {
+  describe('studies (F-Study; renamed from sweeps in Sprint 16)', () => {
+    /** @type {import('../../src/contracts/study').StudyDefinition} */
+    const definition = {
+      name: 'Nurse staffing sweep',
+      planType: 'grid1d',
+      parameters: [{ type: 'entityTypeCount', targetId: 'et1', path: 'entityTypes.et1.count', label: 'Number of Nurse', currentValue: 2, range: { min: 1, max: 5, step: 1 } }],
+      goals: [],
+      objective: { metricRef: { kind: 'summary', field: 'avgWait' }, direction: 'min' },
+      runBudget: { points: 5, replicationsPerPoint: 10 },
+      baseSeed: 42,
+      origin: { kind: 'user' },
+    };
+
     beforeEach(() => {
       // Rebuild mock query builder to survive vi.clearAllMocks()
       const qb = {
@@ -1063,66 +1075,120 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       supabase.from.mockReturnValue(qb);
     });
 
-    it('saveSweep inserts a row with config and results', async () => {
-      supabase.from('sweeps').single.mockResolvedValueOnce({
-        data: { id: 'sweep-1', config: { param: 'Server.count', min: 1, max: 3 }, results: { points: [{ value: 1 }, { value: 2 }] }, created_at: '2026-05-09T12:00:00Z' },
+    it('saveStudy inserts a studies row with the definition (no points)', async () => {
+      supabase.from('studies').single.mockResolvedValueOnce({
+        data: { id: 'study-1', definition, schema_version: 2, status: 'complete', origin: { kind: 'user' }, created_at: '2026-09-05T12:00:00Z' },
         error: null,
       });
 
-      const result = await saveSweep('model-1', 'user-1', { param: 'Server.count', min: 1, max: 3 }, { points: [{ value: 1 }, { value: 2 }] });
+      const result = await saveStudy('model-1', 'user-1', definition, []);
 
-      expect(result.id).toBe('sweep-1');
-      expect(result.config.param).toBe('Server.count');
-      expect(supabase.from).toHaveBeenCalledWith('sweeps');
-      expect(supabase.from('sweeps').insert).toHaveBeenCalledWith(
+      expect(result.id).toBe('study-1');
+      expect(result.schemaVersion).toBe(2);
+      expect(supabase.from).toHaveBeenCalledWith('studies');
+      expect(supabase.from('studies').insert).toHaveBeenCalledWith(
         expect.objectContaining({
           model_id: 'model-1',
           run_by: 'user-1',
-          config: expect.objectContaining({ param: 'Server.count' }),
+          definition,
+          schema_version: 2,
+          status: 'complete',
+          origin: { kind: 'user' },
         })
       );
+      expect(supabase.from).not.toHaveBeenCalledWith('study_points');
     });
 
-    it('getSweep fetches a sweep by id', async () => {
-      supabase.from('sweeps').single.mockResolvedValueOnce({
-        data: { id: 'sweep-1', model_id: 'model-1', config: { param: 'Server.count' }, results: { points: [] }, created_at: '2026-05-09T12:00:00Z' },
+    it('saveStudy batch-inserts one study_points row per point', async () => {
+      supabase.from('studies').single.mockResolvedValueOnce({
+        data: { id: 'study-1', definition, schema_version: 2, status: 'complete', origin: { kind: 'user' }, created_at: '2026-09-05T12:00:00Z' },
         error: null,
       });
 
-      const result = await getSweep('sweep-1');
+      const points = [
+        { pointIndex: 0, params: [{ path: 'entityTypes.et1.count', value: 1 }], replications: 10, metrics: { 'summary.avgWait': { mean: 9.1, ci95Low: 8.5, ci95High: 9.7, min: 2, max: 20 } }, feasible: true, seed: 42 },
+        { pointIndex: 1, params: [{ path: 'entityTypes.et1.count', value: 2 }], replications: 10, metrics: { 'summary.avgWait': { mean: 4.2, ci95Low: 3.9, ci95High: 4.5, min: 1, max: 10 } }, feasible: true, seed: 10042 },
+      ];
 
-      expect(result.id).toBe('sweep-1');
-      expect(result.modelId).toBe('model-1');
-      expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('id', 'sweep-1');
+      const result = await saveStudy('model-1', 'user-1', definition, points);
+
+      expect(result.id).toBe('study-1');
+      expect(supabase.from).toHaveBeenCalledWith('study_points');
+      expect(supabase.from('study_points').insert).toHaveBeenCalledWith([
+        expect.objectContaining({ study_id: 'study-1', point_index: 0, replications: 10, feasible: true, seed: 42 }),
+        expect.objectContaining({ study_id: 'study-1', point_index: 1, replications: 10, feasible: true, seed: 10042 }),
+      ]);
     });
 
-    it('listSweeps returns all sweeps for a model ordered by creation date', async () => {
-      supabase.from('sweeps').order.mockResolvedValueOnce({
+    it('getStudy fetches a study and its points when schema_version is set', async () => {
+      supabase.from('studies').single.mockResolvedValueOnce({
+        data: { id: 'study-1', model_id: 'model-1', definition, schema_version: 2, status: 'complete', origin: { kind: 'user' }, created_at: '2026-09-05T12:00:00Z' },
+        error: null,
+      });
+      supabase.from('studies').order.mockResolvedValueOnce({
         data: [
-          { id: 'sweep-1', config: { param: 'Server.count' }, results: {}, created_at: '2026-05-09T12:00:00Z' },
-          { id: 'sweep-2', config: { param: 'Arrival.mean' }, results: {}, created_at: '2026-05-09T11:00:00Z' },
+          { id: 'pt-1', point_index: 0, params: [{ path: 'entityTypes.et1.count', value: 1 }], replications: 10, metrics: {}, feasible: true, seed: 42, created_at: '2026-09-05T12:00:01Z' },
         ],
         error: null,
       });
 
-      const sweeps = await listSweeps('model-1');
+      const result = await getStudy('study-1');
 
-      expect(sweeps).toHaveLength(2);
-      expect(sweeps[0].id).toBe('sweep-1');
-      expect(sweeps[1].id).toBe('sweep-2');
-      expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('model_id', 'model-1');
+      expect(result.legacy).toBe(false);
+      expect(result.definition).toEqual(definition);
+      expect(result.points).toHaveLength(1);
+      expect(result.points[0].pointIndex).toBe(0);
+      expect(supabase.from).toHaveBeenCalledWith('study_points');
+      expect(supabase.from('studies').eq).toHaveBeenCalledWith('study_id', 'study-1');
     });
 
-    it('deleteSweep deletes by id', async () => {
-      supabase.from('sweeps').delete.mockReturnThis();
-      supabase.from('sweeps').eq.mockReturnThis();
+    it('getStudy returns the untouched legacy blob shape when schema_version is null', async () => {
+      supabase.from('studies').single.mockResolvedValueOnce({
+        data: { id: 'sweep-1', model_id: 'model-1', config: { param: 'Server.count', min: 1, max: 3 }, results: { points: [{ value: 1 }, { value: 2 }] }, schema_version: null, status: null, origin: null, created_at: '2026-05-09T12:00:00Z' },
+        error: null,
+      });
 
-      const result = await deleteSweep('sweep-1', 'user-1');
+      const result = await getStudy('sweep-1');
+
+      expect(result).toEqual({
+        id: 'sweep-1',
+        modelId: 'model-1',
+        legacy: true,
+        config: { param: 'Server.count', min: 1, max: 3 },
+        results: { points: [{ value: 1 }, { value: 2 }] },
+        createdAt: '2026-05-09T12:00:00Z',
+      });
+      // Legacy rows never fetch study_points — there is nothing to join to.
+      expect(supabase.from).not.toHaveBeenCalledWith('study_points');
+    });
+
+    it('listStudies returns both legacy and current-schema rows for a model, ordered by creation date', async () => {
+      supabase.from('studies').order.mockResolvedValueOnce({
+        data: [
+          { id: 'study-1', definition, config: null, schema_version: 2, status: 'complete', origin: { kind: 'user' }, created_at: '2026-09-05T12:00:00Z' },
+          { id: 'sweep-1', definition: null, config: { param: 'Server.count' }, schema_version: null, status: null, origin: null, created_at: '2026-05-09T11:00:00Z' },
+        ],
+        error: null,
+      });
+
+      const studies = await listStudies('model-1');
+
+      expect(studies).toHaveLength(2);
+      expect(studies[0]).toMatchObject({ id: 'study-1', legacy: false, name: 'Nurse staffing sweep', planType: 'grid1d', status: 'complete' });
+      expect(studies[1]).toMatchObject({ id: 'sweep-1', legacy: true, planType: 'grid1d', status: 'complete', origin: { kind: 'user' } });
+      expect(supabase.from('studies').eq).toHaveBeenCalledWith('model_id', 'model-1');
+    });
+
+    it('deleteStudy deletes by id, scoped to the owning user', async () => {
+      supabase.from('studies').delete.mockReturnThis();
+      supabase.from('studies').eq.mockReturnThis();
+
+      const result = await deleteStudy('study-1', 'user-1');
 
       expect(result.ok).toBe(true);
-      expect(supabase.from('sweeps').delete).toHaveBeenCalled();
-      expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('id', 'sweep-1');
-      expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('run_by', 'user-1');
+      expect(supabase.from('studies').delete).toHaveBeenCalled();
+      expect(supabase.from('studies').eq).toHaveBeenCalledWith('id', 'study-1');
+      expect(supabase.from('studies').eq).toHaveBeenCalledWith('run_by', 'user-1');
     });
   });
 
@@ -1336,7 +1402,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
 // ── Sprint 71.1 — Persistence unit tests ──────────────────────────────────────
 describe('Sprint 71 — persistence layer', () => {
   // Rebuild mock query builder after vi.clearAllMocks() wipes mockReturnThis() implementations.
-  // Earlier describe blocks (share links, sweeps, getRun) override supabase.from.mockReturnValue,
+  // Earlier describe blocks (share links, studies, getRun) override supabase.from.mockReturnValue,
   // and vi.clearAllMocks() in afterEach removes those implementations, leaving supabase.from
   // returning undefined. We restore a fresh chainable query builder here.
   function makeQb() {

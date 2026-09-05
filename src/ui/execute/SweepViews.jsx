@@ -3,7 +3,19 @@
 import { useMemo, useState } from "react";
 import { alpha, lerpColor } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
-import { fmt, fmtMetric, METRIC_LABELS } from "./executeHelpers.js";
+import { fmt, fmtMetric, METRIC_LABELS, COUNT_METRICS } from "./executeHelpers.js";
+
+// Metrics that can never legitimately go negative (wait/sojourn/time
+// durations, WIP, counts, and the served-ratio percentage) — the chart's
+// y-axis must not render or pad into negative territory for these, even
+// though a small-sample 95% CI lower bound can dip below 0 mathematically.
+// totalCost/costPerServed are deliberately excluded: the COST macro accepts
+// an arbitrary expression and can legitimately go negative (e.g. a refund).
+const NON_NEGATIVE_METRICS = new Set([
+  ...COUNT_METRICS,
+  "summary.avgWait", "summary.avgSvc", "summary.avgSojourn",
+  "summary.avgTimeInSystem", "summary.avgWIP", "summary.servedRatio",
+]);
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 // Check whether a sweep point's aggregateStats satisfies all goals.
@@ -89,9 +101,15 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
   const yMax = Math.max(...allY);
   const yRange = yMax - yMin || 1;
   const yPad = yRange * 0.12;
+  // Clamp the rendered floor at 0 for metrics that cannot be negative — a
+  // CI lower bound (vLowers) can dip below 0 mathematically even when the
+  // underlying metric (wait, sojourn, a count) never can in reality.
+  const renderYMin = NON_NEGATIVE_METRICS.has(metric) ? Math.max(0, yMin - yPad) : yMin - yPad;
+  const renderYMax = yMax + yPad;
+  const renderYRange = renderYMax - renderYMin || 1;
 
   const xScale = (v) => PAD.left + (v - xMin) / (xMax - xMin || 1) * plotW;
-  const yScale = (v) => PAD.top + plotH - (v - (yMin - yPad)) / (yRange + 2 * yPad) * plotH;
+  const yScale = (v) => PAD.top + plotH - (v - renderYMin) / renderYRange * plotH;
 
   const linePath = vValues.map((v, i) => `${i === 0 ? "M" : "L"}${xScale(v).toFixed(1)},${yScale(vMeans[i]).toFixed(1)}`).join(" ");
   const ciUpperPath = vValues.map((v, i) => `${i === 0 ? "M" : "L"}${xScale(v).toFixed(1)},${yScale(vUppers[i]).toFixed(1)}`).join(" ");
@@ -100,7 +118,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
     return `L${xScale(vValues[idx]).toFixed(1)},${yScale(vLowers[idx]).toFixed(1)}`;
   }).join(" ") + " Z";
 
-  const yTicks = Array.from({ length: 5 }, (_, i) => (yMin - yPad) + (i / 4) * (yRange + 2 * yPad));
+  const yTicks = Array.from({ length: 5 }, (_, i) => renderYMin + (i / 4) * renderYRange);
 
   // Best feasible point: lowest mean among feasible points (or highest for served)
   const feasibleIndices = vValues.map((_, i) => i).filter(i => feasibility[i] === true);

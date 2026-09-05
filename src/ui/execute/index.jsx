@@ -10,7 +10,8 @@ import { AdapterRegistry } from "../../engine/adapters/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
-import { saveSimulationRun, getRun } from "../../db/models.js";
+import { saveSimulationRun, getRun, saveStudy, listStudies, getStudy } from "../../db/models.js";
+import { summaryPathToMetricRef } from "../../contracts/study";
 import { useRunHistory } from "./hooks/useRunHistory.js";
 import { useModelSchedules } from "./hooks/useModelSchedules.js";
 import { useVisualizationSettings } from "./hooks/useVisualizationSettings.js";
@@ -20,7 +21,7 @@ import { OverrideChipList } from "./OverrideChipList.jsx";
 import { SavedExperimentsTab } from "./SavedExperimentsTab.jsx";
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
 import { callLLMOnce } from "../../llm/apiClient.js";
-import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
+import { buildNarrativePrompt, buildModelDescriptionPrompt, evaluateSweepPointGoals } from "../../llm/prompts.js";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { saveLocalRun } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
@@ -249,6 +250,15 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [sweepResults, setSweepResults] = useState(null);
   const [sweepProgress, setSweepProgress] = useState(null);
   const [sweepKpiMetric, setSweepKpiMetric] = useState("summary.avgWait");
+  // F-Study: the objective is the metric+direction a Study is optimising for
+  // (persisted with the definition — see StudyObjective in
+  // src/contracts/study.ts). sweepKpiMetric doubles as the objective's
+  // metric so there's one dropdown, not two; direction is a separate control.
+  const [sweepObjectiveDirection, setSweepObjectiveDirection] = useState("min");
+  const [studyList, setStudyList] = useState([]);
+  const [studyListStatus, setStudyListStatus] = useState("idle"); // idle | loading | loaded | error
+  const [studyName, setStudyName] = useState("");
+  const [loadedStudyId, setLoadedStudyId] = useState(null);
   const [sweepMode, setSweepMode] = useState("1d");
   const [sweepSelectedParamB, setSweepSelectedParamB] = useState(null);
   const [sweepMinB, setSweepMinB] = useState(1);
@@ -1300,6 +1310,128 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }), [latestRunId, effectiveRunLabel, seed]);
 
 
+  // ── F-Study: persistence ──────────────────────────────────────────────────
+  // A Study is a saved, evaluated parameter sweep — distinct from a saved
+  // Experiment (a named parameter set, SavedExperimentsTab.jsx). See
+  // src/contracts/study.ts for the StudyDefinition/StudyPoint shapes and
+  // src/db/models.js's saveStudy/getStudy/listStudies/deleteStudy.
+
+  const refreshStudyList = useCallback(async () => {
+    if (!modelId) return;
+    setStudyListStatus("loading");
+    try {
+      const list = await listStudies(modelId);
+      setStudyList(list);
+      setStudyListStatus("loaded");
+    } catch {
+      setStudyListStatus("error");
+    }
+  }, [modelId]);
+
+  useEffect(() => {
+    if (executeSection === "studies" && userId && modelId) {
+      void refreshStudyList();
+    }
+  }, [executeSection, userId, modelId, refreshStudyList]);
+
+  const buildStudyDefinition = useCallback((results) => {
+    const parameters = [{ ...sweepSelectedParam, range: { min: sweepMin, max: sweepMax, step: sweepStep } }];
+    if (sweepMode === "2d" && sweepSelectedParamB) {
+      parameters.push({ ...sweepSelectedParamB, range: { min: sweepMinB, max: sweepMaxB, step: sweepStepB } });
+    }
+    const metricRef = summaryPathToMetricRef(sweepKpiMetric) || { kind: "summary", field: "avgWait" };
+    return {
+      name: studyName.trim() || `Study — ${new Date().toLocaleDateString()}`,
+      planType: sweepMode === "2d" ? "grid2d" : "grid1d",
+      parameters,
+      goals: model.goals || [],
+      objective: { metricRef, direction: sweepObjectiveDirection },
+      runBudget: { points: results.length, replicationsPerPoint: replications },
+      baseSeed: seed,
+      origin: { kind: "user" },
+    };
+  }, [sweepSelectedParam, sweepSelectedParamB, sweepMin, sweepMax, sweepStep, sweepMinB, sweepMaxB, sweepStepB,
+      sweepMode, sweepKpiMetric, sweepObjectiveDirection, studyName, model, replications, seed]);
+
+  // Aggregated per-point metrics only — never per-replication detail (see
+  // src/db/results-persistence.js's 800KB payload guard and study_points'
+  // schema, which has no field for it).
+  const buildStudyPoints = useCallback((results) => results.map((pt, i) => {
+    const params = sweepMode === "2d"
+      ? [{ path: sweepSelectedParam?.path, value: pt.valueA }, { path: sweepSelectedParamB?.path, value: pt.valueB }]
+      : [{ path: sweepSelectedParam?.path, value: pt.value }];
+    const metrics = Object.fromEntries(Object.entries(pt.aggregateStats || {}).map(([path, stat]) => [
+      path,
+      { mean: stat?.mean ?? null, ci95Low: stat?.lower ?? null, ci95High: stat?.upper ?? null, min: null, max: null },
+    ]));
+    return {
+      pointIndex: i,
+      params,
+      replications: pt.replications?.length || replications,
+      metrics,
+      feasible: evaluateSweepPointGoals(model.goals || [], pt.aggregateStats || {}).feasible,
+      seed: pt.seed ?? null,
+    };
+  }), [sweepMode, sweepSelectedParam, sweepSelectedParamB, replications, model]);
+
+  const handleSaveStudy = useCallback(async (results) => {
+    if (!userId || !sweepSelectedParam || !results?.length) return;
+    try {
+      const definition = buildStudyDefinition(results);
+      const points = buildStudyPoints(results);
+      await saveStudy(modelId, userId, definition, points);
+      setSaveStatus({ state: "success", message: `Study saved — ${results.length} point${results.length === 1 ? "" : "s"}.` });
+      void refreshStudyList();
+    } catch (err) {
+      setSaveStatus({ state: "error", message: `Study save failed: ${err?.message || "unknown error"}` });
+    }
+  }, [userId, modelId, sweepSelectedParam, buildStudyDefinition, buildStudyPoints, refreshStudyList]);
+
+  // Loads a saved study read-only into the existing chart/table views. Only
+  // current-schema studies (schema_version set) are rehydrated into the sweep
+  // form state — legacy blob rows (saved before this schema existed, and
+  // never actually produced by any UI caller) have no defined shape to
+  // rehydrate, so they're surfaced as unavailable rather than guessed at.
+  const handleLoadStudy = useCallback(async (id) => {
+    try {
+      const study = await getStudy(id);
+      if (study.legacy) {
+        setSweepResults(null);
+        setSweepStatus("idle");
+        setSaveStatus({ state: "error", message: "This is a legacy sweep record saved before Studies existed — no structured preview is available." });
+        setLoadedStudyId(id);
+        return;
+      }
+      const def = study.definition || {};
+      const isGrid2d = def.planType === "grid2d";
+      setSweepMode(isGrid2d ? "2d" : "1d");
+      setSweepSelectedParam(def.parameters?.[0] || null);
+      setSweepSelectedParamB(isGrid2d ? (def.parameters?.[1] || null) : null);
+      if (def.objective?.metricRef?.kind === "summary") {
+        setSweepKpiMetric(`summary.${def.objective.metricRef.field}`);
+      }
+      setSweepObjectiveDirection(def.objective?.direction || "min");
+      setStudyName(def.name || "");
+      const rebuilt = (study.points || []).map(p => {
+        const aggregateStats = Object.fromEntries(Object.entries(p.metrics || {}).map(([path, m]) => [
+          path, { n: p.replications, mean: m.mean, lower: m.ci95Low, upper: m.ci95High },
+        ]));
+        // Dummy-length array so the results table's "Reps" column (which only
+        // reads .length) renders correctly, without carrying back any
+        // per-replication detail that was never persisted in the first place.
+        const replicationsPlaceholder = new Array(p.replications || 0).fill(null);
+        return isGrid2d
+          ? { valueA: p.params?.[0]?.value, valueB: p.params?.[1]?.value, seed: p.seed, replications: replicationsPlaceholder, aggregateStats }
+          : { value: p.params?.[0]?.value, seed: p.seed, replications: replicationsPlaceholder, aggregateStats };
+      });
+      setSweepResults(rebuilt);
+      setSweepStatus(rebuilt.length ? "complete" : "idle");
+      setLoadedStudyId(id);
+    } catch (err) {
+      setSaveStatus({ state: "error", message: `Failed to load study: ${err?.message || "unknown error"}` });
+    }
+  }, []);
+
   const handleRunSweep = useCallback(() => {
     if (hasAdmissionErrors) return;
     if (sweepMode === "1d" && !sweepSelectedParam) return;
@@ -1309,6 +1441,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSweepResults(null);
     setSweepProgress(null);
     setSweepGridError(null);
+    setLoadedStudyId(null);
 
     if (sweepMode === "2d") {
       try {
@@ -1350,11 +1483,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           setSweepStatus("complete");
           setSweepResults(results);
           setSaveStatus({ state: "success", message: `Sweep complete: ${results.length} points run.` });
+          void handleSaveStudy(results);
         },
         onCancelled(partial) {
           setSweepStatus("complete");
           setSweepResults(partial.results);
           setSaveStatus({ state: "success", message: `Sweep cancelled after ${partial.completedPoints} points.` });
+          void handleSaveStudy(partial.results);
         },
       });
     } else {
@@ -1385,17 +1520,20 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           setSweepStatus("complete");
           setSweepResults(results);
           setSaveStatus({ state: "success", message: `Sweep complete: ${results.length} points run.` });
+          void handleSaveStudy(results);
         },
         onCancelled(partial) {
           setSweepStatus("complete");
           setSweepResults(partial.results);
           setSaveStatus({ state: "success", message: `Sweep cancelled after ${partial.completedPoints} points.` });
+          void handleSaveStudy(partial.results);
         },
       });
     }
   }, [model, sweepMode, sweepSelectedParam, sweepSelectedParamB, sweepMin, sweepMax, sweepStep,
       sweepMinB, sweepMaxB, sweepStepB, replications, seed, warmupPeriod, maxSimTime,
-      terminationMode, terminationCondition, collectTimeSeries, hasAdmissionErrors, runAdmission]);
+      terminationMode, terminationCondition, collectTimeSeries, hasAdmissionErrors, runAdmission,
+      handleSaveStudy]);
 
   const handleCancelSweep = useCallback(() => {
     sweepRunnerRef.current?.cancel();
@@ -1408,14 +1546,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         {[
           { id: "run", label: "Run" },
           { id: "saved-experiments", label: "Experiments" },
-          { id: "experiments", label: "Studies" },
+          { id: "studies", label: "Studies" },
         ].map(section => (
           <Btn
             key={section.id}
             small
             variant={executeSection === section.id ? "primary" : "ghost"}
             onClick={() => {
-              if (section.id === "experiments" && !sweepOpen) { setSweepParams(enumerateSweepableParams(model)); setSweepOpen(true); }
+              if (section.id === "studies" && !sweepOpen) { setSweepParams(enumerateSweepableParams(model)); setSweepOpen(true); }
               if (section.id === "run") {
                 setHideRunReadiness(false);
                 if (executeSection !== "run") {
@@ -1485,7 +1623,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         onFormSeedConsumed={() => setExpFormSeed(null)}
       />
 
-      {executeSection === "experiments" && (
+      {executeSection === "studies" && (
       <div style={{ maxWidth: 1120, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div>
@@ -1493,6 +1631,41 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, marginTop: 2 }}>Parametric sweep and adaptive batch exploration</div>
         </div>
       </div>
+      {userId && (
+        <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PAST STUDIES</span>
+            {studyListStatus === "loading" && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Loading…</span>}
+          </div>
+          {studyListStatus === "loaded" && studyList.length === 0 && (
+            <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>No studies saved yet for this model.</span>
+          )}
+          {studyListStatus === "error" && (
+            <span style={{ fontSize: 11, color: C.red, fontFamily: FONT }}>Couldn't load past studies.</span>
+          )}
+          {studyList.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 160, overflowY: "auto" }}>
+              {studyList.map(s => (
+                <div key={s.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                  padding: "5px 8px", borderRadius: 5,
+                  background: loadedStudyId === s.id ? alpha(C.accent, 0.12) : "transparent",
+                }}>
+                  <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    <span style={{ fontSize: 12, color: C.text, fontFamily: FONT, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {s.name}{s.legacy && <span style={{ color: C.muted, fontWeight: 400 }}> (legacy)</span>}
+                    </span>
+                    <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                      {s.planType || "—"} · {s.status || "—"} · {new Date(s.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <Btn small variant="ghost" onClick={() => handleLoadStudy(s.id)}>Load</Btn>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         {(sweepStatus === "running" || sweepStatus === "complete" || sweepStatus === "error") && (
           <div style={{ padding: "8px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 8 }}>
@@ -1503,7 +1676,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         )}
         <div style={{ padding: "16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
-              Vary one or two parameters across a range to see how KPIs respond. Each point runs multiple replications for statistical confidence. Results are shown in charts and tables but are not saved to run history.
+              Vary one or two parameters across a range to see how KPIs respond. Each point runs multiple replications for statistical confidence.
+              {userId
+                ? " Every completed study is saved automatically and appears in the studies list above."
+                : " Sign in to save completed studies — results are only shown for this session."}
             </div>
             {/* Mode toggle */}
             <div style={{ display: "flex", gap: 2, background: C.bg, borderRadius: 5, padding: 2, width: "fit-content" }}>
@@ -1686,6 +1862,37 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                     ⚠ 2D sweeps run all grid points sequentially and can take 30–90s for larger grids. Consider a 1D sweep for quicker feedback.
                   </div>
                 )}
+
+                {/* F-Study: name + objective — saved with the study when the run completes */}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 2, minWidth: 160 }}>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STUDY NAME</span>
+                    <input type="text" aria-label="Study name" value={studyName} placeholder={`Study — ${new Date().toLocaleDateString()}`}
+                      onChange={e => setStudyName(e.target.value)}
+                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 140 }}>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>OBJECTIVE</span>
+                    <select aria-label="Objective metric" value={sweepKpiMetric} onChange={e => setSweepKpiMetric(e.target.value)}
+                      style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }}>
+                      {CI_METRICS.map(m => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>DIRECTION</span>
+                    <div style={{ display: "flex", gap: 2, background: C.bg, borderRadius: 5, padding: 2 }}>
+                      <button onClick={() => setSweepObjectiveDirection("min")}
+                        style={{ background: sweepObjectiveDirection === "min" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepObjectiveDirection === "min" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 10px" }}>
+                        Minimise
+                      </button>
+                      <button onClick={() => setSweepObjectiveDirection("max")}
+                        style={{ background: sweepObjectiveDirection === "max" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepObjectiveDirection === "max" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 10px" }}>
+                        Maximise
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <Btn variant="primary" onClick={handleRunSweep}
                     disabled={sweepStatus === "running" || hasAdmissionErrors || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))}>
