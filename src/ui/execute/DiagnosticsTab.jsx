@@ -5,7 +5,11 @@ import { Btn, MicIcon, ArrowUpIcon, TypingIndicator } from "../shared/components
 import { getAccessToken } from "../../db/auth.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { MarkdownContent } from "../shared/MarkdownContent.jsx";
-import { tryExtractJson } from "../../llm/apiClient.js";
+import { callLLMOnce, tryExtractJson } from "../../llm/apiClient.js";
+import { buildProposeStudyPrompt } from "../../llm/prompts.js";
+import { validateStudyProposal } from "../../contracts/study";
+import { enumerateSweepableParams } from "../../engine/sweep-params.js";
+import { saveDiagnosis } from "../../db/models.js";
 
 function getProxyUrl() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -192,7 +196,7 @@ function ChatMessage({ msg }) {
   );
 }
 
-export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
+export function DiagnosticsTab({ model, results, onGoToNode, mode = "full", runId = null, userId = null, versionId = null, onProposeStudy = null }) {
   const { C, FONT } = useTheme();
   const hasRun = Boolean(results?.summary);
 
@@ -201,6 +205,11 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
   const [diagnosisResult, setDiagnosisResult] = useState(null);
   const [diagnosisError, setDiagnosisError] = useState(null);
   const [userExpectation, setUserExpectation] = useState("");
+  // Phase 3: "Propose a Study" — turns this diagnosis into a StudyDefinition
+  // proposal for review in the Studies tab (never runs automatically).
+  const [proposeStudyStatus, setProposeStudyStatus] = useState("idle"); // idle | loading | error
+  const [proposeStudyError, setProposeStudyError] = useState(null);
+  const [savedDiagnosisId, setSavedDiagnosisId] = useState(null);
 
   // F69.4 state
   const [chatMessages, setChatMessages] = useState([]);
@@ -245,11 +254,45 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
       }
       setDiagnosisResult(parsed);
       setDiagnosisState("done");
+      setSavedDiagnosisId(null);
+      // Persist alongside the run it was produced against (20260905100000_
+      // studies_phase3.sql's diagnoses table) — best-effort: a signed-out
+      // session (no userId/runId) or a save failure never blocks showing the
+      // diagnosis, since it was already ephemeral React state before Phase 3.
+      // The returned id (when the save succeeds) becomes a proposed Study's
+      // origin.refId if the user later clicks "Propose a Study".
+      if (runId && userId) {
+        saveDiagnosis(runId, userId, parsed, versionId).then(saved => setSavedDiagnosisId(saved.id)).catch(() => {});
+      }
     } catch (err) {
       setDiagnosisError(err.message || "Diagnosis failed.");
       setDiagnosisState("error");
     }
-  }, [buildContextPackage]);
+  }, [buildContextPackage, runId, userId, versionId]);
+
+  const handleProposeStudy = useCallback(async () => {
+    if (!diagnosisResult) return;
+    setProposeStudyStatus("loading");
+    setProposeStudyError(null);
+    try {
+      const sweepableParams = enumerateSweepableParams(model);
+      const prompt = buildProposeStudyPrompt(diagnosisResult, sweepableParams);
+      const raw = await callLLMOnce(prompt);
+      let parsed;
+      try {
+        parsed = tryExtractJson(raw.trim());
+      } catch {
+        throw new Error(`AI response couldn't be parsed. Try again. (Received: "${raw.slice(0, 200)}...")`);
+      }
+      const validation = validateStudyProposal(parsed, sweepableParams);
+      if (!validation.valid) throw new Error(`AI proposal failed validation: ${validation.errors.join("; ")}`);
+      onProposeStudy?.({ payload: parsed, origin: { kind: "ai", refId: savedDiagnosisId || undefined } });
+      setProposeStudyStatus("idle");
+    } catch (err) {
+      setProposeStudyError(err.message || "Propose a Study failed.");
+      setProposeStudyStatus("error");
+    }
+  }, [diagnosisResult, model, onProposeStudy, savedDiagnosisId]);
 
   const handleChatSend = useCallback(async (messageText) => {
     const text = (messageText ?? chatInput).trim();
@@ -414,10 +457,21 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
               </div>
             )}
 
+            {proposeStudyError && (
+              <div style={{ background: C.errorBg, border: `1px solid ${C.danger}`, borderRadius: 6, color: C.error, fontFamily: FONT, fontSize: 12, padding: "10px 12px" }}>
+                {proposeStudyError}
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8 }}>
               <Btn variant="ghost" small onClick={() => { setDiagnosisState("idle"); setDiagnosisResult(null); }}>
                 Re-diagnose
               </Btn>
+              {onProposeStudy && (
+                <Btn variant="primary" small disabled={proposeStudyStatus === "loading"} onClick={handleProposeStudy}>
+                  {proposeStudyStatus === "loading" ? "Asking AI…" : "Propose a Study"}
+                </Btn>
+              )}
             </div>
           </div>
         )}

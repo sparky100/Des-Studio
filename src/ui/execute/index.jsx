@@ -9,7 +9,8 @@ import { AdapterRegistry } from "../../engine/adapters/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
-import { saveSimulationRun, getRun } from "../../db/models.js";
+import { saveSimulationRun, getRun, saveStudy, listStudies, getStudy, fetchExperiments, saveExperiment } from "../../db/models.js";
+import { summaryPathToMetricRef, buildStudyDefinitionFromProposal, validateStudyProposal } from "../../contracts/study";
 import { useRunHistory } from "./hooks/useRunHistory.js";
 import { useModelSchedules } from "./hooks/useModelSchedules.js";
 import { useVisualizationSettings } from "./hooks/useVisualizationSettings.js";
@@ -18,8 +19,8 @@ import { ExperimentRunSettingsFields } from "./ExperimentRunSettingsFields.jsx";
 import { OverrideChipList } from "./OverrideChipList.jsx";
 import { SavedExperimentsTab } from "./SavedExperimentsTab.jsx";
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
-import { callLLMOnce } from "../../llm/apiClient.js";
-import { buildNarrativePrompt, buildModelDescriptionPrompt, evaluateSweepPointGoals } from "../../llm/prompts.js";
+import { callLLMOnce, tryExtractJson } from "../../llm/apiClient.js";
+import { buildNarrativePrompt, buildModelDescriptionPrompt, evaluateSweepPointGoals, buildProposeNextStudyPrompt } from "../../llm/prompts.js";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { saveLocalRun } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
@@ -30,11 +31,13 @@ import { CustomerToken, VisualView } from "./VisualView.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { estimateRunComplexity, estimateMaxCycles, computeEstimateAccuracy } from "../../engine/complexity-estimator.js";
 import { getRunAdmission } from "../../engine/run-admission.js";
-import { enumerateSweepableParams, applySweepValues, generate2DSweepValues } from "../../engine/sweep-params.js";
+import { enumerateSweepableParams, applySweepValues, generate2DSweepValues, MAX_STUDY_REPLICATIONS } from "../../engine/sweep-params.js";
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
+import { computeSensitivityRanking } from "../../engine/sweep-sensitivity.js";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
 import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, sweepGoalKpiOptions, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
+import { SampledParamRangeList, SampledResultsTable, SensitivityPanel } from "./StudyPlanViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
@@ -190,7 +193,7 @@ async function doCloudSave(saveFn, {
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true, studyProposalTrigger = null }) => {
   const { C, FONT } = useTheme();
   const { confirm, confirmDialog } = useConfirm();
   const experimentDefaults = model?.experimentDefaults || {};
@@ -248,7 +251,39 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [sweepResults, setSweepResults] = useState(null);
   const [sweepProgress, setSweepProgress] = useState(null);
   const [sweepKpiMetric, setSweepKpiMetric] = useState("summary.avgWait");
-  const [sweepMode, setSweepMode] = useState("1d");
+  // F-Study: the objective is the metric+direction a Study is optimising for
+  // (persisted with the definition — see StudyObjective in
+  // src/contracts/study.ts). sweepKpiMetric doubles as the objective's
+  // metric so there's one dropdown, not two; direction is a separate control.
+  const [sweepObjectiveDirection, setSweepObjectiveDirection] = useState("min");
+  const [studyList, setStudyList] = useState([]);
+  const [studyListStatus, setStudyListStatus] = useState("idle"); // idle | loading | loaded | error
+  const [studyName, setStudyName] = useState("");
+  const [loadedStudyId, setLoadedStudyId] = useState(null);
+  const [sweepMode, setSweepMode] = useState("1d"); // "1d" | "2d" | "sampled" | "sequential"
+  // F-Study Phase 2: sampled plan state. Each entry: { ...paramDescriptor, min, max }.
+  const [sampledParams, setSampledParams] = useState([]);
+  const [sampledPickerOpen, setSampledPickerOpen] = useState(false);
+  const [sampledPointCount, setSampledPointCount] = useState(10);
+  const [sensitivityRanking, setSensitivityRanking] = useState(null); // { method, ranking } | null
+  // F-Study Phase 3: sequential plan state — a sequential study's first batch
+  // is a Latin hypercube sample narrowed around a "seed point" taken from a
+  // saved Experiment or a point in a previous Study (StudyOrigin, study.ts).
+  // Reuses `sampledParams` for the outer/allowed range of each parameter;
+  // narrowing happens at run time (buildSequentialParameters below).
+  const [seedSource, setSeedSource] = useState("experiment"); // "experiment" | "study"
+  const [seedExperiments, setSeedExperiments] = useState([]);
+  const [seedExperimentId, setSeedExperimentId] = useState("");
+  const [seedStudyId, setSeedStudyId] = useState("");
+  const [seedStudyPoints, setSeedStudyPoints] = useState([]);
+  const [seedStudyPointIndex, setSeedStudyPointIndex] = useState(0);
+  const [sequentialSpread, setSequentialSpread] = useState(0.3); // fraction of each parameter's outer range width used as the narrowed window
+  // The Study's `origin` (StudyOrigin) — defaults to a plain user-authored
+  // study; set explicitly when running a sequential study (seeded from an
+  // Experiment/Study) or when a Study proposal from DiagnosticsTab's
+  // "Propose a Study" has been loaded for review (kind: "ai").
+  const [studyOrigin, setStudyOrigin] = useState({ kind: "user" });
+  const [studyProposalRationale, setStudyProposalRationale] = useState(null);
   const [sweepSelectedParamB, setSweepSelectedParamB] = useState(null);
   const [sweepMinB, setSweepMinB] = useState(1);
   const [sweepMaxB, setSweepMaxB] = useState(5);
@@ -1298,10 +1333,341 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }), [latestRunId, effectiveRunLabel, seed]);
 
 
+  // ── F-Study: persistence ──────────────────────────────────────────────────
+  // A Study is a saved, evaluated parameter sweep — distinct from a saved
+  // Experiment (a named parameter set, SavedExperimentsTab.jsx). See
+  // src/contracts/study.ts for the StudyDefinition/StudyPoint shapes and
+  // src/db/models.js's saveStudy/getStudy/listStudies/deleteStudy.
+
+  const refreshStudyList = useCallback(async () => {
+    if (!modelId) return;
+    setStudyListStatus("loading");
+    try {
+      const list = await listStudies(modelId);
+      setStudyList(list);
+      setStudyListStatus("loaded");
+    } catch {
+      setStudyListStatus("error");
+    }
+  }, [modelId]);
+
+  useEffect(() => {
+    if (executeSection === "studies" && userId && modelId) {
+      void refreshStudyList();
+    }
+  }, [executeSection, userId, modelId, refreshStudyList]);
+
+  // Sequential plan (Phase 3): load the Experiment list once the "Seed from
+  // Experiment" picker is reachable — the Studies tab, sequential mode.
+  useEffect(() => {
+    if (executeSection === "studies" && sweepMode === "sequential" && modelId) {
+      fetchExperiments(modelId).then(setSeedExperiments).catch(() => setSeedExperiments([]));
+    }
+  }, [executeSection, sweepMode, modelId]);
+
+  // Sequential plan: when "seed from a previous Study" is selected, fetch
+  // that study's points so a specific point can be picked as the seed.
+  useEffect(() => {
+    if (sweepMode === "sequential" && seedSource === "study" && seedStudyId) {
+      getStudy(seedStudyId).then(s => setSeedStudyPoints(s.legacy ? [] : (s.points || []))).catch(() => setSeedStudyPoints([]));
+    } else {
+      setSeedStudyPoints([]);
+    }
+    setSeedStudyPointIndex(0);
+  }, [sweepMode, seedSource, seedStudyId]);
+
+  // Resolves the current seed point (Experiment overrides or a Study point's
+  // params) into a path -> numeric value map, or null if nothing is
+  // selected/resolvable yet.
+  const resolvedSeedValues = useMemo(() => {
+    if (sweepMode !== "sequential") return null;
+    if (seedSource === "experiment") {
+      const exp = seedExperiments.find(e => e.id === seedExperimentId);
+      const overrides = exp?.config?.overrides;
+      if (!Array.isArray(overrides)) return null;
+      return new Map(overrides.map(o => [o.path, parseFloat(o.value)]));
+    }
+    const point = seedStudyPoints[seedStudyPointIndex];
+    if (!point?.params) return null;
+    return new Map(point.params.map(p => [p.path, p.value]));
+  }, [sweepMode, seedSource, seedExperiments, seedExperimentId, seedStudyPoints, seedStudyPointIndex]);
+
+  // Narrows each sampledParams entry's [min, max] to a window of the
+  // configured width (a fraction of the outer range) centred on the
+  // resolved seed value, clamped back inside the outer bounds. Falls back to
+  // the outer range's midpoint for any parameter the seed point doesn't
+  // cover (e.g. an experiment that didn't override every studied parameter).
+  const buildSequentialParameters = useCallback((seedValues) => {
+    return sampledParams.map(p => {
+      const outerWidth = p.max - p.min;
+      const seedVal = seedValues?.get(p.path) ?? (p.min + p.max) / 2;
+      const width = (outerWidth * sequentialSpread) || outerWidth || 1;
+      let lo = seedVal - width / 2;
+      let hi = seedVal + width / 2;
+      if (lo < p.min) { hi = Math.min(p.max, hi + (p.min - lo)); lo = p.min; }
+      if (hi > p.max) { lo = Math.max(p.min, lo - (hi - p.max)); hi = p.max; }
+      if (!(hi > lo)) { lo = p.min; hi = p.max; }
+      return { ...p, min: lo, max: hi };
+    });
+  }, [sampledParams, sequentialSpread]);
+
+  // The StudyParameter list for the current planType — [{...descriptor, range}]
+  // in every mode, so buildStudyPoints/handleLoadStudy/the sensitivity panel
+  // can all treat "which parameters, and their ranges" uniformly regardless
+  // of grid1d/grid2d/sampled.
+  const currentStudyParameters = useCallback(() => {
+    if (sweepMode === "sequential") {
+      return buildSequentialParameters(resolvedSeedValues).map(p => ({ ...p, range: { min: p.min, max: p.max, step: (p.max - p.min) / 10 || 1 } }));
+    }
+    if (sweepMode === "sampled") {
+      return sampledParams.map(p => ({ ...p, range: { min: p.min, max: p.max, step: (p.max - p.min) / 10 || 1 } }));
+    }
+    const parameters = [{ ...sweepSelectedParam, range: { min: sweepMin, max: sweepMax, step: sweepStep } }];
+    if (sweepMode === "2d" && sweepSelectedParamB) {
+      parameters.push({ ...sweepSelectedParamB, range: { min: sweepMinB, max: sweepMaxB, step: sweepStepB } });
+    }
+    return parameters;
+  }, [sweepMode, sampledParams, sweepSelectedParam, sweepSelectedParamB, sweepMin, sweepMax, sweepStep, sweepMinB, sweepMaxB, sweepStepB, buildSequentialParameters, resolvedSeedValues]);
+
+  // A sequential study's origin always carries the seed it was narrowed
+  // around (an Experiment or a previous Study's point) — computed on demand
+  // rather than stored, so the "seed from" pickers stay the single source of
+  // truth; kept in sync with `studyOrigin` for non-sequential modes (user, or
+  // an AI proposal's origin — see the "Propose a Study" hydration effect).
+  const effectiveStudyOrigin = sweepMode === "sequential"
+    ? { kind: seedSource, refId: (seedSource === "experiment" ? seedExperimentId : seedStudyId) || undefined }
+    : studyOrigin;
+
+  const buildStudyDefinition = useCallback((results) => {
+    const metricRef = summaryPathToMetricRef(sweepKpiMetric) || { kind: "summary", field: "avgWait" };
+    return {
+      name: studyName.trim() || `Study — ${new Date().toLocaleDateString()}`,
+      planType: sweepMode === "sequential" ? "sequential" : sweepMode === "sampled" ? "sampled" : sweepMode === "2d" ? "grid2d" : "grid1d",
+      parameters: currentStudyParameters(),
+      goals: model.goals || [],
+      objective: { metricRef, direction: sweepObjectiveDirection },
+      runBudget: { points: results.length, replicationsPerPoint: replications },
+      baseSeed: seed,
+      origin: effectiveStudyOrigin,
+    };
+  }, [sweepMode, currentStudyParameters, sweepKpiMetric, sweepObjectiveDirection, studyName, model, replications, seed, effectiveStudyOrigin]);
+
+  // Aggregated per-point metrics only — never per-replication detail (see
+  // src/db/results-persistence.js's 800KB payload guard and study_points'
+  // schema, which has no field for it).
+  const buildStudyPoints = useCallback((results) => results.map((pt, i) => {
+    const params = (sweepMode === "sampled" || sweepMode === "sequential") ? pt.params
+      : sweepMode === "2d" ? [{ path: sweepSelectedParam?.path, value: pt.valueA }, { path: sweepSelectedParamB?.path, value: pt.valueB }]
+      : [{ path: sweepSelectedParam?.path, value: pt.value }];
+    const metrics = Object.fromEntries(Object.entries(pt.aggregateStats || {}).map(([path, stat]) => [
+      path,
+      { mean: stat?.mean ?? null, ci95Low: stat?.lower ?? null, ci95High: stat?.upper ?? null, min: null, max: null },
+    ]));
+    return {
+      pointIndex: i,
+      params,
+      replications: pt.replications?.length || replications,
+      metrics,
+      feasible: evaluateSweepPointGoals(model.goals || [], pt.aggregateStats || {}).feasible,
+      seed: pt.seed ?? null,
+    };
+  }), [sweepMode, sweepSelectedParam, sweepSelectedParamB, replications, model]);
+
+  const handleSaveStudy = useCallback(async (results) => {
+    if (!userId || !results?.length) return;
+    try {
+      const definition = buildStudyDefinition(results);
+      const points = buildStudyPoints(results);
+      await saveStudy(modelId, userId, definition, points);
+      setSaveStatus({ state: "success", message: `Study saved — ${results.length} point${results.length === 1 ? "" : "s"}.` });
+      void refreshStudyList();
+    } catch (err) {
+      setSaveStatus({ state: "error", message: `Study save failed: ${err?.message || "unknown error"}` });
+    }
+  }, [userId, modelId, sweepSelectedParam, buildStudyDefinition, buildStudyPoints, refreshStudyList]);
+
+  // F-Study Phase 3: "Promote to Experiment" on any sampled/sequential study
+  // point — seeds SavedExperimentsTab's New form with that point's params as
+  // overrides, exactly like the Run tab's "Save as Experiment…" button
+  // (both use the same {path, value} shape), and switches to the Experiments
+  // tab so the user reviews/names/saves it there. `point` is one raw
+  // sweepResults entry — either freshly run (no `.id`, so the resulting
+  // experiment's source_study_point_id is left unset) or rehydrated from a
+  // loaded study via handleLoadStudy (carries `.id` from study_points).
+  const handlePromotePointToExperiment = useCallback((point) => {
+    if (!point?.params?.length) return;
+    setExpFormSeed({
+      overrides: point.params.map(p => ({ path: p.path, value: String(p.value) })),
+      sourceStudyPointId: point.id || undefined,
+    });
+    setExecuteSection("saved-experiments");
+  }, []);
+
+  // Loads a saved study read-only into the existing chart/table views. Only
+  // current-schema studies (schema_version set) are rehydrated into the sweep
+  // form state — legacy blob rows (saved before this schema existed, and
+  // never actually produced by any UI caller) have no defined shape to
+  // rehydrate, so they're surfaced as unavailable rather than guessed at.
+  const handleLoadStudy = useCallback(async (id) => {
+    try {
+      const study = await getStudy(id);
+      if (study.legacy) {
+        setSweepResults(null);
+        setSweepStatus("idle");
+        setSaveStatus({ state: "error", message: "This is a legacy sweep record saved before Studies existed — no structured preview is available." });
+        setLoadedStudyId(id);
+        return;
+      }
+      const def = study.definition || {};
+      const isGrid2d = def.planType === "grid2d";
+      const isSampled = def.planType === "sampled" || def.planType === "sequential";
+      const newMode = def.planType === "sequential" ? "sequential" : def.planType === "sampled" ? "sampled" : isGrid2d ? "2d" : "1d";
+      setSweepMode(newMode);
+      if (isSampled) {
+        setSampledParams((def.parameters || []).map(p => ({ ...p, min: p.range?.min, max: p.range?.max })));
+        setSweepSelectedParam(null);
+        setSweepSelectedParamB(null);
+      } else {
+        setSweepSelectedParam(def.parameters?.[0] || null);
+        setSweepSelectedParamB(isGrid2d ? (def.parameters?.[1] || null) : null);
+      }
+      if (def.objective?.metricRef?.kind === "summary") {
+        setSweepKpiMetric(`summary.${def.objective.metricRef.field}`);
+      }
+      setSweepObjectiveDirection(def.objective?.direction || "min");
+      setStudyName(def.name || "");
+      setStudyOrigin(def.origin || { kind: "user" });
+      const rebuilt = (study.points || []).map(p => {
+        const aggregateStats = Object.fromEntries(Object.entries(p.metrics || {}).map(([path, m]) => [
+          path, { n: p.replications, mean: m.mean, lower: m.ci95Low, upper: m.ci95High },
+        ]));
+        // Dummy-length array so the results table's "Reps" column (which only
+        // reads .length) renders correctly, without carrying back any
+        // per-replication detail that was never persisted in the first place.
+        const replicationsPlaceholder = new Array(p.replications || 0).fill(null);
+        // `id` is kept (unlike every other rebuilt field) so a loaded study's
+        // points can be promoted to an Experiment with source_study_point_id
+        // set — see handlePromotePointToExperiment.
+        if (isSampled) return { id: p.id, params: p.params, seed: p.seed, replications: replicationsPlaceholder, aggregateStats };
+        return isGrid2d
+          ? { id: p.id, valueA: p.params?.[0]?.value, valueB: p.params?.[1]?.value, seed: p.seed, replications: replicationsPlaceholder, aggregateStats }
+          : { id: p.id, value: p.params?.[0]?.value, seed: p.seed, replications: replicationsPlaceholder, aggregateStats };
+      });
+      setSweepResults(rebuilt);
+      setSweepStatus(rebuilt.length ? "complete" : "idle");
+      setSensitivityRanking(isSampled && rebuilt.length
+        ? computeSensitivityRanking(rebuilt, def.parameters || [], def.objective?.metricRef ? `summary.${def.objective.metricRef.field}` : null)
+        : null);
+      setLoadedStudyId(id);
+    } catch (err) {
+      setSaveStatus({ state: "error", message: `Failed to load study: ${err?.message || "unknown error"}` });
+    }
+  }, []);
+
+  // F-Study Phase 3: hydrates the Studies form from an AI-proposed (or
+  // AI-narrowed) StudyDefinition for review/edit — nothing runs until the
+  // user clicks Run. Shared by both proposal entry points: DiagnosticsTab's
+  // "Propose a Study" (via studyProposalTrigger, below) and this tab's own
+  // "Propose next study" (handleProposeNextStudy, below).
+  const applyStudyProposal = useCallback((definition, rationale) => {
+    const isSequential = definition.planType === "sequential";
+    const isSampled = definition.planType === "sampled" || isSequential;
+    const isGrid2d = definition.planType === "grid2d";
+    setSweepResults(null);
+    setSensitivityRanking(null);
+    setComparisonResult(null);
+    setLoadedStudyId(null);
+    setSweepMode(isSequential ? "sequential" : isSampled ? "sampled" : isGrid2d ? "2d" : "1d");
+    if (isSampled) {
+      setSampledParams(definition.parameters.map(p => ({ ...p, min: p.range?.min, max: p.range?.max })));
+      setSweepSelectedParam(null);
+      setSweepSelectedParamB(null);
+      // The AI already gives the exact range to run (narrowed, for a
+      // sequential proposal) — a spread of 1 with no seed selected makes
+      // buildSequentialParameters() reproduce that range unchanged (see its
+      // midpoint-seed fallback) rather than narrowing it again.
+      if (isSequential) { setSequentialSpread(1); setSeedExperimentId(""); setSeedStudyId(""); }
+    } else {
+      setSweepSelectedParam(definition.parameters[0] || null);
+      setSweepSelectedParamB(isGrid2d ? (definition.parameters[1] || null) : null);
+      if (definition.parameters[0]?.range) {
+        setSweepMin(String(definition.parameters[0].range.min));
+        setSweepMax(String(definition.parameters[0].range.max));
+        setSweepStep(String(definition.parameters[0].range.step));
+      }
+      if (isGrid2d && definition.parameters[1]?.range) {
+        setSweepMinB(String(definition.parameters[1].range.min));
+        setSweepMaxB(String(definition.parameters[1].range.max));
+        setSweepStepB(String(definition.parameters[1].range.step));
+      }
+    }
+    if (definition.objective?.metricRef?.kind === "summary") {
+      setSweepKpiMetric(`summary.${definition.objective.metricRef.field}`);
+    }
+    setSweepObjectiveDirection(definition.objective?.direction || "min");
+    setStudyName(definition.name || "");
+    if (definition.runBudget?.points > 0) setSampledPointCount(definition.runBudget.points);
+    if (definition.runBudget?.replicationsPerPoint > 0) setReplications(definition.runBudget.replicationsPerPoint);
+    setStudyOrigin(definition.origin);
+    setStudyProposalRationale(rationale || null);
+    setExecuteSection("studies");
+    setSweepOpen(true);
+  }, []);
+
+  // Cross-panel entry point: DiagnosticsTab.jsx's "Propose a Study" (via
+  // AiAssistantPanel -> ModelDetail.jsx) delivers its validated proposal
+  // here as { payload, origin, seq } — seq increments on every proposal so
+  // the effect fires even if the same payload is proposed twice in a row.
+  const appliedProposalSeqRef = useRef(0);
+  useEffect(() => {
+    if (!studyProposalTrigger || studyProposalTrigger.seq === appliedProposalSeqRef.current) return;
+    appliedProposalSeqRef.current = studyProposalTrigger.seq;
+    const paramsForLookup = sweepParams.length ? sweepParams : enumerateSweepableParams(model);
+    const definition = buildStudyDefinitionFromProposal(studyProposalTrigger.payload, paramsForLookup, {
+      goals: model.goals || [],
+      baseSeed: seed,
+      origin: studyProposalTrigger.origin,
+    });
+    applyStudyProposal(definition, studyProposalTrigger.payload?.rationale);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studyProposalTrigger]);
+
+  // In-tab entry point: "Propose next study" on a finished/loaded
+  // sampled/sequential study with a sensitivity ranking — asks the AI to
+  // narrow the ranges around the best point found (buildProposeNextStudyPrompt,
+  // src/llm/prompts.js). Requires a saved study id (loadedStudyId) so the
+  // proposal's origin can point back at it (parent_study_id).
+  const [proposeNextStudyStatus, setProposeNextStudyStatus] = useState("idle"); // idle | loading | error
+  const handleProposeNextStudy = useCallback(async () => {
+    if (!loadedStudyId || !sweepResults?.length) return;
+    setProposeNextStudyStatus("loading");
+    try {
+      const definitionSoFar = buildStudyDefinition(sweepResults);
+      const paramsForLookup = sweepParams.length ? sweepParams : enumerateSweepableParams(model);
+      const prompt = buildProposeNextStudyPrompt(definitionSoFar, buildStudyPoints(sweepResults), sensitivityRanking, paramsForLookup);
+      const raw = await callLLMOnce(prompt);
+      const parsed = tryExtractJson(raw.trim());
+      const validation = validateStudyProposal(parsed, paramsForLookup);
+      if (!validation.valid) throw new Error(`AI proposal failed validation: ${validation.errors.join("; ")}`);
+      const definition = buildStudyDefinitionFromProposal(parsed, paramsForLookup, {
+        goals: model.goals || [],
+        baseSeed: seed,
+        origin: { kind: "study", refId: loadedStudyId },
+      });
+      applyStudyProposal(definition, parsed.rationale);
+      setProposeNextStudyStatus("idle");
+    } catch (err) {
+      setProposeNextStudyStatus("error");
+      setSaveStatus({ state: "error", message: `Propose next study failed: ${err?.message || "unknown error"}` });
+    }
+  }, [loadedStudyId, sweepResults, sensitivityRanking, sweepParams, model, seed, buildStudyDefinition, buildStudyPoints, applyStudyProposal]);
+
   const handleRunSweep = useCallback(() => {
     if (hasAdmissionErrors) return;
     if (sweepMode === "1d" && !sweepSelectedParam) return;
     if (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB)) return;
+    if ((sweepMode === "sampled" || sweepMode === "sequential") && (!sampledParams.length || sampledParams.some(p => !(p.max > p.min)))) return;
+    if (sweepMode === "sequential" && !resolvedSeedValues) return;
 
     // Range fields hold the raw typed string while editing (see the MIN/MAX/STEP
     // inputs below — storing the parsed number there fought the browser's own
@@ -1318,12 +1684,59 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSweepResults(null);
     setSweepProgress(null);
     setSweepGridError(null);
+    setSensitivityRanking(null);
+    setLoadedStudyId(null);
 
-    if (sweepMode === "2d") {
+    if (sweepMode === "sampled" || sweepMode === "sequential") {
+      const objectivePath = sweepKpiMetric;
+      const parameters = currentStudyParameters();
+
+      const onSampledComplete = (results) => {
+        setSensitivityRanking(computeSensitivityRanking(results, parameters, objectivePath));
+        void handleSaveStudy(results);
+      };
+
+      sweepRunnerRef.current = runSweepOffthread({
+        model,
+        planType: sweepMode === "sequential" ? "sequential" : "sampled",
+        parameters,
+        points: sampledPointCount,
+        replications,
+        baseSeed: seed,
+        warmupPeriod,
+        maxSimTime: terminationMode === "time" ? maxSimTime : null,
+        terminationCondition: terminationMode === "condition" ? terminationCondition : null,
+        collectTimeSeries: runAdmission.effectiveSettings.collectTimeSeries,
+        schedulesMap: activeSchedulesMap,
+        onProgress(progress) {
+          setSweepProgress(progress);
+        },
+        onPointComplete(pointResult) {
+          setSweepResults(prev => [...(prev || []), pointResult]);
+        },
+        onError(error) {
+          setSweepStatus("error");
+          setSaveStatus({ state: "error", message: error?.pointIndex != null ? `Study error at point ${error.pointIndex}: ${error.message}` : `Study error: ${error.message}` });
+        },
+        onComplete(results) {
+          setSweepStatus("complete");
+          setSweepResults(results);
+          setSaveStatus({ state: "success", message: `Study complete: ${results.length} points run.` });
+          onSampledComplete(results);
+        },
+        onCancelled(partial) {
+          setSweepStatus("complete");
+          setSweepResults(partial.results);
+          setSaveStatus({ state: "success", message: `Study cancelled after ${partial.completedPoints} points.` });
+          onSampledComplete(partial.results);
+        },
+      });
+    } else if (sweepMode === "2d") {
       try {
         generate2DSweepValues(
           { min, max, step },
-          { min: minB, max: maxB, step: stepB }
+          { min: minB, max: maxB, step: stepB },
+          replications
         );
       } catch (err) {
         setSweepGridError(err.message);
@@ -1359,11 +1772,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           setSweepStatus("complete");
           setSweepResults(results);
           setSaveStatus({ state: "success", message: `Sweep complete: ${results.length} points run.` });
+          void handleSaveStudy(results);
         },
         onCancelled(partial) {
           setSweepStatus("complete");
           setSweepResults(partial.results);
           setSaveStatus({ state: "success", message: `Sweep cancelled after ${partial.completedPoints} points.` });
+          void handleSaveStudy(partial.results);
         },
       });
     } else {
@@ -1394,17 +1809,21 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           setSweepStatus("complete");
           setSweepResults(results);
           setSaveStatus({ state: "success", message: `Sweep complete: ${results.length} points run.` });
+          void handleSaveStudy(results);
         },
         onCancelled(partial) {
           setSweepStatus("complete");
           setSweepResults(partial.results);
           setSaveStatus({ state: "success", message: `Sweep cancelled after ${partial.completedPoints} points.` });
+          void handleSaveStudy(partial.results);
         },
       });
     }
   }, [model, sweepMode, sweepSelectedParam, sweepSelectedParamB, sweepMin, sweepMax, sweepStep,
-      sweepMinB, sweepMaxB, sweepStepB, replications, seed, warmupPeriod, maxSimTime,
-      terminationMode, terminationCondition, collectTimeSeries, hasAdmissionErrors, runAdmission]);
+      sweepMinB, sweepMaxB, sweepStepB, sampledParams, sampledPointCount, sweepKpiMetric,
+      currentStudyParameters, replications, seed, warmupPeriod, maxSimTime,
+      terminationMode, terminationCondition, collectTimeSeries, hasAdmissionErrors, runAdmission,
+      resolvedSeedValues, handleSaveStudy]);
 
   const handleCancelSweep = useCallback(() => {
     sweepRunnerRef.current?.cancel();
@@ -1417,14 +1836,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         {[
           { id: "run", label: "Run" },
           { id: "saved-experiments", label: "Experiments" },
-          { id: "experiments", label: "Studies" },
+          { id: "studies", label: "Studies" },
         ].map(section => (
           <Btn
             key={section.id}
             small
             variant={executeSection === section.id ? "primary" : "ghost"}
             onClick={() => {
-              if (section.id === "experiments" && !sweepOpen) { setSweepParams(enumerateSweepableParams(model)); setSweepOpen(true); }
+              if (section.id === "studies" && !sweepOpen) { setSweepParams(enumerateSweepableParams(model)); setSweepOpen(true); }
               if (section.id === "run") {
                 setHideRunReadiness(false);
                 if (executeSection !== "run") {
@@ -1494,7 +1913,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         onFormSeedConsumed={() => setExpFormSeed(null)}
       />
 
-      {executeSection === "experiments" && (
+      {executeSection === "studies" && (
       <div style={{ maxWidth: 1120, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div>
@@ -1502,6 +1921,41 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, marginTop: 2 }}>Parametric sweep and adaptive batch exploration</div>
         </div>
       </div>
+      {userId && (
+        <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PAST STUDIES</span>
+            {studyListStatus === "loading" && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Loading…</span>}
+          </div>
+          {studyListStatus === "loaded" && studyList.length === 0 && (
+            <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>No studies saved yet for this model.</span>
+          )}
+          {studyListStatus === "error" && (
+            <span style={{ fontSize: 11, color: C.red, fontFamily: FONT }}>Couldn't load past studies.</span>
+          )}
+          {studyList.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 160, overflowY: "auto" }}>
+              {studyList.map(s => (
+                <div key={s.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                  padding: "5px 8px", borderRadius: 5,
+                  background: loadedStudyId === s.id ? alpha(C.accent, 0.12) : "transparent",
+                }}>
+                  <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    <span style={{ fontSize: 12, color: C.text, fontFamily: FONT, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {s.name}{s.legacy && <span style={{ color: C.muted, fontWeight: 400 }}> (legacy)</span>}
+                    </span>
+                    <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                      {s.planType || "—"} · {s.status || "—"} · {new Date(s.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <Btn small variant="ghost" onClick={() => handleLoadStudy(s.id)}>Load</Btn>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         {(sweepStatus === "running" || sweepStatus === "complete" || sweepStatus === "error") && (
           <div style={{ padding: "8px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 8 }}>
@@ -1512,23 +1966,120 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         )}
         <div style={{ padding: "16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
-              Vary one or two parameters across a range to see how KPIs respond. Each point runs multiple replications for statistical confidence. Results are shown in charts and tables but are not saved to run history.
+              Vary one or two parameters across a range to see how KPIs respond. Each point runs multiple replications for statistical confidence.
+              {userId
+                ? " Every completed study is saved automatically and appears in the studies list above."
+                : " Sign in to save completed studies — results are only shown for this session."}
             </div>
             {/* Mode toggle */}
             <div style={{ display: "flex", gap: 2, background: C.bg, borderRadius: 5, padding: 2, width: "fit-content" }}>
               <button
-                onClick={() => { setSweepMode("1d"); setSweepResults(null); setComparisonResult(null); }}
+                onClick={() => { setSweepMode("1d"); setSweepResults(null); setComparisonResult(null); setStudyOrigin({ kind: "user" }); setStudyProposalRationale(null); }}
                 style={{ background: sweepMode === "1d" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepMode === "1d" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
                 1D Sweep
               </button>
               <button
-                onClick={() => { setSweepMode("2d"); setSweepResults(null); setComparisonResult(null); }}
+                onClick={() => { setSweepMode("2d"); setSweepResults(null); setComparisonResult(null); setStudyOrigin({ kind: "user" }); setStudyProposalRationale(null); }}
                 style={{ background: sweepMode === "2d" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepMode === "2d" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
                 2D Sweep
               </button>
+              <button
+                onClick={() => { setSweepMode("sampled"); setSweepResults(null); setComparisonResult(null); setSensitivityRanking(null); setStudyOrigin({ kind: "user" }); setStudyProposalRationale(null); }}
+                style={{ background: sweepMode === "sampled" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepMode === "sampled" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
+                Sampled
+              </button>
+              <button
+                onClick={() => { setSweepMode("sequential"); setSweepResults(null); setComparisonResult(null); setSensitivityRanking(null); setSequentialSpread(0.3); setStudyProposalRationale(null); }}
+                style={{ background: sweepMode === "sequential" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepMode === "sequential" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
+                Sequential
+              </button>
             </div>
 
-            {/* Parameter picker(s) */}
+            {studyProposalRationale && (
+              <div style={{ background: alpha(C.accent, 0.08), border: `1px solid ${alpha(C.accent, 0.35)}`, borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ fontSize: 11, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
+                  <strong style={{ color: C.accent }}>AI proposal loaded</strong> — review the parameters/budget below, then click Run to execute it. {studyProposalRationale}
+                </span>
+                <Btn small variant="ghost" onClick={() => setStudyProposalRationale(null)}>Dismiss</Btn>
+              </div>
+            )}
+
+            {(sweepMode === "sampled" || sweepMode === "sequential") && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                  {sweepMode === "sequential"
+                    ? "Draws a Latin hypercube sample narrowed around a seed point (a saved Experiment or a point from a previous Study) within the outer range set for each parameter below."
+                    : "Draws a Latin hypercube sample across every parameter added below — spread evenly across each parameter's range rather than a fixed grid — and ranks which parameters matter most to the objective."}
+                </div>
+                <SampledParamRangeList
+                  sampledParams={sampledParams}
+                  setSampledParams={setSampledParams}
+                  sweepParams={sweepParams}
+                  pickerOpen={sampledPickerOpen}
+                  setPickerOpen={setSampledPickerOpen}
+                />
+                {sweepMode === "sequential" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10 }}>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SEED FROM</span>
+                    <div style={{ display: "flex", gap: 2, background: C.cardBg, borderRadius: 5, padding: 2, width: "fit-content" }}>
+                      <button onClick={() => setSeedSource("experiment")}
+                        style={{ background: seedSource === "experiment" ? C.border : "transparent", border: "none", borderRadius: 4, color: seedSource === "experiment" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "4px 10px" }}>
+                        Experiment
+                      </button>
+                      <button onClick={() => setSeedSource("study")}
+                        style={{ background: seedSource === "study" ? C.border : "transparent", border: "none", borderRadius: 4, color: seedSource === "study" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "4px 10px" }}>
+                        Previous Study
+                      </button>
+                    </div>
+                    {seedSource === "experiment" ? (
+                      <select aria-label="Seed experiment" value={seedExperimentId} onChange={e => setSeedExperimentId(e.target.value)}
+                        style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }}>
+                        <option value="">Select an experiment…</option>
+                        {seedExperiments.map(exp => <option key={exp.id} value={exp.id}>{exp.name}</option>)}
+                      </select>
+                    ) : (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <select aria-label="Seed study" value={seedStudyId} onChange={e => setSeedStudyId(e.target.value)}
+                          style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }}>
+                          <option value="">Select a study…</option>
+                          {studyList.filter(s => !s.legacy).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                        {seedStudyPoints.length > 0 && (
+                          <select aria-label="Seed point" value={seedStudyPointIndex} onChange={e => setSeedStudyPointIndex(parseInt(e.target.value, 10) || 0)}
+                            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }}>
+                            {seedStudyPoints.map((p, i) => <option key={p.id || i} value={i}>Point {p.pointIndex} {p.feasible === true ? "✓" : p.feasible === false ? "✗" : ""}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>NARROW TO</span>
+                      <input type="number" aria-label="Narrowed range width, as a fraction of the outer range" min={0.05} max={1} step={0.05} value={sequentialSpread}
+                        onChange={e => setSequentialSpread(Math.min(1, Math.max(0.05, parseFloat(e.target.value) || 0.3)))}
+                        style={{ width: 70, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }} />
+                      <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>× each parameter's outer range width, centred on the seed point</span>
+                    </div>
+                    {!resolvedSeedValues && <span style={{ fontSize: 11, color: C.amber, fontFamily: FONT }}>Select a seed to narrow the ranges above.</span>}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 100 }}>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>POINTS</span>
+                    <input type="number" aria-label="Sampled study point count" min={1} value={sampledPointCount}
+                      onChange={e => setSampledPointCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: 90 }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+                    {sampledPointCount * replications > MAX_STUDY_REPLICATIONS
+                      ? `⚠ ${sampledPointCount} points x ${replications} replications = ${sampledPointCount * replications} replications, exceeding the ${MAX_STUDY_REPLICATIONS.toLocaleString()}-replication budget.`
+                      : `${sampledPointCount} points x ${replications} replications = ${sampledPointCount * replications} replications`}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Parameter picker(s) — 1D/2D only; sampled/sequential use SampledParamRangeList above */}
+            {sweepMode !== "sampled" && sweepMode !== "sequential" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>{sweepMode === "2d" ? "PARAMETER X" : "PARAMETER"}</span>
               {sweepSelectedParam ? (
@@ -1571,6 +2122,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 />
               )}
             </div>
+            )}
 
             {sweepMode === "2d" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1618,8 +2170,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             )}
 
             {/* Range config */}
-            {sweepSelectedParam && (
+            {((sweepMode === "sampled" || sweepMode === "sequential") ? sampledParams.length > 0 : sweepSelectedParam) && (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {sweepMode !== "sampled" && sweepMode !== "sequential" && (
+                <>
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
                     <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN {sweepMode === "2d" ? "X" : ""}</span>
@@ -1671,11 +2225,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         try {
                           const grid = generate2DSweepValues(
                             { min: parseFloat(sweepMin) || 0, max: parseFloat(sweepMax) || 0, step: parseFloat(sweepStep) || 0 },
-                            { min: parseFloat(sweepMinB) || 0, max: parseFloat(sweepMaxB) || 0, step: parseFloat(sweepStepB) || 0 }
+                            { min: parseFloat(sweepMinB) || 0, max: parseFloat(sweepMaxB) || 0, step: parseFloat(sweepStepB) || 0 },
+                            replications
                           );
-                          const rows = Math.round(grid.length / (grid.filter(p => p.valueA === grid[0].valueA).length || 1));
-                          const cols = grid.filter(p => p.valueA === grid[0].valueA).length;
-                          return `${rows} x ${cols} = ${grid.length} points`;
+                          const rows = new Set(grid.map(p => p.valueA)).size;
+                          const cols = new Set(grid.map(p => p.valueB)).size;
+                          return `${rows} x ${cols} = ${grid.length} points (${grid.length * replications} replications)`;
                         } catch (err) {
                           return err.message;
                         }
@@ -1695,9 +2250,45 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                     ⚠ 2D sweeps run all grid points sequentially and can take 30–90s for larger grids. Consider a 1D sweep for quicker feedback.
                   </div>
                 )}
+                </>
+                )}
+
+                {/* F-Study: name + objective — saved with the study when the run completes */}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 2, minWidth: 160 }}>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STUDY NAME</span>
+                    <input type="text" aria-label="Study name" value={studyName} placeholder={`Study — ${new Date().toLocaleDateString()}`}
+                      onChange={e => setStudyName(e.target.value)}
+                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: "100%" }} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 140 }}>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>OBJECTIVE</span>
+                    <select aria-label="Objective metric" value={sweepKpiMetric} onChange={e => setSweepKpiMetric(e.target.value)}
+                      style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }}>
+                      {CI_METRICS.map(m => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>DIRECTION</span>
+                    <div style={{ display: "flex", gap: 2, background: C.bg, borderRadius: 5, padding: 2 }}>
+                      <button onClick={() => setSweepObjectiveDirection("min")}
+                        style={{ background: sweepObjectiveDirection === "min" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepObjectiveDirection === "min" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 10px" }}>
+                        Minimise
+                      </button>
+                      <button onClick={() => setSweepObjectiveDirection("max")}
+                        style={{ background: sweepObjectiveDirection === "max" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepObjectiveDirection === "max" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 10px" }}>
+                        Maximise
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <Btn variant="primary" onClick={handleRunSweep}
-                    disabled={sweepStatus === "running" || hasAdmissionErrors || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))}>
+                    disabled={sweepStatus === "running" || hasAdmissionErrors
+                      || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))
+                      || ((sweepMode === "sampled" || sweepMode === "sequential") && (!sampledParams.length || sampledParams.some(p => !(p.max > p.min))))
+                      || (sweepMode === "sequential" && !resolvedSeedValues)}>
                     {sweepStatus === "running" ? "Running..." : "Run Sweep"}
                   </Btn>
                   {sweepStatus === "running" && (
@@ -1777,6 +2368,34 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         </tbody>
                       </table>
                     </div>
+                  </>
+                )}
+
+                {/* Sampled/sequential results: N-parameter table + sensitivity ranking */}
+                {(sweepMode === "sampled" || sweepMode === "sequential") && (
+                  <>
+                    <SampledResultsTable
+                      results={sweepResults}
+                      parameters={currentStudyParameters()}
+                      objectiveMetric={sweepKpiMetric}
+                      objectiveDirection={sweepObjectiveDirection}
+                      goals={model.goals || []}
+                      evaluateFeasible={aggregateStats => evaluateSweepPointGoals(model.goals || [], aggregateStats).feasible}
+                      onPromote={userId ? handlePromotePointToExperiment : undefined}
+                    />
+                    {sensitivityRanking && (
+                      <SensitivityPanel method={sensitivityRanking.method} ranking={sensitivityRanking.ranking} />
+                    )}
+                    {userId && loadedStudyId && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <Btn small variant="ghost" disabled={proposeNextStudyStatus === "loading"} onClick={handleProposeNextStudy}>
+                          {proposeNextStudyStatus === "loading" ? "Asking AI…" : "Propose next study"}
+                        </Btn>
+                        <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                          Narrows these ranges around the best point found — you review before running.
+                        </span>
+                      </div>
+                    )}
                   </>
                 )}
 

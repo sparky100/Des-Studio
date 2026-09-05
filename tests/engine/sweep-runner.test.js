@@ -7,7 +7,7 @@ vi.mock("../../src/engine/replication-runner.js", () => ({
   createReplicationPool: () => ({ destroyed: false, get: vi.fn(), destroy: vi.fn() }),
 }));
 
-import { runSweep, run2DSweep, runSweepOffthread } from "../../src/engine/sweep-runner.js";
+import { runSweep, run2DSweep, runSampledStudy, runSweepOffthread, runStudyOffthread } from "../../src/engine/sweep-runner.js";
 
 function makeMockReplications(count, overrides = {}) {
   return Array.from({ length: count }, (_, i) => ({
@@ -312,8 +312,89 @@ describe("run2DSweep", () => {
   });
 });
 
-describe("runSweepOffthread", () => {
-  test("falls back to run2DSweep when Worker is undefined", async () => {
+describe("runSampledStudy", () => {
+  const parameters = [
+    { path: "entityTypes.et1.count", label: "Server count", type: "entityTypeCount", range: { min: 1, max: 5 } },
+    { path: "bEvents.b1.schedules.distParams.mean", label: "Arrival mean", type: "bEventDistParam", range: { min: 1, max: 3 } },
+  ];
+
+  test("runs exactly `points` points and returns one result each", async () => {
+    const results = await new Promise((resolve, reject) => {
+      runSampledStudy({
+        model, parameters, points: 5, replications: 2, baseSeed: 1,
+        onError: reject, onComplete: resolve,
+      });
+    });
+
+    expect(results.length).toBe(5);
+    for (const pt of results) {
+      expect(pt.params).toHaveLength(2);
+      expect(pt.aggregateStats).toBeDefined();
+      expect(pt.aggregateStats["summary.served"]).toBeDefined();
+    }
+  });
+
+  test("assigns unique seeds per point (baseSeed + pointIndex * 10000)", async () => {
+    const results = await new Promise((resolve, reject) => {
+      runSampledStudy({
+        model, parameters, points: 3, replications: 1, baseSeed: 5,
+        onError: reject, onComplete: resolve,
+      });
+    });
+
+    const seeds = results.map(r => r.seed).sort((a, b) => a - b);
+    expect(seeds).toEqual([5, 10005, 20005]);
+  });
+
+  test("calls onPointComplete for each sampled point", async () => {
+    const pointSpy = vi.fn();
+    await new Promise((resolve, reject) => {
+      runSampledStudy({
+        model, parameters, points: 4, replications: 1,
+        onPointComplete: pointSpy, onError: reject, onComplete: resolve,
+      });
+    });
+    expect(pointSpy).toHaveBeenCalledTimes(4);
+  });
+
+  test("is deterministic — the same baseSeed and inputs produce the same point coordinates", async () => {
+    const run = () => new Promise((resolve, reject) => {
+      runSampledStudy({ model, parameters, points: 6, replications: 1, baseSeed: 77, onError: reject, onComplete: resolve });
+    });
+    const a = await run();
+    const b = await run();
+    expect(a.map(r => r.params)).toEqual(b.map(r => r.params));
+  });
+
+  test("routes a budget-guard failure through onError instead of throwing synchronously", async () => {
+    const error = await new Promise((resolve) => {
+      runSampledStudy({
+        model, parameters, points: 5000, replications: 1,
+        onError: resolve, onComplete: () => resolve(null),
+      });
+    });
+    expect(error).not.toBeNull();
+    expect(error.message).toMatch(/replication budget/);
+  });
+
+  test("routes a missing-parameters failure through onError instead of throwing synchronously", async () => {
+    const error = await new Promise((resolve) => {
+      runSampledStudy({
+        model, parameters: [], points: 5,
+        onError: resolve, onComplete: () => resolve(null),
+      });
+    });
+    expect(error).not.toBeNull();
+    expect(error.message).toMatch(/at least one parameter/);
+  });
+});
+
+describe("runSweepOffthread / runStudyOffthread", () => {
+  test("runSweepOffthread is the same function as runStudyOffthread (back-compat alias)", () => {
+    expect(runSweepOffthread).toBe(runStudyOffthread);
+  });
+
+  test("falls back to run2DSweep when Worker is undefined and no planType is given", async () => {
     // In node, Worker is undefined — runSweepOffthread delegates to run2DSweep
     const results = await new Promise((resolve, reject) => {
       runSweepOffthread({
@@ -327,6 +408,21 @@ describe("runSweepOffthread", () => {
     });
 
     expect(results.length).toBe(4);
+  });
+
+  test("falls back to runSampledStudy when Worker is undefined and planType is 'sampled'", async () => {
+    const parameters = [
+      { path: "entityTypes.et1.count", label: "Server count", type: "entityTypeCount", range: { min: 1, max: 5 } },
+    ];
+    const results = await new Promise((resolve, reject) => {
+      runStudyOffthread({
+        model, planType: "sampled", parameters, points: 3, replications: 1,
+        onError: reject, onComplete: resolve,
+      });
+    });
+
+    expect(results.length).toBe(3);
+    expect(results[0].params).toHaveLength(1);
   });
 });
 

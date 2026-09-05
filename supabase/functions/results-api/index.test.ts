@@ -60,7 +60,7 @@ function makeHandler(opts: {
             order: () => ({ limit: async () => ({ data: run ? [run] : [], error: runError ? new Error("db") : null }) }),
             single: async () => {
               if (table === "share_links") return { data: linkError ? null : link, error: linkError ? new Error("db") : null };
-              if (table === "sweeps")      return { data: sweepError ? null : run, error: sweepError ? new Error("db") : null };
+              if (table === "studies")     return { data: sweepError ? null : run, error: sweepError ? new Error("db") : null };
               return { data: runError ? null : run, error: runError ? new Error("db") : null };
             },
           }),
@@ -125,10 +125,10 @@ async function routeRequest(req: Request, mockClient: ReturnType<typeof makeHand
     return j(200, { runs: [] });
   }
 
-  if (resource === "sweeps" && id) {
-    const { data: sweep, error } = await mockClient.from("sweeps").select().eq("id", id).eq("run_by", (user as { id: string }).id).single();
-    if (error || !sweep) return j(404, { error: "Sweep not found" });
-    return j(200, { id: (sweep as Record<string, unknown>).id });
+  if ((resource === "sweeps" || resource === "studies") && id) {
+    const { data: study, error } = await mockClient.from("studies").select().eq("id", id).eq("run_by", (user as { id: string }).id).single();
+    if (error || !study) return j(404, { error: "Study not found" });
+    return j(200, { id: (study as Record<string, unknown>).id });
   }
 
   return j(404, { error: "Unknown route" });
@@ -205,9 +205,19 @@ Deno.test("GET /runs?modelId= with valid JWT returns runs list", async () => {
   assertEquals(Array.isArray(body.runs), true);
 });
 
-Deno.test("GET /sweeps/:sweepId with valid JWT returns sweep data", async () => {
+Deno.test("GET /sweeps/:id with valid JWT returns study data (legacy alias route)", async () => {
   const res = await routeRequest(
     makeRequest("sweeps/sweep-1", { token: "valid" }),
+    makeHandler({})
+  );
+  assertEquals(res.status, 200);
+  const body = await parseJson(res);
+  assertEquals(body.id, "run-1");
+});
+
+Deno.test("GET /studies/:id with valid JWT returns study data", async () => {
+  const res = await routeRequest(
+    makeRequest("studies/study-1", { token: "valid" }),
     makeHandler({})
   );
   assertEquals(res.status, 200);

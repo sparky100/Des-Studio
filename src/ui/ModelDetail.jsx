@@ -336,6 +336,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [showResultsSnapshot,setShowResultsSnapshot]=useState(false);
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const [notesEditing,setNotesEditing]=useState(false);
+  // F-Study Phase 3: carries a "Propose a Study" result from DiagnosticsTab
+  // (inside the sibling AiAssistantPanel) over to ExecutePanel's Studies tab
+  // for review — mirrors the aiAction/aiSeq pattern above (a seq counter so
+  // the same proposal re-fires even if proposed twice in a row).
+  const [studyProposal,setStudyProposal]=useState(null);
+  const [studyProposalSeq,setStudyProposalSeq]=useState(0);
   const runWithPatchRef = useRef(null);
   const fitAllRef = useRef(null);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
@@ -1417,6 +1423,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               onExposeRunApi={fn => { runWithPatchRef.current = fn; }}
               onRunStateChange={setExecuteRunning}
               schedulesVersion={schedulesVersion}
+              studyProposalTrigger={studyProposal ? { payload: studyProposal.payload, origin: studyProposal.origin, seq: studyProposalSeq } : null}
               modelAssistantOpen={aiSidebarOpen}
               onOpenModelAssistant={() => {
                 if (aiSidebarOpen) {
@@ -1666,6 +1673,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           } : null}
           onOpenOptimise={() => setShowOptimisePanel(true)}
           onClose={()=>{setAiSidebarOpen(false);setAiAction(null);}}
+          runId={selectedResultsRunId || null}
+          userId={overrides.userId}
+          currentVersionId={currentVersionId}
+          onProposeStudy={(proposal) => {
+            setStudyProposal(proposal);
+            setStudyProposalSeq(s => s + 1);
+            setTab("execute");
+            setAiSidebarOpen(false);
+            setAiAction(null);
+          }}
         />
       )}
       {showResultsSnapshot && latestResults?._model_snapshot && (

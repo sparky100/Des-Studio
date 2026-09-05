@@ -393,6 +393,10 @@ export const AiAssistantPanel = ({
   onDiagnosticsNodeSelect = null,
   onRefineInDescribe = null,
   onOpenOptimise = null,
+  runId = null,
+  userId = null,
+  currentVersionId = null,
+  onProposeStudy = null,
 }) => {
   const { C, FONT } = useTheme();
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -1271,7 +1275,12 @@ export const AiAssistantPanel = ({
               }}>{"\u26A1"} Optimise</button>}
           </div>
           {runModeToggle !== "design" && (
-            <DiagnosticsTab mode={runModeToggle} model={model} results={results} onGoToNode={onDiagnosticsNodeSelect || (() => {})} />
+            <DiagnosticsTab
+              mode={runModeToggle} model={model} results={results}
+              onGoToNode={onDiagnosticsNodeSelect || (() => {})}
+              runId={runId} userId={userId} versionId={currentVersionId}
+              onProposeStudy={onProposeStudy}
+            />
           )}
         </>
       )}

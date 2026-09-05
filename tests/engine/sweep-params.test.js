@@ -1,5 +1,9 @@
 import { describe, test, expect } from "vitest";
-import { enumerateSweepableParams, applySweepValue, applySweepValues, generateSweepValues, generate2DSweepValues } from "../../src/engine/sweep-params.js";
+import {
+  enumerateSweepableParams, applySweepValue, applySweepValues,
+  generateSweepValues, generate2DSweepValues, sampleLatinHypercube,
+  isIntegerParamType, checkStudyBudget, MAX_STUDY_REPLICATIONS,
+} from "../../src/engine/sweep-params.js";
 import { TEMPLATES } from "../../src/engine/templates.js";
 
 describe("generateSweepValues", () => {
@@ -13,14 +17,147 @@ describe("generateSweepValues", () => {
     expect(values).toEqual([0, 0.25, 0.5, 0.75, 1]);
   });
 
-  test("caps at 50 points", () => {
+  // Sprint F-Study Phase 2: the old flat "cap at 50, silently decimate" was
+  // replaced by a replication-budget guard (points x replicationsPerPoint),
+  // since the number of points alone isn't what determines run cost.
+  test("no longer silently caps at 50 — a 101-point sweep at 1 replication each is well under the budget", () => {
     const values = generateSweepValues(0, 100, 1);
-    expect(values.length).toBeLessThanOrEqual(50);
+    expect(values.length).toBe(101);
+  });
+
+  test("throws a clear error when points x replicationsPerPoint exceeds the budget", () => {
+    expect(() => generateSweepValues(0, 2500, 1, 1)).toThrow(/2,501 replications/);
+    expect(() => generateSweepValues(0, 2500, 1, 1)).toThrow(/exceeding the 2,000-replication budget/);
+  });
+
+  test("the budget accounts for replicationsPerPoint, not just point count", () => {
+    // 100 points is fine alone, but x25 replications each exceeds the budget.
+    expect(() => generateSweepValues(0, 99, 1, 25)).toThrow(/2,500 replications/);
+    // The same 100 points at 20 replications each lands exactly on the budget.
+    expect(() => generateSweepValues(0, 99, 1, 20)).not.toThrow();
   });
 
   test("returns exactly 1 point when min equals max", () => {
     const values = generateSweepValues(5, 5, 1);
     expect(values).toEqual([5]);
+  });
+});
+
+describe("checkStudyBudget", () => {
+  test("does not throw when within budget", () => {
+    expect(() => checkStudyBudget(10, 10)).not.toThrow();
+  });
+
+  test("throws with a message naming both factors and the total", () => {
+    expect(() => checkStudyBudget(100, 30)).toThrow(/100 points x 30 replications each/);
+    expect(() => checkStudyBudget(100, 30)).toThrow(/3,000 replications/);
+  });
+
+  test("respects a custom maxTotal", () => {
+    expect(() => checkStudyBudget(10, 10, 50)).toThrow(/50-replication budget/);
+  });
+
+  test("defaults an invalid/zero replicationsPerPoint to 1", () => {
+    expect(() => checkStudyBudget(MAX_STUDY_REPLICATIONS, 0)).not.toThrow();
+    expect(() => checkStudyBudget(MAX_STUDY_REPLICATIONS + 1, NaN)).toThrow();
+  });
+});
+
+describe("isIntegerParamType", () => {
+  test("returns true for discrete count/capacity param types", () => {
+    for (const type of ["entityTypeCount", "shiftCapacity", "schedulePatternPeriodCapacity",
+      "schedulePatternDefaultCapacity", "queueCapacity", "containerCapacity", "containerInitialLevel"]) {
+      expect(isIntegerParamType(type)).toBe(true);
+    }
+  });
+
+  test("returns false for continuous param types", () => {
+    for (const type of ["schedulePatternBaseCapacity", "bEventDistParam", "bEventPiecewisePeriodParam",
+      "cEventDistParam", "cEventPiecewisePeriodParam", "stateVarInit"]) {
+      expect(isIntegerParamType(type)).toBe(false);
+    }
+  });
+});
+
+describe("sampleLatinHypercube", () => {
+  const params = [
+    { path: "entityTypes.et1.count", label: "Server count", type: "entityTypeCount", range: { min: 1, max: 10 } },
+    { path: "bEvents.b1.schedules.distParams.mean", label: "Arrival mean", type: "bEventDistParam", range: { min: 0.5, max: 5 } },
+  ];
+
+  test("returns exactly `points` samples, each with one value per parameter", () => {
+    const samples = sampleLatinHypercube(params, { points: 8, baseSeed: 1 });
+    expect(samples).toHaveLength(8);
+    for (const s of samples) {
+      expect(s.params).toHaveLength(2);
+      expect(s.params[0].path).toBe(params[0].path);
+      expect(s.params[1].path).toBe(params[1].path);
+    }
+  });
+
+  test("every sampled value is within its parameter's range", () => {
+    const samples = sampleLatinHypercube(params, { points: 20, baseSeed: 7 });
+    for (const s of samples) {
+      expect(s.params[0].value).toBeGreaterThanOrEqual(1);
+      expect(s.params[0].value).toBeLessThanOrEqual(10);
+      expect(s.params[1].value).toBeGreaterThanOrEqual(0.5);
+      expect(s.params[1].value).toBeLessThanOrEqual(5);
+    }
+  });
+
+  test("rounds samples to integers for integer param types, keeps fractional values for continuous ones", () => {
+    const samples = sampleLatinHypercube(params, { points: 10, baseSeed: 3 });
+    for (const s of samples) {
+      expect(Number.isInteger(s.params[0].value)).toBe(true);
+    }
+    expect(samples.some(s => !Number.isInteger(s.params[1].value))).toBe(true);
+  });
+
+  test("is deterministic — the same baseSeed produces the same samples every time", () => {
+    const a = sampleLatinHypercube(params, { points: 12, baseSeed: 99 });
+    const b = sampleLatinHypercube(params, { points: 12, baseSeed: 99 });
+    expect(a).toEqual(b);
+  });
+
+  test("a different baseSeed produces different samples", () => {
+    const a = sampleLatinHypercube(params, { points: 12, baseSeed: 1 });
+    const b = sampleLatinHypercube(params, { points: 12, baseSeed: 2 });
+    expect(a).not.toEqual(b);
+  });
+
+  test("never uses Math.random — stubbing it out must not change the result", () => {
+    const before = sampleLatinHypercube(params, { points: 10, baseSeed: 55 });
+    const original = Math.random;
+    Math.random = () => { throw new Error("Math.random must not be called"); };
+    try {
+      const after = sampleLatinHypercube(params, { points: 10, baseSeed: 55 });
+      expect(after).toEqual(before);
+    } finally {
+      Math.random = original;
+    }
+  });
+
+  test("Latin hypercube coverage: each dimension's strata are each hit exactly once", () => {
+    // With n points, a true LHS puts exactly one sample in each of the n
+    // equal-width strata per dimension — verify for the (unrounded) continuous
+    // second parameter, where strata boundaries are exact.
+    const n = 10;
+    const samples = sampleLatinHypercube(params, { points: n, baseSeed: 21 });
+    const [min, max] = [0.5, 5];
+    const strataHit = new Set(samples.map(s => Math.floor(((s.params[1].value - min) / (max - min)) * n)));
+    expect(strataHit.size).toBe(n);
+  });
+
+  test("throws when given no parameters", () => {
+    expect(() => sampleLatinHypercube([], { points: 5 })).toThrow(/at least one parameter/);
+  });
+
+  test("throws when a parameter has no range", () => {
+    expect(() => sampleLatinHypercube([{ path: "x" }], { points: 5 })).toThrow(/missing a valid range/);
+  });
+
+  test("throws when points is less than 1", () => {
+    expect(() => sampleLatinHypercube(params, { points: 0 })).toThrow(/at least 1 point/);
   });
 });
 
@@ -585,20 +722,24 @@ describe("generate2DSweepValues", () => {
     expect(pairs).toHaveLength(3); // 3 x 1
   });
 
-  test("throws when grid exceeds 50 points", () => {
-    expect(() =>
-      generate2DSweepValues({ min: 0, max: 10, step: 1 }, { min: 0, max: 10, step: 1 })
-    ).toThrow(/exceeds 50/);
+  // Sprint F-Study Phase 2: a fixed 50-point grid cap was replaced by a
+  // replication-budget guard (points x replicationsPerPoint) — a grid that
+  // was previously always rejected past 50 points is now fine as long as
+  // the total replication count (grid points x replications) stays under
+  // MAX_STUDY_REPLICATIONS (2000, at the default replicationsPerPoint of 1).
+  test("a grid of more than 50 points no longer throws at the default (1 replication per point)", () => {
+    const pairs = generate2DSweepValues({ min: 0, max: 10, step: 1 }, { min: 0, max: 10, step: 1 });
+    expect(pairs).toHaveLength(121); // 11 x 11
   });
 
-  test("allows exactly 50 points", () => {
-    const pairs = generate2DSweepValues({ min: 0, max: 4, step: 1 }, { min: 0, max: 9, step: 1 });
-    expect(pairs).toHaveLength(50); // 5 x 10 = 50
+  test("allows a grid of exactly 2000 points at 1 replication each", () => {
+    const pairs = generate2DSweepValues({ min: 0, max: 39, step: 1 }, { min: 0, max: 49, step: 1 });
+    expect(pairs).toHaveLength(2000); // 40 x 50 = 2000
   });
 
-  test("throws descriptive error with dimensions", () => {
+  test("throws a clear error naming both grid dimensions and replications when the budget is exceeded", () => {
     expect(() =>
-      generate2DSweepValues({ min: 0, max: 10, step: 1 }, { min: 0, max: 10, step: 1 })
-    ).toThrow(/11 x 11 = 121/);
+      generate2DSweepValues({ min: 0, max: 39, step: 1 }, { min: 0, max: 49, step: 1 }, 2)
+    ).toThrow(/2,000 points x 2 replications each/);
   });
 });

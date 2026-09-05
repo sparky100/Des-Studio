@@ -23,10 +23,15 @@ Deno.serve(async (req: Request) => {
 
   const url         = new URL(req.url);
   const pathParts   = url.pathname.replace(/^\/functions\/v1\/results-api\/?/, "").split("/").filter(Boolean);
-  // pathParts[0] === "runs" | "sweeps"
+  // pathParts[0] === "runs" | "sweeps" | "studies"
   // pathParts[1] === id (optional)
+  //
+  // "sweeps" and "studies" are aliases for the same underlying `studies`
+  // table (renamed from `sweeps` — see
+  // 20260905090000_studies_definition_and_points.sql). "sweeps" is kept
+  // working for API backward compatibility; "studies" is the current name.
 
-  const resource = pathParts[0];  // "runs" or "sweeps"
+  const resource = pathParts[0];  // "runs", "sweeps", or "studies"
   const resourceId = pathParts[1] ?? null;
 
   // ── SHARE TOKEN PATH (GET /runs/:runId?shareToken=…) ─────────────────────
@@ -108,23 +113,29 @@ Deno.serve(async (req: Request) => {
     return json(200, { runs: (runs ?? []).map(shapeRunSummary) });
   }
 
-  // ── GET /sweeps/:sweepId ──────────────────────────────────────────────────
-  if (resource === "sweeps" && resourceId) {
-    const { data: sweep, error } = await serviceClient
-      .from("sweeps")
-      .select("id, model_id, run_by, config, results, created_at")
+  // ── GET /sweeps/:id or GET /studies/:id ────────────────────────────────────
+  if ((resource === "sweeps" || resource === "studies") && resourceId) {
+    const { data: study, error } = await serviceClient
+      .from("studies")
+      .select("id, model_id, run_by, config, results, definition, schema_version, status, origin, created_at")
       .eq("id", resourceId)
       .single();
 
-    if (error || !sweep) return json(404, { error: "Sweep not found" });
-    if (sweep.run_by !== user.id) return json(403, { error: "Access denied" });
+    if (error || !study) return json(404, { error: "Study not found" });
+    if (study.run_by !== user.id) return json(403, { error: "Access denied" });
 
     return json(200, {
-      id: sweep.id,
-      modelId: sweep.model_id,
-      createdAt: sweep.created_at,
-      config: sweep.config,
-      results: sweep.results,
+      id: study.id,
+      modelId: study.model_id,
+      createdAt: study.created_at,
+      // Legacy blob shape (pre-Study schema, schema_version null).
+      config: study.config,
+      results: study.results,
+      // Current Study schema.
+      definition: study.definition,
+      schemaVersion: study.schema_version,
+      status: study.status,
+      origin: study.origin,
     });
   }
 

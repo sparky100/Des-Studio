@@ -1,0 +1,263 @@
+// Schema contract round-trip test (see CLAUDE.md / AGENTS.md §"Schema
+// Contract"): StudyDefinition is a new field persisted to the Supabase
+// `studies.definition` JSONB column (and StudyPoint rows to `study_points`)
+// via src/db/models.js's saveStudy(). This asserts the definition/points
+// survive that insert-payload construction unchanged, and separately
+// exercises the MetricRef helpers StudyDefinition.objective depends on.
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { saveStudy } from '../../src/db/models.js';
+import { supabase } from '../../src/db/supabase.js';
+import {
+  STUDY_SCHEMA_VERSION,
+  isAllowedMetricRef,
+  metricRefToPath,
+  summaryPathToMetricRef,
+  validateStudyProposal,
+  buildStudyDefinitionFromProposal,
+} from '../../src/contracts/study';
+
+/** @type {import('../../src/contracts/study').StudyDefinition} */
+const fullDefinition = {
+  name: 'Nurse staffing vs wait time',
+  planType: 'grid1d',
+  parameters: [
+    {
+      type: 'entityTypeCount',
+      targetId: 'et1',
+      path: 'entityTypes.et1.count',
+      label: 'Number of Nurse',
+      description: 'How many Nurse servers are available',
+      currentValue: 2,
+      range: { min: 1, max: 5, step: 1 },
+    },
+  ],
+  goals: [
+    {
+      id: 'g1',
+      metric: 'summary.avgWait',
+      target: 10,
+      operator: '<',
+      label: 'Wait under 10',
+      description: null,
+      scope: null,
+    },
+  ],
+  objective: {
+    metricRef: { kind: 'perResource', resourceTypeId: 'et1', field: 'utilisation' },
+    direction: 'max',
+  },
+  runBudget: { points: 5, replicationsPerPoint: 10 },
+  baseSeed: 42,
+  origin: { kind: 'user' },
+};
+
+const fullPoints = [
+  {
+    pointIndex: 0,
+    params: [{ path: 'entityTypes.et1.count', value: 1 }],
+    replications: 10,
+    metrics: { 'summary.avgWait': { mean: 9.1, ci95Low: 8.5, ci95High: 9.7, min: 2, max: 20 } },
+    feasible: true,
+    seed: 42,
+  },
+];
+
+describe('StudyDefinition persistence round-trip', () => {
+  beforeEach(() => {
+    const qb = {
+      select: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: { id: 'study-1', definition: fullDefinition, schema_version: STUDY_SCHEMA_VERSION, status: 'complete', origin: fullDefinition.origin, created_at: '2026-09-05T12:00:00Z' },
+        error: null,
+      }),
+    };
+    supabase.from.mockReturnValue(qb);
+  });
+
+  it('saveStudy sends the full StudyDefinition to the studies.definition column unchanged', async () => {
+    await saveStudy('model-1', 'user-1', fullDefinition, fullPoints);
+
+    const insertedRow = supabase.from('studies').insert.mock.calls[0][0];
+    expect(insertedRow.definition).toEqual(fullDefinition);
+    expect(insertedRow.schema_version).toBe(STUDY_SCHEMA_VERSION);
+  });
+
+  it('saveStudy sends each StudyPoint to study_points unchanged (minus the wrapper study_id/point_index)', async () => {
+    await saveStudy('model-1', 'user-1', fullDefinition, fullPoints);
+
+    // insert() is the same spy for both the "studies" and "study_points"
+    // calls (the mock's from() ignores the table name), and saveStudy()
+    // inserts the studies row first — so this is the *second* call.
+    const insertedPointRows = supabase.from('study_points').insert.mock.calls[1][0];
+    expect(insertedPointRows).toHaveLength(1);
+    expect(insertedPointRows[0]).toMatchObject({
+      study_id: 'study-1',
+      point_index: 0,
+      params: fullPoints[0].params,
+      replications: 10,
+      metrics: fullPoints[0].metrics,
+      feasible: true,
+      seed: 42,
+    });
+  });
+});
+
+describe('MetricRef helpers', () => {
+  const model = {
+    entityTypes: [{ id: 'et1', name: 'Nurse', role: 'server' }],
+    queues: [{ id: 'q1', name: 'TriageQueue' }],
+  };
+
+  it('metricRefToPath resolves a summary ref without needing a model', () => {
+    expect(metricRefToPath({ kind: 'summary', field: 'avgWait' })).toBe('summary.avgWait');
+  });
+
+  it('metricRefToPath resolves a runtimeMetrics ref without needing a model', () => {
+    expect(metricRefToPath({ kind: 'runtimeMetrics', field: 'events_processed' })).toBe('runtimeMetrics.events_processed');
+  });
+
+  it('metricRefToPath resolves a perResource ref by looking up the entity type name', () => {
+    expect(metricRefToPath({ kind: 'perResource', resourceTypeId: 'et1', field: 'utilisation' }, model))
+      .toBe('summary.perResource.Nurse.utilisation');
+  });
+
+  it('metricRefToPath resolves a perQueue ref by looking up the queue name', () => {
+    expect(metricRefToPath({ kind: 'perQueue', queueId: 'q1', field: 'blockingCount' }, model))
+      .toBe('summary.perQueue.TriageQueue.blockingCount');
+  });
+
+  it('metricRefToPath returns null when the referenced id is not found in the model', () => {
+    expect(metricRefToPath({ kind: 'perResource', resourceTypeId: 'missing', field: 'utilisation' }, model)).toBeNull();
+  });
+
+  it('isAllowedMetricRef accepts every field in each allowed-refs list', () => {
+    expect(isAllowedMetricRef({ kind: 'summary', field: 'avgWait' })).toBe(true);
+    expect(isAllowedMetricRef({ kind: 'perResource', resourceTypeId: 'et1', field: 'utilisation' })).toBe(true);
+    expect(isAllowedMetricRef({ kind: 'perQueue', queueId: 'q1', field: 'blockingCount' })).toBe(true);
+    expect(isAllowedMetricRef({ kind: 'runtimeMetrics', field: 'events_processed' })).toBe(true);
+  });
+
+  it('isAllowedMetricRef rejects an unknown field or kind', () => {
+    expect(isAllowedMetricRef({ kind: 'summary', field: 'notAField' })).toBe(false);
+    expect(isAllowedMetricRef({ kind: 'perResource', field: 'utilisation' })).toBe(false); // missing resourceTypeId
+    expect(isAllowedMetricRef({ kind: 'somethingElse', field: 'avgWait' })).toBe(false);
+    expect(isAllowedMetricRef(null)).toBe(false);
+  });
+
+  it('summaryPathToMetricRef round-trips with metricRefToPath for summary fields', () => {
+    const ref = summaryPathToMetricRef('summary.avgSojourn');
+    expect(ref).toEqual({ kind: 'summary', field: 'avgSojourn' });
+    expect(metricRefToPath(ref)).toBe('summary.avgSojourn');
+  });
+
+  it('summaryPathToMetricRef returns null for a non-summary or unknown path', () => {
+    expect(summaryPathToMetricRef('runtimeMetrics.events_processed')).toBeNull();
+    expect(summaryPathToMetricRef('summary.notAField')).toBeNull();
+  });
+});
+
+// Phase 3: AI-authored study proposals (propose-study / propose-next-study,
+// src/llm/prompts.js) must be validated against the model's own sweepable
+// parameters and the allowed MetricRef lists before being trusted — an AI
+// response is untrusted input, same as any other LLM JSON output.
+describe('validateStudyProposal', () => {
+  const sweepableParams = [
+    { type: 'entityTypeCount', targetId: 'et1', path: 'entityTypes.et1.count', label: 'Number of Nurse', currentValue: 2 },
+    { type: 'queueCapacity', targetId: 'q1', path: 'queues.q1.capacity', label: 'TriageQueue capacity', currentValue: 10 },
+  ];
+
+  const validProposal = {
+    name: 'Nurse count vs wait time',
+    planType: 'sampled',
+    parameters: [
+      { type: 'entityTypeCount', targetId: 'et1', range: { min: 1, max: 6, step: 1 } },
+    ],
+    objective: { metricRef: { kind: 'summary', field: 'avgWait' }, direction: 'min' },
+    runBudget: { points: 20, replicationsPerPoint: 10 },
+  };
+
+  it('accepts a proposal whose parameters and objective are all allowed', () => {
+    const result = validateStudyProposal(validProposal, sweepableParams);
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  it('rejects a parameter not present in the model\'s sweepable-parameter list', () => {
+    const proposal = { ...validProposal, parameters: [{ type: 'entityTypeCount', targetId: 'not-a-real-id', range: { min: 1, max: 6, step: 1 } }] };
+    const result = validateStudyProposal(proposal, sweepableParams);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('not one of this model\'s sweepable parameters'))).toBe(true);
+  });
+
+  it('rejects an objective metricRef outside the allowed MetricRef lists', () => {
+    const proposal = { ...validProposal, objective: { metricRef: { kind: 'summary', field: 'notARealField' }, direction: 'min' } };
+    const result = validateStudyProposal(proposal, sweepableParams);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('objective.metricRef'))).toBe(true);
+  });
+
+  it('rejects an unrecognised planType', () => {
+    const result = validateStudyProposal({ ...validProposal, planType: 'random-walk' }, sweepableParams);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('planType'))).toBe(true);
+  });
+
+  it('rejects a runBudget with a non-positive points or replicationsPerPoint', () => {
+    const result = validateStudyProposal({ ...validProposal, runBudget: { points: 0, replicationsPerPoint: 10 } }, sweepableParams);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('runBudget'))).toBe(true);
+  });
+
+  it('rejects a non-object candidate', () => {
+    expect(validateStudyProposal(null, sweepableParams).valid).toBe(false);
+    expect(validateStudyProposal('not json', sweepableParams).valid).toBe(false);
+  });
+});
+
+describe('buildStudyDefinitionFromProposal', () => {
+  const sweepableParams = [
+    { type: 'entityTypeCount', targetId: 'et1', path: 'entityTypes.et1.count', label: 'Number of Nurse', description: 'How many Nurse servers are available', currentValue: 2 },
+  ];
+
+  it('merges a validated proposal with model goals/baseSeed/origin the AI never saw', () => {
+    const proposal = {
+      name: 'Nurse count vs wait time',
+      planType: 'sampled',
+      parameters: [{ type: 'entityTypeCount', targetId: 'et1', range: { min: 1, max: 6, step: 1 } }],
+      objective: { metricRef: { kind: 'summary', field: 'avgWait' }, direction: 'min' },
+      runBudget: { points: 20, replicationsPerPoint: 10 },
+      rationale: 'Nurse count is the top-ranked sensitivity driver.',
+    };
+    const goals = [{ id: 'g1', metric: 'summary.avgWait', target: 10, operator: '<' }];
+    const origin = { kind: 'ai', refId: 'diag-1' };
+
+    const definition = buildStudyDefinitionFromProposal(proposal, sweepableParams, { goals, baseSeed: 42, origin });
+
+    expect(definition.goals).toBe(goals);
+    expect(definition.baseSeed).toBe(42);
+    expect(definition.origin).toEqual(origin);
+    // The full StudyParameter (path/label/description/currentValue) is looked
+    // up from sweepableParams, not taken from the AI — the AI cannot
+    // hallucinate a path that doesn't exist in the model.
+    expect(definition.parameters).toEqual([
+      {
+        type: 'entityTypeCount', targetId: 'et1', path: 'entityTypes.et1.count',
+        label: 'Number of Nurse', description: 'How many Nurse servers are available', currentValue: 2,
+        range: { min: 1, max: 6, step: 1 },
+      },
+    ]);
+  });
+
+  it('drops a parameter that cannot be matched against sweepableParams', () => {
+    const proposal = {
+      name: 'x', planType: 'sampled',
+      parameters: [{ type: 'entityTypeCount', targetId: 'unknown-id', range: { min: 1, max: 6, step: 1 } }],
+      objective: null, runBudget: { points: 5, replicationsPerPoint: 5 },
+    };
+    const definition = buildStudyDefinitionFromProposal(proposal, sweepableParams, { goals: [], baseSeed: 1, origin: { kind: 'ai' } });
+    expect(definition.parameters).toEqual([]);
+  });
+});

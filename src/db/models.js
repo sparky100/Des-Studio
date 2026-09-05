@@ -8,6 +8,7 @@ import { supabase } from "./supabase.js";
 import { normalizeModelConditions } from "../model/conditionFormat.js";
 import { migrateBalkingToQueues } from "../model/balkMigration.js";
 import { buildPersistedResultsJson } from "./results-persistence.js";
+import { STUDY_SCHEMA_VERSION } from "../contracts/study";
 
 // Every column that this module reads or writes. Used by validateDbSchema().
 export const EXPECTED_COLUMNS = [
@@ -852,72 +853,150 @@ export async function revokeShareLink(id, userId) {
   return { ok: true };
 }
 
+// ── Studies (parameter-sweep experiments) ────────────────────────────────────
+// A Study is distinct from an Experiment (below) — a Study varies parameters
+// across a range/sample and evaluates goals; an Experiment is a saved named
+// parameter set. `studies` was renamed from `sweeps` (Sprint 15-16) — legacy
+// rows have `schema_version === null` and keep their `config`/`results` blob
+// shape; new rows populate `definition`/`schema_version`/`status`/`origin`
+// and store per-point results in the separate `study_points` table instead
+// of the `results` blob (see 20260905090000_studies_definition_and_points.sql).
+
 /**
  * @param {string} modelId
  * @param {string} userId
- * @param {Record<string, any>} config
- * @param {Record<string, any>} results
+ * @param {import('../contracts/study').StudyDefinition} definition
+ * @param {import('../contracts/study').StudyPoint[]} [points]
+ * @param {import('../contracts/study').StudyStatus} [status]
  */
-export async function saveSweep(modelId, userId, config, results) {
+export async function saveStudy(modelId, userId, definition, points = [], status = "complete") {
+  const origin = definition?.origin || { kind: "user" };
   const { data, error } = await supabase
-    .from("sweeps")
+    .from("studies")
     .insert({
       model_id: modelId,
       run_by: userId,
-      config,
-      results,
+      definition,
+      schema_version: STUDY_SCHEMA_VERSION,
+      status,
+      origin,
+      // Denormalised from origin.refId when this study was seeded from a
+      // previous one (sequential plans) — see study.ts's StudyOrigin and
+      // 20260905100000_studies_phase3.sql. Any other origin kind (user/
+      // experiment/ai) leaves this null.
+      parent_study_id: origin.kind === "study" ? origin.refId || null : null,
     })
-    .select("id, config, results, created_at")
+    .select("id, definition, schema_version, status, origin, parent_study_id, created_at")
     .single();
   if (error) throw error;
+
+  const studyId = data.id;
+  if (points.length > 0) {
+    const rows = points.map((p, i) => ({
+      study_id: studyId,
+      point_index: p.pointIndex ?? i,
+      params: p.params,
+      replications: p.replications ?? definition?.runBudget?.replicationsPerPoint ?? 1,
+      metrics: p.metrics || {},
+      feasible: p.feasible ?? null,
+      seed: p.seed ?? null,
+    }));
+    const { error: pointsError } = await supabase.from("study_points").insert(rows);
+    if (pointsError) throw pointsError;
+  }
+
   return {
-    id: data.id,
-    config: data.config,
-    results: data.results,
+    id: studyId,
+    definition: data.definition,
+    schemaVersion: data.schema_version,
+    status: data.status,
+    origin: data.origin,
+    parentStudyId: data.parent_study_id ?? null,
     createdAt: data.created_at,
   };
 }
 
 /** @param {string} id */
-export async function getSweep(id) {
+export async function getStudy(id) {
   const { data, error } = await supabase
-    .from("sweeps")
-    .select("id, model_id, config, results, created_at")
+    .from("studies")
+    .select("id, model_id, definition, config, results, schema_version, status, origin, parent_study_id, created_at")
     .eq("id", id)
     .single();
   if (error) throw error;
+
+  // Legacy blob row (pre-Study schema) — return the untouched shape, no
+  // attempt to reshape it into the new definition/points form.
+  if (data.schema_version == null) {
+    return {
+      id: data.id,
+      modelId: data.model_id,
+      legacy: true,
+      config: data.config,
+      results: data.results,
+      createdAt: data.created_at,
+    };
+  }
+
+  const { data: pointRows, error: pointsError } = await supabase
+    .from("study_points")
+    .select("id, point_index, params, replications, metrics, feasible, seed, created_at")
+    .eq("study_id", id)
+    .order("point_index", { ascending: true });
+  if (pointsError) throw pointsError;
+
   return {
     id: data.id,
     modelId: data.model_id,
-    config: data.config,
-    results: data.results,
+    legacy: false,
+    definition: data.definition,
+    schemaVersion: data.schema_version,
+    status: data.status,
+    origin: data.origin,
+    parentStudyId: data.parent_study_id ?? null,
     createdAt: data.created_at,
+    points: (pointRows || []).map(r => ({
+      id: r.id,
+      pointIndex: r.point_index,
+      params: r.params,
+      replications: r.replications,
+      metrics: r.metrics,
+      feasible: r.feasible,
+      seed: r.seed,
+      createdAt: r.created_at,
+    })),
   };
 }
 
 /** @param {string} modelId */
-export async function listSweeps(modelId) {
+export async function listStudies(modelId) {
   const { data, error } = await supabase
-    .from("sweeps")
-    .select("id, config, results, created_at")
+    .from("studies")
+    .select("id, definition, config, schema_version, status, origin, created_at")
     .eq("model_id", modelId)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data || []).map(s => ({
-    id: s.id,
-    config: s.config,
-    results: s.results,
-    createdAt: s.created_at,
-  }));
+  return (data || []).map(row => {
+    const legacy = row.schema_version == null;
+    return {
+      id: row.id,
+      legacy,
+      name: legacy ? (row.config?.paramConfig?.label || row.config?.label || "Sweep") : (row.definition?.name || "Untitled study"),
+      planType: legacy ? (row.config?.paramConfigs ? "grid2d" : "grid1d") : (row.definition?.planType || null),
+      status: row.status || (legacy ? "complete" : null),
+      origin: row.origin || (legacy ? { kind: "user" } : null),
+      createdAt: row.created_at,
+    };
+  });
 }
 
 /**
  * @param {string} id
  * @param {string} userId
  */
-export async function deleteSweep(id, userId) {
+export async function deleteStudy(id, userId) {
   const { error } = await supabase
-    .from("sweeps")
+    .from("studies")
     .delete()
     .eq("id", id)
     .eq("run_by", userId);
@@ -1089,6 +1168,10 @@ function normalizeExperiment(row = {}) {
     name: row.name,
     description: row.description ?? null,
     config: row.config ?? {},
+    // Set when this experiment was created via the Studies tab's "Promote to
+    // Experiment" action (src/contracts/study.ts's StudyPoint) — null for
+    // every other experiment. See 20260905100000_studies_phase3.sql.
+    sourceStudyPointId: row.source_study_point_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1105,11 +1188,18 @@ export async function fetchExperiments(modelId) {
   return (data || []).map(normalizeExperiment);
 }
 
-/** @param {{ modelId: string, userId: string, name: string, description?: string, config: Record<string, any> }} params */
-export async function saveExperiment({ modelId, userId, name, description, config }) {
+/** @param {{ modelId: string, userId: string, name: string, description?: string, config: Record<string, any>, sourceStudyPointId?: string }} params */
+export async function saveExperiment({ modelId, userId, name, description, config, sourceStudyPointId }) {
   const { data, error } = await supabase
     .from("experiments")
-    .insert({ model_id: modelId, user_id: userId, name, description: description || null, config })
+    .insert({
+      model_id: modelId,
+      user_id: userId,
+      name,
+      description: description || null,
+      config,
+      source_study_point_id: sourceStudyPointId || null,
+    })
     .select()
     .single();
   if (error) throw error;
@@ -1170,6 +1260,51 @@ export async function deleteExperiment(id) {
     .eq("id", id);
   if (error) throw error;
   return { ok: true };
+}
+
+// ── Diagnoses ────────────────────────────────────────────────────────────────
+// Persists DiagnosticsTab.jsx's AI diagnosis result, keyed to the
+// simulation_runs row it was run against (previously ephemeral React state
+// only — see 20260905100000_studies_phase3.sql). Rows are immutable after
+// insert (enforced by a DB trigger), matching study_points' write-once shape.
+
+/** @param {Record<string, any>} row */
+function normalizeDiagnosis(row = {}) {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    userId: row.user_id,
+    versionId: row.version_id ?? null,
+    result: row.result,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * @param {string} runId
+ * @param {string} userId
+ * @param {Record<string, any>} result the parsed diagnosis JSON (findings/overallAssessment)
+ * @param {string|null} [versionId]
+ */
+export async function saveDiagnosis(runId, userId, result, versionId = null) {
+  const { data, error } = await supabase
+    .from("diagnoses")
+    .insert({ run_id: runId, user_id: userId, version_id: versionId, result })
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeDiagnosis(data);
+}
+
+/** @param {string} runId */
+export async function listDiagnosesForRun(runId) {
+  const { data, error } = await supabase
+    .from("diagnoses")
+    .select("*")
+    .eq("run_id", runId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(normalizeDiagnosis);
 }
 
 // ── Model Versions ────────────────────────────────────────────────────────────

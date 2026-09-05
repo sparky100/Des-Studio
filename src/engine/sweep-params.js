@@ -3,6 +3,7 @@
 // No React, no DOM. Pure JS — can run in workers.
 
 import { periodLabel } from "./schedule-pattern.js";
+import { mulberry32, deriveSubSeed } from "./distributions.js";
 
 /** @param {any} obj */
 function deepClone(obj) {
@@ -365,23 +366,72 @@ export function applySweepValues(model, sweepConfigs = []) {
   return clone;
 }
 
+// Types whose applySweepValues() case rounds the value to an integer before
+// writing it back onto the model (server/queue/container counts and
+// capacities — all discrete quantities). Everything else (distribution
+// parameters, schedulePattern.baseCapacity, state variable initial values)
+// is written as-is and may be fractional. Kept here, next to
+// applySweepValues() above, as the single source of truth for "is this
+// parameter discrete?" — sampleLatinHypercube() below uses it to round
+// sampled values onto the integer lattice for these types.
+const INTEGER_PARAM_TYPES = new Set([
+  "entityTypeCount", "shiftCapacity", "schedulePatternPeriodCapacity",
+  "schedulePatternDefaultCapacity", "queueCapacity", "containerCapacity",
+  "containerInitialLevel",
+]);
+
+/** @param {string} type */
+export function isIntegerParamType(type) {
+  return INTEGER_PARAM_TYPES.has(type);
+}
+
+// A Study's total simulation cost is (points x replicationsPerPoint) —
+// this is the number that actually matters for compute/wall-clock budget,
+// not the raw point count alone. Replaces the old flat "50 points" cap
+// (which applied to points alone, regardless of plan type or replications).
+export const MAX_STUDY_REPLICATIONS = 2000;
+
 /**
- * @param {number} min
- * @param {number} max
- * @param {number} step
+ * @param {number} totalPoints
+ * @param {number} replicationsPerPoint
+ * @param {number} [maxTotal]
  */
-export function generateSweepValues(min, max, step) {
+export function checkStudyBudget(totalPoints, replicationsPerPoint, maxTotal = MAX_STUDY_REPLICATIONS) {
+  const reps = Math.max(1, Math.round(replicationsPerPoint) || 1);
+  const total = totalPoints * reps;
+  if (total > maxTotal) {
+    throw new Error(
+      `This plan would run ${total.toLocaleString()} replications ` +
+      `(${totalPoints.toLocaleString()} points x ${reps.toLocaleString()} replications each), ` +
+      `exceeding the ${maxTotal.toLocaleString()}-replication budget. ` +
+      `Reduce the number of points, replications per point, or both.`
+    );
+  }
+}
+
+/** @param {number} min @param {number} max @param {number} step */
+function rawSweepValues(min, max, step) {
   if (Math.abs(max - min) < 1e-9) return [min];
   const values = [];
   const nSteps = Math.floor((max - min) / step);
   for (let i = 0; i <= nSteps; i++) {
     values.push(+(min + i * step).toFixed(6));
   }
-  // Cap at 50
-  if (values.length > 50) {
-    const everyN = Math.ceil(values.length / 50);
-    return values.filter((_, i) => i % everyN === 0).slice(0, 50);
-  }
+  return values;
+}
+
+// replicationsPerPoint is used only for the budget check (default 1, i.e.
+// points alone must stay under the budget).
+/**
+ * @param {number} min
+ * @param {number} max
+ * @param {number} step
+ * @param {number} [replicationsPerPoint]
+ * @throws if the resulting points x replicationsPerPoint would exceed MAX_STUDY_REPLICATIONS
+ */
+export function generateSweepValues(min, max, step, replicationsPerPoint = 1) {
+  const values = rawSweepValues(min, max, step);
+  checkStudyBudget(values.length, replicationsPerPoint);
   return values;
 }
 
@@ -390,20 +440,15 @@ export function generateSweepValues(min, max, step) {
  *
  * @param {{ min: number, max: number, step: number }} rangeA
  * @param {{ min: number, max: number, step: number }} rangeB
+ * @param {number} [replicationsPerPoint]
  * @returns {Array<{ valueA: number, valueB: number }>} cartesian product pairs
- * @throws if total grid points exceed 50
+ * @throws if total grid points x replicationsPerPoint would exceed MAX_STUDY_REPLICATIONS
  */
-export function generate2DSweepValues(rangeA, rangeB) {
-  const valuesA = generateSweepValues(rangeA.min, rangeA.max, rangeA.step);
-  const valuesB = generateSweepValues(rangeB.min, rangeB.max, rangeB.step);
+export function generate2DSweepValues(rangeA, rangeB, replicationsPerPoint = 1) {
+  const valuesA = rawSweepValues(rangeA.min, rangeA.max, rangeA.step);
+  const valuesB = rawSweepValues(rangeB.min, rangeB.max, rangeB.step);
   const total = valuesA.length * valuesB.length;
-
-  if (total > 50) {
-    throw new Error(
-      `2D sweep grid exceeds 50 points (${valuesA.length} x ${valuesB.length} = ${total}). ` +
-      `Reduce one range or increase step size.`
-    );
-  }
+  checkStudyBudget(total, replicationsPerPoint);
 
   const pairs = [];
   for (const valueA of valuesA) {
@@ -412,4 +457,69 @@ export function generate2DSweepValues(rangeA, rangeB) {
     }
   }
   return pairs;
+}
+
+/**
+ * Latin hypercube sample over N sweepable parameters — a Study's "sampled"
+ * plan type. Stratifies each dimension into `points` equal-width strata (no
+ * two points share a stratum on any dimension) and draws one point per
+ * stratum with a seeded jitter, so points spread evenly across the full
+ * range rather than clustering the way independent uniform draws would.
+ *
+ * Deterministic from baseSeed: derives its own PRNG stream (via
+ * deriveSubSeed) so it never shares state with, or is correlated with, the
+ * per-replication seeds (baseSeed + i) the same Study run also uses. No
+ * Math.random() anywhere — mulberry32 only, per AGENTS.md's seeded-RNG rule.
+ *
+ * @param {Array<{ path: string, label?: string, type?: string, range?: { min: number, max: number } }>} parameters
+ * @param {{ points?: number, baseSeed?: number }} [options]
+ * @returns {Array<{ params: Array<{ path: string, value: number }> }>}
+ */
+export function sampleLatinHypercube(parameters, { points, baseSeed = 0 } = {}) {
+  if (!Array.isArray(parameters) || parameters.length === 0) {
+    throw new Error("sampleLatinHypercube requires at least one parameter.");
+  }
+  const n = Math.round(points ?? NaN);
+  if (!Number.isFinite(n) || n < 1) {
+    throw new Error("sampleLatinHypercube requires at least 1 point.");
+  }
+  for (const p of parameters) {
+    if (!p.range || !Number.isFinite(p.range.min) || !Number.isFinite(p.range.max)) {
+      throw new Error(`Parameter '${p.label || p.path}' is missing a valid range for a sampled study.`);
+    }
+  }
+
+  const rng = mulberry32(deriveSubSeed(baseSeed, "study:lhs"));
+
+  // Per-dimension stratified permutation + within-stratum jitter — the
+  // standard LHS construction. Each dimension gets its own independent
+  // permutation, so pairing across dimensions is randomised (not just the
+  // within-stratum position), avoiding the "diagonal" correlation a shared
+  // permutation would introduce.
+  const perDimensionValues = parameters.map(param => {
+    const permutation = Array.from({ length: n }, (_, i) => i);
+    // Fisher-Yates shuffle using the seeded RNG — no Math.random().
+    for (let i = permutation.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [permutation[i], permutation[j]] = [permutation[j], permutation[i]];
+    }
+    // Every parameter's range was already validated non-null above (this is
+    // a second pass over the same array — TS just can't carry that
+    // narrowing across two separate .map()/for-of closures).
+    const range = /** @type {{ min: number, max: number }} */ (param.range);
+    const { min, max } = range;
+    const integer = isIntegerParamType(param.type || "");
+    return permutation.map(stratum => {
+      const jitter = rng();
+      const u = (stratum + jitter) / n;
+      let value = min + u * (max - min);
+      value = Math.min(max, Math.max(min, value));
+      if (integer) value = Math.round(value);
+      return +value.toFixed(6);
+    });
+  });
+
+  return Array.from({ length: n }, (_, i) => ({
+    params: parameters.map((param, d) => ({ path: param.path, value: perDimensionValues[d][i] })),
+  }));
 }
