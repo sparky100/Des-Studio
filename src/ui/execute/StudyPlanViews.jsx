@@ -31,12 +31,18 @@ export function SampledParamRangeList({ sampledParams, setSampledParams, sweepPa
                   <span style={{ fontSize: 11, color: chipColor, fontFamily: FONT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.label}</span>
                   {p.subLabel && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{p.subLabel}</span>}
                 </div>
-                <input aria-label={`${p.label} minimum`} type="number" value={p.min}
-                  onChange={e => setSampledParams(prev => prev.map((sp, i) => i === idx ? { ...sp, min: parseFloat(e.target.value) || 0 } : sp))}
+                {/* min/max hold the raw typed string while editing (same fix as the
+                    1D/2D sweep range inputs) — parsing on every keystroke fought the
+                    browser's own number-input editing (clearing the field, typing a
+                    decimal point or a leading zero). Parsed once at the point of use
+                    instead (currentStudyParameters/buildSequentialParameters/the run
+                    guards below). */}
+                <input aria-label={`${p.label} minimum`} type="number" value={p.min ?? ""}
+                  onChange={e => setSampledParams(prev => prev.map((sp, i) => i === idx ? { ...sp, min: e.target.value } : sp))}
                   placeholder="min"
                   style={{ width: 76, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px" }} />
-                <input aria-label={`${p.label} maximum`} type="number" value={p.max}
-                  onChange={e => setSampledParams(prev => prev.map((sp, i) => i === idx ? { ...sp, max: parseFloat(e.target.value) || 0 } : sp))}
+                <input aria-label={`${p.label} maximum`} type="number" value={p.max ?? ""}
+                  onChange={e => setSampledParams(prev => prev.map((sp, i) => i === idx ? { ...sp, max: e.target.value } : sp))}
                   placeholder="max"
                   style={{ width: 76, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px" }} />
                 <Btn small variant="ghost" ariaLabel={`Remove ${p.label}`} onClick={() => setSampledParams(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
