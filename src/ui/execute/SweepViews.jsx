@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { alpha, lerpColor } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
-import { fmt, fmtMetric, METRIC_LABELS, COUNT_METRICS } from "./executeHelpers.js";
+import { fmt, fmtMetric, metricLabel, COUNT_METRICS } from "./executeHelpers.js";
+import { evaluateSweepPointGoals, resolveSweepGoalCurrent, GOAL_STAT_KEY } from "../../llm/prompts.js";
+import { scopedGoalKey } from "../../engine/statistics.js";
 
 // Metrics that can never legitimately go negative (wait/sojourn/time
 // durations, WIP, counts, and the served-ratio percentage) — the chart's
@@ -18,9 +20,6 @@ const NON_NEGATIVE_METRICS = new Set([
 ]);
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-// Check whether a sweep point's aggregateStats satisfies all goals.
-// goals: array of {metric, operator, target} from model.goals
-// Returns true if all goals met, false if any missed, null if no goals or no data.
 function chipStyle(color, FONT) {
   return {
     display: "inline-block",
@@ -31,32 +30,46 @@ function chipStyle(color, FONT) {
   };
 }
 
-function pointIsFeasible(goals, aggregateStats) {
-  if (!goals?.length) return null;
-  const STAT_KEY = {
-    avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn",
-    avgTimeInSystem: "summary.avgTimeInSystem",
-    avgWIP: "summary.avgWIP", maxWIP: "summary.maxWIP",
-    served: "summary.served", servedRatio: "summary.servedRatio", reneged: "summary.reneged",
-    totalCost: "summary.totalCost", costPerServed: "summary.costPerServed",
-  };
-  for (const g of goals) {
-    if (g.scope || (typeof g.operator === "string" && g.operator.startsWith("p"))) continue;
-    const key = STAT_KEY[g.metric] || (g.metric?.startsWith("summary.") ? g.metric : null);
-    if (!key) continue;
-    const val = aggregateStats[key]?.mean;
-    if (val == null || !Number.isFinite(val)) return null;
-    const t = parseFloat(g.target);
-    const op = g.operator || "<";
-    const met =
-      op === "<"  ? val < t  :
-      op === "<=" ? val <= t :
-      op === ">"  ? val > t  :
-      op === ">=" ? val >= t :
-      Math.abs(val - t) < 0.001;
-    if (!met) return false;
+// Whether `metric` is a "goal:<index>" KPI selection (see execute/index.jsx's
+// KPI dropdown, which lists the model's own goals alongside the fixed
+// CI_METRICS list) rather than a plain aggregateStats dot-path.
+function isGoalMetric(metric) {
+  return typeof metric === "string" && metric.startsWith("goal:");
+}
+function goalIndexOf(metric) {
+  return parseInt(metric.slice(5), 10);
+}
+
+// Resolve the full CI stats object ({mean, lower, upper, halfWidth}) a sweep
+// point has for the currently selected KPI metric — either a fixed
+// aggregateStats dot-path, or, for a goal-derived KPI, whichever aggregateStats
+// key engine/sweep-runner.js populated for that goal (scopedGoalKey for a
+// scoped goal, the goal's own metric path — or its short-name alias via
+// GOAL_STAT_KEY — for an unscoped one).
+function sweepMetricStats(metric, goals, aggregateStats) {
+  if (!aggregateStats) return null;
+  if (isGoalMetric(metric)) {
+    const g = goals[goalIndexOf(metric)];
+    if (!g) return null;
+    if (g.scope) {
+      const key = scopedGoalKey(g.metric, g.scope);
+      return key ? aggregateStats[key] ?? null : null;
+    }
+    return aggregateStats[g.metric] ?? aggregateStats[GOAL_STAT_KEY[g.metric]] ?? null;
   }
-  return true;
+  return aggregateStats[metric] ?? null;
+}
+
+// "Higher is better" for a metric's best-point/best-cell highlighting —
+// derived from the goal's own operator for a goal-derived KPI (more
+// correct than guessing from the metric name), or the prior name-based
+// heuristic for a fixed metric.
+function isHigherBetterFor(metric, goals) {
+  if (isGoalMetric(metric)) {
+    const op = goals[goalIndexOf(metric)]?.operator;
+    return op === ">" || op === ">=";
+  }
+  return metric.includes("served");
 }
 
 export function SweepChart({ results, metric, paramLabel, goals = [] }) {
@@ -64,8 +77,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
   const [tip, setTip] = useState(null);
   if (!results?.length) return null;
 
-  const statPath = metric;
-  const means = results.map(r => r.aggregateStats[statPath]?.mean ?? null);
+  const means = results.map(r => sweepMetricStats(metric, goals, r.aggregateStats)?.mean ?? null);
 
   const finite = means.filter(m => m != null);
   if (finite.length < 2) {
@@ -81,18 +93,19 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
   const plotH = H - PAD.top - PAD.bottom;
 
   const valid = results.filter((_, i) => means[i] != null);
+  const vStats = valid.map(r => sweepMetricStats(metric, goals, r.aggregateStats));
   const vValues = valid.map(r => r.value);
-  const vMeans = valid.map(r => r.aggregateStats[statPath].mean);
-  const vLowers = valid.map(r => r.aggregateStats[statPath]?.lower ?? r.aggregateStats[statPath].mean);
-  const vUppers = valid.map(r => r.aggregateStats[statPath]?.upper ?? r.aggregateStats[statPath].mean);
-  const feasibility = valid.map(r => pointIsFeasible(goals, r.aggregateStats));
+  const vMeans = vStats.map(s => s.mean);
+  const vLowers = vStats.map(s => s.lower ?? s.mean);
+  const vUppers = vStats.map(s => s.upper ?? s.mean);
+  const feasibility = valid.map(r => evaluateSweepPointGoals(goals, r.aggregateStats).feasible);
 
-  // Goal threshold lines that match the displayed metric
-  const STAT_KEY = {
-    avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn",
-    served: "summary.served", reneged: "summary.reneged", totalCost: "summary.totalCost",
-  };
-  const matchingGoals = goals.filter(g => STAT_KEY[g.metric] === metric && g.target != null);
+  // Goal threshold line(s) that match the displayed metric: the single
+  // selected goal for a "goal:<i>" KPI, or every unscoped goal whose metric
+  // matches the selected fixed metric.
+  const matchingGoals = isGoalMetric(metric)
+    ? (goals[goalIndexOf(metric)] ? [goals[goalIndexOf(metric)]] : [])
+    : goals.filter(g => !g.scope && GOAL_STAT_KEY[g.metric] === metric && g.target != null);
 
   const xMin = Math.min(...vValues);
   const xMax = Math.max(...vValues);
@@ -122,7 +135,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
 
   // Best feasible point: lowest mean among feasible points (or highest for served)
   const feasibleIndices = vValues.map((_, i) => i).filter(i => feasibility[i] === true);
-  const isHigherBetter = metric.includes("served");
+  const isHigherBetter = isHigherBetterFor(metric, goals);
   const bestIdx = feasibleIndices.length
     ? feasibleIndices.reduce((best, i) =>
         isHigherBetter ? (vMeans[i] > vMeans[best] ? i : best) : (vMeans[i] < vMeans[best] ? i : best),
@@ -149,7 +162,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
           </span>
           {matchingGoals.map((g, i) => (
             <div key={i} style={chipStyle(C.amber, FONT)}>
-              {METRIC_LABELS[STAT_KEY[g.metric]] || g.metric} {g.operator} {fmtMetric(metric, parseFloat(g.target))}
+              {g.label || g.metric} {g.operator} {fmtMetric(metric, parseFloat(g.target))}
             </div>
           ))}
         </div>
@@ -191,7 +204,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
           const cx = xScale(v), cy = yScale(vMeans[i]);
           return (
             <g key={i}
-              onMouseEnter={() => setTip({ x: cx, y: cy, label: `${paramLabel || "x"} = ${v}`, value: `${(METRIC_LABELS[metric] || metric).slice(0,14)}: ${fmtMetric(metric, vMeans[i])}` })}
+              onMouseEnter={() => setTip({ x: cx, y: cy, label: `${paramLabel || "x"} = ${v}`, value: `${metricLabel(metric, goals).slice(0,14)}: ${fmtMetric(metric, vMeans[i])}` })}
               style={{ cursor: "crosshair" }}>
               <circle cx={cx} cy={cy} r={isBest ? 5 : 3}
                 fill={col} stroke={C.bg} strokeWidth={1.5} opacity={f === false ? 0.5 : 1} />
@@ -210,7 +223,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
         </text>
         <text x={8} y={H / 2} textAnchor="middle" fill={C.muted} fontSize={11} fontFamily={FONT}
           transform={`rotate(-90, 8, ${H / 2})`}>
-          {METRIC_LABELS[metric] || metric}
+          {metricLabel(metric, goals)}
         </text>
         {tip && (() => {
           const TW = 140, TH = 36, TX = Math.min(Math.max(tip.x - TW/2, PAD.left), W - PAD.right - TW), TY = Math.max(tip.y - TH - 8, PAD.top);
@@ -226,7 +239,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
       {bestIdx != null && (
         <div style={{ fontSize: 10, fontFamily: FONT, color: C.green, marginTop: 4 }}>
           Best feasible: {paramLabel || "param"} = <strong>{vValues[bestIdx]}</strong>,
-          {" "}{METRIC_LABELS[metric] || metric} = <strong>{fmtMetric(metric, vMeans[bestIdx])}</strong>
+          {" "}{metricLabel(metric, goals)} = <strong>{fmtMetric(metric, vMeans[bestIdx])}</strong>
         </div>
       )}
     </div>
@@ -351,7 +364,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
 
   const getCell = (va, vb) => results.find(r => r.valueA === va && r.valueB === vb);
 
-  const means = results.map(r => r.aggregateStats[metric]?.mean).filter(Number.isFinite);
+  const means = results.map(r => sweepMetricStats(metric, goals, r.aggregateStats)?.mean).filter(Number.isFinite);
   const minMean = Math.min(...means);
   const maxMean = Math.max(...means);
   const meanRange = maxMean - minMean || 1;
@@ -366,15 +379,15 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
 
   const hasGoals = goals.length > 0;
   const feasibleCells = hasGoals
-    ? results.filter(r => pointIsFeasible(goals, r.aggregateStats) === true)
+    ? results.filter(r => evaluateSweepPointGoals(goals, r.aggregateStats).feasible === true)
     : [];
   const feasibleCount = feasibleCells.length;
 
-  const isHigherBetter = metric.includes("served");
+  const isHigherBetter = isHigherBetterFor(metric, goals);
   const bestCell = feasibleCells.length
     ? feasibleCells.reduce((best, r) => {
-        const vm = r.aggregateStats[metric]?.mean;
-        const bm = best.aggregateStats[metric]?.mean;
+        const vm = sweepMetricStats(metric, goals, r.aggregateStats)?.mean;
+        const bm = sweepMetricStats(metric, goals, best.aggregateStats)?.mean;
         return Number.isFinite(vm) && (isHigherBetter ? vm > bm : vm < bm) ? r : best;
       })
     : null;
@@ -389,7 +402,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontFamily: FONT }}>
           <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
             {orderedCells.map((cell, i) => {
-              const f = cell ? pointIsFeasible(goals, cell.aggregateStats) : null;
+              const f = cell ? evaluateSweepPointGoals(goals, cell.aggregateStats).feasible : null;
               return (
                 <div key={i} title={f === true ? "Meets all goals" : f === false ? "Misses a goal" : "No data"} style={{
                   width: 10, height: 10, borderRadius: 3,
@@ -435,12 +448,12 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
             /* Cells */
             ...valueBs.map(vb => {
               const cell = getCell(va, vb);
-              const mean = cell?.aggregateStats[metric]?.mean;
-              const ci = cell?.aggregateStats[metric];
+              const ci = sweepMetricStats(metric, goals, cell?.aggregateStats);
+              const mean = ci?.mean;
               const halfWidth = (ci?.lower != null && ci?.upper != null && Number.isFinite(ci.lower) && Number.isFinite(ci.upper))
                 ? Math.abs((ci.upper - ci.lower) / 2)
                 : null;
-              const feasible = hasGoals && cell ? pointIsFeasible(goals, cell.aggregateStats) : null;
+              const feasible = hasGoals && cell ? evaluateSweepPointGoals(goals, cell.aggregateStats).feasible : null;
               const isBest = hasGoals && cell && cell === bestCell;
               return (
                 <div key={`${va}-${vb}`}
@@ -504,7 +517,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
           background: `linear-gradient(to right, ${C.accent}, ${C.amber}, ${C.red})`,
         }} />
         <span style={{ fontSize: 11, color: C.muted }}>High</span>
-        <span style={{ fontSize: 11, color: C.muted, marginLeft: 4 }}>{METRIC_LABELS[metric] || metric}</span>
+        <span style={{ fontSize: 11, color: C.muted, marginLeft: 4 }}>{metricLabel(metric, goals)}</span>
       </div>
     </div>
   );

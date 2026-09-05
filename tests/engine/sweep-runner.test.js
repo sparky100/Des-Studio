@@ -425,3 +425,84 @@ describe("runSweepOffthread / runStudyOffthread", () => {
     expect(results[0].params).toHaveLength(1);
   });
 });
+
+// Regression coverage for the "N/N meet all goals" bug: scoped goals (the
+// only kind most real models have — see examples/bike-shop.json) previously
+// had nothing in aggregateStats for src/llm/prompts.js's
+// evaluateSweepPointGoals to read, so they were silently skipped and every
+// sweep point read as feasible. addScopedGoalStats (sweep-runner.js) now
+// populates a real CI-summarized entry per scoped goal, per point.
+describe("scoped goal aggregateStats", () => {
+  const modelWithGoals = {
+    ...model,
+    goals: [
+      { label: "Staff util under 90%", scope: { id: "et_staff", name: "Staff", type: "resource" }, metric: "resource.utilisation", target: 0.9, operator: "<" },
+      { label: "Repair wait under 30", scope: { id: "q_repair", name: "Repair Queue", type: "queue" }, metric: "summary.avgWait", target: 30, operator: "<" },
+      { label: "Bikes never empty", scope: { id: "BikesAvailable", name: "BikesAvailable", type: "container" }, metric: "container.minLevel", target: 0, operator: ">" },
+    ],
+  };
+
+  function wrapReplicationsWithGoalData(options) {
+    const { replications, onReplicationComplete, onComplete } = options;
+    const results = Array.from({ length: replications }, (_, i) => ({
+      replicationIndex: i,
+      result: {
+        summary: {
+          served: 100, avgWait: 2.5,
+          perResource: { Staff: { utilisation: 0.5, calendarUtilisation: 0.5 } },
+          containerLevels: { BikesAvailable: { min: 0, max: 5, avg: 3, final: 4 } },
+        },
+        waitDist: { "Repair Queue": { n: 10, mean: 45 } },
+      },
+    }));
+    const timerId = setTimeout(() => {
+      results.forEach((r, i) => onReplicationComplete?.(r, { completed: i + 1, total: replications }));
+      onComplete?.(results);
+    }, 0);
+    return { cancel() { clearTimeout(timerId); } };
+  }
+
+  test("runSweep (1D) populates a real aggregateStats entry for each scoped goal", async () => {
+    mockRunReplications.mockImplementation(wrapReplicationsWithGoalData);
+    const results = await new Promise((resolve, reject) => {
+      runSweep({ model: modelWithGoals, paramConfig, min: 1, max: 2, step: 1, replications: 2, onError: reject, onComplete: resolve });
+    });
+
+    for (const pt of results) {
+      expect(pt.aggregateStats["resource.utilisation.Staff"]?.mean).toBeCloseTo(0.5, 5);
+      expect(pt.aggregateStats["queue.avgWait.q_repair"]?.mean).toBe(45);
+      // container.minLevel normalizes to the engine's actual `min` field, not a literal "minLevel" field.
+      expect(pt.aggregateStats["container.minLevel.BikesAvailable"]?.mean).toBe(0);
+    }
+  });
+
+  test("run2DSweep also populates scoped-goal aggregateStats per grid point", async () => {
+    mockRunReplications.mockImplementation(wrapReplicationsWithGoalData);
+    const results = await new Promise((resolve, reject) => {
+      run2DSweep({
+        model: modelWithGoals,
+        paramConfigs: [paramConfig, paramConfig],
+        ranges: [{ min: 1, max: 2, step: 1 }, { min: 1, max: 2, step: 1 }],
+        replications: 1,
+        onError: reject,
+        onComplete: resolve,
+      });
+    });
+
+    expect(results.length).toBe(4);
+    for (const pt of results) {
+      expect(pt.aggregateStats["resource.utilisation.Staff"]?.mean).toBeCloseTo(0.5, 5);
+      expect(pt.aggregateStats["queue.avgWait.q_repair"]?.mean).toBe(45);
+    }
+  });
+
+  test("a model with no goals produces no scoped-goal aggregateStats keys", async () => {
+    mockRunReplications.mockImplementation(wrapReplicationsWithGoalData);
+    const results = await new Promise((resolve, reject) => {
+      runSweep({ model, paramConfig, min: 1, max: 1, step: 1, replications: 1, onError: reject, onComplete: resolve });
+    });
+
+    const keys = Object.keys(results[0].aggregateStats);
+    expect(keys.some(k => k.startsWith("resource.") || k.startsWith("queue.") || k.startsWith("container."))).toBe(false);
+  });
+});
