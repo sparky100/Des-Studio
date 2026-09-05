@@ -264,7 +264,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   // F-Study Phase 2: sampled plan state. Each entry: { ...paramDescriptor, min, max }.
   const [sampledParams, setSampledParams] = useState([]);
   const [sampledPickerOpen, setSampledPickerOpen] = useState(false);
-  const [sampledPointCount, setSampledPointCount] = useState(10);
+  // Holds the raw typed string while editing (see the POINTS input below) —
+  // parsed once at the point of use via intDefault().
+  const [sampledPointCount, setSampledPointCount] = useState("10");
   const [sensitivityRanking, setSensitivityRanking] = useState(null); // { method, ranking } | null
   // F-Study Phase 3: sequential plan state — a sequential study's first batch
   // is a Latin hypercube sample narrowed around a "seed point" taken from a
@@ -277,7 +279,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [seedStudyId, setSeedStudyId] = useState("");
   const [seedStudyPoints, setSeedStudyPoints] = useState([]);
   const [seedStudyPointIndex, setSeedStudyPointIndex] = useState(0);
-  const [sequentialSpread, setSequentialSpread] = useState(0.3); // fraction of each parameter's outer range width used as the narrowed window
+  // Fraction of each parameter's outer range width used as the narrowed
+  // window. Holds the raw typed string while editing (see the NARROW TO
+  // input below) — parsed and clamped to [0.05, 1] once at the point of use
+  // in buildSequentialParameters(), not on every keystroke.
+  const [sequentialSpread, setSequentialSpread] = useState("0.3");
   // The Study's `origin` (StudyOrigin) — defaults to a plain user-authored
   // study; set explicitly when running a sequential study (seeded from an
   // Experiment/Study) or when a Study proposal from DiagnosticsTab's
@@ -1399,14 +1405,22 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   // cover (e.g. an experiment that didn't override every studied parameter).
   const buildSequentialParameters = useCallback((seedValues) => {
     return sampledParams.map(p => {
-      const outerWidth = p.max - p.min;
-      const seedVal = seedValues?.get(p.path) ?? (p.min + p.max) / 2;
-      const width = (outerWidth * sequentialSpread) || outerWidth || 1;
+      // p.min/p.max hold the raw typed string while the user is editing
+      // (see SampledParamRangeList) — parse once here, at the point of use.
+      const min = numberDefault(p.min, 0);
+      const max = numberDefault(p.max, 0);
+      const outerWidth = max - min;
+      const seedVal = seedValues?.get(p.path) ?? (min + max) / 2;
+      // sequentialSpread also holds the raw typed string while editing — parse
+      // and clamp to [0.05, 1] here, at read time, rather than on every
+      // keystroke (which fought typing a value like "0.25").
+      const spread = Math.min(1, Math.max(0.05, numberDefault(sequentialSpread, 0.3)));
+      const width = (outerWidth * spread) || outerWidth || 1;
       let lo = seedVal - width / 2;
       let hi = seedVal + width / 2;
-      if (lo < p.min) { hi = Math.min(p.max, hi + (p.min - lo)); lo = p.min; }
-      if (hi > p.max) { lo = Math.max(p.min, lo - (hi - p.max)); hi = p.max; }
-      if (!(hi > lo)) { lo = p.min; hi = p.max; }
+      if (lo < min) { hi = Math.min(max, hi + (min - lo)); lo = min; }
+      if (hi > max) { lo = Math.max(min, lo - (hi - max)); hi = max; }
+      if (!(hi > lo)) { lo = min; hi = max; }
       return { ...p, min: lo, max: hi };
     });
   }, [sampledParams, sequentialSpread]);
@@ -1420,7 +1434,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       return buildSequentialParameters(resolvedSeedValues).map(p => ({ ...p, range: { min: p.min, max: p.max, step: (p.max - p.min) / 10 || 1 } }));
     }
     if (sweepMode === "sampled") {
-      return sampledParams.map(p => ({ ...p, range: { min: p.min, max: p.max, step: (p.max - p.min) / 10 || 1 } }));
+      return sampledParams.map(p => {
+        const min = numberDefault(p.min, 0);
+        const max = numberDefault(p.max, 0);
+        return { ...p, range: { min, max, step: (max - min) / 10 || 1 } };
+      });
     }
     const parameters = [{ ...sweepSelectedParam, range: { min: sweepMin, max: sweepMax, step: sweepStep } }];
     if (sweepMode === "2d" && sweepSelectedParamB) {
@@ -1666,7 +1684,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (hasAdmissionErrors) return;
     if (sweepMode === "1d" && !sweepSelectedParam) return;
     if (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB)) return;
-    if ((sweepMode === "sampled" || sweepMode === "sequential") && (!sampledParams.length || sampledParams.some(p => !(p.max > p.min)))) return;
+    if ((sweepMode === "sampled" || sweepMode === "sequential") && (!sampledParams.length || sampledParams.some(p => !(numberDefault(p.max, 0) > numberDefault(p.min, 0))))) return;
     if (sweepMode === "sequential" && !resolvedSeedValues) return;
 
     // Range fields hold the raw typed string while editing (see the MIN/MAX/STEP
@@ -1700,7 +1718,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         model,
         planType: sweepMode === "sequential" ? "sequential" : "sampled",
         parameters,
-        points: sampledPointCount,
+        points: intDefault(sampledPointCount, 10),
         replications,
         baseSeed: seed,
         warmupPeriod,
@@ -2054,8 +2072,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                     )}
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>NARROW TO</span>
-                      <input type="number" aria-label="Narrowed range width, as a fraction of the outer range" min={0.05} max={1} step={0.05} value={sequentialSpread}
-                        onChange={e => setSequentialSpread(Math.min(1, Math.max(0.05, parseFloat(e.target.value) || 0.3)))}
+                      <input type="number" aria-label="Narrowed range width, as a fraction of the outer range" min={0.05} max={1} step={0.05} value={sequentialSpread ?? ""}
+                        onChange={e => setSequentialSpread(e.target.value)}
                         style={{ width: 70, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px" }} />
                       <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>× each parameter's outer range width, centred on the seed point</span>
                     </div>
@@ -2065,15 +2083,23 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 100 }}>
                     <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>POINTS</span>
-                    <input type="number" aria-label="Sampled study point count" min={1} value={sampledPointCount}
-                      onChange={e => setSampledPointCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    <input type="number" aria-label="Sampled study point count" min={1} value={sampledPointCount ?? ""}
+                      onChange={e => setSampledPointCount(e.target.value)}
                       style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", width: 90 }} />
                   </div>
-                  <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
-                    {sampledPointCount * replications > MAX_STUDY_REPLICATIONS
-                      ? `⚠ ${sampledPointCount} points x ${replications} replications = ${sampledPointCount * replications} replications, exceeding the ${MAX_STUDY_REPLICATIONS.toLocaleString()}-replication budget.`
-                      : `${sampledPointCount} points x ${replications} replications = ${sampledPointCount * replications} replications`}
-                  </span>
+                  {(() => {
+                    // sampledPointCount holds the raw typed string while editing (same
+                    // fix as the range inputs above) — parse once here, at the point of use.
+                    const pointCount = intDefault(sampledPointCount, 10);
+                    const totalReplications = pointCount * replications;
+                    return (
+                      <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+                        {totalReplications > MAX_STUDY_REPLICATIONS
+                          ? `⚠ ${pointCount} points x ${replications} replications = ${totalReplications} replications, exceeding the ${MAX_STUDY_REPLICATIONS.toLocaleString()}-replication budget.`
+                          : `${pointCount} points x ${replications} replications = ${totalReplications} replications`}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -2287,7 +2313,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   <Btn variant="primary" onClick={handleRunSweep}
                     disabled={sweepStatus === "running" || hasAdmissionErrors
                       || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))
-                      || ((sweepMode === "sampled" || sweepMode === "sequential") && (!sampledParams.length || sampledParams.some(p => !(p.max > p.min))))
+                      || ((sweepMode === "sampled" || sweepMode === "sequential") && (!sampledParams.length || sampledParams.some(p => !(numberDefault(p.max, 0) > numberDefault(p.min, 0)))))
                       || (sweepMode === "sequential" && !resolvedSeedValues)}>
                     {sweepStatus === "running" ? "Running..." : "Run Sweep"}
                   </Btn>
