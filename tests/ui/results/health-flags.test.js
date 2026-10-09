@@ -268,3 +268,33 @@ describe("evaluateLiveHealth — L7 (balking)", () => {
     expect(l7.severity).toBe("warning");
   });
 });
+
+describe("evaluateResultsHealth — H14/H15 (container levels over time)", () => {
+  const series = (levels) => ({ summary: {}, timeSeries: levels.map((v, t) => ({ t, byQueue: {}, byType: {}, byContainer: { Stock: v } })) });
+
+  test("H14 when a stock that held product ran empty", () => {
+    const flags = evaluateResultsHealth(series([10, 10, 5, 0, 0, 8, 8, 8, 8, 8, 8]), {});
+    const f = flags.find(x => x.code === "H14");
+    expect(f).toBeDefined();
+    expect(f.resource).toBe("Stock");
+    expect(f.message).toContain("ran empty 1 time");
+    expect(f.message).toContain("first at t = 3");
+    expect(f.message).toContain("20% of the run");
+  });
+
+  test("no H14 for a container that was never non-empty", () => {
+    const flags = evaluateResultsHealth(series([0, 0, 0, 0]), {});
+    expect(flags.find(x => x.code === "H14")).toBeUndefined();
+  });
+
+  test("H15 when the level is drawn down without running empty", () => {
+    const flags = evaluateResultsHealth(series([100, 95, 90, 80, 70, 60, 50, 40, 30, 20]), {});
+    expect(flags.find(x => x.code === "H15")?.message).toContain("trending down");
+    expect(flags.find(x => x.code === "H14")).toBeUndefined();
+  });
+
+  test("notes the replication mean for batch results", () => {
+    const flags = evaluateResultsHealth(series([10, 0, 10]), {}, 5);
+    expect(flags.find(x => x.code === "H14").message).toContain("mean level across 5 replications");
+  });
+});

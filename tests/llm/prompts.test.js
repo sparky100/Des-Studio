@@ -21,6 +21,8 @@ import {
   parsePlanRefinementResponse,
   parseSuggestionResponse,
   promptWordEstimate,
+  buildKpis as buildKpisForContainers,
+  CONTAINER_OVER_TIME_NOTE,
 } from "../../src/llm/prompts.js";
 
 const model = {
@@ -1664,5 +1666,43 @@ describe("Phase 3 — Study proposal prompts", () => {
       const prompt = buildProposeNextStudyPrompt(study, points, sensitivity, sweepableParams);
       expect(prompt.messages[0].content).toMatch(/"rationale"/);
     });
+  });
+});
+
+describe("container levels over time in AI prompts", () => {
+  const containerModel = { containerTypes: [{ id: "ct_products", capacity: "200", initialLevel: "100" }] };
+  const results = {
+    summary: { containerLevels: { ct_products: { min: 0, avg: 40, max: 100, final: 40 } } },
+    timeSeries: [
+      { t: 0, byContainer: { ct_products: 100 } },
+      { t: 20, byContainer: { ct_products: 0 } },
+      { t: 40, byContainer: { ct_products: 40 } },
+      { t: 100, byContainer: { ct_products: 40 } },
+    ],
+  };
+
+  it("buildKpis attaches an overTime digest and the interpretation note", () => {
+    const kpis = buildKpisForContainers(containerModel, results);
+    const ct = kpis.containerLevels.ct_products;
+    expect(ct.min).toBe(0);
+    expect(ct.capacity).toBe("200");
+    expect(ct.overTime.trough).toEqual({ level: 0, t: 20 });
+    expect(ct.overTime.firstEmptyAt).toBe(20);
+    expect(ct.overTime.pctTimeEmpty).toBe(20);
+    expect(ct.overTime.profile.length).toBeGreaterThan(0);
+    expect(kpis.containerLevelsNote).toBe(CONTAINER_OVER_TIME_NOTE);
+  });
+
+  it("buildKpis has no overTime or note without a time series", () => {
+    const kpis = buildKpisForContainers(containerModel, { summary: results.summary });
+    expect(kpis.containerLevels.ct_products.overTime).toBeUndefined();
+    expect(kpis.containerLevelsNote).toBeUndefined();
+  });
+
+  it("report recommendations payload carries the digest too", () => {
+    const prompt = buildReportRecommendationsPrompt(containerModel, results);
+    const text = JSON.stringify(prompt);
+    expect(text).toContain("overTime");
+    expect(text).toContain("pctTimeEmpty");
   });
 });

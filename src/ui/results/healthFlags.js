@@ -2,6 +2,8 @@
 // Returns a sorted array of { code, severity, resource?, message, suggestion } objects.
 // severity: "critical" | "warning"
 
+import { summarizeContainerSeries } from "../../engine/containerSeriesStats.js";
+
 export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
   const flags = [];
   const summary = results?.summary || {};
@@ -122,6 +124,24 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
           message: `${q} queue trending up (avg ${earlyMean.toFixed(1)} → ${lateMean.toFixed(1)} waiting) — the system may not reach steady state.`,
           suggestion: "Check upstream constraints — the queue is growing faster than it's being drained, suggesting a capacity shortfall or an arrival surge." });
       }
+    }
+  }
+
+  // H14 / H15 — Container stock ran empty / is being drawn down — requires
+  // timeSeries[].byContainer. Container semantics vary (a product stock running
+  // dry is bad; a backlog buffer emptying is fine), so these stay warnings and
+  // the wording leaves the judgement to the modeller.
+  const containerDigest = summarizeContainerSeries(timeSeries);
+  const levelScope = isMultiRep ? ` (mean level across ${n} replications)` : "";
+  for (const [id, d] of Object.entries(containerDigest || {})) {
+    if (d.timesEmptied > 0 && d.peak.level > 0) {
+      flags.push({ code: "H14", severity: "warning", resource: id,
+        message: `${id} ran empty ${d.timesEmptied} time${d.timesEmptied !== 1 ? "s" : ""} — empty for ${d.pctTimeEmpty}% of the run, first at t = ${d.firstEmptyAt}${levelScope}.`,
+        suggestion: `If activities DRAIN from ${id}, demand went unmet while it was empty — consider a higher initial level, faster or larger FILLs, or more capacity.` });
+    } else if (d.samples >= 10 && d.earlyMean > 0 && d.lateMean < d.earlyMean * 0.5) {
+      flags.push({ code: "H15", severity: "warning", resource: id,
+        message: `${id} level trending down (avg ${d.earlyMean} → ${d.lateMean})${levelScope} — it is being drawn down faster than it is replenished.`,
+        suggestion: `A longer run may see ${id} run empty — check the balance between FILL and DRAIN rates.` });
     }
   }
 
