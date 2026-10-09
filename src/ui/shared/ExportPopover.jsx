@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useLayoutEffect, useRef } from "react";
 import { SHADOW } from "./tokens.js";
 import { useTheme } from "./ThemeContext.jsx";
 import { useToast } from "./ToastContext.jsx";
@@ -215,6 +215,8 @@ function CreateReportModal({ reportType, setReportType, reportFormat, setReportF
         borderRadius: 8,
         padding: 24,
         width: 380,
+        maxWidth: "95vw",
+        boxSizing: "border-box",
         boxShadow: SHADOW.overlay,
         fontFamily: FONT,
       }}>
@@ -375,12 +377,28 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
     }
   }, [results, model, config, runMeta, aggregateStats, onClose]);
 
+  // Keep the menu inside the viewport — the Export button often sits at the
+  // right edge of its toolbar, so a left-anchored menu overflows on phones.
+  const menuRef = useRef(null);
+  const [shiftX, setShiftX] = useState(0);
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el || typeof window === "undefined") return;
+    const margin = 8;
+    const rect = el.getBoundingClientRect();
+    const naturalLeft = rect.left - shiftX;
+    const overflowRight = naturalLeft + rect.width - (window.innerWidth - margin);
+    const next = overflowRight > 0 ? Math.max(-overflowRight, margin - naturalLeft) : 0;
+    if (next !== shiftX) setShiftX(next);
+  }, [shiftX]);
+
   return (
     <>
-      <div style={{
+      <div ref={menuRef} style={{
         position: "absolute",
         top: "calc(100% + 4px)",
-        left: 0,
+        left: shiftX,
+        maxWidth: "calc(100vw - 16px)",
         zIndex: 100,
         background: C.cardBg,
         border: `1px solid ${C.border}`,
