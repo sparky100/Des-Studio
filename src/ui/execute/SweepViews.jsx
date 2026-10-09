@@ -625,6 +625,53 @@ export function QueueDepthTimePlot({ timeSeries, queues, timeUnit }) {
   );
 }
 
+// ── ContainerLevelTimePlot — live container level per container, one chart each ──
+// Plots the instantaneous level recorded at each time-series sample
+// (timeSeries[].byContainer). The trough line under each chart shows the
+// lowest level so far and when it occurred — for product stocks, running dry
+// matters more than the peak.
+export function ContainerLevelTimePlot({ timeSeries, containerTypes, timeUnit }) {
+  const { C, FONT } = useTheme();
+  const ts = timeSeries || [];
+  const ids = [...new Set([
+    ...(containerTypes || []).map(ct => ct.id).filter(Boolean),
+    ...Object.keys(ts[ts.length - 1]?.byContainer || {}),
+  ])];
+  if (!ids.length) return null;
+
+  const series = ids.map(id => ({
+    id,
+    points: ts
+      .map(entry => ({ t: entry?.t ?? 0, v: entry?.byContainer?.[id] }))
+      .filter(p => Number.isFinite(p.v)),
+  })).filter(s => s.points.length >= 2);
+
+  if (!series.length) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+        CONTAINER LEVEL OVER TIME (per container)
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))", gap: 12 }}>
+        {series.map(({ id, points }) => {
+          const trough = points.reduce((b, p) => p.v < b.v ? p : b, points[0]);
+          const last = points[points.length - 1];
+          return (
+            <div key={id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <SingleQueueLinePlot name={id} points={points} color={C.green} yLabel="level" timeUnit={timeUnit} />
+              <div aria-label={`${id} trough`} style={{ fontSize: 10, color: C.muted, fontFamily: FONT, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <span>Trough <strong style={{ color: C.text }}>{+trough.v.toFixed(2)}</strong> at t = {Math.round(trough.t)}</span>
+                <span>Latest <strong style={{ color: C.text }}>{+last.v.toFixed(2)}</strong></span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── QueueWaitTimePlot — time-binned average wait per queue, one chart each ────
 // Each point is the average wait of entities that cleared the queue since the
 // previous time-series sample, answering "for arrivals around time t, what was

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   binSeriesPoints,
   buildChartSections,
+  buildContainerLevelSeries,
   buildQueueDepthSeries,
   buildResultsViewModel,
   buildRuntimeMetricsModel,
@@ -293,6 +294,7 @@ describe("results view model", () => {
       "system-wip",
       "system-throughput",
       "system-sojourn",
+      "container-levels",
     ]);
     expect(sections[0].question).toBe("How much time is spent queueing?");
     expect(sections[0].title).toBe("Waiting time distribution");
@@ -331,5 +333,34 @@ describe("results view model", () => {
     expect(sections.find(s => s.id === "system-wip").series).toEqual([]);
     expect(sections.find(s => s.id === "system-throughput").series).toEqual([]);
     expect(sections.find(s => s.id === "wait-by-arrival-attr").series).toEqual([]);
+  });
+});
+
+describe("buildContainerLevelSeries", () => {
+  const containerModel = { containerTypes: [{ id: "ct_products", capacity: "200", initialLevel: "100" }, { id: "ct_backlog", capacity: "50" }] };
+  const results = {
+    timeSeries: [
+      { t: 0, byContainer: { ct_products: 100, ct_backlog: 0 } },
+      { t: 5, byContainer: { ct_products: 0, ct_backlog: 0 } },
+      { t: 10, byContainer: { ct_products: 60, ct_backlog: 0 } },
+    ],
+  };
+
+  test("builds one series per container with level points and capacity", () => {
+    const series = buildContainerLevelSeries(results, containerModel);
+    const products = series.find(s => s.id === "ct_products");
+    expect(products.points).toEqual([{ t: 0, value: 100 }, { t: 5, value: 0 }, { t: 10, value: 60 }]);
+    expect(products.capacity).toBe(200);
+    expect(products.hasData).toBe(true);
+  });
+
+  test("keeps an always-empty container in the chart section (an empty stock is a finding)", () => {
+    const section = buildChartSections(results, containerModel).find(s => s.id === "container-levels");
+    expect(section.series.map(s => s.id)).toEqual(["ct_products", "ct_backlog"]);
+  });
+
+  test("has no series without byContainer data", () => {
+    const section = buildChartSections({ timeSeries: [{ t: 0 }, { t: 1 }] }, containerModel).find(s => s.id === "container-levels");
+    expect(section.series).toEqual([]);
   });
 });

@@ -557,3 +557,24 @@ describe("ResultsWorkspace", () => {
     expect(screen.getByText('BALKED AT "HIRE QUEUE"')).toBeInTheDocument();
   });
 });
+
+describe("container levels over time", () => {
+  test("renders a chart card per container with trough, peak, final and n tiles", () => {
+    const containerModel = { ...model, containerTypes: [{ id: "ct_asia_products", capacity: "200", initialLevel: "100" }] };
+    const containerResults = {
+      ...results,
+      timeSeries: [
+        { ...results.timeSeries[0], t: 0, byContainer: { ct_asia_products: 100 } },
+        { ...results.timeSeries[1], t: 5, byContainer: { ct_asia_products: 0 } },
+        { ...results.timeSeries[1], t: 9, byContainer: { ct_asia_products: 60 } },
+      ],
+    };
+    render(<ResultsWorkspace results={containerResults} model={containerModel} />);
+    const grid = screen.getByLabelText("Container level chart grid");
+    expect(within(grid).getByText("ct_asia_products")).toBeTruthy();
+    expect(within(grid).getByText("TROUGH")).toBeTruthy();
+    expect(within(grid).getByText("PEAK")).toBeTruthy();
+    expect(within(grid).getByText("FINAL")).toBeTruthy();
+    expect(within(grid).getByText("at t = 5")).toBeTruthy();
+  });
+});

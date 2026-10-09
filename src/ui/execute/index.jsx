@@ -2668,8 +2668,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         </div>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0, maxWidth: "100%" }}>
+          <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, overflowWrap: "anywhere", minWidth: 0 }}>
             {replications} rep{replications !== 1 ? "s" : ""} · {terminationMode === "time" ? `${maxSimTime} time units` : "condition stop"} · seed {seed}{warmupPeriod > 0 ? ` · warm-up ${warmupPeriod}` : ""}
           </span>
           <div style={{ position: "relative" }}>
@@ -2686,7 +2686,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 <div style={{ position: "fixed", inset: 0, zIndex: 99 }}
                   onClick={() => { setShowRunOverridesPanel(false); setRunOverridesPickerOpen(false); }} />
                 <div style={{
-                  position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 100, width: 360,
+                  position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 100, width: 360, maxWidth: "calc(100vw - 32px)",
                   background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 12,
                   display: "flex", flexDirection: "column", gap: 8, boxShadow: SHADOW.dropdown,
                 }}>

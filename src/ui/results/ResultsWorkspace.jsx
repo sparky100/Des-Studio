@@ -19,7 +19,7 @@ const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 140;
 
-const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, waitByArrival: true, serverUtil: true, shiftUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true, systemTrends: true };
+const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, waitOverTime: true, waitByArrival: true, serverUtil: true, shiftUtil: true, queueDepth: true, containerLevels: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true, systemTrends: true };
 
 // `SectionHeader` here is CollapsibleSection with Results' own aria-controls
 // id convention preserved verbatim (results-section-<id>, matching each
@@ -224,6 +224,23 @@ function ChartCard({ title, color, sourceLabel, statItems, dataPreview, children
       {dataPreview}
     </div>
   );
+}
+
+// Stat-card items for a container-level panel. The trough (lowest level and
+// when it occurred) leads — for product stocks, running dry matters more than
+// the peak.
+function containerSeriesStats(series, color) {
+  const pts = Array.isArray(series?.points) ? series.points : [];
+  if (pts.length < 2) return [];
+  const trough = pts.reduce((b, p) => Number(p.value) < Number(b.value) ? p : b, pts[0]);
+  const peak = pts.reduce((b, p) => Number(p.value) > Number(b.value) ? p : b, pts[0]);
+  const last = pts[pts.length - 1];
+  return [
+    { label: "trough", value: formatNumber(trough.value), color, desc: `at t = ${formatNumber(trough.t, 0)}` },
+    { label: "peak", value: formatNumber(peak.value), desc: `at t = ${formatNumber(peak.t, 0)}` },
+    { label: "final", value: formatNumber(last.value), desc: `t = ${formatNumber(last.t, 0)}` },
+    { label: "n", value: pts.length.toLocaleString(), desc: "data points" },
+  ];
 }
 
 // Returns the four stat-card items for a time-series panel.
@@ -1808,6 +1825,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const serverSection = chartModel.chartSections.find(section => section.id === "server-utilization");
   const waitSection = chartModel.chartSections.find(section => section.id === "wait-distribution");
   const waitTimeSection = chartModel.chartSections.find(section => section.id === "wait-over-time");
+  const containerSection = chartModel.chartSections.find(section => section.id === "container-levels");
   const waitByArrivalSection = chartModel.chartSections.find(section => section.id === "wait-by-arrival-attr");
   const wipSection = chartModel.chartSections.find(section => section.id === "system-wip");
   const throughputSection = chartModel.chartSections.find(section => section.id === "system-throughput");
@@ -2219,6 +2237,33 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                             dataPreview={<SeriesDataPreview series={series} />}
                           >
                             <MiniLineChart title="" ariaTitle={title} points={series.points} color={color} yLabel="depth" />
+                          </ChartCard>
+                        );
+                      })}
+                    </div>
+                  </ChartSectionShell>
+                </div>
+              </div>
+            )}
+
+            {chartModel.hasTimeSeries && containerSection?.series.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <SectionHeader id="containerLevels" label="Container levels over time" isOpen={sectionsOpen.containerLevels} onToggle={toggleSection} />
+                <div id="results-section-containerLevels" style={{ display: sectionsOpen.containerLevels ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+                  <ChartSectionShell section={containerSection}>
+                    <div aria-label="Container level chart grid" style={CHART_GRID}>
+                      {containerSection.series.map((series, idx) => {
+                        const color = CHART_COLORS[idx % CHART_COLORS.length];
+                        return (
+                          <ChartCard
+                            key={series.id}
+                            title={series.label}
+                            color={color}
+                            sourceLabel={series.sourceLabel}
+                            statItems={containerSeriesStats(series, color)}
+                            dataPreview={<SeriesDataPreview series={series} />}
+                          >
+                            <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="level" />
                           </ChartCard>
                         );
                       })}

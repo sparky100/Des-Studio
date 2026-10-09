@@ -1598,11 +1598,21 @@ const cycleLog = [];
       };
       const wipCountAtSample = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged" && e.status !== "balked").length;
       const completedSinceSample = state.__completedSinceSample || 0;
+      // Container levels (G21) — the instantaneous level at this sample time,
+      // not an interval average: FILL/DRAIN move a level in jumps, and an
+      // average would smooth over the moment a stock runs dry.
+      /** @type {Record<string, number> | null} */
+      let byContainer = null;
+      if (runtimeModel.containerTypes?.length) {
+        byContainer = {};
+        for (const ct of runtimeModel.containerTypes) byContainer[ct.id] = state[`__container_${ct.id}`] ?? 0;
+      }
+      const containerField = byContainer ? { byContainer } : {};
       if (stepSnap) {
-        _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: withRecentWaits(stepSnap.byQueue), wip: wipCountAtSample, completed: completedSinceSample });
+        _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: withRecentWaits(stepSnap.byQueue), ...containerField, wip: wipCountAtSample, completed: completedSinceSample });
       } else {
         liteSnap = snapLite();
-        _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: withRecentWaits(liteSnap.byQueue), wip: wipCountAtSample, completed: completedSinceSample });
+        _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: withRecentWaits(liteSnap.byQueue), ...containerField, wip: wipCountAtSample, completed: completedSinceSample });
       }
       state.__completedSinceSample = 0;
       _lastTimeSeriesSampleT = clock;
