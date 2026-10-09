@@ -412,3 +412,35 @@ describe('container() token — bEvents[].routing[].condition', () => {
     expect(patient.queue).toBe('ICU Queue');
   });
 });
+
+// ── Container level time series (byContainer) ─────────────────────────────────
+
+describe('timeSeries byContainer', () => {
+  test('records the instantaneous level at each sample, including a drop to zero', () => {
+    const model = makeContainerModel({
+      containers: [{ id: 'Stock', capacity: '1000', initialLevel: '100' }],
+      bEffects: [
+        { id: 'drain', name: 'Drain', scheduledTime: '3', effect: 'DRAIN(Stock, 100)', schedules: [] },
+        { id: 'fill',  name: 'Fill',  scheduledTime: '6', effect: 'FILL(Stock, 40)',   schedules: [] },
+      ],
+      maxTime: 10,
+    });
+    const engine = buildEngine(model, 42, 0, 10, null, 5000, 5000, true);
+    const result = engine.runAll();
+    const ts = result.timeSeries;
+    expect(ts.length).toBeGreaterThan(0);
+    for (const pt of ts) expect(pt.byContainer).toHaveProperty('Stock');
+    const at = t => ts.filter(pt => pt.t <= t).at(-1)?.byContainer.Stock;
+    expect(at(2.5)).toBe(100);
+    expect(at(4)).toBe(0);
+    expect(at(9)).toBe(40);
+  });
+
+  test('omits byContainer when the model has no containers', () => {
+    const model = makeContainerModel({ containers: [], maxTime: 5 });
+    const engine = buildEngine(model, 42, 0, 5, null, 5000, 5000, true);
+    const result = engine.runAll();
+    expect(result.timeSeries.length).toBeGreaterThan(0);
+    for (const pt of result.timeSeries) expect(pt.byContainer).toBeUndefined();
+  });
+});

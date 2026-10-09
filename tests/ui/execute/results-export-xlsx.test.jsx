@@ -130,3 +130,25 @@ describe("buildResultsXlsx — container/skill/rejection sheets", () => {
     expect(findSheet("Activity Throughput")).toBeUndefined();
   });
 });
+
+describe("buildResultsXlsx — container levels over time", () => {
+  it("adds one row per sample and one column per container", async () => {
+    await buildResultsXlsx({
+      results: {
+        summary: {},
+        timeSeries: [
+          { t: 0, byQueue: {}, byType: {}, byContainer: { Products: 112.4, Backlog: 0 } },
+          { t: 5, byQueue: {}, byType: {}, byContainer: { Products: 0, Backlog: 7 } },
+        ],
+      },
+      model: { name: "Oil" },
+    });
+    const sheet = findSheet("Container Levels Over Time");
+    expect(sheet.rows).toEqual([["Time", "Products", "Backlog"], [0, 112.4, 0], [5, 0, 7]]);
+  });
+
+  it("omits the sheet when the time series has no container data", async () => {
+    await buildResultsXlsx({ results: { summary: {}, timeSeries: [{ t: 0, byQueue: {}, byType: {} }] }, model: { name: "Plain" } });
+    expect(findSheet("Container Levels Over Time")).toBeUndefined();
+  });
+});

@@ -277,3 +277,31 @@ describe("makeBatchResult container/skill/adherence aggregation", () => {
     expect(batch.summary.perResource.Staff.scheduleAdherence).toBeCloseTo(0.85);
   });
 });
+
+describe("byContainer averaging across replications", () => {
+  const rep = (levels) => levels.map(([t, v]) => ({ t, byQueue: {}, byType: {}, byContainer: { Stock: v } }));
+
+  it("makeTimeSeriesAccumulator reports the mean level per grid point", () => {
+    const acc = makeTimeSeriesAccumulator(3, 2);
+    acc.addSeries(rep([[0, 100], [1, 0], [2, 40]]));
+    acc.addSeries(rep([[0, 100], [1, 20], [2, 60]]));
+    const result = acc.getResult();
+    expect(result.map(pt => pt.byContainer.Stock)).toEqual([100, 10, 50]);
+  });
+
+  it("makeBatchResult (non-streaming path) reports the mean level per point", () => {
+    const replicationPayloads = [
+      { result: { summary: {}, timeSeries: rep([[0, 100], [1, 0]]) } },
+      { result: { summary: {}, timeSeries: rep([[0, 80], [1, 30]]) } },
+    ];
+    const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
+    expect(batch.timeSeries.find(pt => pt.t === 0).byContainer.Stock).toBe(90);
+    expect(batch.timeSeries.find(pt => pt.t === 1).byContainer.Stock).toBe(15);
+  });
+
+  it("omits byContainer when no replication recorded containers", () => {
+    const acc = makeTimeSeriesAccumulator(2, 1);
+    acc.addSeries([{ t: 0, byQueue: {}, byType: {} }, { t: 1, byQueue: {}, byType: {} }]);
+    for (const pt of acc.getResult()) expect(pt.byContainer).toBeUndefined();
+  });
+});

@@ -71,7 +71,8 @@ const SCHEMA_REFERENCE_TEXT = `simmodlr.results.v1 — JSON Export Schema
       }
     ],
     timeSeries: [                     // per-interval snapshots
-      { clock: 0.5, byQueue: { ... }, byType: { ... }, wip: 3, completed: 1 }
+      { t: 0.5, byQueue: { ... }, byType: { ... }, wip: 3, completed: 1,
+        byContainer: { "Tank": 112.4 } }  // container level at t (models with containers)
     ],
     waitDist: {                       // per-queue wait distributions
       "QueueName": { n: 200, mean: 2.3, values: [ ... ], histogram: { ... } }

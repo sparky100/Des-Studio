@@ -97,6 +97,36 @@ export function buildQueueDepthSeries(results = {}, model = {}, sectionFilter = 
   });
 }
 
+// Container level over time (G21) — the instantaneous level recorded at each
+// time-series sample (mean across replications for a batch run). Unlike queue
+// depth, a container that sat at zero all run is still shown: an empty stock
+// is a finding, not an absence of data.
+export function buildContainerLevelSeries(results = {}, model = {}, sectionFilter = null) {
+  const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
+  const containerTypes = Array.isArray(model?.containerTypes) ? model.containerTypes : [];
+  const ids = [...new Set([
+    ...containerTypes.map(ct => ct.id).filter(Boolean),
+    ...timeSeries.flatMap(entry => Object.keys(entry?.byContainer || {})),
+  ])];
+  const filteredIds = sectionFilter ? ids.filter(id => sectionFilter.shouldInclude(id)) : ids;
+
+  return filteredIds.map(id => {
+    const ct = containerTypes.find(c => c.id === id);
+    const capacity = finiteOrNull(ct?.capacity);
+    const points = timeSeries
+      .filter(entry => Number.isFinite(Number(entry?.byContainer?.[id])))
+      .map(entry => ({ t: finiteNumber(entry?.t), value: finiteNumber(entry.byContainer[id]) }));
+    return {
+      id,
+      label: id,
+      capacity,
+      points,
+      hasData: points.length >= 2,
+      sourceLabel: `Level at each sample time${capacity != null ? ` (capacity ${capacity})` : ""}`,
+    };
+  });
+}
+
 export function buildServerUtilizationSeries(results = {}, model = {}, sectionFilter = null) {
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
   const serverTypes = (model?.entityTypes || []).filter(et => et.role === "server");
@@ -320,6 +350,7 @@ export function buildSystemSojournDistribution(results = {}) {
 
 export function buildChartSections(results = {}, model = {}, sectionFilter = null) {
   const queueDepthSeries = buildQueueDepthSeries(results, model, sectionFilter).filter(hasNonZeroValue);
+  const containerLevelSeries = buildContainerLevelSeries(results, model, sectionFilter).filter(s => s.hasData);
   const serverUtilizationSeries = buildServerUtilizationSeries(results, model, sectionFilter).filter(hasNonZeroValue);
   const waitDistributions = buildWaitDistributions(results, model, sectionFilter);
   const waitTimeSeries = buildWaitTimeSeries(results, model, sectionFilter).filter(s => s.hasData && hasNonZeroValue(s));
@@ -401,6 +432,15 @@ export function buildChartSections(results = {}, model = {}, sectionFilter = nul
       distributions: systemSojournDistributions,
       maxValue: Math.max(0, ...systemSojournDistributions.map(d => finiteNumber(d.p99))),
     },
+    {
+      id: "container-levels",
+      title: "How container levels changed over time",
+      question: "When did stocks run low?",
+      method: "Shows each container's level at every sampled time point, in container units. Levels are instantaneous readings, not interval averages, so a stock hitting zero shows as a dip to zero.",
+      emptyMessage: "Run with Detailed output enabled to see container levels over time.",
+      series: containerLevelSeries,
+      maxValue: Math.max(0, ...containerLevelSeries.map(maxPointValue)),
+    },
   ];
 }
 
@@ -464,6 +504,7 @@ export function buildResultsViewModel(results = {}, model = {}, options = {}) {
     serverUtilizationSeries: chartSections.find(s => s.id === "server-utilization")?.series || [],
     waitDistributions: chartSections.find(s => s.id === "wait-distribution")?.distributions || [],
     waitTimeSeries: chartSections.find(s => s.id === "wait-over-time")?.series || [],
+    containerLevelSeries: chartSections.find(s => s.id === "container-levels")?.series || [],
     shiftUtilizationSeries: buildShiftUtilizationSeries(results.summary || {}),
     chartSections,
     runtimeMetrics,

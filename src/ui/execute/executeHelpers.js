@@ -110,6 +110,10 @@ export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) 
     : null;
   let queueSums = grid ? {} : null;
   let typeSums = grid ? {} : null;
+  // Container levels: summed per grid point, divided by the number of
+  // replications that reported the container at that point (a level, like
+  // queue waiting — not a delta counter).
+  let containerSums = grid ? {} : null;
   let wipSums = grid ? new Float64Array(grid.length) : null;
   let completedSums = grid ? new Float64Array(grid.length) : null;
   let count = 0;
@@ -133,6 +137,10 @@ export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) 
     };
     return queueSums[k];
   }
+  function ensureContainerKey(k) {
+    if (!containerSums[k]) containerSums[k] = { sum: new Float64Array(grid.length), n: new Float64Array(grid.length) };
+    return containerSums[k];
+  }
   function ensureTypeKey(k) {
     if (!typeSums[k]) typeSums[k] = { waiting: new Float64Array(grid.length), busy: new Float64Array(grid.length), idle: new Float64Array(grid.length), total: new Float64Array(grid.length) };
     return typeSums[k];
@@ -147,6 +155,7 @@ export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) 
         : times.slice();
       queueSums = {};
       typeSums = {};
+      containerSums = {};
       wipSums = new Float64Array(grid.length);
       completedSums = new Float64Array(grid.length);
     }
@@ -186,6 +195,12 @@ export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) 
         s.idle[gi] += ty.idle ?? 0;
         s.total[gi] += ty.total ?? 0;
       }
+      for (const [k, level] of Object.entries(pt.byContainer || {})) {
+        if (!Number.isFinite(level)) continue;
+        const s = ensureContainerKey(k);
+        s.sum[gi] += level;
+        s.n[gi]++;
+      }
       if (typeof pt.wip === "number") wipSums[gi] += pt.wip;
     }
     count++;
@@ -204,7 +219,16 @@ export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) 
         };
       for (const [k, s] of Object.entries(typeSums))
         byType[k] = { waiting: s.waiting[gi] / count, busy: s.busy[gi] / count, idle: s.idle[gi] / count, total: s.total[gi] / count };
-      return { t, byQueue, byType, wip: wipSums[gi] / count, completed: completedSums[gi] / count };
+      const containerKeys = Object.keys(containerSums);
+      let byContainer;
+      if (containerKeys.length) {
+        byContainer = {};
+        for (const k of containerKeys) {
+          const s = containerSums[k];
+          if (s.n[gi] > 0) byContainer[k] = s.sum[gi] / s.n[gi];
+        }
+      }
+      return { t, byQueue, byType, ...(byContainer ? { byContainer } : {}), wip: wipSums[gi] / count, completed: completedSums[gi] / count };
     });
   }
 
@@ -453,10 +477,12 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
   // Collect all key names across all reps
   const queueNames = new Set();
   const typeNames = new Set();
+  const containerNames = new Set();
   for (const ts of allSeries) {
     for (const pt of ts) {
       for (const k of Object.keys(pt.byQueue || {})) queueNames.add(k);
       for (const k of Object.keys(pt.byType || {})) typeNames.add(k);
+      for (const k of Object.keys(pt.byContainer || {})) containerNames.add(k);
     }
   }
 
@@ -512,7 +538,20 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       if (count > 0) byType[tName] = { waiting: sumWaiting / count, busy: sumBusy / count, idle: sumIdle / count, total: sumTotal / count };
     }
 
-    return { t, byQueue, byType, ...(wip !== undefined ? { wip } : {}), ...(completed !== undefined ? { completed } : {}) };
+    let byContainer;
+    if (containerNames.size) {
+      byContainer = {};
+      for (const cName of containerNames) {
+        let sum = 0, count = 0;
+        for (const snaps of repSnapshots) {
+          const level = snaps[gi]?.byContainer?.[cName];
+          if (Number.isFinite(level)) { sum += level; count++; }
+        }
+        if (count > 0) byContainer[cName] = sum / count;
+      }
+    }
+
+    return { t, byQueue, byType, ...(byContainer ? { byContainer } : {}), ...(wip !== undefined ? { wip } : {}), ...(completed !== undefined ? { completed } : {}) };
   });
 }
 
@@ -834,6 +873,20 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
       clRows.push([id, lvl.min ?? '', lvl.avg ?? '', lvl.max ?? '', lvl.final ?? '']);
     }
     sheets.push({ name: 'Container Levels', rows: clRows, colWidths: [18, 10, 10, 10, 10] });
+  }
+
+  // Sheet: Container Levels Over Time — one row per time-series sample, one
+  // column per container (instantaneous level; mean across replications for
+  // a batch run).
+  const tsForContainers = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
+  const containerSeriesIds = [...new Set(tsForContainers.flatMap(pt => Object.keys(pt?.byContainer || {})))];
+  if (containerSeriesIds.length) {
+    const ctRows = [['Time', ...containerSeriesIds]];
+    for (const pt of tsForContainers) {
+      if (!pt?.byContainer) continue;
+      ctRows.push([pt.t, ...containerSeriesIds.map(id => pt.byContainer[id] ?? '')]);
+    }
+    sheets.push({ name: 'Container Levels Over Time', rows: ctRows, colWidths: [12, ...containerSeriesIds.map(() => 16)] });
   }
 
   // Sheet: Skill Utilisation (when at least one resource type has skillUtil)
