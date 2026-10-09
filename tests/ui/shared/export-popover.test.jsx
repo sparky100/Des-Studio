@@ -73,3 +73,33 @@ describe('ExportPopover', () => {
     expect(screen.getByRole('dialog', { name: /json export schema reference/i })).toBeInTheDocument();
   });
 });
+
+// Regression: React error #185 (maximum update depth) when opening Export near
+// the right edge. Real layout reports fractional positions that never settle
+// exactly on the value the viewport-clamp asked for, so a measure → setState →
+// re-measure loop never terminated.
+describe('ExportPopover viewport clamp', () => {
+  it('positions once without an update loop when layout reports drifting sub-pixel values', () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+    let calls = 0;
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      calls++;
+      const left = parseFloat(this.style?.left || '0') || 0;
+      // Anchor at x=300; each measurement is off by a tiny, changing amount.
+      const x = 300 + left + calls * 0.0001;
+      return { left: x, right: x + 260, width: 260, top: 0, bottom: 200, height: 200, x, y: 0, toJSON() {} };
+    });
+    try {
+      expect(() => renderPopover()).not.toThrow();
+      const menu = screen.getByText(/full model results \(\.json\)/i).closest('div[style*="absolute"]');
+      const left = parseFloat(menu.style.left);
+      // Right edge pulled inside the 360px viewport (8px margin): 300 + left + 260 <= 352.
+      expect(300 + left + 260).toBeLessThanOrEqual(352.01);
+      expect(calls).toBeLessThan(10);
+    } finally {
+      spy.mockRestore();
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+    }
+  });
+});
