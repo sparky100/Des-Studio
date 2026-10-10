@@ -12,7 +12,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim, noteServerClaim, mayHoldOtherServers, markTerminal, setServerStatus } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
 // per-macro usages below for the (large, and macro-specific) set of fields
@@ -309,13 +309,13 @@ function claimMatchesPair(customer, server) {
  * @param {{ felRef?: Record<string, any>|null, endedBy?: string }} [options]
  */
 function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLETE" } = {}) {
-  const { entities, state, clock, msgs } = ctx;
+  const { state, clock, msgs } = ctx;
 
   if (cust.status === "serving" || cust.role === "batch") {
     if (!cust.stages) cust.stages = [];
     cust.stages.push(buildStageRecord(cust, srv, clock));
     clearWaitingState(cust, ctx.index);
-    cust.status        = "done";
+    markTerminal(ctx.index, cust, "done");
     cust.completionTime = clock;
     cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
     setOutcome(cust, {
@@ -342,16 +342,24 @@ function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLE
   // Release any auxiliary servers that were co-seized with this customer (COSEIZE pattern).
   // They have currentCustId pointing to the now-done customer but were not tracked in
   // the primary server context, so completion would otherwise leave them permanently busy.
-  const auxiliaryBusy = entities.filter((/** @type {any} */ e) =>
+  // Only an entity that has claimed more than one server can hold any besides srv.
+  const auxiliaryBusy = mayHoldOtherServers(cust) ? serverRoster(ctx).filter((/** @type {any} */ e) =>
     e.role === "server" &&
     e.currentCustId === cust.id &&
     e.id !== srv?.id &&
     (e.status === "busy" || e.status === "serving")
-  );
+  ) : [];
   for (const auxSrv of auxiliaryBusy) {
     releaseServerClaim(null, auxSrv, clock);
     if (!beginTurnaround(auxSrv, ctx)) msgs.push(`Server #${auxSrv.id} (${auxSrv.type}) → idle (COSEIZE release)`);
   }
+}
+
+// Every server, in roster order: the index's server list when there is one
+// (servers only — far shorter than `entities` on a busy model), else entities.
+/** @param {Record<string, any>} ctx */
+function serverRoster(ctx) {
+  return ctx.index ? ctx.index.servers : ctx.entities;
 }
 
 /** @type {MacroDef[]} */
@@ -445,9 +453,16 @@ export const MACROS = [
         : null;
 
       const candidates = listWaiting(queueToken, discipline, entities, filterFn, !!matchedQ, true, ctx.index);
-      const allIdleServers = isAnyType
-        ? (helpers.allServers ? helpers.allServers().filter((/** @type {any} */ s) => s.status === "idle" && !s._suspended) : [])
-        : (helpers.idleOf(sType) || []);
+      // Plain ASSIGN (one type, no skill, no SCAN, no trace) only needs the
+      // first idle server — skip building the full sorted idle list.
+      const firstIdleOnly = !isAnyType && !skillLiteral && !skillAttrName && !scan && !arbitrationTarget && typeof helpers.firstIdleOf === "function";
+      const firstIdle = firstIdleOnly ? helpers.firstIdleOf(sType) : null;
+      const allIdleServers = firstIdleOnly
+        ? (firstIdle ? [firstIdle] : [])
+        : isAnyType
+          ? (helpers.allServers ? helpers.allServers().filter((/** @type {any} */ s) => s.status === "idle" && !s._suspended) : [])
+          : (helpers.idleOf(sType) || []);
+      const idleServerTotal = () => (firstIdleOnly && helpers.idleCount ? helpers.idleCount(sType) : allIdleServers.length);
 
       // Resolve skill: literal takes precedence, otherwise resolve from entity attribute
       const skillFor = (/** @type {any} */ entity) => {
@@ -494,8 +509,8 @@ export const MACROS = [
       const skill = skillFor(cust);
       const rankedServers = rankedServersFor(skill);
 
-      /** @type {Record<string, any>} */
-      const arbitration = {
+      /** @type {Record<string, any>|null} */
+      const arbitration = !arbitrationTarget ? null : {
         type: "server",
         serverType: sType,
         skill: skill || undefined,
@@ -554,11 +569,13 @@ export const MACROS = [
         cust.ceventName    = ctx.ceventName;
         setLastCustId(cust.id);
         setLastSrvId(srv.id);
-        arbitration.winner = { entityId: cust.id, serverId: srv.id, serverType: srv.type, skill: skill || undefined, skillSource: skillAttrName || undefined };
-        arbitration.losers = candidates
-          .filter(e => e.id !== cust.id)
-          .map(e => ({ entityId: e.id, reason: "lower priority or later arrival" }));
-        if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
+        if (arbitration && arbitrationTarget) {
+          arbitration.winner = { entityId: cust.id, serverId: srv.id, serverType: srv.type, skill: skill || undefined, skillSource: skillAttrName || undefined };
+          arbitration.losers = candidates
+            .filter(e => e.id !== cust.id)
+            .map(e => ({ entityId: e.id, reason: "lower priority or later arrival" }));
+          Object.assign(arbitrationTarget, arbitration);
+        }
         const skillSuffix = skill ? ` (skill: ${skill}${skillAttrName ? ` ← Entity.${skillAttrName}` : ''})` : '';
         const scanSuffix = scannedPast > 0 ? ` (SCAN: passed ${scannedPast} ahead with no matching idle server)` : '';
         const servedByType = isAnyType ? srv.type : sType;
@@ -567,12 +584,14 @@ export const MACROS = [
           `[waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
         );
       } else {
-        arbitration.noMatch = true;
-        arbitration.candidateCount = candidates.length;
-        arbitration.idleServerCount = allIdleServers.length;
-        if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
+        if (arbitration && arbitrationTarget) {
+          arbitration.noMatch = true;
+          arbitration.candidateCount = candidates.length;
+          arbitration.idleServerCount = allIdleServers.length;
+          Object.assign(arbitrationTarget, arbitration);
+        }
         const skillSuffix = skill ? ` (skill: ${skill})` : '';
-        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${candidates.length} idle=${allIdleServers.length}${skillSuffix}`);
+        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${candidates.length} idle=${idleServerTotal()}${skillSuffix}`);
         // Nothing changed — report a no-op so Phase C doesn't restart its scan
         // for this firing. Without this, a condition like
         // `queue(Q).length > 0 AND idle(T).count > 0` that stays true while the
@@ -766,7 +785,7 @@ export const MACROS = [
           srvById.currentCustId === custId;
         srv = srvByIdIsMatch
           ? srvById
-          : entities.find((/** @type {any} */ e) =>
+          : serverRoster(ctx).find((/** @type {any} */ e) =>
               e.role === "server" &&
               e.type.trim().toLowerCase() === srvType.trim().toLowerCase() &&
               e.status === "busy" &&
@@ -863,7 +882,7 @@ export const MACROS = [
       const claimedServers = [];
       const lostTypes = (cust._lostClaimTypes || []).slice();
       for (const t of typeList) {
-        const matches = entities.filter((/** @type {any} */ e) =>
+        const matches = serverRoster(ctx).filter((/** @type {any} */ e) =>
           e.role === "server" &&
           e.currentCustId === cust.id &&
           e.type.trim().toLowerCase() === t.toLowerCase() &&
@@ -917,7 +936,7 @@ export const MACROS = [
         if (!ent.stages) ent.stages = [];
         ent.stages.push(buildStageRecord(ent, null, clock));
         clearWaitingState(ent, ctx.index);
-        ent.status     = "reneged";
+        markTerminal(ctx.index, ent, "reneged");
         ent.renegeTime = clock;
         setOutcome(ent, {
           status: "reneged",
@@ -1068,7 +1087,7 @@ export const MACROS = [
       }
 
       clearWaitingState(parent, ctx.index);
-      parent.status = "done";
+      markTerminal(ctx.index, parent, "done");
       parent.completionTime = clock;
       setOutcome(parent, {
         status: "completed",
@@ -1098,7 +1117,7 @@ export const MACROS = [
       const ent = selectWaiting(queueToken, discipline, entities, null, !!matchedQ, ctx.index);
       if (ent) {
         clearWaitingState(ent, ctx.index);
-        ent.status     = "reneged";
+        markTerminal(ctx.index, ent, "reneged");
         ent.renegeTime = clock;
         setOutcome(ent, {
           status: "reneged",
@@ -1344,7 +1363,7 @@ export const MACROS = [
             if (!carried) msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
           }
         }
-        srv.status = "failed";
+        setServerStatus(srv, "failed");
         srv._failedAt = clock;
         failedCount++;
       }
@@ -1553,7 +1572,7 @@ export const MACROS = [
             stages: member.stages.map((/** @type {any} */ s) => ({ ...s })),
           });
           clearWaitingState(member, ctx.index);
-          member.status = "done";
+          markTerminal(ctx.index, member, "done");
           member.completionTime = clock;
           setOutcome(member, {
             status: "completed",
@@ -1680,11 +1699,12 @@ export const MACROS = [
           srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
           delete srv._starvationStart;
         }
-        srv.status = "busy";
+        setServerStatus(srv, "busy");
         srv._busyStart = clock;
         srv._currentSkill = skill;
         srv.currentCustId = cust.id;
         srv._claimGroup = primary.srv._claimGroup;
+        noteServerClaim(cust);
         srv.resourceClaim = {
           customerId: cust.id,
           customerType: cust.type,
@@ -1792,7 +1812,7 @@ export const MACROS = [
       indexTrackEntity(ctx.index, parent);
 
       clearWaitingState(entityA, ctx.index);
-      entityA.status = "done";
+      markTerminal(ctx.index, entityA, "done");
       entityA.completionTime = clock;
       setOutcome(entityA, {
         status: "completed",
@@ -1804,7 +1824,7 @@ export const MACROS = [
       entityA._matchedInto = parentId;
 
       clearWaitingState(entityB, ctx.index);
-      entityB.status = "done";
+      markTerminal(ctx.index, entityB, "done");
       entityB.completionTime = clock;
       setOutcome(entityB, {
         status: "completed",

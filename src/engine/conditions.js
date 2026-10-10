@@ -57,9 +57,7 @@ function resolveQueueValue(queueName, property, state) {
   if (state.queues?.[queueName]?.[property] != null) return state.queues[queueName][property];
   if (state.queues?.[queueName]?.[normalizedProperty] != null) return state.queues[queueName][normalizedProperty];
 
-  const queueDef = state.model?.queues?.find((/** @type {any} */ q) =>
-    String(q.name || "").trim().toLowerCase() === String(queueName || "").trim().toLowerCase()
-  );
+  const queueDef = queueDefFor(state.model, queueName);
   const discipline = queueDef?.discipline || "FIFO";
   const inQueueCount = state.helpers?.waitingInQueue?.(queueName, discipline)?.length;
 
@@ -146,6 +144,46 @@ const OTHER_ATTR_RE = /^Other\.\w+$/;
 // state variable called sour stays a literal. No arithmetic: the RHS is a
 // single reference, never an expression.
 const STATE_DOT_RE = /^state\.([A-Za-z_]\w*)$/;
+
+// Which function-call token a condition variable is, parsed once per distinct
+// string: conditions are evaluated on every Phase C scan, and running the
+// token regexes each time was a measurable share of the scan cost.
+/** @type {Map<string, { kind: string|null, match: RegExpMatchArray|null }>} */
+const _tokenCache = new Map();
+const TOKEN_CACHE_LIMIT = 10_000;
+/** @param {string} text */
+function parseToken(text) {
+  let hit = _tokenCache.get(text);
+  if (hit) return hit;
+  /** @type {[string, RegExp][]} */
+  const kinds = [["queue", QUEUE_TOKEN_RE], ["idle", IDLE_TOKEN_RE], ["busy", BUSY_TOKEN_RE], ["attr", ATTR_TOKEN_RE], ["container", CONTAINER_TOKEN_RE]];
+  hit = { kind: null, match: null };
+  for (const [kind, re] of kinds) {
+    const m = text.match(re);
+    if (m) { hit = { kind, match: m }; break; }
+  }
+  if (_tokenCache.size >= TOKEN_CACHE_LIMIT) _tokenCache.clear();
+  _tokenCache.set(text, hit);
+  return hit;
+}
+
+// Queue definitions by normalised name, cached per model object.
+/** @type {WeakMap<object, Map<string, any>>} */
+const _queueDefCache = new WeakMap();
+/** @param {any} model @param {any} queueName */
+function queueDefFor(model, queueName) {
+  if (!model) return undefined;
+  let byName = _queueDefCache.get(model);
+  if (!byName) {
+    byName = new Map();
+    for (const q of model.queues || []) {
+      const key = String(q.name || "").trim().toLowerCase();
+      if (!byName.has(key)) byName.set(key, q);
+    }
+    _queueDefCache.set(model, byName);
+  }
+  return byName.get(String(queueName || "").trim().toLowerCase());
+}
 const BARE_IDENT_RE = /^[A-Za-z_]\w*$/;
 
 /** @param {any} value */
@@ -191,38 +229,41 @@ export function isResolvableExpression(value) {
 function resolveVariable(ref, state) {
   if (typeof ref !== "string" || !ref.trim()) return undefined;
   const text = ref.trim();
+  const token = parseToken(text);
 
-  const queueToken = text.match(QUEUE_TOKEN_RE);
+  const queueToken = token.kind === "queue" ? token.match : null;
   if (queueToken) {
     return resolveQueueValue(queueToken[1].trim(), queueToken[2], state);
   }
 
-  const idleToken = text.match(IDLE_TOKEN_RE);
+  const idleToken = token.kind === "idle" ? token.match : null;
   if (idleToken) {
     const type = idleToken[1].trim();
     const skill = idleToken[2] ? idleToken[2].trim() : null;
     if (skill) {
       return state.helpers?.idleOf(type)?.filter((/** @type {any} */ s) => state.helpers?.hasSkillType?.(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill)))?.length ?? 0;
     }
+    if (state.helpers?.idleCount) return state.helpers.idleCount(type);
     return state.helpers?.idleOf?.(type)?.length ?? 0;
   }
 
-  const busyToken = text.match(BUSY_TOKEN_RE);
+  const busyToken = token.kind === "busy" ? token.match : null;
   if (busyToken) {
     const type = busyToken[1].trim();
     const skill = busyToken[2] ? busyToken[2].trim() : null;
     if (skill) {
       return state.helpers?.busyOf(type)?.filter((/** @type {any} */ s) => state.helpers?.hasSkillType?.(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill)))?.length ?? 0;
     }
+    if (state.helpers?.busyCount) return state.helpers.busyCount(type);
     return state.helpers?.busyOf?.(type)?.length ?? 0;
   }
 
-  const attrToken = text.match(ATTR_TOKEN_RE);
+  const attrToken = token.kind === "attr" ? token.match : null;
   if (attrToken) {
     return resolveAttrValue(attrToken[1].trim(), attrToken[2].trim(), state);
   }
 
-  const containerToken = text.match(CONTAINER_TOKEN_RE);
+  const containerToken = token.kind === "container" ? token.match : null;
   if (containerToken) {
     return resolveContainerValue(containerToken[1].trim(), containerToken[2].toLowerCase(), state);
   }

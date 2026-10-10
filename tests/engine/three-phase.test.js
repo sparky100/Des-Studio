@@ -90,7 +90,7 @@ describe('Phase B', () => {
     const result = buildEngine(model, 123).runAll();
 
     expect(result.runtimeMetrics).toEqual(expect.objectContaining({
-      wall_clock_ms: null,
+      wall_clock_ms: expect.any(Number),
       replications: 1,
       events_processed: 7,
       c_event_scans: 6,

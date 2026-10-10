@@ -12,7 +12,7 @@
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods, createStreamRegistry } from "./distributions.js";
 import { buildWaitDistEntry, finalizeWeightedStats, summarizeEntitySummary } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
-import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, endTurnaround, turnaroundSpecFor, isCarriedClaim } from "./entities.js";
+import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, endTurnaround, turnaroundSpecFor, isCarriedClaim, isInSystem, setServerStatus, serverCountsOfType } from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent, applyShiftChange } from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
@@ -269,11 +269,11 @@ function deriveDirtyFromTemplate(template, event, ctx) {
   const dirty = createDirtySet();
   const currentCustomer = () => {
     const custId = ctx._lastCustId ?? event?._contextCustId;
-    return custId != null ? ctx.entities.find((/** @type {any} */ entity) => entity.id === custId) : null;
+    return custId != null ? findEntityById(ctx.index ?? null, ctx.entities, custId) : null;
   };
   const currentServer = () => {
     const srvId = ctx._lastSrvId ?? event?._contextSrvId;
-    return srvId != null ? ctx.entities.find((/** @type {any} */ entity) => entity.id === srvId) : null;
+    return srvId != null ? findEntityById(ctx.index ?? null, ctx.entities, srvId) : null;
   };
 
   for (const action of template || []) {
@@ -712,10 +712,16 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     if (attr) _quantityAttrByType.set(String(et.name).trim().toLowerCase(), attr);
   }
   const quantityEnabled = _quantityAttrByType.size > 0;
+  /** @type {Map<any, string|undefined>} */
+  const _quantityAttrByRawType = new Map();
   /** @param {any} e @returns {number} */
   const qtyOf = (e) => {
     if (!e || e.role === "server") return 0;
-    const attr = _quantityAttrByType.get(String(e.type || "").trim().toLowerCase());
+    let attr = _quantityAttrByRawType.get(e.type);
+    if (attr === undefined && !_quantityAttrByRawType.has(e.type)) {
+      attr = _quantityAttrByType.get(String(e.type || "").trim().toLowerCase());
+      _quantityAttrByRawType.set(e.type, attr);
+    }
     if (!attr) return 0;
     const v = Number(e.attrs?.[attr]);
     return Number.isFinite(v) ? v : 0;
@@ -835,7 +841,34 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // snapshot numbers are unaffected by when a sweep happened to run.
   /** @type {Record<string, any>[]} */
   let _completed = [];
+  // Test-only cross-check of queueIndex.inSystem against a full scan each cycle.
+  const verifyInSystemCounter = engineOptions._verifyInSystemCounter === true;
   const allEntitiesForStats = () => (_completed.length ? entities.concat(_completed) : entities);
+  // Running tallies over _completed for the snapshot/time-series code. Swept
+  // entities are terminal and never change again, so their contribution to
+  // byType/byQueue totals is fixed — folding it in here keeps sampleLive()/snap()
+  // O(live entities) instead of O(every entity created so far), which made
+  // chart collection O(N²) per run.
+  const _completedAgg = {
+    /** @type {Record<string, number>} */ totalByType: {},
+    /** @type {Record<string, number>} */ liteQueueTotal: {},   // keyed by queue || lastQueue (sampleLive)
+    /** @type {Record<string, number>} */ seenByQueue: {},      // queue === q || lastQueue === q (snap)
+    /** @type {Record<string, number>} */ renegedByQueue: {},
+    /** @type {Record<string, number>} */ balkedByQueue: {},
+  };
+  const foldCompleted = (/** @type {Record<string, any>} */ e) => {
+    const agg = _completedAgg;
+    if (e.type) agg.totalByType[e.type] = (agg.totalByType[e.type] || 0) + 1;
+    if (e.role === "server") return;
+    const liteQ = e.queue || e.lastQueue;
+    if (liteQ) agg.liteQueueTotal[liteQ] = (agg.liteQueueTotal[liteQ] || 0) + 1;
+    const seen = e.queue && e.lastQueue && e.queue !== e.lastQueue ? [e.queue, e.lastQueue] : [e.queue || e.lastQueue].filter(Boolean);
+    for (const q of seen) {
+      agg.seenByQueue[q] = (agg.seenByQueue[q] || 0) + 1;
+      if (e.status === "reneged") agg.renegedByQueue[q] = (agg.renegedByQueue[q] || 0) + 1;
+    }
+    if (e.status === "balked" && e.terminalQueue) agg.balkedByQueue[e.terminalQueue] = (agg.balkedByQueue[e.terminalQueue] || 0) + 1;
+  };
   // Below this many live entities, a sweep isn't worth its own O(live) cost.
   // Kept low (rather than the old 1,000) so `entities` tracks live population
   // instead of sawtoothing up to a high ceiling between sweeps — that ceiling
@@ -855,7 +888,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     fel = keptFel;
     for (const e of removed) {
       indexUntrackEntity(queueIndex, e);
-      if (intoAccumulator) _completed.push(e);
+      if (intoAccumulator) { _completed.push(e); foldCompleted(e); }
     }
     return removed;
   };
@@ -932,8 +965,18 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // ── Snapshot ──────────────────────────────────────────────────────────────
   function snap(/** @type {any} */ clock) {
     const h = makeHelpers(entities, runtimeModel, queueIndex);
-    const statsEntities = allEntitiesForStats();
-    const types = [...new Set(statsEntities.map((/** @type {any} */ e) => e.type))];
+    // Live entities are scanned; swept (terminal) ones come from _completedAgg,
+    // so a snapshot costs O(live) rather than O(every entity created).
+    const agg = _completedAgg;
+    /** @type {Record<string, number>} */
+    const liveTotalByType = {};
+    /** @type {Record<string, number>} */
+    const turnaroundByType = {};
+    for (const e of entities) {
+      liveTotalByType[e.type] = (liveTotalByType[e.type] || 0) + 1;
+      if (e.status === "turnaround") turnaroundByType[e.type] = (turnaroundByType[e.type] || 0) + 1;
+    }
+    const types = [...new Set([...Object.keys(liveTotalByType), ...Object.keys(agg.totalByType)])];
     /** @type {Record<string, any>} */
     const byType = {};
     types.forEach((/** @type {any} */ t) => {
@@ -942,9 +985,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         idle:    h.idleOf(t).length,
         // A server in turnaround (B4) is unavailable but carries no entity;
         // it counts as busy here, as it does in utilisation.
-        busy:    h.busyOf(t).length + statsEntities.filter((/** @type {any} */ e) => e.type === t && e.status === "turnaround").length,
+        busy:    h.busyOf(t).length + (turnaroundByType[t] || 0),
         failed:  h.failedOf(t).length,
-        total:   statsEntities.filter((/** @type {any} */ e) => e.type === t).length,
+        total:   (liveTotalByType[t] || 0) + (agg.totalByType[t] || 0),
       };
     });
     /** @type {Record<string, any>} */
@@ -952,23 +995,32 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     // Balked/blocked entities never actually joined a queue (that's the point of
     // balking), so they never get `.queue`/`.lastQueue` set to it — they're
     // attributed via `.terminalQueue` instead (set in entities.js discardFailedJoin).
-    // Tally them in one pass rather than re-filtering `statsEntities` per queue.
+    // Tally them in one pass rather than re-filtering per queue.
     /** @type {Record<string, number>} */
-    const balkedByQueue = {};
-    for (const e of statsEntities) {
-      if (e.role !== "server" && e.status === "balked" && e.terminalQueue) {
+    const balkedByQueue = { ...agg.balkedByQueue };
+    /** @type {Record<string, number>} */
+    const seenByQueue = { ...agg.seenByQueue };
+    /** @type {Record<string, number>} */
+    const renegedByQueue = { ...agg.renegedByQueue };
+    for (const e of entities) {
+      if (e.role === "server") continue;
+      if (e.status === "balked" && e.terminalQueue) {
         balkedByQueue[e.terminalQueue] = (balkedByQueue[e.terminalQueue] || 0) + 1;
+      }
+      const seen = e.queue && e.lastQueue && e.queue !== e.lastQueue ? [e.queue, e.lastQueue] : [e.queue || e.lastQueue].filter(Boolean);
+      for (const q of seen) {
+        seenByQueue[q] = (seenByQueue[q] || 0) + 1;
+        if (e.status === "reneged") renegedByQueue[q] = (renegedByQueue[q] || 0) + 1;
       }
     }
     (runtimeModel.queues || []).forEach((/** @type {any} */ q) => {
       const qName = q.name;
       if (!qName) return;
-      const seenEntities = statsEntities.filter((/** @type {any} */ e) => e.role !== "server" && (e.queue === qName || e.lastQueue === qName));
       const waitingEntities = entities.filter((/** @type {any} */ e) => e.role !== "server" && e.queue === qName && e.status === "waiting");
       byQueue[qName] = {
         waiting: waitingEntities.length,
-        total: seenEntities.length,
-        reneged: seenEntities.filter((/** @type {any} */ e) => e.status === "reneged").length,
+        total: seenByQueue[qName] || 0,
+        reneged: renegedByQueue[qName] || 0,
         balked: balkedByQueue[qName] || 0,
         ...(quantityEnabled ? { quantityWaiting: roundQty(waitingEntities.reduce((sum, e) => sum + qtyOf(e), 0)) } : {}),
       };
@@ -1021,13 +1073,21 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   }
 
   // ── Lightweight snapshot for time-series collection ───────────────────────
-  // Single O(N) pass; produces the same shape as snap() byType/byQueue.
-  function snapLite() {
+  // One pass over the live entities per sample: the byType/byQueue counts
+  // (same shape as snap()), work in progress and its quantity, and the waits
+  // of stages that ended since the previous sample. Swept (terminal) entities
+  // contribute only fixed totals, kept in _completedAgg.
+  /** @param {number} sinceT @param {number} untilT */
+  function sampleLive(sinceT, untilT) {
     /** @type {Record<string, any>} */
     const byType = {};
     /** @type {Record<string, any>} */
     const byQueue = {};
-    for (const e of allEntitiesForStats()) {
+    /** @type {Record<string, { sum: number, n: number }>} */
+    const recentWaits = {};
+    let wip = 0;
+    let wipQuantity = 0;
+    for (const e of entities) {
       const t = e.type;
       if (t) {
         if (!byType[t]) byType[t] = { waiting: 0, idle: 0, busy: 0, failed: 0, total: 0 };
@@ -1037,7 +1097,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         else if (e.status === "busy" || e.status === "serving" || e.status === "turnaround") byType[t].busy++;
         else if (e.status === "failed") byType[t].failed++;
       }
-      if (e.role !== "server" && (e.queue || e.lastQueue)) {
+      if (e.role === "server") continue;
+      if (e.queue || e.lastQueue) {
         const qName = e.queue || e.lastQueue;
         if (!byQueue[qName]) byQueue[qName] = quantityEnabled ? { waiting: 0, total: 0, quantityWaiting: 0 } : { waiting: 0, total: 0 };
         byQueue[qName].total++;
@@ -1046,9 +1107,47 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
           if (quantityEnabled) byQueue[qName].quantityWaiting += qtyOf(e);
         }
       }
+      if (isInSystem(e)) {
+        wip++;
+        if (quantityEnabled) wipQuantity += qtyOf(e);
+      }
+      // Time-binned average wait (layered onto the time-series depth chart):
+      // stage records are created when a stage ends, so bucketing on
+      // serviceEndedAt picks each stage up exactly once, in the sample where
+      // it became known. Stages are appended in end order, so walk back from
+      // the newest and stop at the first that ended before this window.
+      const stages = e.stages;
+      if (stages && stages.length) {
+        let first = stages.length;
+        while (first > 0) {
+          const endedAt = stages[first - 1].serviceEndedAt;
+          if (endedAt != null && endedAt <= sinceT) break;
+          first--;
+        }
+        for (let i = first; i < stages.length; i++) {
+          const stage = stages[i];
+          const clearedAt = stage.serviceEndedAt;
+          if (clearedAt == null || clearedAt <= sinceT || clearedAt > untilT) continue;
+          const qName = stage.queueName;
+          if (!qName) continue;
+          if (!recentWaits[qName]) recentWaits[qName] = { sum: 0, n: 0 };
+          recentWaits[qName].sum += truncateInterval(stage.waitStartedAt, stage.serviceStartedAt);
+          recentWaits[qName].n++;
+        }
+      }
+    }
+    // Swept (terminal) entities only ever add to totals — see _completedAgg.
+    // Added after the live pass so key order matches a live-then-swept scan.
+    for (const t in _completedAgg.totalByType) {
+      if (!byType[t]) byType[t] = { waiting: 0, idle: 0, busy: 0, failed: 0, total: 0 };
+      byType[t].total += _completedAgg.totalByType[t];
+    }
+    for (const qName in _completedAgg.liteQueueTotal) {
+      if (!byQueue[qName]) byQueue[qName] = quantityEnabled ? { waiting: 0, total: 0, quantityWaiting: 0 } : { waiting: 0, total: 0 };
+      byQueue[qName].total += _completedAgg.liteQueueTotal[qName];
     }
     if (quantityEnabled) for (const q of Object.values(byQueue)) q.quantityWaiting = roundQty(q.quantityWaiting);
-    return { byType, byQueue };
+    return { byType, byQueue, recentWaits, wip, wipQuantity };
   }
 
   // ── Build initial FEL ─────────────────────────────────────────────────────
@@ -1150,6 +1249,21 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
   noteFelSize();
+  // The FEL is kept sorted by scheduledTime from here on. New entries go in
+  // by binary search after every entry with the same or an earlier time —
+  // the exact position a stable re-sort would give them — instead of
+  // re-sorting the whole list on every event.
+  const felInsert = (/** @type {Record<string, any>} */ entry) => {
+    const t = entry.scheduledTime;
+    let lo = 0;
+    let hi = fel.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (fel[mid].scheduledTime <= t) lo = mid + 1;
+      else hi = mid;
+    }
+    fel.splice(lo, 0, entry);
+  };
 
   log.push(_trace("INIT", { message: "Engine initialised" }));
 
@@ -1177,7 +1291,10 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     incEventCount,
     noteEntityCreated,
     noteQueueDepth,
-    _arbitration,
+    // Arbitration records only feed the structured trace; without a trace,
+    // ASSIGN/PREEMPT skip building them (they list every waiting entity and
+    // idle server, per assignment).
+    _arbitration: collectTrace ? _arbitration : null,
     _purgePhase,
     registry,
   });
@@ -1209,8 +1326,25 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   }
 
   // ── step(): one Phase A → B → C cycle ────────────────────────────────────
+  // Wall-clock time spent inside step(), reported as runtimeMetrics.wall_clock_ms
+  // so every replication (single run, batch worker, step-driven run) carries
+  // its own timing.
+  const _perfNow = typeof globalThis.performance?.now === "function"
+    ? () => globalThis.performance.now()
+    : () => Date.now();
+  let _wallClockMs = 0;
   /** @param {{ captureSnap?: boolean }} [options] */
   function step(options = {}) {
+    const startedAt = _perfNow();
+    try {
+      return stepCycle(options);
+    } finally {
+      _wallClockMs += _perfNow() - startedAt;
+    }
+  }
+
+  /** @param {{ captureSnap?: boolean }} [options] */
+  function stepCycle(options = {}) {
     const captureSnap = options.captureSnap !== false;
     const stepSnapshot = () => (captureSnap ? snap(clock) : null);
 
@@ -1230,7 +1364,10 @@ const cycleLog = [];
     const nextTime = fel[0].scheduledTime;
 
     // Compute due events before clock advance — needed for Phase A trace entry
-    const due = fel.filter(ev => Math.abs(ev.scheduledTime - nextTime) < 1e-9);
+    // Sorted FEL: the events due now are a prefix.
+    let dueCount = 0;
+    while (dueCount < fel.length && Math.abs(fel[dueCount].scheduledTime - nextTime) < 1e-9) dueCount++;
+    const due = fel.slice(0, dueCount);
 
     // Time-based termination check (before advancing clock)
     if (maxSimTime !== null && nextTime > maxSimTime) {
@@ -1258,7 +1395,7 @@ const cycleLog = [];
     }
 
     // Phase B — fire all due events
-    fel = fel.filter(ev => Math.abs(ev.scheduledTime - clock) >= 1e-9);
+    fel.splice(0, dueCount);
     let phaseCDirty = enableFilteredPhaseC ? createDirtySet() : null;
 
     for (const ev of due) {
@@ -1362,11 +1499,11 @@ const cycleLog = [];
                 preemptCustomer(cust, srv, clock, failCtx, "FAILURE");
               }
             }
-            srv.status = "failed";
+            setServerStatus(srv, "failed");
             srv._failedAt = clock;
             const repairTime = clock + sample(ev.mttrDist, ev.mttrParams, rng, null,
               { streamName: `mttr:${sType}:${ev.serverIndex + 1}`, streamRegistry });
-            fel.push({
+            felInsert({
               id: `repair:${sType}:${ev.serverIndex}:${repairTime.toFixed(4)}`,
               type: "REPAIR",
               name: `Repair: ${sType} #${ev.serverIndex + 1}`,
@@ -1409,7 +1546,7 @@ const cycleLog = [];
                 preemptCustomer(cust, srv, clock, failCtx, "FAILURE");
               }
             }
-            srv.status = "failed";
+            setServerStatus(srv, "failed");
             srv._failedAt = clock;
             failedCount++;
           }
@@ -1429,7 +1566,7 @@ const cycleLog = [];
         const current = srv && srv.status === "turnaround" && srv._turnaroundToken === ev.token;
         if (current) {
           endTurnaround(srv, clock);
-          srv.status = "idle";
+          setServerStatus(srv, "idle");
           srv._starvationStart = clock;
           if (enableFilteredPhaseC) markDirtyResource(/** @type {DirtySet} */ (phaseCDirty), srv.type);
         }
@@ -1461,7 +1598,7 @@ const cycleLog = [];
                 rng, null,
                 { streamName: `mtbf:${sType}:${ev.serverIndex + 1}`, streamRegistry }
               );
-              fel.push({
+              felInsert({
                 id: `fail:${sType}:${ev.serverIndex}:${nextFailTime.toFixed(4)}`,
                 type: "FAILURE",
                 name: `Failure: ${sType} #${ev.serverIndex + 1}`,
@@ -1514,8 +1651,7 @@ const cycleLog = [];
         );
       }
 
-      for (const entry of felEntries) fel.push(entry);
-      fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
+      for (const entry of felEntries) felInsert(entry);
       noteFelSize();
 
       if (collectTrace) {
@@ -1610,8 +1746,7 @@ const cycleLog = [];
                 )
           );
         }
-        for (const entry of felEntries) fel.push(entry);
-        if (felEntries.length) fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
+        for (const entry of felEntries) felInsert(entry);
         noteFelSize();
         _runtimeMetrics.cEventsFired++;
         _runtimeMetrics.eventsProcessed++;
@@ -1685,8 +1820,11 @@ const cycleLog = [];
     // Collect time-series snapshot after Phase C stabilises (F10.4a)
     const stepSnap = captureSnap ? snap(clock) : null;
     let liteSnap = null;
+    /** @type {number|null} */
+    let wipThisCycle = null;
     if (_timeSeries !== null) {
-      const recentWaits = computeRecentWaitsByQueue(_lastTimeSeriesSampleT, clock);
+      const sample = sampleLive(_lastTimeSeriesSampleT, clock);
+      const recentWaits = sample.recentWaits;
       const withRecentWaits = (/** @type {any} */ byQueueIn) => {
         /** @type {Record<string, any>} */
         const out = {};
@@ -1696,10 +1834,10 @@ const cycleLog = [];
         }
         return out;
       };
-      const wipAtSample = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged" && e.status !== "balked");
-      const wipCountAtSample = wipAtSample.length;
+      const wipCountAtSample = sample.wip;
+      wipThisCycle = sample.wip;
       const quantityField = quantityEnabled
-        ? { quantityInSystem: roundQty(wipAtSample.reduce((sum, e) => sum + qtyOf(e), 0)) }
+        ? { quantityInSystem: roundQty(sample.wipQuantity) }
         : {};
       const completedSinceSample = state.__completedSinceSample || 0;
       // Container levels (G21) — the instantaneous level at this sample time,
@@ -1715,7 +1853,7 @@ const cycleLog = [];
       if (stepSnap) {
         _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: withRecentWaits(stepSnap.byQueue), ...containerField, wip: wipCountAtSample, completed: completedSinceSample });
       } else {
-        liteSnap = snapLite();
+        liteSnap = sample;
         _timeSeries.push({ t: clock, byType: liteSnap.byType, byQueue: withRecentWaits(liteSnap.byQueue), ...containerField, wip: wipCountAtSample, completed: completedSinceSample });
       }
       state.__completedSinceSample = 0;
@@ -1791,7 +1929,31 @@ const cycleLog = [];
     // G11 — WIP time-average: integrate WIP count over time
     const dt = clock - _lastWipSnapTime;
     if (dt > 0) {
-      const wipCount = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged" && e.status !== "balked").length;
+      // Exact running count kept by the queue index (see isInSystem in entities.js).
+      const wipCount = queueIndex.inSystem;
+      if (verifyInSystemCounter) {
+        let scanned = 0;
+        for (const e of entities) if (isInSystem(e)) scanned++;
+        if (scanned !== wipCount || (wipThisCycle != null && wipThisCycle !== wipCount)) {
+          throw new Error(`in-system counter drift at t=${clock}: counter ${wipCount}, scan ${scanned}, sample ${wipThisCycle}`);
+        }
+        /** @type {Map<string, { type: string, idle: number, busy: number }>} */
+        const scannedByType = new Map();
+        for (const e of queueIndex.servers) {
+          const key = e.type.trim().toLowerCase();
+          if (!scannedByType.has(key)) scannedByType.set(key, { type: e.type, idle: 0, busy: 0 });
+          if (e._suspended) continue;
+          const c = /** @type {{ type: string, idle: number, busy: number }} */ (scannedByType.get(key));
+          if (e.status === "idle") c.idle++;
+          else if (e.status === "busy" || e.status === "serving") c.busy++;
+        }
+        for (const c of scannedByType.values()) {
+          const counts = serverCountsOfType(queueIndex, c.type);
+          if (counts.idle !== c.idle || counts.busy !== c.busy) {
+            throw new Error(`server count drift for ${c.type} at t=${clock}: idle ${counts.idle}/${c.idle}, busy ${counts.busy}/${c.busy}`);
+          }
+        }
+      }
       _wipIntegral += wipCount * dt;
       _lastWipSnapTime = clock;
     }
@@ -1975,36 +2137,6 @@ const cycleLog = [];
     return truncateInterval(entity.arrivalTime, endTime);
   }
 
-  // ── time-binned average wait (layered onto the time-series depth chart) ──
-  // Stage records are only created when a stage ends (buildStageRecord, fired
-  // at completion/release), so serviceStartedAt reflects an earlier point in
-  // time than when the record becomes visible. Bucketing on serviceEndedAt
-  // (which equals the current clock for any stage that just ended) means each
-  // stage is picked up exactly once, in the bucket where it became known —
-  // answering "what was the typical wait for entities that cleared the queue
-  // around this time?"
-  /**
-   * @param {any} sinceT
-   * @param {any} untilT
-   * @returns {Record<string, { sum: number, n: number }>}
-   */
-  function computeRecentWaitsByQueue(sinceT, untilT) {
-    /** @type {Record<string, { sum: number, n: number }>} */
-    const acc = {};
-    for (const e of entities) {
-      if (e.role === "server" || !e.stages || e.stages.length === 0) continue;
-      for (const stage of e.stages) {
-        const clearedAt = stage.serviceEndedAt;
-        if (clearedAt == null || clearedAt <= sinceT || clearedAt > untilT) continue;
-        const qName = stage.queueName;
-        if (!qName) continue;
-        if (!acc[qName]) acc[qName] = { sum: 0, n: 0 };
-        acc[qName].sum += truncateInterval(stage.waitStartedAt, stage.serviceStartedAt);
-        acc[qName].n++;
-      }
-    }
-    return acc;
-  }
 
   // ── waitDist: per-queue wait-time distribution (F10.4b) ───────────────────
   // Wait time = serviceStart − arrivalTime, recorded for every served customer.
@@ -2583,7 +2715,7 @@ const cycleLog = [];
 
   function getRuntimeMetrics(entitiesCompleted = state.__served || 0) {
     return {
-      wall_clock_ms: null,
+      wall_clock_ms: Math.round(_wallClockMs),
       replications: 1,
       events_processed: _runtimeMetrics.eventsProcessed,
       c_event_scans: _runtimeMetrics.cEventScans,
