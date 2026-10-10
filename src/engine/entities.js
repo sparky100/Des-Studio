@@ -10,13 +10,21 @@ import { evaluatePredicate } from "./conditions.js";
 import { sample } from "./distributions.js";
 
 /**
+ * idle/busy: the idle(T).count / busy(T).count figures (suspended servers
+ * excluded). snapIdle/snapBusy/snapFailed: the same servers classified the way
+ * snapshots and chart samples count them (suspension ignored, a server in
+ * turnaround counted as busy). total: servers of the type in the roster.
+ * @typedef {{ idle: number, busy: number, snapIdle: number, snapBusy: number, snapFailed: number, total: number }} ServerTypeCounts
+ */
+
+/**
  * @typedef {{
  *   waitingByQueue: Map<string, Record<string, any>[]>,
  *   servers: Record<string, any>[],
  *   fifoSortedByQueue: Map<string, boolean>,
  *   byId: Map<any, Record<string, any>>,
  *   serversByType: Map<string, Record<string, any>[]>|null,
- *   serverCountsByType: Map<string, { idle: number, busy: number }>|null,
+ *   serverCountsByType: Map<string, ServerTypeCounts>|null,
  *   inSystem: number,
  * }} QueueIndex
  */
@@ -324,13 +332,15 @@ export function serversOfType(index, type) {
     index.serversByType = byType;
     // Per-type idle/busy counts, kept current by setServerStatus /
     // setServerSuspended until the roster next changes.
-    /** @type {Map<string, { idle: number, busy: number }>} */
+    /** @type {Map<string, ServerTypeCounts>} */
     const counts = new Map();
     for (const [key, list] of byType) {
-      const c = { idle: 0, busy: 0 };
+      const c = { idle: 0, busy: 0, snapIdle: 0, snapBusy: 0, snapFailed: 0, total: list.length };
       for (const srv of list) {
         const cls = serverCountClass(srv);
         if (cls) c[cls]++;
+        const snapCls = serverSnapshotClass(srv);
+        if (snapCls) c[snapCls]++;
         _serverMeta.set(srv, { index, key });
       }
       counts.set(key, c);
@@ -343,11 +353,21 @@ export function serversOfType(index, type) {
 /**
  * @param {QueueIndex} index
  * @param {any} type
- * @returns {{ idle: number, busy: number }}
+ * @returns {ServerTypeCounts}
  */
 export function serverCountsOfType(index, type) {
   if (!index.serversByType || !index.serverCountsByType) serversOfType(index, type);
-  return /** @type {Map<string, { idle: number, busy: number }>} */ (index.serverCountsByType).get(norm(type)) || { idle: 0, busy: 0 };
+  return /** @type {Map<string, ServerTypeCounts>} */ (index.serverCountsByType).get(norm(type))
+    || { idle: 0, busy: 0, snapIdle: 0, snapBusy: 0, snapFailed: 0, total: 0 };
+}
+
+// Snapshot classification (see ServerTypeCounts).
+/** @param {Record<string, any>} srv @returns {"snapIdle"|"snapBusy"|"snapFailed"|null} */
+function serverSnapshotClass(srv) {
+  if (srv.status === "idle") return "snapIdle";
+  if (srv.status === "busy" || srv.status === "serving" || srv.status === "turnaround") return "snapBusy";
+  if (srv.status === "failed") return "snapFailed";
+  return null;
 }
 
 // Which per-type count a server is in: idle(T).count / busy(T).count semantics.
@@ -368,12 +388,19 @@ function changeServer(srv, change) {
   const meta = _serverMeta.get(srv);
   const counts = meta?.index.serverCountsByType?.get(meta.key);
   const before = counts ? serverCountClass(srv) : null;
+  const snapBefore = counts ? serverSnapshotClass(srv) : null;
   change();
   if (!counts) return;
   const after = serverCountClass(srv);
-  if (before === after) return;
-  if (before) counts[before]--;
-  if (after) counts[after]++;
+  if (before !== after) {
+    if (before) counts[before]--;
+    if (after) counts[after]++;
+  }
+  const snapAfter = serverSnapshotClass(srv);
+  if (snapBefore !== snapAfter) {
+    if (snapBefore) counts[snapBefore]--;
+    if (snapAfter) counts[snapAfter]++;
+  }
 }
 
 /**

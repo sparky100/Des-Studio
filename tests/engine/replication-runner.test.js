@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { compactReplicationPayload, runReplications } from '../../src/engine/replication-runner.js';
+import { compactReplicationPayload, runReplications, defaultWorkerCount, MAX_DEFAULT_WORKERS } from '../../src/engine/replication-runner.js';
 
 function deferredWorkerFactory() {
   const workers = [];
@@ -248,5 +248,23 @@ describe('runReplications', () => {
         message: 'worker unavailable',
       })
     );
+  });
+});
+
+describe('defaultWorkerCount', () => {
+  test('uses cores − 1, capped at MAX_DEFAULT_WORKERS (phones report every core)', () => {
+    expect(MAX_DEFAULT_WORKERS).toBe(4);
+    expect(defaultWorkerCount(10, { hardwareConcurrency: 8 })).toBe(4);
+    expect(defaultWorkerCount(10, { hardwareConcurrency: 4 })).toBe(3);
+    expect(defaultWorkerCount(10, { hardwareConcurrency: 1 })).toBe(1);
+  });
+
+  test('never more workers than replications', () => {
+    expect(defaultWorkerCount(2, { hardwareConcurrency: 8 })).toBe(2);
+  });
+
+  test('keeps low-memory devices to 2 workers', () => {
+    expect(defaultWorkerCount(10, { hardwareConcurrency: 8, deviceMemory: 4 })).toBe(2);
+    expect(defaultWorkerCount(10, { hardwareConcurrency: 8, deviceMemory: 8 })).toBe(4);
   });
 });

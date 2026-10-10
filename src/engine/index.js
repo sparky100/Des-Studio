@@ -12,9 +12,10 @@
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods, createStreamRegistry } from "./distributions.js";
 import { buildWaitDistEntry, finalizeWeightedStats, summarizeEntitySummary } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
-import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, endTurnaround, turnaroundSpecFor, isCarriedClaim, isInSystem, setServerStatus, serverCountsOfType } from "./entities.js";
+import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, endTurnaround, turnaroundSpecFor, isCarriedClaim, isInSystem, setServerStatus, serverCountsOfType, serversOfType } from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent, applyShiftChange } from "./phases.js";
+import { setStageRecordSink } from "./macros.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
 import { nullRegistry }                        from "./adapters/index.js";
 import { expandWeeklyPatternToEvents, getPatternInitialCapacity, buildShiftPeriodLabels, resolveSchedulePattern, compileArrivalRatePeriods } from "./schedule-pattern.js";
@@ -1150,6 +1151,93 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     return { byType, byQueue, recentWaits, wip, wipQuantity };
   }
 
+  // Grid mode: fold this cycle's completions and new stage waits into the
+  // pending sample — the same values a per-cycle sample would have recorded
+  // here (a stage counts only if its entity is still live, as the per-cycle
+  // stage walk over `entities` would see it).
+  function foldGridCycle() {
+    _gridCompleted += state.__completedSinceSample || 0;
+    state.__completedSinceSample = 0;
+    for (const { entity, record } of _gridNewStages) {
+      if (entity.role === "server" || queueIndex.byId.get(entity.id) !== entity) continue;
+      const clearedAt = record.serviceEndedAt;
+      if (clearedAt == null || clearedAt <= _lastTimeSeriesSampleT || clearedAt > clock) continue;
+      const qName = record.queueName;
+      if (!qName) continue;
+      if (!_gridWaits[qName]) _gridWaits[qName] = { sum: 0, n: 0 };
+      _gridWaits[qName].sum += truncateInterval(record.waitStartedAt, record.serviceStartedAt);
+      _gridWaits[qName].n++;
+    }
+    _gridNewStages = [];
+    _lastTimeSeriesSampleT = clock;
+    _gridPendingClock = clock;
+  }
+
+  // Grid mode: keep the pending cycle's sample if it is the last one at or
+  // before a grid point, i.e. the next event comes after that point. State is
+  // unchanged since that cycle ended, so it is read now.
+  /** @param {number} nextTime */
+  function flushGridSample(nextTime) {
+    if (!gridTimes || _gridPendingClock == null || !_timeSeries) return;
+    const c = _gridPendingClock;
+    _gridPendingClock = null;
+    while (_gridIdx < gridTimes.length && gridTimes[_gridIdx] < c) _gridIdx++;
+    if (_gridIdx >= gridTimes.length || gridTimes[_gridIdx] >= nextTime) return;
+    const sample = sampleLive(c, c);
+    _timeSeries.push({ t: c, byType: sample.byType, byQueue: withQueueWaits(sample.byQueue, _gridWaits), ...timeSeriesLevels(sample), wip: sample.wip, completed: _gridCompleted });
+    _gridWaits = {};
+    _gridCompleted = 0;
+  }
+
+  // A time-series point's byQueue with each queue's waits since the previous
+  // point attached. A queue whose waits were recorded but that no live entity
+  // references any more (the last one through it moved on) still gets an
+  // entry — otherwise those waits were dropped from the chart.
+  /** @param {Record<string, any>} byQueueIn @param {Record<string, { sum: number, n: number }>} waits */
+  function withQueueWaits(byQueueIn, waits) {
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const [qName, qData] of Object.entries(byQueueIn || {})) {
+      const w = waits[qName];
+      out[qName] = { ...qData, avgWait: w ? w.sum / w.n : null, waitN: w ? w.n : 0 };
+    }
+    for (const [qName, w] of Object.entries(waits)) {
+      if (out[qName] || !w.n) continue;
+      out[qName] = { waiting: 0, total: 0, ...(quantityEnabled ? { quantityWaiting: 0 } : {}), avgWait: w.sum / w.n, waitN: w.n };
+    }
+    return out;
+  }
+
+  // Container levels and quantity in system for a time-series point.
+  /** @param {{ wipQuantity: number }} sample */
+  function timeSeriesLevels(sample) {
+    /** @type {Record<string, number> | null} */
+    let byContainer = null;
+    if (runtimeModel.containerTypes?.length) {
+      byContainer = {};
+      for (const ct of runtimeModel.containerTypes) byContainer[ct.id] = state[`__container_${ct.id}`] ?? 0;
+    }
+    return {
+      ...(byContainer ? { byContainer } : {}),
+      ...(quantityEnabled ? { quantityInSystem: roundQty(sample.wipQuantity) } : {}),
+    };
+  }
+
+  // byType counts for server types only — what utilisation streaks and
+  // schedule adherence read each cycle when the full sample is not taken.
+  function serverTypeCounts() {
+    serversOfType(queueIndex, "");  // (re)build the per-type buckets and counts if stale
+    /** @type {Record<string, any>} */
+    const byType = {};
+    for (const list of /** @type {Map<string, Record<string, any>[]>} */ (queueIndex.serversByType).values()) {
+      const t = list[0]?.type;
+      if (!t) continue;
+      const c = serverCountsOfType(queueIndex, t);
+      byType[t] = { waiting: 0, idle: c.snapIdle, busy: c.snapBusy, failed: c.snapFailed, total: c.total + (_completedAgg.totalByType[t] || 0) };
+    }
+    return byType;
+  }
+
   // ── Build initial FEL ─────────────────────────────────────────────────────
   let clock = 0;
   /** @type {Record<string, any>[]} */
@@ -1157,6 +1245,32 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   /** @type {Record<string, any>[]|null} */
   const _timeSeries = collectTimeSeries ? [] : null; // null = disabled, zero overhead
   let _lastTimeSeriesSampleT = 0; // bucket start for the per-sample avgWait computed below
+
+  // ── Grid sampling (batch runs) ────────────────────────────────────────────
+  // Batch charts resample every replication's series onto N equal points over
+  // [0, maxSimTime] (makeTimeSeriesAccumulator in ui/execute/executeHelpers.js),
+  // reading the last sample at or before each point and summing the
+  // waits/completions of every sample since the previous point. With
+  // timeSeriesGridPoints set, the engine keeps exactly those samples — the last
+  // cycle at or before each grid point — carrying the waits and completions
+  // accumulated since the previous kept sample, so the batch chart is the
+  // same while a replication holds ~N points instead of one per cycle.
+  const gridPointCount = Number(engineOptions.timeSeriesGridPoints);
+  const gridTimes = _timeSeries !== null && Number.isInteger(gridPointCount) && gridPointCount >= 2
+    && Number.isFinite(maxSimTime) && /** @type {number} */ (maxSimTime) > 0
+    ? Array.from({ length: gridPointCount }, (_, i) => (i / (gridPointCount - 1)) * /** @type {number} */ (maxSimTime))
+    : null;
+  let _gridIdx = 0;
+  /** @type {number|null} */
+  let _gridPendingClock = null;
+  let _gridCompleted = 0;
+  /** @type {Record<string, { sum: number, n: number }>} */
+  let _gridWaits = {};
+  /** @type {{ entity: Record<string, any>, record: Record<string, any> }[]} */
+  let _gridNewStages = [];
+  const _gridStageSink = (/** @type {Record<string, any>} */ entity, /** @type {Record<string, any>} */ record) => {
+    _gridNewStages.push({ entity, record });
+  };
 
   // G11 — WIP time-average tracking (Little's Law: avgWIP = ∫ WIP dt / T)
   let _wipIntegral = 0;
@@ -1336,15 +1450,22 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   /** @param {{ captureSnap?: boolean }} [options] */
   function step(options = {}) {
     const startedAt = _perfNow();
+    const gridMode = gridTimes != null && options.captureSnap === false;
+    if (gridMode) {
+      flushGridSample(fel.length ? fel[0].scheduledTime : Infinity);
+      _gridNewStages = [];
+      setStageRecordSink(_gridStageSink);
+    }
     try {
-      return stepCycle(options);
+      return stepCycle(options, gridMode);
     } finally {
+      if (gridMode) setStageRecordSink(null);
       _wallClockMs += _perfNow() - startedAt;
     }
   }
 
-  /** @param {{ captureSnap?: boolean }} [options] */
-  function stepCycle(options = {}) {
+  /** @param {{ captureSnap?: boolean }} [options] @param {boolean} [gridMode] */
+  function stepCycle(options = {}, gridMode = false) {
     const captureSnap = options.captureSnap !== false;
     const stepSnapshot = () => (captureSnap ? snap(clock) : null);
 
@@ -1822,34 +1943,34 @@ const cycleLog = [];
     let liteSnap = null;
     /** @type {number|null} */
     let wipThisCycle = null;
-    if (_timeSeries !== null) {
-      const sample = sampleLive(_lastTimeSeriesSampleT, clock);
-      const recentWaits = sample.recentWaits;
-      const withRecentWaits = (/** @type {any} */ byQueueIn) => {
-        /** @type {Record<string, any>} */
-        const out = {};
-        for (const [qName, qData] of Object.entries(byQueueIn || {})) {
-          const w = recentWaits[qName];
-          out[qName] = { ...qData, avgWait: w ? w.sum / w.n : null, waitN: w ? w.n : 0 };
+    /** @type {Record<string, any>|null} */
+    let gridByType = null;
+    /** @type {Record<string, any>|null} */
+    let cycleByType = null;
+    if (_timeSeries !== null && gridMode) {
+      foldGridCycle();
+      gridByType = serverTypeCounts();
+      // Max queue depth per cycle, as the full sample would have read it:
+      // waiting entities by their queue name, from the waiting-queue index.
+      for (const bucket of queueIndex.waitingByQueue.values()) {
+        if (!bucket.length) continue;
+        /** @type {Record<string, number>} */
+        const depthByName = {};
+        for (const e of bucket) if (e.status === "waiting" && e.queue) depthByName[e.queue] = (depthByName[e.queue] || 0) + 1;
+        for (const qName in depthByName) {
+          if (depthByName[qName] > (_runtimeMetrics.maxQueueLengthByQueue[qName] || 0)) _runtimeMetrics.maxQueueLengthByQueue[qName] = depthByName[qName];
         }
-        return out;
-      };
+      }
+    } else if (_timeSeries !== null) {
+      const sample = sampleLive(_lastTimeSeriesSampleT, clock);
+      const withRecentWaits = (/** @type {any} */ byQueueIn) => withQueueWaits(byQueueIn, sample.recentWaits);
       const wipCountAtSample = sample.wip;
       wipThisCycle = sample.wip;
-      const quantityField = quantityEnabled
-        ? { quantityInSystem: roundQty(sample.wipQuantity) }
-        : {};
       const completedSinceSample = state.__completedSinceSample || 0;
       // Container levels (G21) — the instantaneous level at this sample time,
       // not an interval average: FILL/DRAIN move a level in jumps, and an
       // average would smooth over the moment a stock runs dry.
-      /** @type {Record<string, number> | null} */
-      let byContainer = null;
-      if (runtimeModel.containerTypes?.length) {
-        byContainer = {};
-        for (const ct of runtimeModel.containerTypes) byContainer[ct.id] = state[`__container_${ct.id}`] ?? 0;
-      }
-      const containerField = { ...(byContainer ? { byContainer } : {}), ...quantityField };
+      const containerField = timeSeriesLevels(sample);
       if (stepSnap) {
         _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: withRecentWaits(stepSnap.byQueue), ...containerField, wip: wipCountAtSample, completed: completedSinceSample });
       } else {
@@ -1867,8 +1988,11 @@ const cycleLog = [];
           if (depth > currentMax) _runtimeMetrics.maxQueueLengthByQueue[qName] = depth;
         }
       }
+      cycleByType = stepSnap?.byType ?? liteSnap?.byType ?? null;
+    }
+    if (_timeSeries !== null) {
       // Schedule adherence sampling (F86.5) — compare actual count to desired capacity
-      const byType = stepSnap?.byType ?? liteSnap?.byType;
+      const byType = gridByType ?? cycleByType;
       if (byType && state.__desiredServerCapacity) {
         state.__scheduleAdherenceSamples = state.__scheduleAdherenceSamples || {};
         // byType is keyed by the entity type's actual-case name (e.g. "Nurse");
@@ -1937,20 +2061,26 @@ const cycleLog = [];
         if (scanned !== wipCount || (wipThisCycle != null && wipThisCycle !== wipCount)) {
           throw new Error(`in-system counter drift at t=${clock}: counter ${wipCount}, scan ${scanned}, sample ${wipThisCycle}`);
         }
-        /** @type {Map<string, { type: string, idle: number, busy: number }>} */
+        /** @type {Map<string, Record<string, any>>} */
         const scannedByType = new Map();
         for (const e of queueIndex.servers) {
           const key = e.type.trim().toLowerCase();
-          if (!scannedByType.has(key)) scannedByType.set(key, { type: e.type, idle: 0, busy: 0 });
+          if (!scannedByType.has(key)) scannedByType.set(key, { type: e.type, idle: 0, busy: 0, snapIdle: 0, snapBusy: 0, snapFailed: 0, total: 0 });
+          const c = /** @type {Record<string, any>} */ (scannedByType.get(key));
+          c.total++;
+          if (e.status === "idle") c.snapIdle++;
+          else if (e.status === "busy" || e.status === "serving" || e.status === "turnaround") c.snapBusy++;
+          else if (e.status === "failed") c.snapFailed++;
           if (e._suspended) continue;
-          const c = /** @type {{ type: string, idle: number, busy: number }} */ (scannedByType.get(key));
           if (e.status === "idle") c.idle++;
           else if (e.status === "busy" || e.status === "serving") c.busy++;
         }
         for (const c of scannedByType.values()) {
-          const counts = serverCountsOfType(queueIndex, c.type);
-          if (counts.idle !== c.idle || counts.busy !== c.busy) {
-            throw new Error(`server count drift for ${c.type} at t=${clock}: idle ${counts.idle}/${c.idle}, busy ${counts.busy}/${c.busy}`);
+          const counts = /** @type {Record<string, any>} */ (serverCountsOfType(queueIndex, c.type));
+          for (const field of ["idle", "busy", "snapIdle", "snapBusy", "snapFailed", "total"]) {
+            if (counts[field] !== c[field]) {
+              throw new Error(`server count drift for ${c.type} at t=${clock}: ${field} ${counts[field]}/${c[field]}`);
+            }
           }
         }
       }

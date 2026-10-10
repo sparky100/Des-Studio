@@ -7,7 +7,7 @@ import { runReplications } from "../../engine/replication-runner.js";
 import { buildBatchAnalysisPrompt, buildApplyOpportunityPrompt, parseSuggestionResponse, applySuggestionPatch, buildGoalGapsFromResults, buildKpis, buildUtilisationMap, correctUtilisationFigures } from "../../llm/prompts.js";
 import { streamNarrative, streamModelBuilder, callLLMOnce } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
-import { makeBatchResult, CI_METRICS, formatRunTimestamp, makeTimeSeriesAccumulator } from "./executeHelpers.js";
+import { makeBatchResult, CI_METRICS, formatRunTimestamp, makeTimeSeriesAccumulator, TIME_SERIES_GRID_POINTS } from "./executeHelpers.js";
 import { summarizeReplicationResults, compareScenarios } from "../../engine/statistics.js";
 import { RUN_ADMISSION_TIERS, getRunAdmission } from "../../engine/run-admission.js";
 import { estimateMaxCycles } from "../../engine/complexity-estimator.js";
@@ -258,7 +258,7 @@ export function AdaptiveBatchPanel({
     const effectiveCollectCharts = forceCollectCharts ?? collectCharts;
     const chartsAutoDisabled = collectCharts && !effectiveCollectCharts;
     try {
-      const tsAccumulator = effectiveCollectCharts ? makeTimeSeriesAccumulator(150, maxSimTime) : null;
+      const tsAccumulator = effectiveCollectCharts ? makeTimeSeriesAccumulator(TIME_SERIES_GRID_POINTS, maxSimTime) : null;
       const adaptiveResult = await runAdaptiveBatch({
         model,
         tier,
@@ -270,6 +270,7 @@ export function AdaptiveBatchPanel({
         maxCycles: estimateMaxCycles(admission.complexityEstimate),
         maxCEventScans: admission.effectiveSettings?.maxCEventScans,
         onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
+        timeSeriesGridPoints: tsAccumulator && Number.isFinite(maxSimTime) && maxSimTime > 0 ? TIME_SERIES_GRID_POINTS : null,
         signal,
         onProgress: ({ completed, relativeHalfWidth }) => {
           setTotalReps(completed);

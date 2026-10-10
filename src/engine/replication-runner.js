@@ -12,11 +12,22 @@ import { runReplicationPayload, WORKER_MESSAGE_TYPES } from "./worker.js";
  */
 
 /** @param {number} replications */
-function defaultWorkerCount(replications) {
-  const cores = typeof navigator !== "undefined" && Number.isFinite(navigator.hardwareConcurrency)
-    ? navigator.hardwareConcurrency
-    : 2;
-  return Math.min(replications, Math.max(1, cores - 1));
+// At most this many replication workers by default. Phones report every core
+// (often 8, mostly slow efficiency cores), and each worker holds a whole
+// replication's state — running 7 at once was slower, hotter and far heavier
+// on memory than 4.
+export const MAX_DEFAULT_WORKERS = 4;
+
+/**
+ * @param {number} replications
+ * @param {{ hardwareConcurrency?: number, deviceMemory?: number }} [nav]
+ */
+export function defaultWorkerCount(replications, nav = typeof navigator !== "undefined" ? navigator : {}) {
+  const cores = Number.isFinite(nav?.hardwareConcurrency) ? /** @type {number} */ (nav.hardwareConcurrency) : 2;
+  let cap = MAX_DEFAULT_WORKERS;
+  // navigator.deviceMemory (GB, Chromium only) — keep low-memory devices to 2.
+  if (Number.isFinite(nav?.deviceMemory) && /** @type {number} */ (nav.deviceMemory) <= 4) cap = 2;
+  return Math.min(replications, cap, Math.max(1, cores - 1));
 }
 
 /** @returns {ReplicationWorker} */
@@ -141,6 +152,7 @@ export function createReplicationPool({ createWorker = createBrowserWorker } = {
  *   maxCycles?: number,
  *   maxCPasses?: number,
  *   maxCEventScans?: number|null,
+ *   timeSeriesGridPoints?: number|null,
  *   collectTimeSeries?: boolean,
  *   collectTrace?: boolean,
  *   schedulesMap?: Record<string, any>,
@@ -171,6 +183,7 @@ export function runReplications(options = {}) {
     maxCycles = 5000,
     maxCPasses = 5000,
     maxCEventScans = null,
+    timeSeriesGridPoints = null,
     collectTimeSeries,
     schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
     workerCount,
@@ -199,6 +212,9 @@ export function runReplications(options = {}) {
     maxCycles,
     maxCPasses,
     maxCEventScans,
+    // Charts for a batch are resampled to a fixed grid (makeTimeSeriesAccumulator);
+    // when the caller says which grid, workers record only the samples it reads.
+    timeSeriesGridPoints,
     collectTimeSeries,
     // Batch replications never surface the structured trace (compaction strips
     // log, persistence strips trace), so skip building it inside the engine.

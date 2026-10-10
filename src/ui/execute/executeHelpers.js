@@ -156,7 +156,12 @@ export function buildParameterOverrideRecord(effectiveOverrides = [], adhocPaths
 // silently truncate every other (correctly longer-running) replication's data
 // past that point. With no knownMaxTime (condition-based termination, no
 // a-priori run length), fall back to deriving the grid from the first series.
-export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) {
+// Batch charts: every replication's series is resampled onto this many equal
+// points. Batch runs pass the same number to the engine (timeSeriesGridPoints)
+// so workers keep only the samples the accumulator reads.
+export const TIME_SERIES_GRID_POINTS = 150;
+
+export function makeTimeSeriesAccumulator(maxPoints = TIME_SERIES_GRID_POINTS, knownMaxTime = null) {
   let grid = Number.isFinite(knownMaxTime) && knownMaxTime > 0
     ? Array.from({ length: maxPoints }, (_, i) => (i / (maxPoints - 1)) * knownMaxTime)
     : null;

@@ -68,6 +68,18 @@ describe('engine scaling', () => {
     expect(long / short).toBeLessThan(1.3);
   });
 
+  test('batch path (chart samples on the 150-point grid): tanker fleet µs/event at 300 days within 1.3x of 100 days', () => {
+    const batchRep = maxSimTime => {
+      const result = buildEngine(fleetModel(), 7, 60, maxSimTime, null, 1e8, 5000, true, undefined,
+        { collectTrace: false, timeSeriesGridPoints: 150 }).runAll();
+      expect(result.timeSeries.length).toBeLessThanOrEqual(150);
+      return (result.runtimeMetrics.wall_clock_ms * 1000) / result.runtimeMetrics.events_processed;
+    };
+    const short = batchRep(100);
+    const long = batchRep(300);
+    expect(long / short).toBeLessThan(1.3);
+  });
+
   test('µs/event with 1,000 servers of one type is within 2.5x of 10 servers at the same event volume', () => {
     const at = c => median([1, 2, 3].map(() => usPerEvent(mmc({ c, arrivalMean: 0.1, serviceMean: 0.05 * c }), 1000, { charts: false })));
     expect(at(1000) / at(10)).toBeLessThan(2.5);
