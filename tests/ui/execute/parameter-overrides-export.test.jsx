@@ -97,3 +97,37 @@ describe("batch container levels are labelled", () => {
     expect(extremes.textContent).toContain("Highest in any rep 245");
   });
 });
+
+describe("goal outcomes in exports", () => {
+  const goalModel = { name: "Oil", goals: [
+    { label: "Served at least 5", metric: "summary.served", operator: ">=", target: 5 },
+    { label: "Avg wait under 1", metric: "summary.avgWait", operator: "<", target: 1 },
+    { label: "Unmeasured", metric: "summary.totalCost", operator: "<", target: 1 },
+  ] };
+  const res = { summary: { served: 8, avgWait: 2.5 } };
+
+  it("JSON export evaluates goals for results that predate recorded outcomes", () => {
+    const payload = buildResultsExportPayload({ model: goalModel, results: res });
+    expect(payload.results.goalOutcomes.map(g => [g.label, g.status])).toEqual([
+      ["Served at least 5", "met"], ["Avg wait under 1", "not-met"], ["Unmeasured", "no-data"],
+    ]);
+  });
+
+  it("metrics-only JSON export keeps goal outcomes", () => {
+    const payload = buildResultsExportPayload({ model: goalModel, results: res, metricsOnly: true });
+    expect(payload.results.goalOutcomes).toHaveLength(3);
+  });
+
+  it("prefers outcomes recorded at run time", () => {
+    const recorded = [{ label: "x", status: "met" }];
+    const payload = buildResultsExportPayload({ model: goalModel, results: { ...res, goalOutcomes: recorded } });
+    expect(payload.results.goalOutcomes).toEqual(recorded);
+  });
+
+  it("workbook gets a Goals sheet and a Summary row", async () => {
+    await buildResultsXlsx({ results: res, model: goalModel });
+    const sheets = downloadWorkbook.mock.calls.at(-1)[0];
+    expect(sheets.find(s => s.name === "Summary").rows).toContainEqual(["Goals met", "1 of 3 — see Goals sheet"]);
+    expect(sheets.find(s => s.name === "Goals").rows).toContainEqual(["Avg wait under 1", "summary.avgWait", "", "<", 1, 2.5, 1.5, "not-met"]);
+  });
+});

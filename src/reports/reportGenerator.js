@@ -857,7 +857,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
   if (activityEntries.length) {
     activityHtml = `<h3>Activity throughput</h3>
     <p class="note">How many times each activity actually completed during the run.</p>
-    ${htmlTable(['Activity', 'Completions'], activityEntries.map(([name, count]) => [name, String(count)]))}`;
+    ${htmlTable(['Activity', 'Entities started'], activityEntries.map(([name, count]) => [name, String(count)]))}`;
   }
 
   // Preemptions table — entities interrupted mid-service (PREEMPT/FAIL macros,
@@ -1314,7 +1314,7 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
   if (mdActivityEntries.length) {
     lines.push('### Activity Throughput');
     lines.push('');
-    lines.push(mdTable(['Activity', 'Completions'], mdActivityEntries.map(([name, count]) => [name, String(count)])));
+    lines.push(mdTable(['Activity', 'Entities started'], mdActivityEntries.map(([name, count]) => [name, String(count)])));
     lines.push('');
   }
 

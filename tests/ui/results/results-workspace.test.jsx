@@ -317,7 +317,7 @@ describe("ResultsWorkspace", () => {
 
     render(<ResultsWorkspace results={activityResults} model={model} />);
 
-    const heading = screen.getByText("ACTIVITY THROUGHPUT");
+    const heading = screen.getByText(/^ACTIVITY THROUGHPUT — ENTITIES STARTED/);
     const cards = heading.nextElementSibling.children;
     expect(within(cards[0]).getByText("INSPECT")).toBeInTheDocument();
     expect(within(cards[0]).getByText("12")).toBeInTheDocument();
@@ -327,7 +327,7 @@ describe("ResultsWorkspace", () => {
 
   test("does not render ACTIVITY THROUGHPUT when summary.activityCounts is absent", () => {
     render(<ResultsWorkspace results={results} model={model} />);
-    expect(screen.queryByText("ACTIVITY THROUGHPUT")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^ACTIVITY THROUGHPUT/)).not.toBeInTheDocument();
   });
 
   test("renders an INTERRUPTIONS card per entity type with a reason breakdown when summary.preemptCounts is present — the user's own 'how many times was a RepairJob preempted' case", () => {

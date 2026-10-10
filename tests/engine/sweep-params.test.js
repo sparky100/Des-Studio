@@ -512,6 +512,12 @@ describe("applySweepValue", () => {
     expect(cloned.containerTypes[0].initialLevel).toBe(0);
   });
 
+  test("keeps a numeric state variable numeric", () => {
+    const model = { stateVariables: [{ name: "closureEnabled", valueType: "number", initialValue: 0 }] };
+    const cloned = applySweepValue(model, { type: "stateVarInit", targetId: "closureEnabled" }, 1);
+    expect(cloned.stateVariables[0].initialValue).toBe(1);
+  });
+
   test("modifies state variable initial value", () => {
     const model = { stateVariables: [{ name: "threshold", initialValue: "10" }] };
     const param = { type: "stateVarInit", targetId: "threshold" };

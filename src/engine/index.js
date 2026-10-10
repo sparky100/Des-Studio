@@ -692,8 +692,14 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // ── Event fire counts: how many times each B/C-event has fired ─────────────
   /** @type {Record<string, number>} */
   const _eventCounts = {};
-  const incEventCount = (/** @type {any} */ id) => {
-    if (id) _eventCounts[id] = (_eventCounts[id] || 0) + 1;
+  // Raw C-event firings, kept separately because one DELAY firing can start
+  // many entities — _eventCounts counts entities started (see fireCEvent).
+  /** @type {Record<string, number>} */
+  const _cEventFirings = {};
+  const incEventCount = (/** @type {any} */ id, /** @type {number} */ n = 1, /** @type {boolean} */ isCEvent = false) => {
+    if (!id) return;
+    _eventCounts[id] = (_eventCounts[id] || 0) + n;
+    if (isCEvent) _cEventFirings[id] = (_cEventFirings[id] || 0) + 1;
   };
   const _runtimeMetrics = {
     eventsProcessed: 0,
@@ -2358,16 +2364,16 @@ const cycleLog = [];
       queueJourneys[path] = (queueJourneys[path] || 0) + 1;
     }
 
-    // Activity throughput: how many times each activity (C-event) actually
-    // completed. _eventCounts already tracks every B/C-event firing (see
-    // fireBEvent/fireCEvent in phases.js) but previously only survived to the
-    // end of a run on the ephemeral `snap`, never in the persisted summary —
-    // scope this view to C-events ("activities"), since that's what's asked
-    // for; B-event/arrival counts already have partial coverage elsewhere.
+    // Activity throughput: how many entities each activity (C-event) started.
+    // _eventCounts tracks every B/C-event firing (see fireBEvent/fireCEvent in
+    // phases.js), with a C-event credited once per entity it starts — a single
+    // DELAY firing moves every waiting entity at once, so counting firings
+    // under-reported DELAY activities by the batch size. `firings` keeps the
+    // raw number of times the C-event fired.
     /** @type {Record<string, any>} */
     const activityCounts = {};
     for (const ev of runtimeModel.cEvents || []) {
-      if (_eventCounts[ev.id]) activityCounts[ev.id] = { name: ev.name || ev.id, count: _eventCounts[ev.id] };
+      if (_eventCounts[ev.id]) activityCounts[ev.id] = { name: ev.name || ev.id, count: _eventCounts[ev.id], firings: _cEventFirings[ev.id] || 0 };
     }
 
     return {

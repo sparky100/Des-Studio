@@ -535,7 +535,11 @@ export function fireCEvent(ev, ctx) {
   // the dirty-set filter (enableFilteredPhaseC) happens to re-scan it on — an
   // internal optimization that must stay invisible to simulation semantics
   // (see tests/engine/phase-c-dirty-filter.test.js).
-  if (ev.id) ctx.incEventCount?.(ev.id);
+  //
+  // Credit one count per entity the firing started: DELAY starts every waiting
+  // entity in a single firing (effectCtx._delayedCustIds), so counting the
+  // firing once under-reported DELAY activities by the batch size.
+  if (ev.id) ctx.incEventCount?.(ev.id, effectCtx._delayedCustIds?.length || 1, true);
 
   // Resolve attribute-conditional cSchedules.
   // When ANY entry has a `when` predicate, first-match semantics apply:
