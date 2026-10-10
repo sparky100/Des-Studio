@@ -83,6 +83,7 @@ export function compactReplicationPayload(payload) {
       runtimeMetrics: result.runtimeMetrics,
       phaseCTruncated: result.phaseCTruncated || result.summary?.phaseCTruncated || false,
       cycleLimitReached: result.cycleLimitReached || result.summary?.cycleLimitReached || false,
+      scanLimitReached: result.scanLimitReached || result.summary?.scanLimitReached || false,
       warnings: result.warnings || result.summary?.warnings || [],
       entitySummary: result.entitySummary,
       entitySummaryCompact: result.entitySummaryCompact,
@@ -139,6 +140,7 @@ export function createReplicationPool({ createWorker = createBrowserWorker } = {
  *   terminationCondition?: any,
  *   maxCycles?: number,
  *   maxCPasses?: number,
+ *   maxCEventScans?: number|null,
  *   collectTimeSeries?: boolean,
  *   collectTrace?: boolean,
  *   schedulesMap?: Record<string, any>,
@@ -168,6 +170,7 @@ export function runReplications(options = {}) {
     terminationCondition = null,
     maxCycles = 5000,
     maxCPasses = 5000,
+    maxCEventScans = null,
     collectTimeSeries,
     schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
     workerCount,
@@ -195,6 +198,7 @@ export function runReplications(options = {}) {
     terminationCondition,
     maxCycles,
     maxCPasses,
+    maxCEventScans,
     collectTimeSeries,
     // Batch replications never surface the structured trace (compaction strips
     // log, persistence strips trace), so skip building it inside the engine.

@@ -11,12 +11,15 @@ export function usePhaseCTruncationStatus() {
   const [truncatedReplicationCount, setTruncatedReplicationCount] = useState(0);
   const [totalReplicationCount, setTotalReplicationCount] = useState(1);
   const [cycleLimitReached, setCycleLimitReached] = useState(false);
+  // Replications stopped by the per-replication C-event scan cap (2× tier limit).
+  const [scanLimitReplicationCount, setScanLimitReplicationCount] = useState(0);
 
   const reset = useCallback((total = 1) => {
     setPhaseCTruncated(false);
     setTruncatedReplicationCount(0);
     setTotalReplicationCount(total);
     setCycleLimitReached(false);
+    setScanLimitReplicationCount(0);
   }, []);
 
   // Single-run contexts (interactive step, "Run Once"): at most one
@@ -27,6 +30,7 @@ export function usePhaseCTruncationStatus() {
       setTruncatedReplicationCount(1);
     }
     if (r?.cycleLimitReached || r?.summary?.cycleLimitReached) setCycleLimitReached(true);
+    if (r?.scanLimitReached || r?.summary?.scanLimitReached) setScanLimitReplicationCount(1);
   }, []);
 
   // Batch context: recompute from every replication payload completed so
@@ -42,10 +46,15 @@ export function usePhaseCTruncationStatus() {
     if (latestPayload?.result?.cycleLimitReached || latestPayload?.result?.summary?.cycleLimitReached) {
       setCycleLimitReached(true);
     }
+    const scanLimitedSoFar = completedPayloads.filter(
+      p => p?.result?.scanLimitReached || p?.result?.summary?.scanLimitReached
+    ).length;
+    if (scanLimitedSoFar > 0) setScanLimitReplicationCount(scanLimitedSoFar);
   }, []);
 
   return {
     phaseCTruncated, truncatedReplicationCount, totalReplicationCount, cycleLimitReached,
+    scanLimitReplicationCount,
     reset, recordSingleResult, recordBatchProgress,
   };
 }

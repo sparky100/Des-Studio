@@ -249,7 +249,9 @@ describe("estimateRunComplexity", () => {
       bEventCount: 2,
       cEventCount: 1,
       estimatedStageTransitions: 452,
-      estimatedCEventScans: 904,
+      estimatedBEventFirings: 904,
+      // 1 C-event, no Phase C filtering: ~1.5 scans per B-event (re-scan after a firing).
+      estimatedCEventScans: 1356,
       riskLevel: "small",
       confidence: "high",
     }));
@@ -284,7 +286,10 @@ describe("estimateRunComplexity", () => {
           dist: "Exponential",
           distParams: { mean: "0.005" },
         }],
-      }],
+      },
+      { id: "done_a", name: "Done A", effect: "RELEASE(Server A, Middle Queue)", schedules: [] },
+      { id: "done_b", name: "Done B", effect: "RELEASE(Server B, Exit Queue)", schedules: [] },
+      { id: "done_c", name: "Done C", effect: "RELEASE(Server C)", schedules: [] }],
       cEvents: [
         {
           id: "stage_a",
@@ -313,8 +318,10 @@ describe("estimateRunComplexity", () => {
       replications: 1,
     });
 
+    // 18,001 arrivals, each visiting all three stages: 18,001 × (1 + 3).
+    expect(estimate.meanStageVisitsPerEntity).toBe(3);
     expect(estimate.estimatedBEventFirings).toBe(72004);
-    expect(estimate.estimatedCEventScans).toBe(216012);
+    expect(estimate.estimatedCEventScans).toBe(Math.ceil(72004 * 4.5));
     expect(estimateMaxCycles(estimate)).toBe(144008);
   });
 

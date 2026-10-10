@@ -25,11 +25,12 @@ import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { saveLocalRun } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { ChartDataChoiceDialog } from "./ChartDataChoiceDialog.jsx";
+import { ScanLimitBanner } from "./ScanLimitBanner.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
 import { evaluateLiveHealth } from "../results/healthFlags.js";
 import { CustomerToken, VisualView } from "./VisualView.jsx";
 import { validateModel } from "../../engine/validation.js";
-import { estimateRunComplexity, estimateMaxCycles, computeEstimateAccuracy } from "../../engine/complexity-estimator.js";
+import { estimateRunComplexity, estimateMaxCycles, computeEstimateAccuracy, scansPerBEventFromMetrics } from "../../engine/complexity-estimator.js";
 import { getRunAdmission } from "../../engine/run-admission.js";
 import { enumerateSweepableParams, applySweepValues, generate2DSweepValues, MAX_STUDY_REPLICATIONS } from "../../engine/sweep-params.js";
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
@@ -206,9 +207,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [saveStatus, setSaveStatus] = useState(null);
   const {
     phaseCTruncated, truncatedReplicationCount, totalReplicationCount, cycleLimitReached,
+    scanLimitReplicationCount,
     reset: resetTruncationStatus, recordSingleResult: recordTruncationResult, recordBatchProgress: recordBatchTruncationProgress,
   } = usePhaseCTruncationStatus();
   const [lastRunEstimateAccuracy, setLastRunEstimateAccuracy] = useState(null);
+  // Measured C-event scans per B-event from this model's last run — replaces the
+  // estimator's default ratio so RA7/RA8 reflect how this model actually scans.
+  const [scanCalibration, setScanCalibration] = useState(null);
+  const recordScanCalibration = useCallback((runtimeMetrics) => {
+    const measured = scansPerBEventFromMetrics(runtimeMetrics, (model?.cEvents || []).length);
+    if (measured) setScanCalibration(measured);
+  }, [model]);
   const [results, setResults] = useState(null);
   const [liveWaitDist, setLiveWaitDist] = useState(null);
   const [liveTimeSeries, setLiveTimeSeries] = useState(null);
@@ -461,7 +470,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     maxSimTime,
     replications,
     schedulesMap: activeSchedulesMap,
-  }), [model, terminationMode, maxSimTime, replications, activeSchedulesMap]);
+    calibration: scanCalibration,
+  }), [model, terminationMode, maxSimTime, replications, activeSchedulesMap, scanCalibration]);
   const runAdmission = useMemo(() => getRunAdmission(model, {
     warmupPeriod,
     maxSimTime,
@@ -504,7 +514,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const readinessAdvisoryCount = runAdmission.warnings.length;
   const readinessDigestParts = [
     formatEstimate(complexityEstimate.expectedEntities) !== "—" ? `≈ ${formatEstimate(complexityEstimate.expectedEntities)} entities` : null,
-    formatEstimate(complexityEstimate.estimatedCEventScans) !== "—" ? `${formatEstimate(complexityEstimate.estimatedCEventScans)} scans` : null,
+    formatEstimate(complexityEstimate.estimatedCEventScans) !== "—" ? `${formatEstimate(complexityEstimate.estimatedCEventScans)} scans/rep` : null,
     complexityEstimate.confidence ? `${complexityEstimate.confidence} confidence` : null,
   ].filter(Boolean);
 
@@ -530,7 +540,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       estimateMaxCycles(runAdmission.complexityEstimate), 5000,
       collectTimeSeries,
       undefined,
-      { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) }, collectTrace: effectiveCollectTrace }
+      { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) }, collectTrace: effectiveCollectTrace, maxCEventScans: runAdmission.effectiveSettings?.maxCEventScans }
     );
     setCurrentSnap(engineRef.current.getSnap());
     const initLog = [{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }];
@@ -644,6 +654,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         ...summary,
         phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
         cycleLimitReached: r.cycleLimitReached || summary.cycleLimitReached,
+        scanLimitReached: r.scanLimitReached || summary.scanLimitReached || false,
         total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
         served: r.snap?.served || 0,
         reneged: r.snap?.reneged || 0,
@@ -653,6 +664,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         summary: finalSummary,
         phaseCTruncated: finalSummary.phaseCTruncated,
         cycleLimitReached: finalSummary.cycleLimitReached,
+        scanLimitReached: finalSummary.scanLimitReached,
         timeSeries:    engineRef.current.getTimeSeries?.(),
         waitDist:      engineRef.current.getWaitDist?.(),
         waitByArrival:   engineRef.current.getWaitByArrival?.(),
@@ -683,6 +695,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       // Pass/fail per goal, stored with the results so the file is complete.
       fullResult.goalOutcomes = buildGoalOutcomes(buildGoalGapsFromResults(effectiveModel, fullResult));
       setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, fullResult.runtimeMetrics));
+      recordScanCalibration(fullResult.runtimeMetrics);
       setResults(fullResult);
       onResultsReady?.(fullResult);
       onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
@@ -836,6 +849,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: maxTimeForRun,
         terminationCondition: stopConditionForRun,
         maxCycles: estimateMaxCycles(runAdmission.complexityEstimate),
+        maxCEventScans: runAdmission.effectiveSettings?.maxCEventScans,
         collectTimeSeries: effectiveCollectTimeSeries,
         schedulesMap: activeSchedulesMap,
         onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
@@ -893,6 +907,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             batchResult.goalOutcomes = buildGoalOutcomes(buildGoalGapsFromResults(effectiveModel, batchResult));
             setBatchStatus("complete");
             setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, batchResult.runtimeMetrics));
+            recordScanCalibration(ordered[0]?.result?.runtimeMetrics);
             setResults(batchResult);
             onResultsReady?.(batchResult);
             onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log: logRef.current });
@@ -998,7 +1013,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       estimateMaxCycles(runAdmission.complexityEstimate), 5000,
       effectiveCollectTimeSeries,
       undefined,
-      { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) }, collectTrace: effectiveCollectTrace }
+      { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) }, collectTrace: effectiveCollectTrace, maxCEventScans: runAdmission.effectiveSettings?.maxCEventScans }
     );
     setSingleRunProgress(engine.getProgress());
 
@@ -1057,6 +1072,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setLog(result.log);
     onRunComplete?.({ results: result, replicationResults: [], warmupDetection: null, log: result.log });
     setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, result.runtimeMetrics));
+    recordScanCalibration(result.runtimeMetrics);
     setMode("done");
     setSingleRunStatus(singleRunCancelRef.current ? "cancelled" : "complete");
     setSingleRunProgress(engine.getProgress({ done: true, cancelled: singleRunCancelRef.current }));
@@ -1263,6 +1279,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: terminationMode === 'time' ? maxSimTime : null,
         terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
         maxCycles: estimateMaxCycles(runAdmission.complexityEstimate),
+        maxCEventScans: runAdmission.effectiveSettings?.maxCEventScans,
         collectTimeSeries: false,
         schedulesMap: activeSchedulesMap,
         onReplicationComplete: payload => {
@@ -1281,6 +1298,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             snap:          first.snap,
             phaseCTruncated: first.phaseCTruncated || false,
             cycleLimitReached: first.cycleLimitReached || false,
+            scanLimitReached: first.scanLimitReached || false,
           };
           setResults(verifyResult);
           onResultsReady?.(verifyResult);
@@ -1311,6 +1329,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: terminationMode === 'time' ? maxSimTime : null,
         terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
         maxCycles: estimateMaxCycles(runAdmission.complexityEstimate),
+        maxCEventScans: runAdmission.effectiveSettings?.maxCEventScans,
         collectTimeSeries: false,
         schedulesMap: activeSchedulesMap,
         onReplicationComplete: payload => {
@@ -2970,7 +2989,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 { label: "Planned schedule rows", value: formatEstimate(complexityEstimate.plannedScheduleRows) },
                 { label: "Expected entities", value: formatEstimate(complexityEstimate.expectedEntities) },
                 { label: "Stage moves", value: formatEstimate(complexityEstimate.estimatedStageTransitions) },
-                { label: "C-event scans", value: formatEstimate(complexityEstimate.estimatedCEventScans) },
+                { label: "C-event scans / rep", value: formatEstimate(complexityEstimate.estimatedCEventScans) },
                 { label: "Replications", value: formatEstimate(complexityEstimate.replications) },
               ].map(item => (
                 <div
@@ -2990,6 +3009,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             </div>
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
               Confidence: {complexityEstimate.confidence}. This estimate uses arrival and service means, so real runs may be smaller or larger.
+              {complexityEstimate.scanBasisDescription ? ` Scans per replication: ${formatEstimate(complexityEstimate.estimatedBEventFirings)} B-events × ${complexityEstimate.scanBasisDescription}` : ""}
             </div>
             {lastRunEstimateAccuracy && (
               <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
@@ -3082,6 +3102,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           </div>
         </div>
       )}
+
+      <ScanLimitBanner count={scanLimitReplicationCount} total={totalReplicationCount} cap={runAdmission.effectiveSettings?.maxCEventScans} />
 
       {saveStatus && (
         <div

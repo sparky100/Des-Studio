@@ -673,6 +673,8 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
   const truncatedReplicationCount = replicationPayloads.filter(p => p?.result?.phaseCTruncated || p?.result?.summary?.phaseCTruncated).length;
   const phaseCTruncated = truncatedReplicationCount > 0;
   const cycleLimitReached = replicationPayloads.some(p => p?.result?.cycleLimitReached || p?.result?.summary?.cycleLimitReached);
+  const scanLimitReplicationCount = replicationPayloads.filter(p => p?.result?.scanLimitReached || p?.result?.summary?.scanLimitReached).length;
+  const scanLimitReached = scanLimitReplicationCount > 0;
 
   return {
     snap: { clock: finalTime },
@@ -684,6 +686,8 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
     phaseCTruncated,
     truncatedReplicationCount,
     cycleLimitReached,
+    scanLimitReached,
+    scanLimitReplicationCount,
     runtimeMetrics: {
       replications: replicationPayloads.length,
     },
@@ -695,6 +699,8 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       phaseCTruncated,
       truncatedReplicationCount,
       cycleLimitReached,
+      scanLimitReached,
+      scanLimitReplicationCount,
       servedRatio: served > 0 && total > 0 ? +(served / total).toFixed(4) : null,
       numReplications: replicationPayloads.length,
       avgWait: aggregateStats["summary.avgWait"]?.mean ?? null,
@@ -781,8 +787,8 @@ export function buildResultsExportPayload({
     const { log, ...rest } = r;
     if (!metricsOnly) return rest;
     // Metrics-only: keep just summary KPIs; drop time series, distributions, entity details, and snapshot.
-    const { summary, phaseCTruncated, cycleLimitReached, runtimeMetrics, goalOutcomes } = rest;
-    return { summary, phaseCTruncated, cycleLimitReached, runtimeMetrics, goalOutcomes };
+    const { summary, phaseCTruncated, cycleLimitReached, scanLimitReached, runtimeMetrics, goalOutcomes } = rest;
+    return { summary, phaseCTruncated, cycleLimitReached, scanLimitReached, runtimeMetrics, goalOutcomes };
   }
 
   const stripped = stripResults(results);

@@ -72,6 +72,7 @@ function runReplicationsPromise(opts, signal) {
  *   schedulesMap?: Record<string, any>,
  *   targetRelativeCI?: number,
  *   maxCycles?: number,
+ *   maxCEventScans?: number|null,
  *   collectTimeSeries?: boolean,
  *   onRoundComplete?: (info: { round: number, totalReps: number, ci: any, relativeHalfWidth: number|null }) => void,
  *   onProgress?: (info: { completed: number, total: number, relativeHalfWidth: number|null }) => void,
@@ -93,6 +94,7 @@ export async function runAdaptiveBatch(options = {}) {
     schedulesMap = {},
     targetRelativeCI = 5,
     maxCycles,
+    maxCEventScans,
     // Convergence only needs one scalar KPI per replication; time-series
     // collection roughly doubles per-rep cost, so it is opt-in for batches.
     collectTimeSeries = false,
@@ -153,6 +155,7 @@ export async function runAdaptiveBatch(options = {}) {
       onTimeSeriesSample,
       pool,
       ...(maxCycles != null ? { maxCycles } : {}),
+      ...(maxCEventScans != null ? { maxCEventScans } : {}),
       onReplicationComplete: (/** @type {any} */ payload, /** @type {any} */ prog) => {
         const kpiVal = getPathValue(payload?.result, kpiPath);
         if (typeof kpiVal === 'number' && Number.isFinite(kpiVal)) {

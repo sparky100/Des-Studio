@@ -225,6 +225,27 @@ describe("evaluateResultsHealth — H13 (cycle limit reached)", () => {
   });
 });
 
+describe("evaluateResultsHealth — H16 (C-event scan limit reached)", () => {
+  test("flag present and critical for a single run that hit the scan cap", () => {
+    const flags = evaluateResultsHealth({ summary: { total: 100 }, scanLimitReached: true }, makeModel([]));
+    const h16 = flags.find(f => f.code === "H16");
+    expect(h16).toBeDefined();
+    expect(h16.severity).toBe("critical");
+    expect(h16.message).toMatch(/^This run hit the C-event scan limit/);
+  });
+
+  test("batch results say how many replications were stopped", () => {
+    const results = { summary: { total: 100, numReplications: 10, scanLimitReached: true, scanLimitReplicationCount: 3 } };
+    const h16 = evaluateResultsHealth(results, makeModel([])).find(f => f.code === "H16");
+    expect(h16.message).toMatch(/^3 of 10 replications hit the C-event scan limit/);
+  });
+
+  test("no flag when the field is absent", () => {
+    const flags = evaluateResultsHealth({ summary: { total: 100 } }, makeModel([]));
+    expect(flags.some(f => f.code === "H16")).toBe(false);
+  });
+});
+
 describe("evaluateLiveHealth — L3 (capacity blocking)", () => {
   test("no flag when blockingCount is 0", () => {
     const model = makeModel([{ name: "Main Queue", capacity: 5 }]);

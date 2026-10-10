@@ -114,6 +114,7 @@ export function StakeholderView({ model, plan = "free", isAdmin = false, tierPol
       maxSimTime,
       terminationCondition,
       maxCycles: estimateMaxCycles(admission.complexityEstimate),
+      maxCEventScans: admission.effectiveSettings?.maxCEventScans,
       collectTimeSeries: false,
       schedulesMap: schedulesState.map,
       onProgress: p => setProgress(p),

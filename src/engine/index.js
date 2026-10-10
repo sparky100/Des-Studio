@@ -667,6 +667,11 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let _terminationConditionMet = false;
   let _phaseCTruncated = false;
   let _cycleLimitReached = false;
+  // Per-replication C-event scan cap (run admission passes 2× the tier's
+  // maxScans). The pre-run estimate is only a guide, so this is what actually
+  // bounds a run whose estimate was too low. null/0 = no cap.
+  const maxCEventScans = Number(engineOptions.maxCEventScans) > 0 ? Number(engineOptions.maxCEventScans) : null;
+  let _scanLimitReached = false;
   let _excludedCount = 0;
   let _statsResetTime = 0;
   let _purgePhase = false;
@@ -1207,8 +1212,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const captureSnap = options.captureSnap !== false;
     const stepSnapshot = () => (captureSnap ? snap(clock) : null);
 
-    if (_terminationConditionMet) {
-      return { done: true, cycleLog: [], snap: stepSnapshot() };
+    if (_terminationConditionMet || _scanLimitReached) {
+      return { done: true, cycleLog: [], snap: stepSnapshot(), ...(_scanLimitReached ? { scanLimitReached: true } : {}) };
     }
 
 if (fel.length === 0) {
@@ -1763,13 +1768,23 @@ const cycleLog = [];
       return { done: true, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated, cycleLimitReached: true };
     }
 
+    if (maxCEventScans != null && _runtimeMetrics.cEventScans >= maxCEventScans) {
+      _scanLimitReached = true;
+      const scanLimitMsg = `Scan limit reached (${maxCEventScans.toLocaleString()} C-event scans) — simulation halted at t=${clock.toFixed(2)} before reaching its intended duration or termination condition`;
+      warnings.push(scanLimitMsg);
+      if (collectTrace) {
+        log.push(_trace("WARNING", { warning: { code: "SCAN_LIMIT_REACHED", message: scanLimitMsg }, message: scanLimitMsg }));
+      }
+      return { done: true, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated, scanLimitReached: true };
+    }
+
     return { done: false, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated };
   }
 
   /** @param {Record<string, any>} [overrides] */
   function getProgressSnapshot(overrides = {}) {
     const cancelled = !!overrides.cancelled;
-    const done = !!overrides.done || cancelled || _terminationConditionMet || fel.length === 0 || _cycleCount >= maxCycles;
+    const done = !!overrides.done || cancelled || _terminationConditionMet || fel.length === 0 || _cycleCount >= maxCycles || _scanLimitReached;
     return makeSingleRunProgress({
       completed: _cycleCount,
       total: maxCycles,
@@ -1810,6 +1825,7 @@ const cycleLog = [];
       runtimeMetrics:  getRuntimeMetrics(engineSummary.served),
       phaseCTruncated: _phaseCTruncated,
       cycleLimitReached: _cycleLimitReached,
+      scanLimitReached: _scanLimitReached,
       warnings:        warnings.slice(),
       ...(entityDetail
         ? { entitySummary: allEntitiesForStats().map(e => ({ ...e, attrs: { ...e.attrs } })) }
@@ -1846,7 +1862,7 @@ const cycleLog = [];
       return buildRunResult({ cancelled: true, message: "Run cancelled before processing any events." });
     }
 
-    while (fel.length > 0 && _cycleCount < maxCycles && !_terminationConditionMet) {
+    while (fel.length > 0 && _cycleCount < maxCycles && !_scanLimitReached && !_terminationConditionMet) {
       // Check if maxSimTime reached and purge is enabled
       if (maxSimTime != null && clock >= maxSimTime && purgeEnabled && !_purgePhase) {
         _purgePhase = true;
@@ -1864,7 +1880,7 @@ const cycleLog = [];
     // Purge period: continue until all customer entities exit or maxPurgeTime elapsed
     if (_purgePhase) {
       const customerEntities = () => entities.filter(e => e.role !== "server" && (e.status === "waiting" || e.status === "serving"));
-      while (fel.length > 0 && _cycleCount < maxCycles && !_terminationConditionMet && customerEntities().length > 0) {
+      while (fel.length > 0 && _cycleCount < maxCycles && !_scanLimitReached && !_terminationConditionMet && customerEntities().length > 0) {
         if (_purgeStartedAt != null && (clock - _purgeStartedAt) >= maxPurgeTime) {
           log.push(makeTraceEntry("END", { message: `Purge period max time reached (${maxPurgeTime})` }));
           break;
@@ -1878,7 +1894,9 @@ const cycleLog = [];
         if (r.done) break;
       }
     }
-    if (!_terminationConditionMet && _cycleCount >= maxCycles) {
+    if (!_terminationConditionMet && _scanLimitReached) {
+      log.push(makeTraceEntry("END", { message: `Scan limit reached (${maxCEventScans}) — simulation halted` }));
+    } else if (!_terminationConditionMet && _cycleCount >= maxCycles) {
       log.push(makeTraceEntry("END", { message: `Cycle limit reached (${maxCycles}) — simulation halted` }));
     } else if (fel.length === 0 && !_terminationConditionMet) {
       log.push(makeTraceEntry("END", { message: "FEL empty — simulation complete" }));

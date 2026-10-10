@@ -158,6 +158,15 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     resultsJson.cycleLimitReached = true;
     resultsJson.summary = { ...resultsJson.summary, cycleLimitReached: true };
   }
+  if (result.scanLimitReached || summary.scanLimitReached) {
+    const scanLimitReplicationCount = result.scanLimitReplicationCount ?? summary.scanLimitReplicationCount;
+    resultsJson.scanLimitReached = true;
+    resultsJson.summary = {
+      ...resultsJson.summary,
+      scanLimitReached: true,
+      ...(scanLimitReplicationCount != null ? { scanLimitReplicationCount } : {}),
+    };
+  }
   if (Array.isArray(result.warnings) && result.warnings.length) {
     resultsJson.warnings = result.warnings;
   }
