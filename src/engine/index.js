@@ -12,7 +12,7 @@
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods, createStreamRegistry } from "./distributions.js";
 import { buildWaitDistEntry, finalizeWeightedStats, summarizeEntitySummary } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
-import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, endTurnaround, turnaroundSpecFor } from "./entities.js";
+import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, endTurnaround, turnaroundSpecFor, isCarriedClaim } from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent, applyShiftChange } from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
@@ -1351,10 +1351,15 @@ const cycleLog = [];
             if (srv.status === "busy" || srv.status === "serving") {
               const cust = findEntityById(queueIndex, entities, srv.currentCustId);
               if (cust) {
-                fel = fel.filter(entry =>
-                  !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
-                );
-                preemptCustomer(cust, srv, clock, makeCtx(), "FAILURE");
+                const failCtx = makeCtx();
+                // A server the entity carries from an earlier stage: the entity's own
+                // pending events (its current stage) must survive.
+                if (!isCarriedClaim(cust, srv, failCtx)) {
+                  fel = fel.filter(entry =>
+                    !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
+                  );
+                }
+                preemptCustomer(cust, srv, clock, failCtx, "FAILURE");
               }
             }
             srv.status = "failed";
@@ -1393,10 +1398,15 @@ const cycleLog = [];
             if (srv.status === "busy" || srv.status === "serving") {
               const cust = findEntityById(queueIndex, entities, srv.currentCustId);
               if (cust) {
-                fel = fel.filter(entry =>
-                  !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
-                );
-                preemptCustomer(cust, srv, clock, makeCtx(), "FAILURE");
+                const failCtx = makeCtx();
+                // A server the entity carries from an earlier stage: the entity's own
+                // pending events (its current stage) must survive.
+                if (!isCarriedClaim(cust, srv, failCtx)) {
+                  fel = fel.filter(entry =>
+                    !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
+                  );
+                }
+                preemptCustomer(cust, srv, clock, failCtx, "FAILURE");
               }
             }
             srv.status = "failed";

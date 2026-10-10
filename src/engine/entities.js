@@ -460,6 +460,11 @@ export function clearWaitingState(entity, index = null) {
 export function claimServerForEntity(customer, server, clock, index = null, ctx = null, skill = null) {
   if (!customer || !server) return false;
   if (customer.status !== "waiting" || server.status !== "idle") return false;
+  // Servers seized by one ASSIGN/COSEIZE share a claim group, so a failure or
+  // preemption can tell a stage's own (co-seized) servers from one the entity
+  // still holds from an earlier stage. COSEIZE copies this onto its aux units.
+  // Deterministic key (no shared counter), so identical runs stay identical.
+  server._claimGroup = `${customer.id}@${server.id}@${clock}`;
 
   const queueName = customer.queue ?? customer.lastQueue ?? null;
   const claim = claimSnapshot(customer, server, clock, queueName);
@@ -602,6 +607,62 @@ export function selectVictimServer(busyServers, criterion, entities, index, warn
 // A preempted customer resumes an interrupted wait — it's not making a fresh decision
 // to join a queue, so balking is skipped, but capacity/overflow (F11.1/F11.3) still
 // applies (it could overflow/exit if its original queue is now full).
+// ── Carried claims (an entity holding a server across stages) ─────────────
+// COSEIZE(Q, Berth, VLCC) → RELEASE_COSEIZED([Berth]) → ASSIGN(Hormuz, Lane)
+// → RELEASE(Lane) → DELAY(voyage) → RELEASE(VLCC): through the middle stages
+// the entity "carries" its VLCC claim. A carried claim is any server claimed
+// by the entity that is not part of the claim group serving its current
+// stage (none, when the entity is waiting or in a DELAY).
+
+/**
+ * @param {Record<string, any>|null} cust
+ * @param {Record<string, any>|null} srv
+ * @param {Record<string, any>|null} [ctx]  needs entities (and index, if any)
+ */
+export function isCarriedClaim(cust, srv, ctx = null) {
+  if (!cust || !srv || srv.currentCustId !== cust.id || srv._claimGroup == null) return false;
+  let currentGroup = null;
+  if (cust.status === "serving" && cust.serverId != null) {
+    const primary = cust.serverId === srv.id ? srv : findEntityById(ctx?.index ?? null, ctx?.entities || [], cust.serverId);
+    if (primary && primary.currentCustId === cust.id) currentGroup = primary._claimGroup ?? null;
+  }
+  return currentGroup == null || srv._claimGroup !== currentGroup;
+}
+
+/**
+ * Drop a carried claim (its server failed, was preempted or removed): the
+ * server is freed, the entity carries on with its current stage. The lost
+ * type is remembered so the later RELEASE of it still routes the entity
+ * instead of stranding it.
+ * @param {Record<string, any>} cust
+ * @param {Record<string, any>} srv
+ * @param {number} clock
+ * @param {Record<string, any>|null} ctx
+ * @param {string} reason
+ */
+function dropCarriedClaim(cust, srv, clock, ctx, reason) {
+  releaseServerClaim(null, srv, clock);
+  cust._lostClaimTypes = [...(cust._lostClaimTypes || []), norm(srv.type)];
+  ctx?.msgs?.push(`${reason}: #${cust.id} lost its ${srv.type} #${srv.id} (held from an earlier stage) — it continues its current stage`);
+}
+
+/**
+ * True (and consumes the record) when this entity lost its claim on a server
+ * of `serverType` to a failure/preemption — see dropCarriedClaim.
+ * @param {Record<string, any>|null} cust
+ * @param {string} serverType
+ */
+export function consumeLostClaim(cust, serverType) {
+  if (!cust) return false;
+  const list = cust?._lostClaimTypes;
+  if (!Array.isArray(list)) return false;
+  const i = list.indexOf(norm(serverType));
+  if (i < 0) return false;
+  list.splice(i, 1);
+  if (!list.length) delete cust._lostClaimTypes;
+  return true;
+}
+
 /**
  * @param {Record<string, any>} cust
  * @param {Record<string, any>} srv
@@ -612,6 +673,10 @@ export function selectVictimServer(busyServers, criterion, entities, index, warn
  *   breakdown), or "SHIFT_CHANGE" (reactive capacity retirement when a shift closes).
  */
 export function preemptCustomer(cust, srv, clock, ctx, reason = "PREEMPT") {
+  if (isCarriedClaim(cust, srv, ctx)) {
+    dropCarriedClaim(cust, srv, clock, ctx, reason);
+    return 0;
+  }
   const scheduledDuration = srv._scheduledDuration || 0;
   const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
   cust._remainingService  = remainingService;
@@ -629,11 +694,14 @@ export function preemptCustomer(cust, srv, clock, ctx, reason = "PREEMPT") {
   releaseServerClaim(cust, srv, clock);
   // Release any other co-seized servers still claimed by this customer (COSEIZE pattern) —
   // otherwise a PREEMPT/FAIL on one co-seized resource leaves the others stuck "busy" forever.
+  // Only servers from the same claim group: a server the entity carries from
+  // an earlier stage (see isCarriedClaim) stays with it.
   const auxiliaryBusy = (ctx?.entities || []).filter((/** @type {any} */ e) =>
     e.role === "server" &&
     e.currentCustId === cust.id &&
     e.id !== srv.id &&
-    (e.status === "busy" || e.status === "serving")
+    (e.status === "busy" || e.status === "serving") &&
+    (srv._claimGroup == null || e._claimGroup == null || e._claimGroup === srv._claimGroup)
   );
   for (const auxSrv of auxiliaryBusy) {
     releaseServerClaim(null, auxSrv, clock);

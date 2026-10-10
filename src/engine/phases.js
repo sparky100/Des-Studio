@@ -12,7 +12,7 @@
 import { MACROS, applyScalar, buildStageRecord } from "./macros.js";
 import { evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
-import { clearWaitingState, attemptQueueJoin, preemptCustomer, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
+import { clearWaitingState, attemptQueueJoin, preemptCustomer, isCarriedClaim, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
 import { hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
 
 // Distances are undirected — one declared entry covers travel in either direction.
@@ -130,10 +130,14 @@ export function applyShiftChange(ev, ctx) {
         const cust = findEntityById(ctx.index, ctx.entities, srv.currentCustId);
         let rem = 0;
         if (cust) {
-          rem = srv._scheduledDuration != null
-            ? Math.max(0, srv._scheduledDuration - (ctx.clock - (cust.serviceStart ?? ctx.clock)))
-            : 0;
-          cust._remainingService = rem;
+          // A server carried from an earlier stage is just dropped — the
+          // entity's current stage (and its remaining time) is untouched.
+          if (!isCarriedClaim(cust, srv, ctx)) {
+            rem = srv._scheduledDuration != null
+              ? Math.max(0, srv._scheduledDuration - (ctx.clock - (cust.serviceStart ?? ctx.clock)))
+              : 0;
+            cust._remainingService = rem;
+          }
           preemptCustomer(cust, srv, ctx.clock, ctx, "SHIFT_CHANGE");
         }
         const idx = ctx.entities.indexOf(srv);

@@ -12,7 +12,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, setOutcome, beginTurnaround, endTurnaround } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
 // per-macro usages below for the (large, and macro-specific) set of fields
@@ -809,6 +809,18 @@ export const MACROS = [
         if (retired > 0) {
           msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
         }
+      } else if (cust && cust.status === "serving" && cust.serverId == null && consumeLostClaim(cust, srvType)) {
+        // This entity's carried claim on srvType was lost to a failure or
+        // preemption mid-journey (see isCarriedClaim): nothing to free, but
+        // the entity still finishes this stage and moves on.
+        if (!cust.stages) cust.stages = [];
+        cust.stages.push(buildStageRecord(cust, null, clock));
+        cust.lastStageStart = clock;
+        const destQueue = targetQueue || cust.lastQueue || cust.queue;
+        delete cust.serviceStart;
+        if (attemptQueueJoin(cust, destQueue, clock, ctx)) {
+          msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}] — its ${srvType} was lost earlier, nothing to free`);
+        }
       } else {
         msgs.push(`RELEASE(${srvType}): no busy server+customer pair found`);
       }
@@ -849,6 +861,7 @@ export const MACROS = [
       }
 
       const claimedServers = [];
+      const lostTypes = (cust._lostClaimTypes || []).slice();
       for (const t of typeList) {
         const matches = entities.filter((/** @type {any} */ e) =>
           e.role === "server" &&
@@ -857,12 +870,17 @@ export const MACROS = [
           (e.status === "busy" || e.status === "serving")
         );
         if (matches.length === 0) {
+          // Lost to a failure/preemption while carried — nothing to free for this type.
+          if (lostTypes.includes(t.toLowerCase())) continue;
           msgs.push(`RELEASE_COSEIZED([${typeListLabel}]): no claimed ${t} server for customer #${cust.id} — check it matches the scheduling COSEIZE(...) types`);
           return;
         }
         claimedServers.push(...matches);
       }
 
+      for (const t of typeList) {
+        if (!claimedServers.some(srv => srv.type.trim().toLowerCase() === t.toLowerCase())) consumeLostClaim(cust, t);
+      }
       if (!cust.stages) cust.stages = [];
       cust.stages.push(buildStageRecord(cust, claimedServers, clock));
       cust.lastStageStart = clock;
@@ -1254,6 +1272,7 @@ export const MACROS = [
         return;
       }
 
+      const carried = isCarriedClaim(cust, srv, ctx);
       const remainingService = preemptCustomer(cust, srv, clock, ctx);
 
       if (_arbitration && typeof _arbitration === "object") {
@@ -1267,6 +1286,7 @@ export const MACROS = [
       }
 
       const criterionNote = criterion ? ` [by ${criterion}]` : '';
+      if (carried) return;
       msgs.push(
         `PREEMPT: server #${srv.id} (${sType}) interrupted #${cust.id} ` +
         `[remaining ${remainingService.toFixed(3)} t] → re-queued${criterionNote}`
@@ -1319,8 +1339,9 @@ export const MACROS = [
           const custId = srv.currentCustId;
           const cust = findEntityById(ctx.index, entities, custId);
           if (cust) {
+            const carried = isCarriedClaim(cust, srv, ctx);
             const remainingService = preemptCustomer(cust, srv, clock, ctx, "FAIL");
-            msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
+            if (!carried) msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
           }
         }
         srv.status = "failed";
@@ -1663,6 +1684,7 @@ export const MACROS = [
         srv._busyStart = clock;
         srv._currentSkill = skill;
         srv.currentCustId = cust.id;
+        srv._claimGroup = primary.srv._claimGroup;
         srv.resourceClaim = {
           customerId: cust.id,
           customerType: cust.type,
