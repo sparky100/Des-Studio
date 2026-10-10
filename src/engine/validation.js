@@ -10,9 +10,9 @@
 // tab maps to ModelDetail tab IDs: 'entities' | 'state' | 'bevents' | 'cevents' | 'queues' | 'execute'
 
 import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
-import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
+import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRoutingBranch, migrateLegacyCondition } from "../model/conditionFormat.js";
 import { getPatternInitialCapacity } from "./schedule-pattern.js";
-import { evaluatePredicate } from "./conditions.js";
+import { evaluatePredicate, isResolvableExpression } from "./conditions.js";
 import { applyEntityInheritance } from "./entity-inheritance.js";
 
 export const DEFAULT_MAX_SIM_TIME = 500;
@@ -2122,6 +2122,54 @@ export function validateModel(model) {
         'cevents',
         { eventIds: [c.id] });
     }
+  });
+
+  // ── V76: non-numeric literal on the right of a numeric comparison ─────────
+  // A condition's right-hand side is a literal unless it is one of the dynamic
+  // references (queue()/idle()/busy()/container()/attr(), `state.<name>`, or a
+  // declared state-variable name — see conditions.js). A misspelt variable on
+  // the right is therefore compared as the literal text, and a numeric
+  // comparison against text is silently false — e.g. `clock >= closureStrat`.
+  const declaredStateVars = new Map((model.stateVariables || [])
+    .filter((/** @type {any} */ sv) => sv?.name)
+    .map((/** @type {any} */ sv) => [String(sv.name).trim(), sv]));
+  const NUMERIC_LHS_RE = /^(queue\(.+\)\.(length|count|size)|idle\(.+\)\.count|busy\(.+\)\.count|container\(.+\)\.(level|capacity|min|max)|clock|served|reneged|balked|loopCount|hourOfDay|dayOfWeek|(Queue|Resource)\.\w+\.\w+)$/i;
+  const ORDERING_OPS = new Set(['<', '>', '<=', '>=']);
+  const isNumericStateVar = (/** @type {string} */ name) => {
+    const sv = declaredStateVars.get(name);
+    return !!sv && (sv.valueType === 'number' || typeof sv.initialValue === 'number'
+      || (sv.valueType == null && sv.initialValue !== '' && Number.isFinite(Number(sv.initialValue))));
+  };
+  /** @param {any} cond @param {(leaf: any) => void} visit */
+  const eachLeaf = (cond, visit) => {
+    let normalized;
+    try { normalized = migrateLegacyCondition(cond); } catch { return; }
+    if (!normalized) return;
+    if (normalized.operator === 'AND' || normalized.operator === 'OR') (normalized.clauses || []).forEach((/** @type {any} */ c) => eachLeaf(c, visit));
+    else visit(normalized);
+  };
+  /** @param {any} cond @param {string} where @param {string} tab @param {any} extra */
+  const checkRhsLiterals = (cond, where, tab, extra) => {
+    eachLeaf(cond, leaf => {
+      const rhs = leaf.value;
+      if (typeof rhs !== 'string') return;
+      const text = rhs.trim();
+      if (text === '' || Number.isFinite(Number(text)) || isResolvableExpression(text)) return;
+      const stateName = text.startsWith('state.') ? text.slice('state.'.length) : text;
+      if (declaredStateVars.has(stateName)) return; // resolved dynamically (B3)
+      const lhs = String(leaf.variable || '').trim();
+      const lhsNumeric = NUMERIC_LHS_RE.test(lhs) || isNumericStateVar(lhs.startsWith('state.') ? lhs.slice(6) : lhs);
+      if (!ORDERING_OPS.has(leaf.operator) && !lhsNumeric) return;
+      warn('V76', `${where} compares '${lhs}' ${leaf.operator} '${text}', but '${text}' is not a number, a state variable, or a queue/resource/container reference — it is read as literal text and the comparison will always be false. Check the spelling, or declare '${text}' as a state variable.`, tab, extra);
+    });
+  };
+  cEvents.forEach(c => {
+    if (c.condition) checkRhsLiterals(c.condition, `C-Event '${c.name || c.id}' condition`, 'cevents', { eventIds: [c.id] });
+  });
+  bEvents.forEach(b => {
+    (Array.isArray(b.routing) ? b.routing : []).forEach((/** @type {any} */ branch, /** @type {number} */ idx) => {
+      if (branch?.condition) checkRhsLiterals(branch.condition, `B-Event '${b.name || b.id}' routing rule ${idx + 1}`, 'bevents', { eventIds: [b.id] });
+    });
   });
 
   // V-CAL-2: hourOfDay comparison value should be 0-23
