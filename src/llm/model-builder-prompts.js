@@ -244,6 +244,10 @@ pattern, consult §10 directly.`,
     it is far less error-prone than hand-wiring Exponential B-events that call FAIL/REPAIR. Use the
     manual macros only when failures must be conditional on something the auto-schedule can't
     express (e.g. only fail a server while it is serving a specific entity type).
+    For a resource that must spend time away after each job before it can take the next one (a
+    tanker sailing back empty, an ambulance returning to base, an aircraft turnaround), set
+    turnaroundDist/turnaroundDistParams on the server entityType (V80) — the entity moves on at
+    release while the server stays unavailable. Do NOT SPLIT a clone entity to carry the return leg.
 
 18. MATCH takes exactly FIVE arguments: MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue) — the
     entity type and source queue for each side of the pair, then the destination queue. It merges

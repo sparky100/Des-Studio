@@ -524,6 +524,29 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                   </>)}
                 </SectionPanel>
               )}
+              {et.role==="server"&&(
+                <SectionPanel
+                  label="Turnaround after release"
+                  status={et.turnaroundDist?"configured":"off"}
+                  color={C.server}>
+                  <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:FONT,fontSize:11,color:et.turnaroundDist?C.text:C.muted}}>
+                    <input type="checkbox" checked={!!et.turnaroundDist} aria-label="Unavailable for a time after each release"
+                      onChange={e=>{const n=[...types];n[i]=e.target.checked?{...n[i],turnaroundDist:"Fixed",turnaroundDistParams:{value:"10"}}:{...n[i],turnaroundDist:undefined,turnaroundDistParams:undefined};onChange(n);}}/>
+                    Unavailable for a time after each release
+                  </label>
+                  {et.turnaroundDist&&(<>
+                    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>Turnaround:</span>
+                      <DistPicker compact allowPiecewise={false}
+                        value={{dist:et.turnaroundDist,distParams:et.turnaroundDistParams||{value:"10"}}}
+                        onChange={v=>{const n=[...types];n[i]={...n[i],turnaroundDist:v.dist,turnaroundDistParams:v.distParams};onChange(n);}}/>
+                    </div>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
+                      After RELEASE, RELEASE_COSEIZED, COMPLETE or FINISH frees this resource, the entity moves on at once but the resource stays unavailable for this time (an empty return voyage, a return to base, a turnaround) before it can be assigned again. Counts toward utilisation; reported separately as turnaround time.
+                    </span>
+                  </>)}
+                </SectionPanel>
+              )}
               {et.role==="server"&&skills.length>0&&(
                 <SectionPanel label="Skills" status={
                   (() => {

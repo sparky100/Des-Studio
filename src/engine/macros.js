@@ -12,7 +12,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, setOutcome } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, setOutcome, beginTurnaround, endTurnaround } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
 // per-macro usages below for the (large, and macro-specific) set of fields
@@ -333,7 +333,7 @@ function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLE
   }
   if (srv) {
     releaseServerClaim(cust, srv, clock);
-    msgs.push(`Server #${srv.id} → idle`);
+    if (!beginTurnaround(srv, ctx)) msgs.push(`Server #${srv.id} → idle`);
     const retired = retireIdleExcessServers(ctx, srv.type);
     if (retired > 0) {
       msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
@@ -350,7 +350,7 @@ function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLE
   );
   for (const auxSrv of auxiliaryBusy) {
     releaseServerClaim(null, auxSrv, clock);
-    msgs.push(`Server #${auxSrv.id} (${auxSrv.type}) → idle (COSEIZE release)`);
+    if (!beginTurnaround(auxSrv, ctx)) msgs.push(`Server #${auxSrv.id} (${auxSrv.type}) → idle (COSEIZE release)`);
   }
 }
 
@@ -800,10 +800,11 @@ export const MACROS = [
         const destQueue = targetQueue || cust.lastQueue || cust.queue;
         delete cust.serviceStart;
         releaseServerClaim(cust, srv, clock);
+        const inTurnaround = beginTurnaround(srv, ctx) > 0;
         const joined = attemptQueueJoin(cust, destQueue, clock, ctx);
         const retired = retireIdleExcessServers(ctx, srv.type);
         if (joined) {
-          msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done, srv #${srv.id} idle]`);
+          msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done, srv #${srv.id} ${inTurnaround ? "in turnaround" : "idle"}]`);
         }
         if (retired > 0) {
           msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
@@ -871,6 +872,7 @@ export const MACROS = [
       let retired = 0;
       for (const srv of claimedServers) {
         releaseServerClaim(cust, srv, clock);
+        beginTurnaround(srv, ctx);
         retired += retireIdleExcessServers(ctx, srv.type);
       }
       const joined = attemptQueueJoin(cust, destQueue, clock, ctx);
@@ -1295,10 +1297,15 @@ export const MACROS = [
       const busyServers = entities.filter((/** @type {any} */ e) =>
         e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving")
       );
+      // Servers in turnaround (B4) carry no entity, so they fail before any
+      // busy server has its work cut short.
+      const turnaroundServers = entities.filter((/** @type {any} */ e) =>
+        e.role === "server" && normName(e.type) === key && e.status === "turnaround"
+      );
 
       const servers = (requestedN != null && requestedN > 0)
-        ? [...idleServers, ...busyServers].slice(0, requestedN)
-        : [...idleServers, ...busyServers];
+        ? [...idleServers, ...turnaroundServers, ...busyServers].slice(0, requestedN)
+        : [...idleServers, ...turnaroundServers, ...busyServers];
 
       let failedCount = 0;
       for (const srv of servers) {
@@ -1306,6 +1313,8 @@ export const MACROS = [
           srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
           delete srv._starvationStart;
         }
+        // A failure ends the turnaround; after REPAIR the server is idle.
+        if (srv.status === "turnaround") endTurnaround(srv, clock);
         if (srv.status === "busy" || srv.status === "serving") {
           const custId = srv.currentCustId;
           const cust = findEntityById(ctx.index, entities, custId);

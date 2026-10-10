@@ -664,6 +664,7 @@ export function flushRetiredServerStats(srv, state) {
     skillBusyTimeSum: {}, perShiftBusyTimeSum: {},
   });
   acc.busyTimeSum   += srv._busyTime      || 0;
+  acc.turnaroundTimeSum = (acc.turnaroundTimeSum || 0) + (srv._turnaroundTime || 0);
   acc.downtimeSum   += srv._totalDowntime || 0;
   acc.failureCount  += srv._failureCount  || 0;
   const starv = srv._starvationTime || 0;
@@ -679,6 +680,75 @@ export function flushRetiredServerStats(srv, state) {
       acc.perShiftBusyTimeSum[label] = (acc.perShiftBusyTimeSum[label] || 0) + bt;
     }
   }
+}
+
+// ── Server turnaround (B4) ────────────────────────────────────────────────
+// A server type with turnaroundDist/turnaroundDistParams is unavailable for a
+// sampled time after it releases an entity — a tanker sailing back empty, an
+// ambulance returning to base, an aircraft turnaround. The entity moves on
+// immediately; the server sits in status "turnaround" (neither idle nor busy
+// with an entity) until a TURNAROUND_END event makes it idle again. Applies on
+// normal completion releases (RELEASE, RELEASE_COSEIZED, COMPLETE, FINISH),
+// not when work is cut short by PREEMPT, FAIL or a shift change.
+
+/**
+ * @param {Record<string, any>|null|undefined} model
+ * @param {string} serverType
+ * @returns {{ dist: string, params: Record<string, any> } | null}
+ */
+export function turnaroundSpecFor(model, serverType) {
+  const key = norm(serverType);
+  const et = (model?.entityTypes || []).find((/** @type {any} */ t) => t.role === "server" && norm(t.name) === key);
+  if (!et?.turnaroundDist || !et.turnaroundDistParams) return null;
+  return { dist: et.turnaroundDist, params: et.turnaroundDistParams };
+}
+
+/**
+ * Put a just-released (idle) server into turnaround when its type defines one.
+ * @param {Record<string, any>} srv
+ * @param {Record<string, any>} ctx  macro ctx: model, rng, streamRegistry, clock, scheduleEvent, msgs
+ * @returns {number} the sampled turnaround time (0 = none)
+ */
+export function beginTurnaround(srv, ctx) {
+  if (!srv || srv.role !== "server" || srv.status !== "idle" || typeof ctx?.scheduleEvent !== "function") return 0;
+  const spec = turnaroundSpecFor(ctx.model, srv.type);
+  if (!spec) return 0;
+  const duration = Math.max(0, Number(sample(spec.dist, spec.params, ctx.rng, null, {
+    streamName: `turnaround:${srv.type}`,
+    streamRegistry: ctx.streamRegistry,
+  })) || 0);
+  if (!(duration > 0)) return 0;
+  // Not starving while away: releaseServerClaim started the idle timer.
+  delete srv._starvationStart;
+  srv.status = "turnaround";
+  srv._turnaroundStart = ctx.clock;
+  srv._turnaroundToken = (srv._turnaroundToken || 0) + 1;
+  ctx.scheduleEvent({
+    id: `turnaround:${srv.id}:${srv._turnaroundToken}`,
+    type: "TURNAROUND_END",
+    name: `Turnaround complete: ${srv.type}`,
+    serverTypeName: srv.type,
+    serverId: srv.id,
+    token: srv._turnaroundToken,
+    scheduledTime: ctx.clock + duration,
+  });
+  ctx.msgs?.push(`Server #${srv.id} (${srv.type}) → turnaround for ${duration.toFixed(3)} t`);
+  return duration;
+}
+
+/**
+ * Close a server's turnaround interval (on TURNAROUND_END, or a failure during
+ * turnaround). Leaves the status for the caller to set.
+ * @param {Record<string, any>} srv
+ * @param {number} clock
+ */
+export function endTurnaround(srv, clock) {
+  if (!srv || srv.status !== "turnaround") return 0;
+  const elapsed = srv._turnaroundStart != null ? Math.max(0, clock - srv._turnaroundStart) : 0;
+  srv._turnaroundTime = (srv._turnaroundTime || 0) + elapsed;
+  srv._turnaroundCount = (srv._turnaroundCount || 0) + 1;
+  delete srv._turnaroundStart;
+  return elapsed;
 }
 
 /**

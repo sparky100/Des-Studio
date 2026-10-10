@@ -563,6 +563,32 @@ export function validateModel(model) {
     }
   });
 
+  // ── V80: server turnaround (B4) — unavailable for a sampled time after each release ──
+  entityTypes.forEach(et => {
+    const dist = et.turnaroundDist;
+    const params = et.turnaroundDistParams;
+    if (!hasField(dist) && !hasField(params)) return;
+    const label = `Entity class '${et.name || '?'}'`;
+    if (et.role !== 'server') {
+      err('V80', `${label} sets a turnaround time, but turnaround applies only to resources (server types) — the time a resource is unavailable after it releases an entity.`, 'entities', { entityTypeIds: [et.id] });
+      return;
+    }
+    if (!hasField(dist) || !hasField(params) || typeof params !== 'object') {
+      err('V80', `${label} must set both turnaroundDist and turnaroundDistParams.`, 'entities', { entityTypeIds: [et.id] });
+      return;
+    }
+    const distName = normalizeDistributionName(dist);
+    if (!distName || ['Schedule', 'ServerAttr', 'EntityAttr', 'Distance'].includes(distName)) {
+      err('V80', `${label} turnaroundDist must be a sampling distribution (Fixed, Exponential, Triangular, Uniform, Normal, Erlang, Empirical, Piecewise…) — got '${dist}'.`, 'entities', { entityTypeIds: [et.id] });
+      return;
+    }
+    const nonString = Object.entries(params).filter(([, v]) => typeof v === 'number');
+    if (nonString.length) {
+      err('V80', `${label} turnaroundDistParams values must be strings (e.g. "20", not 20): ${nonString.map(([k]) => k).join(', ')}.`, 'entities', { entityTypeIds: [et.id] });
+    }
+    checkDist(dist, params, `${label} turnaround`, 'entities');
+  });
+
   // ── V6: B-Event schedule references must point to existing event IDs ────────
   const bEventIds = new Set(bEvents.map(b => b.id));
 
