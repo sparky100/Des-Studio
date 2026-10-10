@@ -492,11 +492,14 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     }
   }
 
-  // Activity throughput — how many times each activity actually completed
+  // Activity throughput — how many entities each activity started (a DELAY
+  // firing can start several at once)
   if (kpis.activityCounts && Object.keys(kpis.activityCounts).length) {
     lines.push('### Activity Throughput');
     lines.push('');
-    const completionsLabel = isMultiRepBundle ? `Avg completions / run (÷${nReps})` : 'Completions';
+    lines.push('Entities each activity (C-event) started. One DELAY firing starts every waiting entity, so this counts entities, not firings.');
+    lines.push('');
+    const completionsLabel = isMultiRepBundle ? `Avg entities started / run (÷${nReps})` : 'Entities started';
     lines.push(`| Activity | ${completionsLabel} |`);
     lines.push(`|----------|${'-'.repeat(completionsLabel.length + 2)}|`);
     const sortedActivities = Object.values(kpis.activityCounts).sort((a, b) => b.count - a.count);

@@ -109,7 +109,7 @@ function EventCountsTable({ snap, model, sectionsOpen, onToggleSection }) {
       />
       <EventCountGroup
         id="cevents"
-        title="C-EVENTS (CONDITIONAL) — TIMES FIRED"
+        title="C-EVENTS (CONDITIONAL) — ENTITIES STARTED"
         color={C.cEvent}
         events={cEvents}
         counts={counts}

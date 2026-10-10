@@ -117,12 +117,13 @@ describe("buildResultsXlsx — container/skill/rejection sheets", () => {
 
   it("adds an Activity Throughput sheet when summary.activityCounts is present", async () => {
     await buildResultsXlsx({
-      results: { summary: { activityCounts: { repair: { name: "Repair Job", count: 4 } } } },
+      results: { summary: { activityCounts: { repair: { name: "Repair Job", count: 4, firings: 3 } } } },
       model: { name: "Bike Shop" },
     });
     const sheet = findSheet("Activity Throughput");
     expect(sheet).toBeDefined();
-    expect(sheet.rows).toContainEqual(["Repair Job", 4]);
+    expect(sheet.rows[0]).toEqual(["Activity", "Entities started", "Firings"]);
+    expect(sheet.rows).toContainEqual(["Repair Job", 4, 3]);
   });
 
   it("omits the Activity Throughput sheet when there is no activity data", async () => {

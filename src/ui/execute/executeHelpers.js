@@ -4,6 +4,7 @@ import { TOKEN_COLORS } from "../shared/tokens.js";
 import { slugifyResultName, timestampForFilename, csvEscape, downloadTextFile } from "../shared/utils.js";
 import { buildWaitDistEntry, finalizeWeightedStats, SUMMARY_METRICS } from "../../engine/statistics.js";
 import { downloadWorkbook } from "../shared/workbook.js";
+import { buildGoalGapsFromResults } from "../../llm/prompts.js";
 export { downloadTextFile };
 
 export const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
@@ -89,6 +90,37 @@ export function makeBatchRuntimeMetrics(replicationPayloads, replications, wallC
     entities_completed: runtimeRows.reduce((sum, row) => sum + (Number(row.entities_completed) || 0), 0),
     max_queue_length_by_queue: Object.keys(maxQueueLengthByQueue).length ? maxQueueLengthByQueue : undefined,
   };
+}
+
+// The model snapshot stored with a run: the simulated model (overrides
+// applied) with experimentDefaults replaced by the settings this run actually
+// used — otherwise a snapshot read on its own shows the model's default
+// replications/run length/seed rather than the run's. The live model is not
+// touched; this is a copy.
+export function buildRunModelSnapshot(model, runConfig = {}) {
+  if (!model) return model;
+  const pick = (k) => (runConfig[k] !== undefined ? { [k]: runConfig[k] } : {});
+  return {
+    ...model,
+    experimentDefaults: {
+      ...(model.experimentDefaults || {}),
+      ...pick("replications"),
+      ...pick("maxSimTime"),
+      ...pick("warmupPeriod"),
+      ...pick("seed"),
+      ...pick("terminationMode"),
+      ...pick("terminationCondition"),
+    },
+  };
+}
+
+// Goal outcomes for a finished run — the same evaluation the Results view and
+// AI analysis use (buildGoalGapsFromResults), stored on the results so a
+// results file carries its own pass/fail record. `status` distinguishes a
+// goal that couldn't be evaluated from one that failed.
+export function buildGoalOutcomes(gaps) {
+  if (!Array.isArray(gaps) || !gaps.length) return undefined;
+  return gaps.map(g => ({ ...g, status: g.current == null ? "no-data" : g.met ? "met" : "not-met" }));
 }
 
 // The parameter values a run actually used when they differ from the saved
@@ -429,15 +461,16 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
   }
   const preemptCounts = Object.keys(preemptAcc).length ? preemptAcc : undefined;
 
-  // Aggregate activity throughput (C-event fire counts) across replications,
-  // summed like served/reneged/balked. Labels are static per model, so the
-  // first replication to report an activity's label wins.
+  // Aggregate activity throughput (entities started per C-event, plus raw
+  // firings) across replications, summed like served/reneged/balked. Labels
+  // are static per model, so the first replication to report one wins.
   const activityAcc = {};
   for (const s of summaries) {
     if (!s.activityCounts) continue;
     for (const [id, entry] of Object.entries(s.activityCounts)) {
-      if (!activityAcc[id]) activityAcc[id] = { name: entry.name, count: 0 };
+      if (!activityAcc[id]) activityAcc[id] = { name: entry.name, count: 0, firings: 0 };
       activityAcc[id].count += entry.count || 0;
+      activityAcc[id].firings += entry.firings ?? entry.count ?? 0;
     }
   }
   const activityCounts = Object.keys(activityAcc).length ? activityAcc : undefined;
@@ -696,11 +729,17 @@ export function buildResultsExportPayload({
     const { log, ...rest } = r;
     if (!metricsOnly) return rest;
     // Metrics-only: keep just summary KPIs; drop time series, distributions, entity details, and snapshot.
-    const { summary, phaseCTruncated, cycleLimitReached, runtimeMetrics } = rest;
-    return { summary, phaseCTruncated, cycleLimitReached, runtimeMetrics };
+    const { summary, phaseCTruncated, cycleLimitReached, runtimeMetrics, goalOutcomes } = rest;
+    return { summary, phaseCTruncated, cycleLimitReached, runtimeMetrics, goalOutcomes };
   }
 
   const stripped = stripResults(results);
+  // Goal pass/fail — recorded at run time; evaluated here for results saved
+  // before that (against the run's own snapshot when it has one).
+  if (stripped && !stripped.goalOutcomes) {
+    const goalOutcomes = buildGoalOutcomes(buildGoalGapsFromResults(results._model_snapshot ?? model ?? {}, results));
+    if (goalOutcomes) stripped.goalOutcomes = goalOutcomes;
+  }
   const entityJourneys = !metricsOnly && stripped ? buildEntityJourneys(stripped.entitySummary) : undefined;
   const resultData = { ...stripped };
   if (entityJourneys !== undefined) resultData.entityJourneys = entityJourneys;
@@ -851,6 +890,20 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
     summaryRows.push(['Parameter Overrides', 'None — model run as saved']);
   }
 
+  // Sheet: Goals — pass/fail per goal (recorded at run time, or evaluated now
+  // for older results).
+  const goalOutcomes = results?.goalOutcomes
+    ?? (results ? buildGoalOutcomes(buildGoalGapsFromResults(results._model_snapshot ?? model ?? {}, results)) : undefined);
+  if (goalOutcomes?.length) {
+    const metCount = goalOutcomes.filter(g => g.status === 'met').length;
+    summaryRows.push(['Goals met', `${metCount} of ${goalOutcomes.length} — see Goals sheet`]);
+    const gRows = [['Goal', 'Metric', 'Scope', 'Operator', 'Target', 'Result', 'Gap', 'Status']];
+    for (const g of goalOutcomes) {
+      gRows.push([g.label ?? '', g.metric ?? '', g.scope?.name ?? g.scope?.id ?? '', g.operator ?? '', g.target ?? '', g.current ?? '', g.gap ?? '', g.status]);
+    }
+    sheets.push({ name: 'Goals', rows: gRows, colWidths: [40, 22, 18, 9, 9, 10, 8, 9] });
+  }
+
   // Sheet 2: Replications
   const repRows = [['Replication', 'Seed', 'Arrived', 'Served', 'Reneged', 'Balked', 'Preempted', 'Completion Rate', 'Avg Wait', 'Avg Svc', 'Avg Sojourn', 'Avg Time in System', 'Total Cost', 'Cost per Served', 'Final Time']];
   const resultRows = replicationResults.length
@@ -978,14 +1031,15 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
     sheets.push({ name: 'Preemptions', rows: preemptRows, colWidths: [18, 10, 16, 10] });
   }
 
-  // Sheet: Activity Throughput (how many times each activity/C-event completed)
+  // Sheet: Activity Throughput (entities each activity/C-event started, and
+  // how many times it fired — one DELAY firing starts every waiting entity)
   const activityCounts = summary.activityCounts || {};
-  const activityRows = [['Activity', 'Completions']];
+  const activityRows = [['Activity', 'Entities started', 'Firings']];
   for (const entry of Object.values(activityCounts)) {
-    activityRows.push([entry.name ?? '', entry.count ?? 0]);
+    activityRows.push([entry.name ?? '', entry.count ?? 0, entry.firings ?? entry.count ?? 0]);
   }
   if (activityRows.length > 1) {
-    sheets.push({ name: 'Activity Throughput', rows: activityRows, colWidths: [24, 14] });
+    sheets.push({ name: 'Activity Throughput', rows: activityRows, colWidths: [24, 16, 10] });
   }
 
   // Write to buffer and trigger download

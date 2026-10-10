@@ -772,7 +772,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
       {activityEntries.length > 0 && (
         <>
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
-            ACTIVITY THROUGHPUT
+            ACTIVITY THROUGHPUT — ENTITIES STARTED{isMultiRep ? " (AVG / RUN)" : ""}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
             {activityEntries.map(a => (

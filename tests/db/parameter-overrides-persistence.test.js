@@ -6,12 +6,15 @@ import { describe, it, expect } from "vitest";
 import { buildRunRecord } from "../../src/db/runRecord.js";
 import { buildPersistedResultsJson } from "../../src/db/results-persistence.js";
 import { applySweepValues, enumerateSweepableParams } from "../../src/engine/sweep-params.js";
-import { buildParameterOverrideRecord } from "../../src/ui/execute/executeHelpers.js";
+import { buildParameterOverrideRecord, buildRunModelSnapshot, buildGoalOutcomes } from "../../src/ui/execute/executeHelpers.js";
+import { buildGoalGapsFromResults } from "../../src/llm/prompts.js";
 
 const baseModel = {
   id: "m1",
   name: "World Oil",
-  stateVariables: [{ name: "closureEnabled", initialValue: "0" }],
+  stateVariables: [{ name: "closureEnabled", valueType: "number", initialValue: 0 }],
+  experimentDefaults: { replications: 40, maxSimTime: 240, warmupPeriod: 50, seed: 7 },
+  goals: [{ label: "Served at least 5", metric: "summary.served", operator: ">=", target: 5 }],
 };
 
 function overriddenRun() {
@@ -20,7 +23,10 @@ function overriddenRun() {
   const effectiveModel = applySweepValues(baseModel, effectiveOverrides);
   const overrides = buildParameterOverrideRecord(effectiveOverrides, new Set([paramConfig.path]));
   const result = { summary: { served: 10 } };
-  const runRecord = buildRunRecord(effectiveModel, result, {
+  const runConfig = { maxSimTime: 365, warmupPeriod: 60, replications: 10, terminationMode: "time", seed: 42 };
+  const snapshot = buildRunModelSnapshot(effectiveModel, runConfig);
+  result.goalOutcomes = buildGoalOutcomes(buildGoalGapsFromResults(effectiveModel, result));
+  const runRecord = buildRunRecord(snapshot, result, {
     maxSimTime: 365, warmupPeriod: 60, replications: 10, terminationMode: "time", parameterOverrides: overrides,
   }, 42, { includeModelSnapshot: true });
   return { result, runRecord };
@@ -42,7 +48,12 @@ describe("parameter overrides survive persistence", () => {
         value: 1,
         source: "adhoc",
       }]);
-      expect(saved._model_snapshot.stateVariables[0].initialValue).toBe("1");
+      // Numeric state variable stays a number, not "1".
+      expect(saved._model_snapshot.stateVariables[0].initialValue).toBe(1);
+      // The snapshot's run settings are the run's, not the model defaults.
+      expect(saved._model_snapshot.experimentDefaults).toEqual({ replications: 10, maxSimTime: 365, warmupPeriod: 60, seed: 42, terminationMode: "time" });
+      // Goal pass/fail travels with the results.
+      expect(saved.goalOutcomes).toEqual([expect.objectContaining({ label: "Served at least 5", current: 10, met: true, status: "met" })]);
     });
   }
 

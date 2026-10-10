@@ -20,7 +20,7 @@ import { OverrideChipList } from "./OverrideChipList.jsx";
 import { SavedExperimentsTab } from "./SavedExperimentsTab.jsx";
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
 import { callLLMOnce, tryExtractJson } from "../../llm/apiClient.js";
-import { buildNarrativePrompt, buildModelDescriptionPrompt, evaluateSweepPointGoals, buildProposeNextStudyPrompt } from "../../llm/prompts.js";
+import { buildNarrativePrompt, buildModelDescriptionPrompt, evaluateSweepPointGoals, buildProposeNextStudyPrompt, buildGoalGapsFromResults } from "../../llm/prompts.js";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { saveLocalRun } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
@@ -35,7 +35,7 @@ import { enumerateSweepableParams, applySweepValues, generate2DSweepValues, MAX_
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
 import { computeSensitivityRanking } from "../../engine/sweep-sensitivity.js";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
-import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, sweepGoalKpiOptions, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildParameterOverrideRecord, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, sweepGoalKpiOptions, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildParameterOverrideRecord, buildRunModelSnapshot, buildGoalOutcomes, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { SampledParamRangeList, SampledResultsTable, SensitivityPanel } from "./StudyPlanViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
@@ -679,7 +679,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       };
       // The model that was actually simulated (overrides applied) — consumers read
       // results._model_snapshot before the saved copy arrives from the database.
-      fullResult._model_snapshot = effectiveModel;
+      fullResult._model_snapshot = buildRunModelSnapshot(effectiveModel, fullResult._experiment_config);
+      // Pass/fail per goal, stored with the results so the file is complete.
+      fullResult.goalOutcomes = buildGoalOutcomes(buildGoalGapsFromResults(effectiveModel, fullResult));
       setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, fullResult.runtimeMetrics));
       setResults(fullResult);
       onResultsReady?.(fullResult);
@@ -687,7 +689,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       if (modelId) {
         const prepareDurationMs = nowPerf() - prepareStartedAt;
         const stepSeed = runSeedRef.current;
-        const runRecord = buildRunRecord(effectiveModel, fullResult, {
+        const runRecord = buildRunRecord(fullResult._model_snapshot, fullResult, {
           maxSimTime: terminationMode === 'time' ? maxSimTime : null,
           warmupPeriod,
           replications: 1,
@@ -886,7 +888,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             };
             // The model that was actually simulated (overrides applied) — consumers read
             // results._model_snapshot before the saved copy arrives from the database.
-            batchResult._model_snapshot = effectiveModel;
+            batchResult._model_snapshot = buildRunModelSnapshot(effectiveModel, batchResult._experiment_config);
+            // Pass/fail per goal, stored with the results so the file is complete.
+            batchResult.goalOutcomes = buildGoalOutcomes(buildGoalGapsFromResults(effectiveModel, batchResult));
             setBatchStatus("complete");
             setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, batchResult.runtimeMetrics));
             setResults(batchResult);
@@ -894,7 +898,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log: logRef.current });
             setAggregateStats(stats);
             const prepareDurationMs = nowPerf() - prepareStartedAt;
-            const batchRunRecord = buildRunRecord(effectiveModel, batchResult, {
+            const batchRunRecord = buildRunRecord(batchResult._model_snapshot, batchResult, {
               maxSimTime: maxTimeForRun,
               warmupPeriod,
               replications,
@@ -1042,7 +1046,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     };
     // The model that was actually simulated (overrides applied) — consumers read
     // results._model_snapshot before the saved copy arrives from the database.
-    result._model_snapshot = effectiveModel;
+    result._model_snapshot = buildRunModelSnapshot(effectiveModel, result._experiment_config);
+    // Pass/fail per goal, stored with the results so the file is complete.
+    result.goalOutcomes = buildGoalOutcomes(buildGoalGapsFromResults(effectiveModel, result));
 
     setCurrentSnap(result.snap);
     setResults(result);
@@ -1062,7 +1068,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     }
 
     const prepareDurationMs = nowPerf() - prepareStartedAt;
-    const singleRunRecord = buildRunRecord(effectiveModel, result, {
+    const singleRunRecord = buildRunRecord(result._model_snapshot, result, {
       maxSimTime: maxTimeForRun,
       warmupPeriod,
       replications: 1,

@@ -345,7 +345,13 @@ export function applySweepValues(model, sweepConfigs = []) {
       }
       case "stateVarInit": {
         const sv = (clone.stateVariables || []).find((/** @type {any} */ s) => s.name === paramConfig.targetId);
-        if (sv) sv.initialValue = String(value);
+        // Keep the variable's own type: a numeric state variable (valueType
+        // "number", or stored as a number) gets a number, so the run snapshot
+        // never mixes "1" with 0 and strict comparisons downstream hold.
+        if (sv) {
+          const numeric = sv.valueType === "number" || typeof sv.initialValue === "number";
+          sv.initialValue = numeric ? Number(value) : String(value);
+        }
         break;
       }
       case "containerCapacity": {
