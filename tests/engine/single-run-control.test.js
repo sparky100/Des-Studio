@@ -69,7 +69,9 @@ describe("single-run progress and cancellation", () => {
     // value here would diff on the echoed config rather than on behaviour.
     const withEmptyOptions = buildEngine(makeProgressModel(), 99, 0, 5, null, 5000, 5000, false, undefined, {}).runAll();
 
-    expect(withEmptyOptions).toEqual(baseline);
+    // runtimeMetrics.wall_clock_ms is measured time, so it differs run to run.
+    const withoutWallClock = r => ({ ...r, runtimeMetrics: { ...r.runtimeMetrics, wall_clock_ms: undefined } });
+    expect(withoutWallClock(withEmptyOptions)).toEqual(withoutWallClock(baseline));
   });
 
   test("cancelled runs stop at a safe checkpoint and return a partial result", () => {

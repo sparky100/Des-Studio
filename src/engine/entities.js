@@ -1499,6 +1499,15 @@ export function makeHelpers(entities, model = null, index = null) {
 
     selectIdleOf: (/** @type {any} */ type) => sortedSubset(typePool(type), isIdle)[0],
 
+    // Same server as idleOf(type)[0], without building the whole list when the
+    // type's bucket is already in resource order.
+    firstIdleOf: (/** @type {any} */ type) => {
+      const pool = typePool(type);
+      if (!/** @type {any} */ (pool)._sortedForResources) return sortedSubset(pool, isIdle)[0] ?? null;
+      for (const e of pool) if (isIdle(e)) return e;
+      return null;
+    },
+
     hasSkillType: (/** @type {any} */ typeName, /** @type {any} */ skill) => {
       const et = serverTypeDef(model, typeName);
       return et && Array.isArray(et.skills) && et.skills.includes(skill);

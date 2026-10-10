@@ -35,7 +35,9 @@ describe('quiet mode (collectTrace: false)', () => {
 
     expect(quiet.summary).toEqual(traced.summary);
     expect(quiet.finalTime).toBe(traced.finalTime);
-    expect(quiet.runtimeMetrics).toEqual(traced.runtimeMetrics);
+    // wall_clock_ms is measured time (and tracing costs time), so leave it out.
+    const counts = m => ({ ...m, wall_clock_ms: undefined });
+    expect(counts(quiet.runtimeMetrics)).toEqual(counts(traced.runtimeMetrics));
     expect(quiet.waitDist).toEqual(traced.waitDist);
     expect(quiet.entitySummary.length).toBe(traced.entitySummary.length);
     expect(quiet.warnings).toEqual(traced.warnings);

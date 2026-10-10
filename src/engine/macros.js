@@ -453,9 +453,16 @@ export const MACROS = [
         : null;
 
       const candidates = listWaiting(queueToken, discipline, entities, filterFn, !!matchedQ, true, ctx.index);
-      const allIdleServers = isAnyType
-        ? (helpers.allServers ? helpers.allServers().filter((/** @type {any} */ s) => s.status === "idle" && !s._suspended) : [])
-        : (helpers.idleOf(sType) || []);
+      // Plain ASSIGN (one type, no skill, no SCAN, no trace) only needs the
+      // first idle server — skip building the full sorted idle list.
+      const firstIdleOnly = !isAnyType && !skillLiteral && !skillAttrName && !scan && !arbitrationTarget && typeof helpers.firstIdleOf === "function";
+      const firstIdle = firstIdleOnly ? helpers.firstIdleOf(sType) : null;
+      const allIdleServers = firstIdleOnly
+        ? (firstIdle ? [firstIdle] : [])
+        : isAnyType
+          ? (helpers.allServers ? helpers.allServers().filter((/** @type {any} */ s) => s.status === "idle" && !s._suspended) : [])
+          : (helpers.idleOf(sType) || []);
+      const idleServerTotal = () => (firstIdleOnly && helpers.idleCount ? helpers.idleCount(sType) : allIdleServers.length);
 
       // Resolve skill: literal takes precedence, otherwise resolve from entity attribute
       const skillFor = (/** @type {any} */ entity) => {
@@ -584,7 +591,7 @@ export const MACROS = [
           Object.assign(arbitrationTarget, arbitration);
         }
         const skillSuffix = skill ? ` (skill: ${skill})` : '';
-        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${candidates.length} idle=${allIdleServers.length}${skillSuffix}`);
+        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${candidates.length} idle=${idleServerTotal()}${skillSuffix}`);
         // Nothing changed — report a no-op so Phase C doesn't restart its scan
         // for this firing. Without this, a condition like
         // `queue(Q).length > 0 AND idle(T).count > 0` that stays true while the
