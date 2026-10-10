@@ -377,6 +377,15 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       perResourceAcc[type].availSum    += stats.availability  ?? 1;
       perResourceAcc[type].failureSum  += stats.failureCount  ?? 0;
       perResourceAcc[type].downtimeSum += stats.totalDowntime ?? 0;
+      // Turnaround (B4) — only present for server types that define one.
+      if (stats.turnaroundFraction != null) {
+        const a = perResourceAcc[type];
+        a.turnaroundFractionSum = (a.turnaroundFractionSum || 0) + stats.turnaroundFraction;
+        a.turnaroundTimeSum = (a.turnaroundTimeSum || 0) + (stats.turnaroundTime ?? 0);
+        a.busyUtilSum = (a.busyUtilSum || 0) + (stats.busyUtilisation ?? 0);
+        a.turnaroundCountSum = (a.turnaroundCountSum || 0) + (stats.turnaroundCount ?? 0);
+        a.turnaroundN = (a.turnaroundN || 0) + 1;
+      }
       if (stats.calendarUtilisation != null) {
         perResourceAcc[type].calUtilSum += stats.calendarUtilisation;
         perResourceAcc[type].calUtilCount++;
@@ -411,6 +420,12 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
               ? Object.fromEntries(Object.entries(acc.skillUtilSum).map(([skill, sum]) => [skill, +(sum / acc.count).toFixed(4)]))
               : undefined,
             scheduleAdherence: acc.adherenceCount ? +(acc.adherenceSum / acc.adherenceCount).toFixed(4) : undefined,
+            ...(acc.turnaroundN ? {
+              turnaroundFraction: +(acc.turnaroundFractionSum / acc.turnaroundN).toFixed(4),
+              turnaroundTime: +(acc.turnaroundTimeSum / acc.turnaroundN).toFixed(4),
+              busyUtilisation: +(acc.busyUtilSum / acc.turnaroundN).toFixed(4),
+              turnaroundCount: +(acc.turnaroundCountSum / acc.turnaroundN).toFixed(2),
+            } : {}),
             ...(batchQuantities ? { quantityProcessed: batchQuantities._meanQty(s => s.perResource?.[type]?.quantityProcessed) } : {}),
           },
         ])

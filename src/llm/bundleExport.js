@@ -90,7 +90,8 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
       const failure = et.mtbfDist
         ? `MTBF=${et.mtbfDist}(${Object.values(et.mtbfDistParams||{}).join(',')}) MTTR=${et.mttrDist}(${Object.values(et.mttrDistParams||{}).join(',')}) scope=${et.failureScope||'unit'}`
         : '—';
-      lines.push(`| ${et.name || '?'} | ${et.role || 'customer'} | ${count} | ${attrs} | ${failure} |`);
+      const turnaround = et.turnaroundDist ? ` turnaround=${et.turnaroundDist}(${Object.values(et.turnaroundDistParams||{}).join(',')})` : '';
+      lines.push(`| ${et.name || '?'} | ${et.role || 'customer'} | ${count} | ${attrs} | ${failure}${turnaround} |`);
     }
     lines.push('');
   }

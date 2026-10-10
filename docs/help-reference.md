@@ -230,6 +230,22 @@ Server entity types can be configured with random failures using `mtbfDist` and 
 - MTBF should be much larger than MTTR (typical ratios: 10:1 or higher)
 - The engine handles warm-up correctly — failures before warm-up don't inflate post-warmup downtime statistics
 
+### Holding a Resource Across Stages
+
+An entity can keep one resource while it passes through later stages — a tanker keeps its VLCC through a chokepoint and the voyage: `COSEIZE(Loading Queue, Berth, VLCC)` → `RELEASE_COSEIZED([Berth], Hormuz Queue)` (frees only the berth) → `ASSIGN(Hormuz Queue, Lane)` → `RELEASE(Lane, Voyage Queue)` → `DELAY(Voyage Queue)` → `RELEASE(VLCC, Asia Crude Queue)`. Turn on **Pass entity context** on every completion schedule in the chain.
+
+- A failure or preemption of one resource interrupts only the stage it belongs to (resources seized together by one ASSIGN/COSEIZE): if the lane fails, the transit is re-queued and the tanker keeps its VLCC.
+- If the carried resource itself fails or is preempted, the entity loses it but continues its current stage; the later RELEASE of it simply routes the entity onward.
+
+### Turnaround After Release
+
+Some resources need time away after each job before they can take the next one: a tanker sailing back empty after discharging, an ambulance returning to base, an aircraft turnaround. Tick **Unavailable for a time after each release** on the server type (Entity Types → Turnaround after release) and set the turnaround distribution (`turnaroundDist` / `turnaroundDistParams`).
+
+- When RELEASE, RELEASE_COSEIZED, COMPLETE or FINISH frees the resource, the entity moves on at once; the resource stays unavailable for the sampled time, then becomes idle and waiting work can take it.
+- It does not apply when work is cut short (PREEMPT, a failure, a shift change). A failure during turnaround ends it; after repair the resource is idle.
+- Results: utilisation includes turnaround time; each resource tile also shows the split ("X% with an entity · Y% in turnaround"), and `perResource` reports `turnaroundTime`, `turnaroundFraction`, `busyUtilisation` and `turnaroundCount`.
+- Use this instead of SPLITting a clone entity to carry the return leg, which inflates served counts.
+
 ---
 
 ## Distributions
@@ -586,6 +602,7 @@ Per-skill utilisation stats, aggregated correctly across multi-replication batch
 | V69 | A `distances[]` entry has an empty/duplicate id, `fromQueue`/`toQueue` doesn't match a declared queue or the two are the same, a non-positive `distance`, or a duplicate entry for the same undirected pair | Fix the id, queue names, distance value, or remove the duplicate pair |
 | V77 | `ASSIGN(..., SCAN)` has no skill argument, or `SCAN:N` is not a positive whole number | Put the skill (`"Skill"` or `Entity.attr`) before SCAN; use e.g. `SCAN:10` |
 | V78 | An entity type's `quantityAttr` names an attribute it doesn't have, a non-number attribute, or is set on a server type | Pick a number attribute of that customer type, or clear the quantity attribute |
+| V80 | Turnaround time set on a non-server type, only one of `turnaroundDist`/`turnaroundDistParams` set, a non-sampling distribution, or numeric (non-string) parameter values | Set turnaround only on resources, with both fields and string parameters such as `{ "value": "20" }` |
 | V70 | A `Distance`-typed schedule has an invalid `from`/`to`/`speedSource`/`speedAttr` (blocking), or references a pair/attribute that isn't declared (warning — falls back to a duration of 0) | Correct the distParams; or declare the missing distance/attribute |
 
 Gaps in the numbering (e.g. no V7) are intentional — codes were retired or renumbered during development and are not reused.

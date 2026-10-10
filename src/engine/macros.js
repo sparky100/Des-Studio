@@ -12,7 +12,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, setOutcome } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
 // per-macro usages below for the (large, and macro-specific) set of fields
@@ -333,7 +333,7 @@ function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLE
   }
   if (srv) {
     releaseServerClaim(cust, srv, clock);
-    msgs.push(`Server #${srv.id} → idle`);
+    if (!beginTurnaround(srv, ctx)) msgs.push(`Server #${srv.id} → idle`);
     const retired = retireIdleExcessServers(ctx, srv.type);
     if (retired > 0) {
       msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
@@ -350,7 +350,7 @@ function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLE
   );
   for (const auxSrv of auxiliaryBusy) {
     releaseServerClaim(null, auxSrv, clock);
-    msgs.push(`Server #${auxSrv.id} (${auxSrv.type}) → idle (COSEIZE release)`);
+    if (!beginTurnaround(auxSrv, ctx)) msgs.push(`Server #${auxSrv.id} (${auxSrv.type}) → idle (COSEIZE release)`);
   }
 }
 
@@ -800,13 +800,26 @@ export const MACROS = [
         const destQueue = targetQueue || cust.lastQueue || cust.queue;
         delete cust.serviceStart;
         releaseServerClaim(cust, srv, clock);
+        const inTurnaround = beginTurnaround(srv, ctx) > 0;
         const joined = attemptQueueJoin(cust, destQueue, clock, ctx);
         const retired = retireIdleExcessServers(ctx, srv.type);
         if (joined) {
-          msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done, srv #${srv.id} idle]`);
+          msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done, srv #${srv.id} ${inTurnaround ? "in turnaround" : "idle"}]`);
         }
         if (retired > 0) {
           msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
+        }
+      } else if (cust && cust.status === "serving" && cust.serverId == null && consumeLostClaim(cust, srvType)) {
+        // This entity's carried claim on srvType was lost to a failure or
+        // preemption mid-journey (see isCarriedClaim): nothing to free, but
+        // the entity still finishes this stage and moves on.
+        if (!cust.stages) cust.stages = [];
+        cust.stages.push(buildStageRecord(cust, null, clock));
+        cust.lastStageStart = clock;
+        const destQueue = targetQueue || cust.lastQueue || cust.queue;
+        delete cust.serviceStart;
+        if (attemptQueueJoin(cust, destQueue, clock, ctx)) {
+          msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}] — its ${srvType} was lost earlier, nothing to free`);
         }
       } else {
         msgs.push(`RELEASE(${srvType}): no busy server+customer pair found`);
@@ -848,6 +861,7 @@ export const MACROS = [
       }
 
       const claimedServers = [];
+      const lostTypes = (cust._lostClaimTypes || []).slice();
       for (const t of typeList) {
         const matches = entities.filter((/** @type {any} */ e) =>
           e.role === "server" &&
@@ -856,12 +870,17 @@ export const MACROS = [
           (e.status === "busy" || e.status === "serving")
         );
         if (matches.length === 0) {
+          // Lost to a failure/preemption while carried — nothing to free for this type.
+          if (lostTypes.includes(t.toLowerCase())) continue;
           msgs.push(`RELEASE_COSEIZED([${typeListLabel}]): no claimed ${t} server for customer #${cust.id} — check it matches the scheduling COSEIZE(...) types`);
           return;
         }
         claimedServers.push(...matches);
       }
 
+      for (const t of typeList) {
+        if (!claimedServers.some(srv => srv.type.trim().toLowerCase() === t.toLowerCase())) consumeLostClaim(cust, t);
+      }
       if (!cust.stages) cust.stages = [];
       cust.stages.push(buildStageRecord(cust, claimedServers, clock));
       cust.lastStageStart = clock;
@@ -871,6 +890,7 @@ export const MACROS = [
       let retired = 0;
       for (const srv of claimedServers) {
         releaseServerClaim(cust, srv, clock);
+        beginTurnaround(srv, ctx);
         retired += retireIdleExcessServers(ctx, srv.type);
       }
       const joined = attemptQueueJoin(cust, destQueue, clock, ctx);
@@ -1252,6 +1272,7 @@ export const MACROS = [
         return;
       }
 
+      const carried = isCarriedClaim(cust, srv, ctx);
       const remainingService = preemptCustomer(cust, srv, clock, ctx);
 
       if (_arbitration && typeof _arbitration === "object") {
@@ -1265,6 +1286,7 @@ export const MACROS = [
       }
 
       const criterionNote = criterion ? ` [by ${criterion}]` : '';
+      if (carried) return;
       msgs.push(
         `PREEMPT: server #${srv.id} (${sType}) interrupted #${cust.id} ` +
         `[remaining ${remainingService.toFixed(3)} t] → re-queued${criterionNote}`
@@ -1295,10 +1317,15 @@ export const MACROS = [
       const busyServers = entities.filter((/** @type {any} */ e) =>
         e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving")
       );
+      // Servers in turnaround (B4) carry no entity, so they fail before any
+      // busy server has its work cut short.
+      const turnaroundServers = entities.filter((/** @type {any} */ e) =>
+        e.role === "server" && normName(e.type) === key && e.status === "turnaround"
+      );
 
       const servers = (requestedN != null && requestedN > 0)
-        ? [...idleServers, ...busyServers].slice(0, requestedN)
-        : [...idleServers, ...busyServers];
+        ? [...idleServers, ...turnaroundServers, ...busyServers].slice(0, requestedN)
+        : [...idleServers, ...turnaroundServers, ...busyServers];
 
       let failedCount = 0;
       for (const srv of servers) {
@@ -1306,12 +1333,15 @@ export const MACROS = [
           srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
           delete srv._starvationStart;
         }
+        // A failure ends the turnaround; after REPAIR the server is idle.
+        if (srv.status === "turnaround") endTurnaround(srv, clock);
         if (srv.status === "busy" || srv.status === "serving") {
           const custId = srv.currentCustId;
           const cust = findEntityById(ctx.index, entities, custId);
           if (cust) {
+            const carried = isCarriedClaim(cust, srv, ctx);
             const remainingService = preemptCustomer(cust, srv, clock, ctx, "FAIL");
-            msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
+            if (!carried) msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
           }
         }
         srv.status = "failed";
@@ -1654,6 +1684,7 @@ export const MACROS = [
         srv._busyStart = clock;
         srv._currentSkill = skill;
         srv.currentCustId = cust.id;
+        srv._claimGroup = primary.srv._claimGroup;
         srv.resourceClaim = {
           customerId: cust.id,
           customerType: cust.type,

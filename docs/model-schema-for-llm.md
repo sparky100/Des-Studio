@@ -1,11 +1,12 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 2.7.0
+**Version:** 2.8.0
 **Date:** 2026-10-10
 **Sprint baseline:** Sprint 88
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
+| v2.8.0 | 2026-10-10 | Server turnaround | **`turnaroundDist` / `turnaroundDistParams` on server entity types (§2):** a resource is unavailable for a sampled time after each release (RELEASE, RELEASE_COSEIZED, COMPLETE, FINISH) — a tanker's empty return voyage, an ambulance returning to base. The entity moves on at once; the server is in `turnaround` until it ends. `perResource` gains `turnaroundTime`, `turnaroundFraction`, `busyUtilisation`, `turnaroundCount`; `utilisation` now includes turnaround. New blocking rule **V80**. **RELEASE resolution (§6.2) corrected:** with entity context it releases only a server claimed by *this* entity. **Carried claims (§6.2):** an entity can hold a server across later stages (COSEIZE → RELEASE_COSEIZED subset → ASSIGN → … → RELEASE); a failure/preemption interrupts only the failed server's own claim group, and losing a carried server no longer strands the entity. MANDATORY GENERATION PROTOCOL step 4 now points at every blocking rule in §10; the duplicate TOP LLM MISTAKES #25 (Distance) is renumbered #27; new mistake #28. |
 | v2.7.0 | 2026-10-10 | Full-scale network enablers | **State variable on the right-hand side (§6.1, §5 routing):** a RHS that is a declared state variable (bare name or `state.<name>`) now resolves dynamically — `clock >= closureStart` works; the old "RHS state variable is always a literal" rule is removed. New warning V76 for a non-numeric literal in a numeric comparison. **`ASSIGN(..., SCAN[:N])` (§6):** look past a front entity whose skill has no idle server; V77. **ASSIGN no-match is a no-op.** **`DRAIN_PARTIAL(c, amount[, shortfall])` (§5, §6, §8):** draws `min(level, amount)`, records the remainder. **`quantityAttr` (§2, §9):** volume-weighted results; V78/V79; new goal metrics `summary.servedQuantity`, `summary.quantityThrough`, `resource.quantityProcessed`. **Results (§8):** container stats exclude warm-up; batch container min/avg/max/final are means across replications with `lowestMin`/`highestMax`. Two new TOP LLM MISTAKES (#25, #26). |
 | v2.6.0 | 2026-08-26 | Business view curation field | Added the optional top-level `exposedParams` field to §1 — an **app-managed** array the model owner curates in the UI (Access tab → Business view) to choose which parameters viewer-role users may adjust. LLMs must **never generate or modify** this field: it references internal sweep-parameter paths that only the app can resolve, and the app preserves the current value across AI applies regardless of what a generation emits. Documented so LLMs reading an exported model don't treat it as unknown/invalid or strip it on round-trip. |
 | v2.5.0 | 2026-07-02 | Bare `defaultQueueName` enforcement | A real-world model shipped with four B-events using `defaultQueueName` alone (no `routing[]`/`probabilisticRouting[]`) as if it were a standalone "route to this queue" mechanism — it is not; the engine only consults `defaultQueueName` as a fallback *inside* `routing[]` (see `fireBEvent`, `engine/phases.js`). Every entity reaching the first such event was silently stuck forever, stalling the entire downstream pathway (0% of entities completed) while the model still saved, loaded, and validated cleanly. Added **V61** (§10) — blocking error when the entity isn't otherwise resolved, warning if it is (dead-field case). Added **TOP LLM MISTAKES #21**. Strengthened the §6.2 DELAY-completion "routing table" option to state explicitly that `defaultQueueName` alone is insufficient and to point single-fixed-destination cases at `probabilisticRouting: [{ probability: 1.0, queueName: "..." }]` instead. Also fixed a related bug in the LLM-facing model digest generator (`src/llm/prompts.js`) that labelled a bare `defaultQueueName` as routing type `"fixed"` — implying it was a third working routing mode alongside `"conditional"`/`"probabilistic"` — which could itself mislead an LLM iterating on an existing model into reproducing the pattern. |
@@ -55,7 +56,7 @@ Read every row in the TOP LLM MISTAKES table. For each one, confirm your model d
 
 ### Step 4 — Validate before output
 Before returning any JSON, check every blocking rule in §10 programmatically or by inspection.
-A model with any blocking error (V1–V47, V-SKILL-1, V-SKILL-2, V-SKILL-4, V-SKILL-5 (when profile counts oversubscribe), CHK-001 to CHK-014) must not be returned to the user.
+A model that breaks any blocking rule — every blocking rule in §10 — must not be returned to the user.
 Fix all errors first.
 
 ### Step 5 — Planned arrivals: check row count
@@ -102,7 +103,8 @@ Read this before writing any model JSON.
 | 24 | Arithmetic expression used as a condition's entire `variable` — e.g. `(clock - state.lastSlotTime) >= 60` | The condition grammar has **no arithmetic evaluator** at all — `variable` must be a single resolvable token (`queue(...)`, `idle(...)`, `Entity.attr`, a bare state-variable name, etc.), never a parenthesized expression. `(clock - state.lastSlotTime)` is parsed as one opaque literal token, matches no known namespace, and throws `Unknown variable namespace in predicate` at runtime — with no validation-time warning, since string conditions aren't statically checked against the resolvable-token list. For "N time units since the last event," use a self-rescheduling timer B-event that sets a boolean flag instead — see §6.2 "DELAY with slot capacity" for the full pattern. |
 | 25 | A repeating "status check" B-event that recomputes a flag from `clock` every time unit (e.g. a daily `SET(isOpen, 1 - enabled * min(1, max(0, floor(clock) - start + 1)) * ...)`) | A state variable may be the **right-hand side** of a condition, so compare `clock` to it directly: two C-events — `clock >= closureStart AND clock < closureEnd AND closureEnabled == 1 AND isOpen == 1` → `SET(isOpen, 0)`, and `clock >= closureEnd AND isOpen == 0` → `SET(isOpen, 1)`. No tick events, no nested min/max/floor. See §6.1. |
 | 26 | One queue + one C-event per skill/grade at the same station (e.g. `Asia Sour Crude Queue` and `Asia Sweet Crude Queue`) only to stop one grade blocking another | Use one queue per station and `ASSIGN(Queue, UnitType, Entity.grade, SCAN)` — SCAN assigns the first waiting entity whose skill has an idle unit, so a sour lot at the front no longer blocks sweet lots behind it. Give the unit type per-instance `skillProfiles` for its mix of skills. Fewer queues and C-events means fewer C-event scans per event. See §6. |
-| 25 | Putting a `Distance`-typed schedule on a B-event's own self-rescheduling `schedules[]` instead of a C-event's `cSchedules` | `Distance` reads a speed attribute from the matched server or arriving entity at the moment a service starts — that pairing only exists after a C-event's `ASSIGN` (or similar) has resolved a customer/server context for the current `cSchedules` entry. A B-event's `schedules[]` (used for e.g. `b_arrive` scheduling its own next arrival) has no such context, so `speedSource` has nothing to read and the leg silently falls back to a duration of 0. Use `Distance` only inside a C-event's `cSchedules`, immediately after the `ASSIGN` that starts the leg. |
+| 27 | Putting a `Distance`-typed schedule on a B-event's own self-rescheduling `schedules[]` instead of a C-event's `cSchedules` | `Distance` reads a speed attribute from the matched server or arriving entity at the moment a service starts — that pairing only exists after a C-event's `ASSIGN` (or similar) has resolved a customer/server context for the current `cSchedules` entry. A B-event's `schedules[]` (used for e.g. `b_arrive` scheduling its own next arrival) has no such context, so `speedSource` has nothing to read and the leg silently falls back to a duration of 0. Use `Distance` only inside a C-event's `cSchedules`, immediately after the `ASSIGN` that starts the leg. |
+| 28 | SPLITting a clone entity to carry a resource's empty return leg (e.g. a tanker sailing back after discharge) so the server stays busy — inflates served counts and needs the clone's quantity zeroed | Set `turnaroundDist`/`turnaroundDistParams` on the server entity type (§2 "Turnaround After Release"). The entity completes or moves on at release; the server stays unavailable for the turnaround. |
 
 ---
 
@@ -412,6 +414,23 @@ Servers can have random failures (the engine auto-generates FAIL/REPAIR events):
 - `mtbfDist` / `mttrDist`: any distribution name from §4. `Exponential` and `Triangular` are most common.
 - Mean time between failures (`mtbfDist`) should be much larger than mean time to repair (`mttrDist`).
 - No additional B-events or C-events are needed — the engine handles failure scheduling automatically.
+
+### Optional: Turnaround After Release
+
+A resource that must spend time away after each job before it can take the next one — a tanker sailing back empty after discharging, an ambulance returning to base, an aircraft turnaround — sets a turnaround distribution on its **server** entity type:
+
+```json
+{ "id": "et_vlcc", "name": "VLCC", "role": "server", "count": 12,
+  "turnaroundDist": "Triangular",
+  "turnaroundDistParams": { "min": "18", "mode": "20", "max": "24" } }
+```
+
+- When `RELEASE`, `RELEASE_COSEIZED`, `COMPLETE()` or `FINISH` frees a server of this type, the **entity moves on immediately**; the server enters status `turnaround` (not idle, not busy with an entity) for a sampled time, then becomes idle and Conditional events are re-checked. `idle(VLCC).count` does not include servers in turnaround.
+- Not applied when work is cut short — `PREEMPT`, `FAIL`/MTBF failures, or a shift change.
+- A failure during turnaround ends it; after repair the server is idle.
+- Results: `perResource[type].utilisation` = (busy with an entity + turnaround) / available time; also `busyUtilisation`, `turnaroundTime`, `turnaroundFraction` and `turnaroundCount`. Time-series `byType[].busy` counts servers in turnaround.
+- Both fields together; parameter values as strings; only on `role: "server"`; a sampling distribution from §4 (not `Schedule`, `ServerAttr`, `EntityAttr` or `Distance`) — **V80**, blocking.
+- Do **not** SPLIT a clone entity to carry the return leg (TOP LLM MISTAKES #28).
 
 ---
 
@@ -959,6 +978,23 @@ The target queue argument is optional — omit it (`RELEASE_COSEIZED([Surgeon, A
 
 - The B-event scheduled by a COSEIZE C-event must resolve **all** co-seized resources in a single call: `COMPLETE()` to release everyone and end the entity's lifecycle, or `RELEASE_COSEIZED([Type1, Type2, ...])` (optionally with a target queue) to release everyone and continue the entity.
 - **Do NOT** issue separate single `RELEASE(Surgeon)` + `RELEASE(Anesthetist)` calls for co-seized types on the same B-event — each resolves against the same cached primary-server context, so only the first call actually releases anything and the rest silently leave that resource stuck busy forever. The model validator flags this pattern (V38c).
+
+#### Holding a server across stages (carried claim)
+
+An entity may keep one server while it goes through later stages — e.g. a tanker keeps its VLCC through a chokepoint and the voyage:
+
+```jsonc
+// C: "COSEIZE(Gulf Loading Queue, Gulf Terminal Berth, VLCC)"
+// B: "RELEASE_COSEIZED([Gulf Terminal Berth], Hormuz Queue)"   // frees only the berth; VLCC stays claimed
+// C: "ASSIGN(Hormuz Queue, Hormuz Transit Lane)"                 // a second claim while holding the VLCC
+// B: "RELEASE(Hormuz Transit Lane, Gulf to Asia Voyage)"
+// C: "DELAY(Gulf to Asia Voyage)"
+// B: "RELEASE(VLCC, Asia Crude Queue)"                           // frees this entity's own VLCC
+```
+
+- Every completion `cSchedule` in the chain needs `useEntityCtx: true` — that is what makes each `RELEASE` act on *this* entity's claim.
+- Servers seized together (one `ASSIGN`, or one `COSEIZE`) form a claim group. A `FAIL`/`PREEMPT`/MTBF failure/shift-change removal of a server interrupts only its own group's stage: a lane failure re-queues the transit and the entity keeps its VLCC.
+- If the **carried** server (the VLCC) fails or is preempted, the entity loses it but carries on with its current stage (transit, voyage, waiting); the later `RELEASE(VLCC, …)` / `RELEASE_COSEIZED([VLCC], …)` then has nothing to free and simply routes the entity onward.
 - The `RELEASE_COSEIZED([...])` type list must exactly match (or be a subset of) the types in the scheduling C-event's `COSEIZE(...)` call, or the release will fail at runtime (validator rule V38d catches mismatches ahead of time).
 - Spell it **`RELEASE_COSEIZED`** — with the trailing "D". `RELEASE_COSEIZE(...)` (missing it) is not a macro; it silently no-ops at runtime instead of raising an error, so this typo can go unnoticed until you see servers never releasing (validator rule V38e catches it ahead of time).
 - The condition MUST check `idle(<Type>).count >= N` for **every** server type when using `Type:N` quantity syntax (not just `> 0`) — otherwise Phase C will waste passes on COSEIZE attempts that always fail for lack of enough idle servers.
@@ -1095,7 +1131,7 @@ Rules:
 - The completion B-event has three valid ways to resolve the delayed entity — pick based on what actually happens when the delay ends:
   1. **`COMPLETE()`** — the entity's journey ends here. Works correctly with no server claimed: the engine explicitly checks the entity's `_isDelay` flag and skips the "no matching busy server" guard for delay completions.
   2. **A routing table (`routing[]` + `defaultQueueName`, or `probabilisticRouting[]`) with NO effect macro at all** — use this when the entity continues to another queue and no server is involved anywhere in this entity's journey. Leave `effect` empty/absent; the engine's routing logic explicitly accepts a delay-held entity (status `"serving"` with a customer context but no server context) the same way it accepts a `"waiting"` entity — no `COMPLETE()` or `RELEASE()` needed to "unlock" it first. **`defaultQueueName` is never sufficient by itself.** It is only read as the fallback *inside* `routing[]` when no branch condition matches — a B-event with `defaultQueueName` set but no `routing[]` array (and no `probabilisticRouting[]`) does not route the entity anywhere at all; it silently leaves the entity stuck forever. For the common case of "always go to this one next queue" — no branching, no probability — use `"probabilisticRouting": [{ "probability": 1.0, "queueName": "Next Queue" }]`, not a bare `defaultQueueName`. See TOP LLM MISTAKES #21, blocked by V61.
-  3. **`RELEASE(ServerType[, TargetQueue])`** — **only** valid if a server was genuinely seized for this same entity *earlier* in its journey (e.g. a prior C-event `ASSIGN`s a server, then this `DELAY` models an unsupervised recovery/hold while that server is still considered claimed, then `RELEASE` frees it). `RELEASE` has no `_isDelay` awareness: it resolves the server by type/busy-status, not by this entity's context, so on a chain where no server was *ever* claimed it will either silently no-op (entity stuck forever, same leak as bare `ARRIVE`) or — if an unrelated busy server of that type happens to exist elsewhere in the model — incorrectly act on a *different* customer's claim. Never invent a `RELEASE` for a delay where nothing was seized; use option 1 or 2 instead.
+  3. **`RELEASE(ServerType[, TargetQueue])`** — **only** valid if a server was genuinely seized for this same entity *earlier* in its journey (e.g. a prior C-event `ASSIGN`s a server, then this `DELAY` models an unsupervised recovery/hold while that server is still considered claimed, then `RELEASE` frees it). When the completion B-event carries entity context (`useEntityCtx: true` on the DELAY's `cSchedule`, which V47 asks for), `RELEASE` releases only a server of that type **claimed by this entity**; if this entity holds none it does nothing and the entity is stuck forever (same leak as bare `ARRIVE`). Without entity context it falls back to *any* busy server of that type — which can act on a *different* customer's claim. Never invent a `RELEASE` for a delay where nothing was seized; use option 1 or 2 instead.
 - **The completion B-event's effect must not be a bare `ARRIVE(...)` with nothing else.** `ARRIVE` always spawns a brand-new entity and never resolves the delayed entity, which is left stuck in `"serving"` status forever. Resolve the delayed entity with one of the three options above — `ARRIVE` is fine *in addition* to `COMPLETE()`/`RELEASE()` (e.g. `["RELEASE(Clinician, Discharge Queue)", "ARRIVE(AuditRecord, Log Queue)"]` to also spawn a derived log entity), just never alone. Blocked by V47.
 - `DELAY(QueueName)` counts as a valid consumer of `QueueName` for CHK-013 — do not add a redundant `ASSIGN`/`BATCH` just to silence that check.
 - `QueueName` must reference a defined queue (V47, parity with the `BATCH`/`FILL`/`DRAIN` queue checks).
@@ -1476,6 +1512,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V69 | Each `distances[]` entry must have a non-empty/unique `id`; `fromQueue`/`toQueue` must each reference a declared queue and be different from each other; `distance` must be a positive finite number; no duplicate entry for the same unordered `(fromQueue, toQueue)` pair. Blocking error. |
 | V77 | `ASSIGN(..., SCAN)` must have a skill argument (`"Skill"` or `Entity.attrName`) before `SCAN`, and `SCAN:N` must be a positive whole number. Blocking error. |
 | V78 | `quantityAttr` must name an attribute of that (customer) entity type whose `valueType` is `"number"`. Blocking error. Not allowed on server types. |
+| V80 | `turnaroundDist` / `turnaroundDistParams` are only valid on `role: "server"` entity types, must be set together, must use a sampling distribution (not `Schedule`/`ServerAttr`/`EntityAttr`/`Distance`) with valid parameters, and parameter values must be strings. Blocking error. |
 | V70 | A `Distance`-typed schedule's `from`/`to` must reference declared queues, `speedSource` must be `"entity"` or `"server"`, and `speedAttr` must be non-empty. Blocking error. (Referencing a pair not present in `distances[]`, or a `speedAttr` not declared on any matching entity type, is a warning instead — see the Warnings table.) |
 
 ### Warnings (run proceeds, banner shown)

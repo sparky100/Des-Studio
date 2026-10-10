@@ -460,6 +460,11 @@ export function clearWaitingState(entity, index = null) {
 export function claimServerForEntity(customer, server, clock, index = null, ctx = null, skill = null) {
   if (!customer || !server) return false;
   if (customer.status !== "waiting" || server.status !== "idle") return false;
+  // Servers seized by one ASSIGN/COSEIZE share a claim group, so a failure or
+  // preemption can tell a stage's own (co-seized) servers from one the entity
+  // still holds from an earlier stage. COSEIZE copies this onto its aux units.
+  // Deterministic key (no shared counter), so identical runs stay identical.
+  server._claimGroup = `${customer.id}@${server.id}@${clock}`;
 
   const queueName = customer.queue ?? customer.lastQueue ?? null;
   const claim = claimSnapshot(customer, server, clock, queueName);
@@ -602,6 +607,62 @@ export function selectVictimServer(busyServers, criterion, entities, index, warn
 // A preempted customer resumes an interrupted wait — it's not making a fresh decision
 // to join a queue, so balking is skipped, but capacity/overflow (F11.1/F11.3) still
 // applies (it could overflow/exit if its original queue is now full).
+// ── Carried claims (an entity holding a server across stages) ─────────────
+// COSEIZE(Q, Berth, VLCC) → RELEASE_COSEIZED([Berth]) → ASSIGN(Hormuz, Lane)
+// → RELEASE(Lane) → DELAY(voyage) → RELEASE(VLCC): through the middle stages
+// the entity "carries" its VLCC claim. A carried claim is any server claimed
+// by the entity that is not part of the claim group serving its current
+// stage (none, when the entity is waiting or in a DELAY).
+
+/**
+ * @param {Record<string, any>|null} cust
+ * @param {Record<string, any>|null} srv
+ * @param {Record<string, any>|null} [ctx]  needs entities (and index, if any)
+ */
+export function isCarriedClaim(cust, srv, ctx = null) {
+  if (!cust || !srv || srv.currentCustId !== cust.id || srv._claimGroup == null) return false;
+  let currentGroup = null;
+  if (cust.status === "serving" && cust.serverId != null) {
+    const primary = cust.serverId === srv.id ? srv : findEntityById(ctx?.index ?? null, ctx?.entities || [], cust.serverId);
+    if (primary && primary.currentCustId === cust.id) currentGroup = primary._claimGroup ?? null;
+  }
+  return currentGroup == null || srv._claimGroup !== currentGroup;
+}
+
+/**
+ * Drop a carried claim (its server failed, was preempted or removed): the
+ * server is freed, the entity carries on with its current stage. The lost
+ * type is remembered so the later RELEASE of it still routes the entity
+ * instead of stranding it.
+ * @param {Record<string, any>} cust
+ * @param {Record<string, any>} srv
+ * @param {number} clock
+ * @param {Record<string, any>|null} ctx
+ * @param {string} reason
+ */
+function dropCarriedClaim(cust, srv, clock, ctx, reason) {
+  releaseServerClaim(null, srv, clock);
+  cust._lostClaimTypes = [...(cust._lostClaimTypes || []), norm(srv.type)];
+  ctx?.msgs?.push(`${reason}: #${cust.id} lost its ${srv.type} #${srv.id} (held from an earlier stage) — it continues its current stage`);
+}
+
+/**
+ * True (and consumes the record) when this entity lost its claim on a server
+ * of `serverType` to a failure/preemption — see dropCarriedClaim.
+ * @param {Record<string, any>|null} cust
+ * @param {string} serverType
+ */
+export function consumeLostClaim(cust, serverType) {
+  if (!cust) return false;
+  const list = cust?._lostClaimTypes;
+  if (!Array.isArray(list)) return false;
+  const i = list.indexOf(norm(serverType));
+  if (i < 0) return false;
+  list.splice(i, 1);
+  if (!list.length) delete cust._lostClaimTypes;
+  return true;
+}
+
 /**
  * @param {Record<string, any>} cust
  * @param {Record<string, any>} srv
@@ -612,6 +673,10 @@ export function selectVictimServer(busyServers, criterion, entities, index, warn
  *   breakdown), or "SHIFT_CHANGE" (reactive capacity retirement when a shift closes).
  */
 export function preemptCustomer(cust, srv, clock, ctx, reason = "PREEMPT") {
+  if (isCarriedClaim(cust, srv, ctx)) {
+    dropCarriedClaim(cust, srv, clock, ctx, reason);
+    return 0;
+  }
   const scheduledDuration = srv._scheduledDuration || 0;
   const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
   cust._remainingService  = remainingService;
@@ -629,11 +694,14 @@ export function preemptCustomer(cust, srv, clock, ctx, reason = "PREEMPT") {
   releaseServerClaim(cust, srv, clock);
   // Release any other co-seized servers still claimed by this customer (COSEIZE pattern) —
   // otherwise a PREEMPT/FAIL on one co-seized resource leaves the others stuck "busy" forever.
+  // Only servers from the same claim group: a server the entity carries from
+  // an earlier stage (see isCarriedClaim) stays with it.
   const auxiliaryBusy = (ctx?.entities || []).filter((/** @type {any} */ e) =>
     e.role === "server" &&
     e.currentCustId === cust.id &&
     e.id !== srv.id &&
-    (e.status === "busy" || e.status === "serving")
+    (e.status === "busy" || e.status === "serving") &&
+    (srv._claimGroup == null || e._claimGroup == null || e._claimGroup === srv._claimGroup)
   );
   for (const auxSrv of auxiliaryBusy) {
     releaseServerClaim(null, auxSrv, clock);
@@ -664,6 +732,7 @@ export function flushRetiredServerStats(srv, state) {
     skillBusyTimeSum: {}, perShiftBusyTimeSum: {},
   });
   acc.busyTimeSum   += srv._busyTime      || 0;
+  acc.turnaroundTimeSum = (acc.turnaroundTimeSum || 0) + (srv._turnaroundTime || 0);
   acc.downtimeSum   += srv._totalDowntime || 0;
   acc.failureCount  += srv._failureCount  || 0;
   const starv = srv._starvationTime || 0;
@@ -679,6 +748,75 @@ export function flushRetiredServerStats(srv, state) {
       acc.perShiftBusyTimeSum[label] = (acc.perShiftBusyTimeSum[label] || 0) + bt;
     }
   }
+}
+
+// ── Server turnaround (B4) ────────────────────────────────────────────────
+// A server type with turnaroundDist/turnaroundDistParams is unavailable for a
+// sampled time after it releases an entity — a tanker sailing back empty, an
+// ambulance returning to base, an aircraft turnaround. The entity moves on
+// immediately; the server sits in status "turnaround" (neither idle nor busy
+// with an entity) until a TURNAROUND_END event makes it idle again. Applies on
+// normal completion releases (RELEASE, RELEASE_COSEIZED, COMPLETE, FINISH),
+// not when work is cut short by PREEMPT, FAIL or a shift change.
+
+/**
+ * @param {Record<string, any>|null|undefined} model
+ * @param {string} serverType
+ * @returns {{ dist: string, params: Record<string, any> } | null}
+ */
+export function turnaroundSpecFor(model, serverType) {
+  const key = norm(serverType);
+  const et = (model?.entityTypes || []).find((/** @type {any} */ t) => t.role === "server" && norm(t.name) === key);
+  if (!et?.turnaroundDist || !et.turnaroundDistParams) return null;
+  return { dist: et.turnaroundDist, params: et.turnaroundDistParams };
+}
+
+/**
+ * Put a just-released (idle) server into turnaround when its type defines one.
+ * @param {Record<string, any>} srv
+ * @param {Record<string, any>} ctx  macro ctx: model, rng, streamRegistry, clock, scheduleEvent, msgs
+ * @returns {number} the sampled turnaround time (0 = none)
+ */
+export function beginTurnaround(srv, ctx) {
+  if (!srv || srv.role !== "server" || srv.status !== "idle" || typeof ctx?.scheduleEvent !== "function") return 0;
+  const spec = turnaroundSpecFor(ctx.model, srv.type);
+  if (!spec) return 0;
+  const duration = Math.max(0, Number(sample(spec.dist, spec.params, ctx.rng, null, {
+    streamName: `turnaround:${srv.type}`,
+    streamRegistry: ctx.streamRegistry,
+  })) || 0);
+  if (!(duration > 0)) return 0;
+  // Not starving while away: releaseServerClaim started the idle timer.
+  delete srv._starvationStart;
+  srv.status = "turnaround";
+  srv._turnaroundStart = ctx.clock;
+  srv._turnaroundToken = (srv._turnaroundToken || 0) + 1;
+  ctx.scheduleEvent({
+    id: `turnaround:${srv.id}:${srv._turnaroundToken}`,
+    type: "TURNAROUND_END",
+    name: `Turnaround complete: ${srv.type}`,
+    serverTypeName: srv.type,
+    serverId: srv.id,
+    token: srv._turnaroundToken,
+    scheduledTime: ctx.clock + duration,
+  });
+  ctx.msgs?.push(`Server #${srv.id} (${srv.type}) → turnaround for ${duration.toFixed(3)} t`);
+  return duration;
+}
+
+/**
+ * Close a server's turnaround interval (on TURNAROUND_END, or a failure during
+ * turnaround). Leaves the status for the caller to set.
+ * @param {Record<string, any>} srv
+ * @param {number} clock
+ */
+export function endTurnaround(srv, clock) {
+  if (!srv || srv.status !== "turnaround") return 0;
+  const elapsed = srv._turnaroundStart != null ? Math.max(0, clock - srv._turnaroundStart) : 0;
+  srv._turnaroundTime = (srv._turnaroundTime || 0) + elapsed;
+  srv._turnaroundCount = (srv._turnaroundCount || 0) + 1;
+  delete srv._turnaroundStart;
+  return elapsed;
 }
 
 /**

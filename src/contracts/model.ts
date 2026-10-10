@@ -40,6 +40,9 @@ export interface EntityTypeDefinition {
   mtbfDistParams?: Record<string, unknown>;
   mttrDist?: string;
   mttrDistParams?: Record<string, unknown>;
+  /** Server turnaround (B4): unavailable for a sampled time after each release (V80). */
+  turnaroundDist?: string;
+  turnaroundDistParams?: Record<string, unknown>;
   /** Skills assigned to this server type (must exist in model_json.skills). */
   skills?: string[];
   /** Per-instance skill assignment (count- or weight-based); overrides `skills` per server. */

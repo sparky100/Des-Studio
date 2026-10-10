@@ -666,6 +666,11 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                     {r.totalDowntime ? ` · ${formatMetricValue(r.totalDowntime)} downtime` : ""}
                   </div>
                 )}
+                {r.turnaroundFraction != null && (
+                  <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                    {utilPct(r.busyUtilisation ?? 0)} with an entity · {utilPct(r.turnaroundFraction)} in turnaround
+                  </div>
+                )}
                 {r.scheduleAdherence != null && (
                   <div style={{ fontSize: 11, color: r.scheduleAdherence >= 0.9 ? C.green : C.amber, fontFamily: FONT, lineHeight: 1.5 }}>
                     Schedule adherence: {Math.round(r.scheduleAdherence * 100)}%

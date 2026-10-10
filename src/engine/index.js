@@ -12,7 +12,7 @@
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods, createStreamRegistry } from "./distributions.js";
 import { buildWaitDistEntry, finalizeWeightedStats, summarizeEntitySummary } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
-import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById } from "./entities.js";
+import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, endTurnaround, turnaroundSpecFor, isCarriedClaim } from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent, applyShiftChange } from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
@@ -347,7 +347,7 @@ function deriveDirtyFromTemplate(template, event, ctx) {
     }
   }
 
-  if (event?.type === "SHIFT_CHANGE" || event?.type === "FAILURE" || event?.type === "REPAIR") {
+  if (event?.type === "SHIFT_CHANGE" || event?.type === "FAILURE" || event?.type === "REPAIR" || event?.type === "TURNAROUND_END") {
     markDirtyResource(dirty, event.serverTypeName);
   }
   return dirty;
@@ -940,7 +940,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       byType[t] = {
         waiting: h.waitingOf(t).length,
         idle:    h.idleOf(t).length,
-        busy:    h.busyOf(t).length,
+        // A server in turnaround (B4) is unavailable but carries no entity;
+        // it counts as busy here, as it does in utilisation.
+        busy:    h.busyOf(t).length + statsEntities.filter((/** @type {any} */ e) => e.type === t && e.status === "turnaround").length,
         failed:  h.failedOf(t).length,
         total:   statsEntities.filter((/** @type {any} */ e) => e.type === t).length,
       };
@@ -1032,7 +1034,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         byType[t].total++;
         if (e.status === "waiting") byType[t].waiting++;
         else if (e.status === "idle") byType[t].idle++;
-        else if (e.status === "busy" || e.status === "serving") byType[t].busy++;
+        else if (e.status === "busy" || e.status === "serving" || e.status === "turnaround") byType[t].busy++;
         else if (e.status === "failed") byType[t].failed++;
       }
       if (e.role !== "server" && (e.queue || e.lastQueue)) {
@@ -1289,6 +1291,9 @@ const cycleLog = [];
         state.__completedSinceSample = 0;
         for (const srv of entities.filter(e => e.role === 'server')) {
           srv._busyTime = 0;
+          srv._turnaroundTime = 0;
+          srv._turnaroundCount = 0;
+          if (srv.status === "turnaround") srv._turnaroundStart = clock;
           // _shiftBusyTime/_skillBusyTime (F86.4 per-shift and per-skill utilisation,
           // see releaseServerClaim) are per-label maps that mirror _busyTime but are
           // never overwritten in place — only _busyTime was being zeroed here, so
@@ -1335,9 +1340,10 @@ const cycleLog = [];
         if (ev.failureScope === "unit" && ev.serverIndex != null) {
           const srv = entities.find(e =>
             e.role === "server" && e.type.trim().toLowerCase() === key && e._instanceIndex === ev.serverIndex
-            && (e.status === "busy" || e.status === "serving" || e.status === "idle")
+            && (e.status === "busy" || e.status === "serving" || e.status === "idle" || e.status === "turnaround")
           );
           if (srv) {
+            if (srv.status === "turnaround") endTurnaround(srv, clock);
             if (srv.status === "idle" && srv._starvationStart != null) {
               srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
               delete srv._starvationStart;
@@ -1345,10 +1351,15 @@ const cycleLog = [];
             if (srv.status === "busy" || srv.status === "serving") {
               const cust = findEntityById(queueIndex, entities, srv.currentCustId);
               if (cust) {
-                fel = fel.filter(entry =>
-                  !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
-                );
-                preemptCustomer(cust, srv, clock, makeCtx(), "FAILURE");
+                const failCtx = makeCtx();
+                // A server the entity carries from an earlier stage: the entity's own
+                // pending events (its current stage) must survive.
+                if (!isCarriedClaim(cust, srv, failCtx)) {
+                  fel = fel.filter(entry =>
+                    !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
+                  );
+                }
+                preemptCustomer(cust, srv, clock, failCtx, "FAILURE");
               }
             }
             srv.status = "failed";
@@ -1375,10 +1386,11 @@ const cycleLog = [];
           }
         } else {
           const servers = entities.filter(e =>
-            e.role === "server" && e.type.trim().toLowerCase() === key && (e.status === "busy" || e.status === "serving" || e.status === "idle")
+            e.role === "server" && e.type.trim().toLowerCase() === key && (e.status === "busy" || e.status === "serving" || e.status === "idle" || e.status === "turnaround")
           );
           let failedCount = 0;
           for (const srv of servers) {
+            if (srv.status === "turnaround") endTurnaround(srv, clock);
             if (srv.status === "idle" && srv._starvationStart != null) {
               srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
               delete srv._starvationStart;
@@ -1386,10 +1398,15 @@ const cycleLog = [];
             if (srv.status === "busy" || srv.status === "serving") {
               const cust = findEntityById(queueIndex, entities, srv.currentCustId);
               if (cust) {
-                fel = fel.filter(entry =>
-                  !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
-                );
-                preemptCustomer(cust, srv, clock, makeCtx(), "FAILURE");
+                const failCtx = makeCtx();
+                // A server the entity carries from an earlier stage: the entity's own
+                // pending events (its current stage) must survive.
+                if (!isCarriedClaim(cust, srv, failCtx)) {
+                  fel = fel.filter(entry =>
+                    !(entry._contextCustId === cust.id && entry._requiresCtxEntity)
+                  );
+                }
+                preemptCustomer(cust, srv, clock, failCtx, "FAILURE");
               }
             }
             srv.status = "failed";
@@ -1401,6 +1418,27 @@ const cycleLog = [];
             cycleLog.push({ phase: "B", time: clock, message: msg });
             log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: servers.map(s => s.id) } }));
           }
+        }
+        continue;
+      }
+
+      if (ev.type === 'TURNAROUND_END') {
+        const srv = findEntityById(queueIndex, entities, ev.serverId);
+        // A stale entry (the server failed during turnaround, or started a
+        // newer one) carries an old token and is ignored.
+        const current = srv && srv.status === "turnaround" && srv._turnaroundToken === ev.token;
+        if (current) {
+          endTurnaround(srv, clock);
+          srv.status = "idle";
+          srv._starvationStart = clock;
+          if (enableFilteredPhaseC) markDirtyResource(/** @type {DirtySet} */ (phaseCDirty), srv.type);
+        }
+        if (collectTrace) {
+          const msg = current
+            ? `TURNAROUND: ${srv.type} #${srv.id} available again at t=${clock.toFixed(3)}`
+            : `TURNAROUND: server #${ev.serverId} no longer in turnaround — skipped`;
+          cycleLog.push({ phase: "B", time: clock, message: msg });
+          log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: current, result: [msg], entityIds: srv ? [srv.id] : [] } }));
         }
         continue;
       }
@@ -2172,6 +2210,13 @@ const cycleLog = [];
           : 0
       );
       perResource[srv.type].busyTimeSum += busyTime;
+      const turnaroundTime = (srv._turnaroundTime || 0) + (
+        srv.status === "turnaround" && srv._turnaroundStart != null
+          ? Math.max(0, clock - srv._turnaroundStart)
+          : 0
+      );
+      if (turnaroundTime > 0) perResource[srv.type].turnaroundTimeSum = (perResource[srv.type].turnaroundTimeSum || 0) + turnaroundTime;
+      if (srv._turnaroundCount) perResource[srv.type].turnaroundCount = (perResource[srv.type].turnaroundCount || 0) + srv._turnaroundCount;
       perResource[srv.type].downtimeSum  += srv._totalDowntime || 0;
       perResource[srv.type].failureCount += srv._failureCount  || 0;
 
@@ -2221,6 +2266,7 @@ const cycleLog = [];
       if (!perResource[type]) perResource[type] = { total: 0, busyTimeSum: 0, starvationTimeSum: 0, maxContStarvDur: 0, downtimeSum: 0, failureCount: 0 };
       const r = perResource[type];
       r.busyTimeSum      += acc.busyTimeSum;
+      if (acc.turnaroundTimeSum) r.turnaroundTimeSum = (r.turnaroundTimeSum || 0) + acc.turnaroundTimeSum;
       r.starvationTimeSum += acc.starvationTimeSum;
       r.downtimeSum      += acc.downtimeSum;
       r.failureCount     += acc.failureCount;
@@ -2242,7 +2288,17 @@ const cycleLog = [];
     for (const type of Object.keys(perResource)) {
       const r = perResource[type];
       const denominator = elapsed * r.total;
-      r.utilisation = denominator > 0 ? +(r.busyTimeSum / denominator).toFixed(4) : 0;
+      // Turnaround (B4) counts toward utilisation — the server is committed
+      // to the work even though no entity is with it — and is also reported
+      // on its own so busy-with-entity time stays visible.
+      const turnaroundSum = r.turnaroundTimeSum || 0;
+      r.utilisation = denominator > 0 ? +((r.busyTimeSum + turnaroundSum) / denominator).toFixed(4) : 0;
+      if (turnaroundSum > 0 || turnaroundSpecFor(runtimeModel, type)) {
+        r.turnaroundTime = +turnaroundSum.toFixed(4);
+        r.turnaroundFraction = denominator > 0 ? +(turnaroundSum / denominator).toFixed(4) : 0;
+        r.busyUtilisation = denominator > 0 ? +(r.busyTimeSum / denominator).toFixed(4) : 0;
+        r.turnaroundCount = r.turnaroundCount || 0;
+      }
       r.skillUtil = r.skillBusyTimeSum ? Object.fromEntries(
         Object.entries(r.skillBusyTimeSum).map(([skill, bt]) => [skill, denominator > 0 ? +(bt / denominator).toFixed(4) : 0])
       ) : undefined;

@@ -1078,6 +1078,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     };
     if (e.role === "server") {
       if (e.mtbfDist) entry.failureModel = { mtbfDist: e.mtbfDist, mtbfParams: e.mtbfDistParams, mttrDist: e.mttrDist, mttrParams: e.mttrDistParams, failureScope: e.failureScope || "unit" };
+      if (e.turnaroundDist) entry.turnaround = { dist: e.turnaroundDist, params: e.turnaroundDistParams };
       if (Array.isArray(e.shiftSchedule) && e.shiftSchedule.length > 0) entry.shiftSchedule = `${e.shiftSchedule.length} period(s)`;
     }
     return entry;
@@ -1929,6 +1930,7 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
       }));
       if (attrs.length) entry.attributes = attrs;
       if (et.mtbfDist) entry.failureModel = { mtbfDist: et.mtbfDist, mttrDist: et.mttrDist, failureScope: et.failureScope || "unit" };
+      if (et.turnaroundDist) entry.turnaround = { dist: et.turnaroundDist, params: et.turnaroundDistParams };
       return entry;
     });
 
