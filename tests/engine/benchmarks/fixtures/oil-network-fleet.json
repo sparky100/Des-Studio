@@ -1,0 +1,1824 @@
+{
+ "name": "World Oil Network \u2014 Toy with Tanker Fleet (Imported)",
+ "model_json": {
+  "schemaVersion": 1,
+  "entityTypes": [
+   {
+    "id": "et_cargo",
+    "name": "Crude Cargo",
+    "role": "customer",
+    "count": 0,
+    "attrDefs": [
+     {
+      "name": "grade",
+      "mutable": true,
+      "valueType": "string",
+      "defaultValue": "sour"
+     },
+     {
+      "name": "route",
+      "mutable": true,
+      "valueType": "string",
+      "defaultValue": "gulf_asia"
+     },
+     {
+      "name": "volume",
+      "mutable": true,
+      "valueType": "number",
+      "defaultValue": 2
+     },
+     {
+      "name": "pumpDays",
+      "mutable": true,
+      "valueType": "number",
+      "defaultValue": 0.8
+     },
+     {
+      "name": "refineDays",
+      "mutable": true,
+      "valueType": "number",
+      "defaultValue": 4
+     }
+    ],
+    "quantityAttr": "volume"
+   },
+   {
+    "id": "et_gulf_vlcc",
+    "name": "Gulf VLCC",
+    "role": "server",
+    "count": 320,
+    "attrDefs": [],
+    "turnaroundDist": "Triangular",
+    "turnaroundDistParams": {
+     "max": "30",
+     "min": "18",
+     "mode": "20"
+    }
+   },
+   {
+    "id": "et_atl_vlcc",
+    "name": "Atlantic VLCC",
+    "role": "server",
+    "count": 145,
+    "attrDefs": [],
+    "turnaroundDist": "Triangular",
+    "turnaroundDistParams": {
+     "max": "48",
+     "min": "28",
+     "mode": "35"
+    }
+   },
+   {
+    "id": "et_suezmax",
+    "name": "Suezmax",
+    "role": "server",
+    "count": 240,
+    "attrDefs": [],
+    "turnaroundDist": "Triangular",
+    "turnaroundDistParams": {
+     "max": "30",
+     "min": "12",
+     "mode": "18"
+    }
+   },
+   {
+    "id": "et_aframax",
+    "name": "Aframax",
+    "role": "server",
+    "count": 105,
+    "attrDefs": [],
+    "turnaroundDist": "Triangular",
+    "turnaroundDistParams": {
+     "max": "19",
+     "min": "14",
+     "mode": "16"
+    }
+   },
+   {
+    "id": "et_gulf_berth",
+    "name": "Gulf Terminal Berth",
+    "role": "server",
+    "count": 14,
+    "attrDefs": []
+   },
+   {
+    "id": "et_waf_berth",
+    "name": "West Africa Terminal Berth",
+    "role": "server",
+    "count": 5,
+    "attrDefs": []
+   },
+   {
+    "id": "et_us_berth",
+    "name": "US Gulf Coast Terminal Berth",
+    "role": "server",
+    "count": 5,
+    "attrDefs": []
+   },
+   {
+    "id": "et_hormuz",
+    "name": "Hormuz Transit Lane",
+    "role": "server",
+    "count": 7,
+    "attrDefs": []
+   },
+   {
+    "id": "et_bypass",
+    "name": "Bypass Pipeline",
+    "role": "server",
+    "count": 2,
+    "attrDefs": []
+   },
+   {
+    "id": "et_asia_unit",
+    "name": "Asia Refinery Unit",
+    "role": "server",
+    "count": 32,
+    "skills": [
+     "sour",
+     "sweet"
+    ],
+    "attrDefs": [],
+    "skillProfiles": [
+     {
+      "name": "Sour units",
+      "count": 24,
+      "skills": [
+       "sour"
+      ]
+     },
+     {
+      "name": "Sweet units",
+      "count": 8,
+      "skills": [
+       "sweet"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "et_eur_unit",
+    "name": "Europe Refinery Unit",
+    "role": "server",
+    "count": 16,
+    "skills": [
+     "sour",
+     "sweet"
+    ],
+    "attrDefs": [],
+    "skillProfiles": [
+     {
+      "name": "Sour units",
+      "count": 7,
+      "skills": [
+       "sour"
+      ]
+     },
+     {
+      "name": "Sweet units",
+      "count": 9,
+      "skills": [
+       "sweet"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "et_us_unit",
+    "name": "US Gulf Coast Refinery Unit",
+    "role": "server",
+    "count": 12,
+    "skills": [
+     "sour",
+     "sweet"
+    ],
+    "attrDefs": [],
+    "skillProfiles": [
+     {
+      "name": "Sour units",
+      "count": 4,
+      "skills": [
+       "sour"
+      ]
+     },
+     {
+      "name": "Sweet units",
+      "count": 8,
+      "skills": [
+       "sweet"
+      ]
+     }
+    ]
+   }
+  ],
+  "stateVariables": [
+   {
+    "id": "sv_closure_enabled",
+    "name": "closureEnabled",
+    "valueType": "number",
+    "initialValue": 0,
+    "resetOnWarmup": false
+   },
+   {
+    "id": "sv_closure_start",
+    "name": "closureStart",
+    "valueType": "number",
+    "initialValue": 100,
+    "resetOnWarmup": false
+   },
+   {
+    "id": "sv_closure_end",
+    "name": "closureEnd",
+    "valueType": "number",
+    "initialValue": 130,
+    "resetOnWarmup": false
+   },
+   {
+    "id": "sv_hormuz_open",
+    "name": "hormuzOpen",
+    "valueType": "number",
+    "initialValue": 1,
+    "resetOnWarmup": false
+   }
+  ],
+  "bEvents": [
+   {
+    "id": "b_arr_gulf_asia",
+    "name": "Gulf to Asia Cargo Produced",
+    "effect": [
+     "ARRIVE(Crude Cargo, Gulf VLCC Loading Queue)",
+     "SET_ATTR(grade, \"sour\")",
+     "SET_ATTR(route, \"gulf_asia\")",
+     "SET_ATTR(volume, 2)",
+     "SET_ATTR(pumpDays, 0.8)",
+     "SET_ATTR(refineDays, 4)"
+    ],
+    "schedules": [
+     {
+      "dist": "Exponential",
+      "eventId": "b_arr_gulf_asia",
+      "distParams": {
+       "mean": "0.204082"
+      }
+     }
+    ],
+    "description": "Gulf to Asia: sour crude, 2 Mb per cargo (Gulf VLCC), 9.8 Mb/day",
+    "scheduledTime": "0"
+   },
+   {
+    "id": "b_arr_gulf_us",
+    "name": "Gulf to US Gulf Coast Cargo Produced",
+    "effect": [
+     "ARRIVE(Crude Cargo, Gulf VLCC Loading Queue)",
+     "SET_ATTR(grade, \"sour\")",
+     "SET_ATTR(route, \"gulf_us\")",
+     "SET_ATTR(volume, 2)",
+     "SET_ATTR(pumpDays, 0.8)",
+     "SET_ATTR(refineDays, 4)"
+    ],
+    "schedules": [
+     {
+      "dist": "Exponential",
+      "eventId": "b_arr_gulf_us",
+      "distParams": {
+       "mean": "1.428571"
+      }
+     }
+    ],
+    "description": "Gulf to US Gulf Coast: sour crude, 2 Mb per cargo (Gulf VLCC), 1.4 Mb/day",
+    "scheduledTime": "0"
+   },
+   {
+    "id": "b_arr_gulf_eur",
+    "name": "Gulf to Europe Cargo Produced",
+    "effect": [
+     "ARRIVE(Crude Cargo, Gulf Suezmax Loading Queue)",
+     "SET_ATTR(grade, \"sour\")",
+     "SET_ATTR(route, \"gulf_eur\")",
+     "SET_ATTR(volume, 1)",
+     "SET_ATTR(pumpDays, 0.4)",
+     "SET_ATTR(refineDays, 2)"
+    ],
+    "schedules": [
+     {
+      "dist": "Exponential",
+      "eventId": "b_arr_gulf_eur",
+      "distParams": {
+       "mean": "0.357143"
+      }
+     }
+    ],
+    "description": "Gulf to Europe: sour crude, 1 Mb per cargo (Suezmax), 2.8 Mb/day",
+    "scheduledTime": "0"
+   },
+   {
+    "id": "b_arr_waf_asia",
+    "name": "West Africa to Asia Cargo Produced",
+    "effect": [
+     "ARRIVE(Crude Cargo, West Africa VLCC Loading Queue)",
+     "SET_ATTR(grade, \"sweet\")",
+     "SET_ATTR(route, \"waf_asia\")",
+     "SET_ATTR(volume, 2)",
+     "SET_ATTR(pumpDays, 0.8)",
+     "SET_ATTR(refineDays, 4)"
+    ],
+    "schedules": [
+     {
+      "dist": "Exponential",
+      "eventId": "b_arr_waf_asia",
+      "distParams": {
+       "mean": "1.0"
+      }
+     }
+    ],
+    "description": "West Africa to Asia: sweet crude, 2 Mb per cargo (Atlantic VLCC), 2.0 Mb/day",
+    "scheduledTime": "0"
+   },
+   {
+    "id": "b_arr_waf_eur",
+    "name": "West Africa to Europe Cargo Produced",
+    "effect": [
+     "ARRIVE(Crude Cargo, West Africa Suezmax Loading Queue)",
+     "SET_ATTR(grade, \"sweet\")",
+     "SET_ATTR(route, \"waf_eur\")",
+     "SET_ATTR(volume, 1)",
+     "SET_ATTR(pumpDays, 0.4)",
+     "SET_ATTR(refineDays, 2)"
+    ],
+    "schedules": [
+     {
+      "dist": "Exponential",
+      "eventId": "b_arr_waf_eur",
+      "distParams": {
+       "mean": "0.5"
+      }
+     }
+    ],
+    "description": "West Africa to Europe: sweet crude, 1 Mb per cargo (Suezmax), 2.0 Mb/day",
+    "scheduledTime": "0"
+   },
+   {
+    "id": "b_arr_us_asia",
+    "name": "US Gulf Coast to Asia Cargo Produced",
+    "effect": [
+     "ARRIVE(Crude Cargo, US Gulf Coast VLCC Loading Queue)",
+     "SET_ATTR(grade, \"sweet\")",
+     "SET_ATTR(route, \"us_asia\")",
+     "SET_ATTR(volume, 2)",
+     "SET_ATTR(pumpDays, 0.8)",
+     "SET_ATTR(refineDays, 4)"
+    ],
+    "schedules": [
+     {
+      "dist": "Exponential",
+      "eventId": "b_arr_us_asia",
+      "distParams": {
+       "mean": "1.666667"
+      }
+     }
+    ],
+    "description": "US Gulf Coast to Asia: sweet crude, 2 Mb per cargo (Atlantic VLCC), 1.2 Mb/day",
+    "scheduledTime": "0"
+   },
+   {
+    "id": "b_arr_us_eur",
+    "name": "US Gulf Coast to Europe Cargo Produced",
+    "effect": [
+     "ARRIVE(Crude Cargo, US Gulf Coast Aframax Loading Queue)",
+     "SET_ATTR(grade, \"sweet\")",
+     "SET_ATTR(route, \"us_eur\")",
+     "SET_ATTR(volume, 0.7)",
+     "SET_ATTR(pumpDays, 0.28)",
+     "SET_ATTR(refineDays, 1.4)"
+    ],
+    "schedules": [
+     {
+      "dist": "Exponential",
+      "eventId": "b_arr_us_eur",
+      "distParams": {
+       "mean": "0.388954"
+      }
+     }
+    ],
+    "description": "US Gulf Coast to Europe: sweet crude, 0.7 Mb per cargo (Aframax), 1.8 Mb/day",
+    "scheduledTime": "0"
+   },
+   {
+    "id": "b_arr_us_dom",
+    "name": "US domestic Cargo Produced",
+    "effect": [
+     "ARRIVE(Crude Cargo, US Domestic Pipeline)",
+     "SET_ATTR(grade, \"sweet\")",
+     "SET_ATTR(route, \"us_dom\")",
+     "SET_ATTR(volume, 2)",
+     "SET_ATTR(pumpDays, 0.8)",
+     "SET_ATTR(refineDays, 4)"
+    ],
+    "schedules": [
+     {
+      "dist": "Exponential",
+      "eventId": "b_arr_us_dom",
+      "distParams": {
+       "mean": "0.666667"
+      }
+     }
+    ],
+    "description": "US domestic: sweet crude, 2 Mb per cargo (pipeline lot), 3.0 Mb/day",
+    "scheduledTime": "0"
+   },
+   {
+    "id": "b_gulf_loaded",
+    "name": "Gulf Cargo Loaded",
+    "effect": [
+     "RELEASE_COSEIZED([Gulf Terminal Berth])"
+    ],
+    "routing": [
+     {
+      "condition": {
+       "operator": "AND",
+       "clauses": [
+        {
+         "variable": "queue(Hormuz Queue).length",
+         "operator": ">",
+         "value": 6
+        },
+        {
+         "variable": "hormuzOpen",
+         "operator": "==",
+         "value": 0
+        }
+       ]
+      },
+      "queueName": "Bypass Pipeline Queue"
+     }
+    ],
+    "schedules": [],
+    "description": "Berth freed, tanker kept. Goes to Hormuz, or to the bypass pipeline only while Hormuz is closed and more than 6 cargoes are waiting",
+    "scheduledTime": "9999",
+    "defaultQueueName": "Hormuz Queue"
+   },
+   {
+    "id": "b_waf_loaded",
+    "name": "West Africa Cargo Loaded",
+    "effect": [
+     "RELEASE_COSEIZED([West Africa Terminal Berth])"
+    ],
+    "routing": [
+     {
+      "condition": {
+       "variable": "Entity.route",
+       "operator": "==",
+       "value": "waf_eur"
+      },
+      "queueName": "West Africa to Europe Voyage"
+     }
+    ],
+    "schedules": [],
+    "description": "Berth freed, tanker kept; sails to its destination",
+    "scheduledTime": "9999",
+    "defaultQueueName": "West Africa to Asia Voyage"
+   },
+   {
+    "id": "b_us_loaded",
+    "name": "US Gulf Coast Cargo Loaded",
+    "effect": [
+     "RELEASE_COSEIZED([US Gulf Coast Terminal Berth])"
+    ],
+    "routing": [
+     {
+      "condition": {
+       "variable": "Entity.route",
+       "operator": "==",
+       "value": "us_eur"
+      },
+      "queueName": "US Gulf Coast to Europe Voyage"
+     }
+    ],
+    "schedules": [],
+    "description": "Berth freed, tanker kept; sails to its destination",
+    "scheduledTime": "9999",
+    "defaultQueueName": "US Gulf Coast to Asia Voyage"
+   },
+   {
+    "id": "b_hormuz_transited",
+    "name": "Hormuz Transited",
+    "effect": [
+     "RELEASE(Hormuz Transit Lane)"
+    ],
+    "routing": [
+     {
+      "condition": {
+       "variable": "Entity.route",
+       "operator": "==",
+       "value": "gulf_eur"
+      },
+      "queueName": "Gulf to Europe Voyage"
+     },
+     {
+      "condition": {
+       "variable": "Entity.route",
+       "operator": "==",
+       "value": "gulf_us"
+      },
+      "queueName": "Gulf to US Gulf Coast Voyage"
+     }
+    ],
+    "schedules": [],
+    "description": "Lane freed; the loaded tanker heads for its destination",
+    "scheduledTime": "9999",
+    "defaultQueueName": "Gulf to Asia Voyage"
+   },
+   {
+    "id": "b_bypass_done",
+    "name": "Bypass Delivered",
+    "effect": [
+     "RELEASE(Bypass Pipeline)"
+    ],
+    "routing": [
+     {
+      "condition": {
+       "variable": "Entity.route",
+       "operator": "==",
+       "value": "gulf_eur"
+      },
+      "queueName": "Gulf to Europe Voyage"
+     },
+     {
+      "condition": {
+       "variable": "Entity.route",
+       "operator": "==",
+       "value": "gulf_us"
+      },
+      "queueName": "Gulf to US Gulf Coast Voyage"
+     }
+    ],
+    "schedules": [],
+    "description": "Crude pumped overland to a terminal outside the strait (simplification: the cargo keeps its tanker)",
+    "scheduledTime": "9999",
+    "defaultQueueName": "Gulf to Asia Voyage"
+   },
+   {
+    "id": "b_bypass_return_done",
+    "name": "Returned to Hormuz",
+    "effect": [],
+    "schedules": [],
+    "description": "A cargo waiting for the bypass rejoins the Hormuz queue once the strait is open",
+    "scheduledTime": "9999",
+    "probabilisticRouting": [
+     {
+      "queueName": "Hormuz Queue",
+      "probability": 1
+     }
+    ]
+   },
+   {
+    "id": "b_v_gulf_asia_done",
+    "name": "Gulf to Asia Voyage Arrives",
+    "effect": [
+     "RELEASE(Gulf VLCC, Asia Crude Queue)"
+    ],
+    "schedules": [],
+    "description": "Cargo discharged at the hub; the Gulf VLCC starts its empty return voyage",
+    "scheduledTime": "9999"
+   },
+   {
+    "id": "b_v_gulf_eur_done",
+    "name": "Gulf to Europe Voyage Arrives",
+    "effect": [
+     "RELEASE(Suezmax, Europe Crude Queue)"
+    ],
+    "schedules": [],
+    "description": "Cargo discharged at the hub; the Suezmax starts its empty return voyage",
+    "scheduledTime": "9999"
+   },
+   {
+    "id": "b_v_gulf_us_done",
+    "name": "Gulf to US Gulf Coast Voyage Arrives",
+    "effect": [
+     "RELEASE(Gulf VLCC, US Gulf Coast Crude Queue)"
+    ],
+    "schedules": [],
+    "description": "Cargo discharged at the hub; the Gulf VLCC starts its empty return voyage",
+    "scheduledTime": "9999"
+   },
+   {
+    "id": "b_v_waf_eur_done",
+    "name": "West Africa to Europe Voyage Arrives",
+    "effect": [
+     "RELEASE(Suezmax, Europe Crude Queue)"
+    ],
+    "schedules": [],
+    "description": "Cargo discharged at the hub; the Suezmax starts its empty return voyage",
+    "scheduledTime": "9999"
+   },
+   {
+    "id": "b_v_waf_asia_done",
+    "name": "West Africa to Asia Voyage Arrives",
+    "effect": [
+     "RELEASE(Atlantic VLCC, Asia Crude Queue)"
+    ],
+    "schedules": [],
+    "description": "Cargo discharged at the hub; the Atlantic VLCC starts its empty return voyage",
+    "scheduledTime": "9999"
+   },
+   {
+    "id": "b_v_us_eur_done",
+    "name": "US Gulf Coast to Europe Voyage Arrives",
+    "effect": [
+     "RELEASE(Aframax, Europe Crude Queue)"
+    ],
+    "schedules": [],
+    "description": "Cargo discharged at the hub; the Aframax starts its empty return voyage",
+    "scheduledTime": "9999"
+   },
+   {
+    "id": "b_v_us_asia_done",
+    "name": "US Gulf Coast to Asia Voyage Arrives",
+    "effect": [
+     "RELEASE(Atlantic VLCC, Asia Crude Queue)"
+    ],
+    "schedules": [],
+    "description": "Cargo discharged at the hub; the Atlantic VLCC starts its empty return voyage",
+    "scheduledTime": "9999"
+   },
+   {
+    "id": "b_v_us_dom_done",
+    "name": "US Domestic Pipeline Arrives",
+    "effect": [],
+    "schedules": [],
+    "description": "Pipeline lot reaches the US Gulf Coast hub",
+    "scheduledTime": "9999",
+    "probabilisticRouting": [
+     {
+      "queueName": "US Gulf Coast Crude Queue",
+      "probability": 1
+     }
+    ]
+   },
+   {
+    "id": "b_asia_refined",
+    "name": "Asia Cargo Refined",
+    "effect": [
+     "FILL(ct_asia_products, Entity.volume * 1.03)",
+     "COMPLETE()"
+    ],
+    "schedules": [],
+    "description": "Cargo processed; volume x 1.03 of products added to the regional product stock",
+    "scheduledTime": "9999"
+   },
+   {
+    "id": "b_eur_refined",
+    "name": "Europe Cargo Refined",
+    "effect": [
+     "FILL(ct_europe_products, Entity.volume * 1.03)",
+     "COMPLETE()"
+    ],
+    "schedules": [],
+    "description": "Cargo processed; volume x 1.03 of products added to the regional product stock",
+    "scheduledTime": "9999"
+   },
+   {
+    "id": "b_us_refined",
+    "name": "US Gulf Coast Cargo Refined",
+    "effect": [
+     "FILL(ct_us_products, Entity.volume * 1.03)",
+     "COMPLETE()"
+    ],
+    "schedules": [],
+    "description": "Cargo processed; volume x 1.03 of products added to the regional product stock",
+    "scheduledTime": "9999"
+   },
+   {
+    "id": "b_asia_demand",
+    "name": "Asia Daily Demand",
+    "effect": [
+     "DRAIN_PARTIAL(ct_asia_products, 13.12, ct_asia_unmet)"
+    ],
+    "schedules": [
+     {
+      "dist": "Fixed",
+      "eventId": "b_asia_demand",
+      "distParams": {
+       "value": "1"
+      }
+     }
+    ],
+    "description": "Draws 13.12 Mb/day of products; anything not in stock is lost and added to ct_asia_unmet. Starts on day 30",
+    "scheduledTime": "30"
+   },
+   {
+    "id": "b_eur_demand",
+    "name": "Europe Daily Demand",
+    "effect": [
+     "DRAIN_PARTIAL(ct_europe_products, 6.66, ct_europe_unmet)"
+    ],
+    "schedules": [
+     {
+      "dist": "Fixed",
+      "eventId": "b_eur_demand",
+      "distParams": {
+       "value": "1"
+      }
+     }
+    ],
+    "description": "Draws 6.66 Mb/day of products; anything not in stock is lost and added to ct_europe_unmet. Starts on day 30",
+    "scheduledTime": "30"
+   },
+   {
+    "id": "b_us_demand",
+    "name": "US Gulf Coast Daily Demand",
+    "effect": [
+     "DRAIN_PARTIAL(ct_us_products, 4.44, ct_us_unmet)"
+    ],
+    "schedules": [
+     {
+      "dist": "Fixed",
+      "eventId": "b_us_demand",
+      "distParams": {
+       "value": "1"
+      }
+     }
+    ],
+    "description": "Draws 4.44 Mb/day of products; anything not in stock is lost and added to ct_us_unmet. Starts on day 45",
+    "scheduledTime": "45"
+   }
+  ],
+  "cEvents": [
+   {
+    "id": "c_load_gulf_vlcc",
+    "name": "Load Gulf VLCC",
+    "effect": [
+     "COSEIZE(Gulf VLCC Loading Queue, Gulf Terminal Berth, Gulf VLCC)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(Gulf VLCC Loading Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Gulf Terminal Berth).count",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Gulf VLCC).count",
+       "operator": ">",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_gulf_loaded",
+      "distParams": {
+       "max": "1.5",
+       "min": "0.8",
+       "mode": "1"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "A free Gulf Terminal Berth and a free Gulf VLCC load the next cargo; the tanker stays with the cargo until discharge"
+   },
+   {
+    "id": "c_load_gulf_suezmax",
+    "name": "Load Gulf Suezmax",
+    "effect": [
+     "COSEIZE(Gulf Suezmax Loading Queue, Gulf Terminal Berth, Suezmax)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(Gulf Suezmax Loading Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Gulf Terminal Berth).count",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Suezmax).count",
+       "operator": ">",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_gulf_loaded",
+      "distParams": {
+       "max": "1.5",
+       "min": "0.8",
+       "mode": "1"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "A free Gulf Terminal Berth and a free Suezmax load the next cargo; the tanker stays with the cargo until discharge"
+   },
+   {
+    "id": "c_load_west_vlcc_wa",
+    "name": "Load West Africa VLCC",
+    "effect": [
+     "COSEIZE(West Africa VLCC Loading Queue, West Africa Terminal Berth, Atlantic VLCC)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(West Africa VLCC Loading Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(West Africa Terminal Berth).count",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Atlantic VLCC).count",
+       "operator": ">",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_waf_loaded",
+      "distParams": {
+       "max": "1.5",
+       "min": "0.8",
+       "mode": "1"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "A free West Africa Terminal Berth and a free Atlantic VLCC load the next cargo; the tanker stays with the cargo until discharge"
+   },
+   {
+    "id": "c_load_west_suezmax_wa",
+    "name": "Load West Africa Suezmax",
+    "effect": [
+     "COSEIZE(West Africa Suezmax Loading Queue, West Africa Terminal Berth, Suezmax)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(West Africa Suezmax Loading Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(West Africa Terminal Berth).count",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Suezmax).count",
+       "operator": ">",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_waf_loaded",
+      "distParams": {
+       "max": "1.5",
+       "min": "0.8",
+       "mode": "1"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "A free West Africa Terminal Berth and a free Suezmax load the next cargo; the tanker stays with the cargo until discharge"
+   },
+   {
+    "id": "c_load_us_vlcc",
+    "name": "Load US Gulf Coast VLCC",
+    "effect": [
+     "COSEIZE(US Gulf Coast VLCC Loading Queue, US Gulf Coast Terminal Berth, Atlantic VLCC)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(US Gulf Coast VLCC Loading Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(US Gulf Coast Terminal Berth).count",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Atlantic VLCC).count",
+       "operator": ">",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_us_loaded",
+      "distParams": {
+       "max": "1.5",
+       "min": "0.8",
+       "mode": "1"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "A free US Gulf Coast Terminal Berth and a free Atlantic VLCC load the next cargo; the tanker stays with the cargo until discharge"
+   },
+   {
+    "id": "c_load_us_aframax",
+    "name": "Load US Gulf Coast Aframax",
+    "effect": [
+     "COSEIZE(US Gulf Coast Aframax Loading Queue, US Gulf Coast Terminal Berth, Aframax)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(US Gulf Coast Aframax Loading Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(US Gulf Coast Terminal Berth).count",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Aframax).count",
+       "operator": ">",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_us_loaded",
+      "distParams": {
+       "max": "1.5",
+       "min": "0.8",
+       "mode": "1"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "A free US Gulf Coast Terminal Berth and a free Aframax load the next cargo; the tanker stays with the cargo until discharge"
+   },
+   {
+    "id": "c_hormuz",
+    "name": "Transit Hormuz",
+    "effect": [
+     "ASSIGN(Hormuz Queue, Hormuz Transit Lane)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(Hormuz Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Hormuz Transit Lane).count",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "hormuzOpen",
+       "operator": "==",
+       "value": 1
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "Fixed",
+      "eventId": "b_hormuz_transited",
+      "distParams": {
+       "value": "0.5"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "A free lane takes the next tanker through the strait while it is open"
+   },
+   {
+    "id": "c_bypass",
+    "name": "Pump via Bypass",
+    "effect": [
+     "ASSIGN(Bypass Pipeline Queue, Bypass Pipeline)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(Bypass Pipeline Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Bypass Pipeline).count",
+       "operator": ">",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "EntityAttr",
+      "eventId": "b_bypass_done",
+      "distParams": {
+       "attr": "pumpDays"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "Bypass pipeline (about 5 Mb/day) moves one cargo; pumping time scales with cargo volume"
+   },
+   {
+    "id": "c_bypass_return",
+    "name": "Return to Hormuz",
+    "effect": [
+     "DELAY(Bypass Pipeline Queue)"
+    ],
+    "priority": 2,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(Bypass Pipeline Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "hormuzOpen",
+       "operator": "==",
+       "value": 1
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "Fixed",
+      "eventId": "b_bypass_return_done",
+      "distParams": {
+       "value": "0.1"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "Once Hormuz reopens, cargoes still waiting for the bypass go back to the Hormuz queue"
+   },
+   {
+    "id": "c_close_hormuz",
+    "name": "Close Hormuz",
+    "effect": [
+     "SET(hormuzOpen, 0)"
+    ],
+    "priority": 0,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "clock",
+       "operator": ">=",
+       "value": "closureStart"
+      },
+      {
+       "variable": "clock",
+       "operator": "<",
+       "value": "closureEnd"
+      },
+      {
+       "variable": "closureEnabled",
+       "operator": "==",
+       "value": 1
+      },
+      {
+       "variable": "hormuzOpen",
+       "operator": "==",
+       "value": 1
+      }
+     ]
+    },
+    "cSchedules": [],
+    "description": "Scenario: closes the strait from closureStart to closureEnd when closureEnabled = 1"
+   },
+   {
+    "id": "c_reopen_hormuz",
+    "name": "Reopen Hormuz",
+    "effect": [
+     "SET(hormuzOpen, 1)"
+    ],
+    "priority": 0,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "clock",
+       "operator": ">=",
+       "value": "closureEnd"
+      },
+      {
+       "variable": "hormuzOpen",
+       "operator": "==",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [],
+    "description": "Scenario: reopens the strait at closureEnd"
+   },
+   {
+    "id": "c_v_gulf_asia",
+    "name": "Sail Gulf to Asia",
+    "effect": [
+     "DELAY(Gulf to Asia Voyage)"
+    ],
+    "priority": 1,
+    "condition": {
+     "variable": "queue(Gulf to Asia Voyage).length",
+     "operator": ">",
+     "value": 0
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_v_gulf_asia_done",
+      "distParams": {
+       "max": "24",
+       "min": "18",
+       "mode": "20"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "Laden passage 18 to 24 days; the Gulf VLCC stays claimed"
+   },
+   {
+    "id": "c_v_gulf_eur",
+    "name": "Sail Gulf to Europe",
+    "effect": [
+     "DELAY(Gulf to Europe Voyage)"
+    ],
+    "priority": 1,
+    "condition": {
+     "variable": "queue(Gulf to Europe Voyage).length",
+     "operator": ">",
+     "value": 0
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_v_gulf_eur_done",
+      "distParams": {
+       "max": "30",
+       "min": "20",
+       "mode": "24"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "Laden passage 20 to 30 days; the Suezmax stays claimed"
+   },
+   {
+    "id": "c_v_gulf_us",
+    "name": "Sail Gulf to US Gulf Coast",
+    "effect": [
+     "DELAY(Gulf to US Gulf Coast Voyage)"
+    ],
+    "priority": 1,
+    "condition": {
+     "variable": "queue(Gulf to US Gulf Coast Voyage).length",
+     "operator": ">",
+     "value": 0
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_v_gulf_us_done",
+      "distParams": {
+       "max": "45",
+       "min": "35",
+       "mode": "40"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "Laden passage 35 to 45 days; the Gulf VLCC stays claimed"
+   },
+   {
+    "id": "c_v_waf_eur",
+    "name": "Sail West Africa to Europe",
+    "effect": [
+     "DELAY(West Africa to Europe Voyage)"
+    ],
+    "priority": 1,
+    "condition": {
+     "variable": "queue(West Africa to Europe Voyage).length",
+     "operator": ">",
+     "value": 0
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_v_waf_eur_done",
+      "distParams": {
+       "max": "17",
+       "min": "12",
+       "mode": "14"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "Laden passage 12 to 17 days; the Suezmax stays claimed"
+   },
+   {
+    "id": "c_v_waf_asia",
+    "name": "Sail West Africa to Asia",
+    "effect": [
+     "DELAY(West Africa to Asia Voyage)"
+    ],
+    "priority": 1,
+    "condition": {
+     "variable": "queue(West Africa to Asia Voyage).length",
+     "operator": ">",
+     "value": 0
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_v_waf_asia_done",
+      "distParams": {
+       "max": "36",
+       "min": "28",
+       "mode": "32"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "Laden passage 28 to 36 days; the Atlantic VLCC stays claimed"
+   },
+   {
+    "id": "c_v_us_eur",
+    "name": "Sail US Gulf Coast to Europe",
+    "effect": [
+     "DELAY(US Gulf Coast to Europe Voyage)"
+    ],
+    "priority": 1,
+    "condition": {
+     "variable": "queue(US Gulf Coast to Europe Voyage).length",
+     "operator": ">",
+     "value": 0
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_v_us_eur_done",
+      "distParams": {
+       "max": "19",
+       "min": "14",
+       "mode": "16"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "Laden passage 14 to 19 days; the Aframax stays claimed"
+   },
+   {
+    "id": "c_v_us_asia",
+    "name": "Sail US Gulf Coast to Asia",
+    "effect": [
+     "DELAY(US Gulf Coast to Asia Voyage)"
+    ],
+    "priority": 1,
+    "condition": {
+     "variable": "queue(US Gulf Coast to Asia Voyage).length",
+     "operator": ">",
+     "value": 0
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_v_us_asia_done",
+      "distParams": {
+       "max": "50",
+       "min": "40",
+       "mode": "45"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "Laden passage 40 to 50 days; the Atlantic VLCC stays claimed"
+   },
+   {
+    "id": "c_v_us_dom",
+    "name": "Pump US Domestic Crude",
+    "effect": [
+     "DELAY(US Domestic Pipeline)"
+    ],
+    "priority": 1,
+    "condition": {
+     "variable": "queue(US Domestic Pipeline).length",
+     "operator": ">",
+     "value": 0
+    },
+    "cSchedules": [
+     {
+      "dist": "Triangular",
+      "eventId": "b_v_us_dom_done",
+      "distParams": {
+       "max": "4",
+       "min": "2",
+       "mode": "3"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "Laden passage 2 to 4 days"
+   },
+   {
+    "id": "c_ref_asia",
+    "name": "Refine Asia Crude",
+    "effect": [
+     "ASSIGN(Asia Crude Queue, Asia Refinery Unit, Entity.grade, SCAN)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(Asia Crude Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Asia Refinery Unit).count",
+       "operator": ">",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "EntityAttr",
+      "eventId": "b_asia_refined",
+      "distParams": {
+       "attr": "refineDays"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "24 sour and 8 sweet units of 0.5 Mb/day; runs the first waiting cargo whose grade has a free unit"
+   },
+   {
+    "id": "c_ref_eur",
+    "name": "Refine Europe Crude",
+    "effect": [
+     "ASSIGN(Europe Crude Queue, Europe Refinery Unit, Entity.grade, SCAN)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(Europe Crude Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(Europe Refinery Unit).count",
+       "operator": ">",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "EntityAttr",
+      "eventId": "b_eur_refined",
+      "distParams": {
+       "attr": "refineDays"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "7 sour and 9 sweet units of 0.5 Mb/day; runs the first waiting cargo whose grade has a free unit"
+   },
+   {
+    "id": "c_ref_us",
+    "name": "Refine US Gulf Coast Crude",
+    "effect": [
+     "ASSIGN(US Gulf Coast Crude Queue, US Gulf Coast Refinery Unit, Entity.grade, SCAN)"
+    ],
+    "priority": 1,
+    "condition": {
+     "operator": "AND",
+     "clauses": [
+      {
+       "variable": "queue(US Gulf Coast Crude Queue).length",
+       "operator": ">",
+       "value": 0
+      },
+      {
+       "variable": "idle(US Gulf Coast Refinery Unit).count",
+       "operator": ">",
+       "value": 0
+      }
+     ]
+    },
+    "cSchedules": [
+     {
+      "dist": "EntityAttr",
+      "eventId": "b_us_refined",
+      "distParams": {
+       "attr": "refineDays"
+      },
+      "useEntityCtx": true
+     }
+    ],
+    "description": "4 sour and 8 sweet units of 0.5 Mb/day; runs the first waiting cargo whose grade has a free unit"
+   }
+  ],
+  "queues": [
+   {
+    "id": "q_load_gulf_vlcc",
+    "name": "Gulf VLCC Loading Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_load_gulf_suezmax",
+    "name": "Gulf Suezmax Loading Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_load_west_vlcc_wa",
+    "name": "West Africa VLCC Loading Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_load_west_suezmax_wa",
+    "name": "West Africa Suezmax Loading Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_load_us_vlcc",
+    "name": "US Gulf Coast VLCC Loading Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_load_us_aframax",
+    "name": "US Gulf Coast Aframax Loading Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_hormuz",
+    "name": "Hormuz Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_bypass",
+    "name": "Bypass Pipeline Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_v_gulf_asia",
+    "name": "Gulf to Asia Voyage",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_v_gulf_eur",
+    "name": "Gulf to Europe Voyage",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_v_gulf_us",
+    "name": "Gulf to US Gulf Coast Voyage",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_v_waf_eur",
+    "name": "West Africa to Europe Voyage",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_v_waf_asia",
+    "name": "West Africa to Asia Voyage",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_v_us_eur",
+    "name": "US Gulf Coast to Europe Voyage",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_v_us_asia",
+    "name": "US Gulf Coast to Asia Voyage",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_v_us_dom",
+    "name": "US Domestic Pipeline",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_asia_crude",
+    "name": "Asia Crude Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_eur_crude",
+    "name": "Europe Crude Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   },
+   {
+    "id": "q_us_crude",
+    "name": "US Gulf Coast Crude Queue",
+    "capacity": "",
+    "discipline": "FIFO",
+    "customerType": "Crude Cargo"
+   }
+  ],
+  "containerTypes": [
+   {
+    "id": "ct_asia_products",
+    "capacity": 600,
+    "initialLevel": 130
+   },
+   {
+    "id": "ct_asia_unmet",
+    "initialLevel": 0
+   },
+   {
+    "id": "ct_europe_products",
+    "capacity": 350,
+    "initialLevel": 66
+   },
+   {
+    "id": "ct_europe_unmet",
+    "initialLevel": 0
+   },
+   {
+    "id": "ct_us_products",
+    "capacity": 250,
+    "initialLevel": 44
+   },
+   {
+    "id": "ct_us_unmet",
+    "initialLevel": 0
+   }
+  ],
+  "distances": [],
+  "goals": [
+   {
+    "label": "Asia cumulative unmet demand under 10 Mb",
+    "scope": {
+     "id": "ct_asia_unmet",
+     "name": "ct_asia_unmet",
+     "type": "container"
+    },
+    "metric": "container.maxLevel",
+    "target": 10,
+    "operator": "<"
+   },
+   {
+    "label": "Europe cumulative unmet demand under 10 Mb",
+    "scope": {
+     "id": "ct_europe_unmet",
+     "name": "ct_europe_unmet",
+     "type": "container"
+    },
+    "metric": "container.maxLevel",
+    "target": 10,
+    "operator": "<"
+   },
+   {
+    "label": "US Gulf Coast cumulative unmet demand under 10 Mb",
+    "scope": {
+     "id": "ct_us_unmet",
+     "name": "ct_us_unmet",
+     "type": "container"
+    },
+    "metric": "container.maxLevel",
+    "target": 10,
+    "operator": "<"
+   },
+   {
+    "label": "Gulf VLCC fleet below 95% committed (incl. return voyages)",
+    "scope": {
+     "id": "et_gulf_vlcc",
+     "name": "Gulf VLCC",
+     "type": "resource"
+    },
+    "metric": "resource.utilisation",
+    "target": 0.95,
+    "operator": "<"
+   },
+   {
+    "label": "Asia refinery units below 90% utilisation",
+    "scope": {
+     "id": "et_asia_unit",
+     "name": "Asia Refinery Unit",
+     "type": "resource"
+    },
+    "metric": "resource.utilisation",
+    "target": 0.9,
+    "operator": "<"
+   }
+  ],
+  "experimentDefaults": {
+   "seed": 492153378,
+   "maxSimTime": 300,
+   "liveDataMode": null,
+   "replications": 10,
+   "warmupPeriod": 60,
+   "terminationMode": "time",
+   "resultDetailLevel": "compact",
+   "terminationCondition": null
+  },
+  "timeUnit": "days",
+  "sections": [
+   {
+    "id": "sec_supply",
+    "name": "Production and Loading",
+    "color": "#4A90D9",
+    "memberIds": [
+     "et_cargo",
+     "b_arr_gulf_asia",
+     "b_arr_gulf_us",
+     "b_arr_gulf_eur",
+     "b_arr_waf_asia",
+     "b_arr_waf_eur",
+     "b_arr_us_asia",
+     "b_arr_us_eur",
+     "et_gulf_berth",
+     "et_waf_berth",
+     "et_us_berth",
+     "q_load_gulf_vlcc",
+     "c_load_gulf_vlcc",
+     "q_load_gulf_suezmax",
+     "c_load_gulf_suezmax",
+     "q_load_west_vlcc_wa",
+     "c_load_west_vlcc_wa",
+     "q_load_west_suezmax_wa",
+     "c_load_west_suezmax_wa",
+     "q_load_us_vlcc",
+     "c_load_us_vlcc",
+     "q_load_us_aframax",
+     "c_load_us_aframax",
+     "b_gulf_loaded",
+     "b_waf_loaded",
+     "b_us_loaded"
+    ]
+   },
+   {
+    "id": "sec_chokepoints",
+    "name": "Chokepoints",
+    "color": "#E74C3C",
+    "memberIds": [
+     "q_hormuz",
+     "q_bypass",
+     "et_hormuz",
+     "et_bypass",
+     "b_hormuz_transited",
+     "b_bypass_done",
+     "b_bypass_return_done",
+     "c_hormuz",
+     "c_bypass",
+     "c_bypass_return",
+     "c_close_hormuz",
+     "c_reopen_hormuz"
+    ]
+   },
+   {
+    "id": "sec_shipping",
+    "name": "Shipping and Fleet",
+    "color": "#27AE60",
+    "memberIds": [
+     "et_gulf_vlcc",
+     "et_atl_vlcc",
+     "et_suezmax",
+     "et_aframax",
+     "b_arr_us_dom",
+     "q_v_gulf_asia",
+     "c_v_gulf_asia",
+     "b_v_gulf_asia_done",
+     "q_v_gulf_eur",
+     "c_v_gulf_eur",
+     "b_v_gulf_eur_done",
+     "q_v_gulf_us",
+     "c_v_gulf_us",
+     "b_v_gulf_us_done",
+     "q_v_waf_eur",
+     "c_v_waf_eur",
+     "b_v_waf_eur_done",
+     "q_v_waf_asia",
+     "c_v_waf_asia",
+     "b_v_waf_asia_done",
+     "q_v_us_eur",
+     "c_v_us_eur",
+     "b_v_us_eur_done",
+     "q_v_us_asia",
+     "c_v_us_asia",
+     "b_v_us_asia_done",
+     "q_v_us_dom",
+     "c_v_us_dom",
+     "b_v_us_dom_done"
+    ]
+   },
+   {
+    "id": "sec_refining",
+    "name": "Refining",
+    "color": "#8E44AD",
+    "memberIds": [
+     "q_asia_crude",
+     "et_asia_unit",
+     "c_ref_asia",
+     "b_asia_refined",
+     "q_eur_crude",
+     "et_eur_unit",
+     "c_ref_eur",
+     "b_eur_refined",
+     "q_us_crude",
+     "et_us_unit",
+     "c_ref_us",
+     "b_us_refined"
+    ]
+   },
+   {
+    "id": "sec_markets",
+    "name": "Markets",
+    "color": "#F39C12",
+    "memberIds": [
+     "b_asia_demand",
+     "b_eur_demand",
+     "b_us_demand"
+    ]
+   }
+  ]
+ }
+}

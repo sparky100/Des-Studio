@@ -12,7 +12,7 @@
 import { MACROS, applyScalar, buildStageRecord } from "./macros.js";
 import { evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
-import { clearWaitingState, attemptQueueJoin, preemptCustomer, isCarriedClaim, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
+import { clearWaitingState, attemptQueueJoin, preemptCustomer, markTerminal, setServerStatus, setServerSuspended, isCarriedClaim, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
 import { hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
 
 // Distances are undirected — one declared entry covers travel in either direction.
@@ -41,7 +41,7 @@ function findDistancePair(distances, from, to) {
 function completeEntity(cust, ev, clock, state, index = null) {
   const previousQueue = cust.queue ?? cust.lastQueue ?? null;
   clearWaitingState(cust, index);
-  cust.status         = "done";
+  markTerminal(index, cust, "done");
   cust.completionTime = clock;
   cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
   cust.lastQueue      = previousQueue;
@@ -110,8 +110,8 @@ export function applyShiftChange(ev, ctx) {
     // Reactivate suspended servers when capacity increases
     for (const srv of servers) {
       if (srv._suspended) {
-        delete srv._suspended;
-        srv.status = "idle";
+        setServerSuspended(srv, false);
+        setServerStatus(srv, "idle");
         srv._starvationStart = ctx.clock;
       }
     }
@@ -153,7 +153,7 @@ export function applyShiftChange(ev, ctx) {
       const busyServers = servers.filter((/** @type {any} */ e) => (e.status === "busy" || e.status === "serving") && !e._suspended);
       for (const srv of busyServers) {
         if (excess <= 0) break;
-        srv._suspended = true;
+        setServerSuspended(srv, true);
         delete srv._busyStart;
         releaseServerClaim(null, srv, ctx.clock);
         excess--;

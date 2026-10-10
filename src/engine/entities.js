@@ -15,6 +15,9 @@ import { sample } from "./distributions.js";
  *   servers: Record<string, any>[],
  *   fifoSortedByQueue: Map<string, boolean>,
  *   byId: Map<any, Record<string, any>>,
+ *   serversByType: Map<string, Record<string, any>[]>|null,
+ *   serverCountsByType: Map<string, { idle: number, busy: number }>|null,
+ *   inSystem: number,
  * }} QueueIndex
  */
 
@@ -158,7 +161,7 @@ export function sortWaitingEntities(waiting, discipline = "FIFO") {
 // same object reference, so no add/remove bookkeeping is needed for those.
 /** @returns {QueueIndex} */
 export function createQueueIndex() {
-  return { waitingByQueue: new Map(), servers: [], fifoSortedByQueue: new Map(), byId: new Map() };
+  return { waitingByQueue: new Map(), servers: [], fifoSortedByQueue: new Map(), byId: new Map(), serversByType: null, serverCountsByType: null, inSystem: 0 };
 }
 
 // O(1) replacement for the dozens of `entities.find(e => e.id === id)` call
@@ -184,7 +187,34 @@ export function findEntityById(index, entities, id) {
  */
 export function indexTrackEntity(index, entity) {
   if (!index || !entity) return;
+  const prev = index.byId.get(entity.id);
+  if (prev === entity) return;
+  if (prev && isInSystem(prev)) index.inSystem--;
   index.byId.set(entity.id, entity);
+  if (isInSystem(entity)) index.inSystem++;
+}
+
+// A customer still in the system: not a server, not done/reneged/balked.
+// index.inSystem counts the tracked (live) entities for which this holds —
+// the work-in-progress figure, kept exact by indexTrackEntity/
+// indexUntrackEntity and markTerminal (the only ways an entity enters or
+// leaves that set: an entity never goes from terminal back to live — UNBATCH
+// restores children as new objects, which are tracked afresh).
+/** @param {Record<string, any>} e */
+export function isInSystem(e) {
+  return e.role !== "server" && e.status !== "done" && e.status !== "reneged" && e.status !== "balked";
+}
+
+/**
+ * Set a terminal status (done / reneged / balked), keeping index.inSystem exact.
+ * @param {QueueIndex|null} index
+ * @param {Record<string, any>} entity
+ * @param {"done"|"reneged"|"balked"} status
+ */
+export function markTerminal(index, entity, status) {
+  const counted = !!index && index.byId.get(entity.id) === entity && isInSystem(entity);
+  entity.status = status;
+  if (counted) index.inSystem--;
 }
 
 // Unregisters an entity from the byId index. Call at every site that removes
@@ -197,7 +227,10 @@ export function indexTrackEntity(index, entity) {
  */
 export function indexUntrackEntity(index, entity) {
   if (!index || !entity) return;
-  if (index.byId.get(entity.id) === entity) index.byId.delete(entity.id);
+  if (index.byId.get(entity.id) === entity) {
+    index.byId.delete(entity.id);
+    if (isInSystem(entity)) index.inSystem--;
+  }
 }
 
 // Plain FIFO (the default/unrecognized-discipline case) sorts purely by
@@ -245,6 +278,8 @@ function readSortedBucket(index, queueName, discipline) {
 export function indexAddServer(index, server) {
   if (!index || !server) return;
   index.servers.push(server);
+  index.serversByType = null;
+  index.serverCountsByType = null;
 }
 
 /**
@@ -255,6 +290,110 @@ export function indexRemoveServer(index, server) {
   if (!index || !server) return;
   const i = index.servers.indexOf(server);
   if (i !== -1) index.servers.splice(i, 1);
+  index.serversByType = null;
+  index.serverCountsByType = null;
+  _serverMeta.delete(server);
+}
+
+// Servers of one type, in roster order — built lazily from index.servers and
+// dropped whenever the roster changes (indexAddServer/indexRemoveServer).
+// idle()/busy() counts and ASSIGN/COSEIZE candidate lists then scan only that
+// type's servers, with the type name normalised once per lookup instead of
+// twice per server.
+/**
+ * @param {QueueIndex} index
+ * @param {any} type
+ * @returns {Record<string, any>[]}
+ */
+export function serversOfType(index, type) {
+  if (!index.serversByType) {
+    /** @type {Map<string, Record<string, any>[]>} */
+    const byType = new Map();
+    for (const srv of index.servers) {
+      const key = norm(srv.type);
+      let list = byType.get(key);
+      if (!list) byType.set(key, list = []);
+      list.push(srv);
+    }
+    // Roster order is normally creation order, which is already the
+    // (arrivalTime, id) order idleOf() returns — flag it so callers can skip
+    // the sort. (arrivalTime/id never change after creation.)
+    for (const list of byType.values()) {
+      /** @type {any} */ (list)._sortedForResources = list.every((srv, i) => i === 0 || compareResources(list[i - 1], srv) <= 0);
+    }
+    index.serversByType = byType;
+    // Per-type idle/busy counts, kept current by setServerStatus /
+    // setServerSuspended until the roster next changes.
+    /** @type {Map<string, { idle: number, busy: number }>} */
+    const counts = new Map();
+    for (const [key, list] of byType) {
+      const c = { idle: 0, busy: 0 };
+      for (const srv of list) {
+        const cls = serverCountClass(srv);
+        if (cls) c[cls]++;
+        _serverMeta.set(srv, { index, key });
+      }
+      counts.set(key, c);
+    }
+    index.serverCountsByType = counts;
+  }
+  return index.serversByType.get(norm(type)) || [];
+}
+
+/**
+ * @param {QueueIndex} index
+ * @param {any} type
+ * @returns {{ idle: number, busy: number }}
+ */
+export function serverCountsOfType(index, type) {
+  if (!index.serversByType || !index.serverCountsByType) serversOfType(index, type);
+  return /** @type {Map<string, { idle: number, busy: number }>} */ (index.serverCountsByType).get(norm(type)) || { idle: 0, busy: 0 };
+}
+
+// Which per-type count a server is in: idle(T).count / busy(T).count semantics.
+/** @param {Record<string, any>} srv @returns {"idle"|"busy"|null} */
+function serverCountClass(srv) {
+  if (srv._suspended) return null;
+  if (srv.status === "idle") return "idle";
+  if (srv.status === "busy" || srv.status === "serving") return "busy";
+  return null;
+}
+
+// Each indexed server's index and normalised type key, for count upkeep.
+/** @type {WeakMap<object, { index: QueueIndex, key: string }>} */
+const _serverMeta = new WeakMap();
+
+/** @param {Record<string, any>} srv @param {() => void} change */
+function changeServer(srv, change) {
+  const meta = _serverMeta.get(srv);
+  const counts = meta?.index.serverCountsByType?.get(meta.key);
+  const before = counts ? serverCountClass(srv) : null;
+  change();
+  if (!counts) return;
+  const after = serverCountClass(srv);
+  if (before === after) return;
+  if (before) counts[before]--;
+  if (after) counts[after]++;
+}
+
+/**
+ * Set a server's status, keeping the index's per-type idle/busy counts exact.
+ * @param {Record<string, any>} srv
+ * @param {string} status
+ */
+export function setServerStatus(srv, status) {
+  changeServer(srv, () => { srv.status = status; });
+}
+
+/**
+ * @param {Record<string, any>} srv
+ * @param {boolean} suspended
+ */
+export function setServerSuspended(srv, suspended) {
+  changeServer(srv, () => {
+    if (suspended) srv._suspended = true;
+    else delete srv._suspended;
+  });
 }
 
 /**
@@ -371,11 +510,21 @@ export function listWaiting(token, discipline, entities, filterFn = null, isQueu
 
 /** @param {Record<string, any>[]} resources */
 export function sortResourceEntities(resources) {
-  return [...resources].sort((a, b) => {
-    const timeDelta = (a.arrivalTime || 0) - (b.arrivalTime || 0);
-    if (timeDelta !== 0) return timeDelta;
-    return (a.id || 0) - (b.id || 0);
-  });
+  return sortResourcesInPlace([...resources]);
+}
+
+// Same order as sortResourceEntities, for an array the caller already owns
+// (e.g. a fresh .filter() result) — skips the extra copy.
+/** @param {Record<string, any>[]} resources */
+function sortResourcesInPlace(resources) {
+  return resources.sort(compareResources);
+}
+
+/** @param {Record<string, any>} a @param {Record<string, any>} b */
+function compareResources(a, b) {
+  const timeDelta = (a.arrivalTime || 0) - (b.arrivalTime || 0);
+  if (timeDelta !== 0) return timeDelta;
+  return (a.id || 0) - (b.id || 0);
 }
 
 /**
@@ -449,6 +598,21 @@ export function clearWaitingState(entity, index = null) {
   return true;
 }
 
+// How many servers each entity has ever claimed. While it is 1, no server
+// other than the one just released can point at the entity, so completion and
+// preemption can skip scanning the roster for co-seized partners. Kept off the
+// entity object so it never shows up in results.
+/** @type {WeakMap<object, number>} */
+const _claimCounts = new WeakMap();
+/** @param {Record<string, any>} entity */
+export function noteServerClaim(entity) {
+  _claimCounts.set(entity, (_claimCounts.get(entity) || 0) + 1);
+}
+/** @param {Record<string, any>} entity */
+export function mayHoldOtherServers(entity) {
+  return (_claimCounts.get(entity) || 0) > 1;
+}
+
 /**
  * @param {Record<string, any>|null} customer
  * @param {Record<string, any>|null} server
@@ -465,6 +629,7 @@ export function claimServerForEntity(customer, server, clock, index = null, ctx 
   // still holds from an earlier stage. COSEIZE copies this onto its aux units.
   // Deterministic key (no shared counter), so identical runs stay identical.
   server._claimGroup = `${customer.id}@${server.id}@${clock}`;
+  noteServerClaim(customer);
 
   const queueName = customer.queue ?? customer.lastQueue ?? null;
   const claim = claimSnapshot(customer, server, clock, queueName);
@@ -477,7 +642,7 @@ export function claimServerForEntity(customer, server, clock, index = null, ctx 
   customer.resourceClaim = claim;
   delete customer.queue;
 
-  server.status = "busy";
+  setServerStatus(server, "busy");
   server._busyStart = clock;
   server.currentCustId = customer.id;
   server._currentSkill = skill;
@@ -538,7 +703,7 @@ export function releaseServerClaim(customer, server, clock) {
         }
       }
       delete server._busyStart;
-      server.status = "idle";
+      setServerStatus(server, "idle");
       // Start starvation timer — server just became idle; if no work arrives, this is starvation
       server._starvationStart = clock;
     }
@@ -696,7 +861,7 @@ export function preemptCustomer(cust, srv, clock, ctx, reason = "PREEMPT") {
   // otherwise a PREEMPT/FAIL on one co-seized resource leaves the others stuck "busy" forever.
   // Only servers from the same claim group: a server the entity carries from
   // an earlier stage (see isCarriedClaim) stays with it.
-  const auxiliaryBusy = (ctx?.entities || []).filter((/** @type {any} */ e) =>
+  const auxiliaryBusy = !mayHoldOtherServers(cust) ? [] : (ctx?.index ? ctx.index.servers : (ctx?.entities || [])).filter((/** @type {any} */ e) =>
     e.role === "server" &&
     e.currentCustId === cust.id &&
     e.id !== srv.id &&
@@ -788,7 +953,7 @@ export function beginTurnaround(srv, ctx) {
   if (!(duration > 0)) return 0;
   // Not starving while away: releaseServerClaim started the idle timer.
   delete srv._starvationStart;
-  srv.status = "turnaround";
+  setServerStatus(srv, "turnaround");
   srv._turnaroundStart = ctx.clock;
   srv._turnaroundToken = (srv._turnaroundToken || 0) + 1;
   ctx.scheduleEvent({
@@ -834,7 +999,7 @@ export function repairServers(failedServers, clock) {
       const flushUpTo = Number.isFinite(failedAt) ? failedAt : clock;
       srv._starvationTime = (srv._starvationTime || 0) + Math.max(0, flushUpTo - srv._starvationStart);
     }
-    srv.status       = "idle";
+    setServerStatus(srv, "idle");
     srv._starvationStart = clock;
     srv._failedAt    = undefined;
     srv._downtime    = downtime;
@@ -1053,7 +1218,7 @@ function discardFailedJoin(entity, ctx, msg, { clock, queueName, routeId, routeL
     indexTrackEntity(ctx.index, entity);
     ctx.noteEntityCreated?.(entity);
   }
-  entity.status = "balked";
+  markTerminal(ctx.index, entity, "balked");
   entity.balkTime = clock;
   // The entity never actually joined `queueName` (that's the whole point of
   // balking/blocking), so `.queue`/`.lastQueue` are never set for it here —
@@ -1203,12 +1368,48 @@ export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
  * @param {Record<string, any>|null} [model]
  * @param {QueueIndex|null} [index]
  */
+// Server entity-type definitions by normalised name, cached per model object.
+/** @type {WeakMap<object, Map<string, any>>} */
+const _serverTypeDefCache = new WeakMap();
+/** @param {any} model @param {any} typeName */
+function serverTypeDef(model, typeName) {
+  if (!model) return undefined;
+  let byName = _serverTypeDefCache.get(model);
+  if (!byName) {
+    byName = new Map();
+    for (const et of model.entityTypes || []) {
+      if (et.role === "server" && !byName.has(norm(et.name))) byName.set(norm(et.name), et);
+    }
+    _serverTypeDefCache.set(model, byName);
+  }
+  return byName.get(norm(typeName));
+}
+
 export function makeHelpers(entities, model = null, index = null) {
   const match = (/** @type {any} */ a, /** @type {any} */ b) => norm(a) === norm(b);
 
   // The small, stable server roster when an index is available, falling back
   // to scanning the full (potentially huge) entities array otherwise.
   const serverPool = () => index ? index.servers : entities.filter((/** @type {any} */ e) => e.role === "server");
+  // Servers of one type (index-backed; full scan only without an index).
+  const typePool = (/** @type {any} */ type) => index
+    ? serversOfType(index, type)
+    : entities.filter((/** @type {any} */ e) => e.role === "server" && match(e.type, type));
+  /** @param {any} type @param {(e: any) => boolean} pred */
+  const countOfType = (type, pred) => {
+    let n = 0;
+    for (const e of typePool(type)) if (pred(e)) n++;
+    return n;
+  };
+  const isIdle = (/** @type {any} */ e) => e.status === "idle" && !e._suspended;
+  // A filtered subset in resource order; a type bucket already in that order
+  // (see serversOfType) needs no sort.
+  /** @param {Record<string, any>[]} pool @param {(e: any) => boolean} pred */
+  const sortedSubset = (pool, pred) => {
+    const subset = pool.filter(pred);
+    return /** @type {any} */ (pool)._sortedForResources ? subset : sortResourcesInPlace(subset);
+  };
+  const isBusy = (/** @type {any} */ e) => (e.status === "busy" || e.status === "serving") && !e._suspended;
 
   /**
    * @param {(entity: any) => boolean} predicate
@@ -1281,27 +1482,25 @@ export function makeHelpers(entities, model = null, index = null) {
     selectWaitingInQueue: (/** @type {any} */ queueName, /** @type {string} */ discipline = "FIFO", /** @type {any} */ filterFn = null, includeBatches = true) =>
       waitingInQueue(queueName, discipline, filterFn, includeBatches)[0],
 
-    idleOf: (/** @type {any} */ type) =>
-      sortResourceEntities(serverPool().filter((/** @type {any} */ e) => match(e.type, type) && e.status === "idle" && !e._suspended)),
+    idleOf: (/** @type {any} */ type) => sortedSubset(typePool(type), isIdle),
+
+    // Counts for idle(T).count / busy(T).count conditions — no copy, no sort.
+    idleCount: (/** @type {any} */ type) => index ? serverCountsOfType(index, type).idle : countOfType(type, isIdle),
+    busyCount: (/** @type {any} */ type) => index ? serverCountsOfType(index, type).busy : countOfType(type, isBusy),
 
     // Cross-type pooling for ASSIGN(Queue, ANY, "Skill") — idle servers of any
     // type that carry the given skill, still sorted FIFO by idle-since time.
     idleOfAnySkill: (/** @type {any} */ skill) =>
       sortResourceEntities(serverPool().filter((/** @type {any} */ e) => e.status === "idle" && !e._suspended && entityHasSkill(e, skill))),
 
-    busyOf: (/** @type {any} */ type) =>
-      sortResourceEntities(serverPool().filter((/** @type {any} */ e) => match(e.type, type) && (e.status === "busy" || e.status === "serving") && !e._suspended)),
+    busyOf: (/** @type {any} */ type) => sortedSubset(typePool(type), isBusy),
 
-    failedOf: (/** @type {any} */ type) =>
-      sortResourceEntities(serverPool().filter((/** @type {any} */ e) => match(e.type, type) && e.status === "failed")),
+    failedOf: (/** @type {any} */ type) => sortedSubset(typePool(type), (/** @type {any} */ e) => e.status === "failed"),
 
-    selectIdleOf: (/** @type {any} */ type) =>
-      sortResourceEntities(serverPool().filter((/** @type {any} */ e) => match(e.type, type) && e.status === "idle" && !e._suspended))[0],
+    selectIdleOf: (/** @type {any} */ type) => sortedSubset(typePool(type), isIdle)[0],
 
     hasSkillType: (/** @type {any} */ typeName, /** @type {any} */ skill) => {
-      const et = (model?.entityTypes || []).find((/** @type {any} */ et) =>
-        et.role === "server" && match(et.name, typeName)
-      );
+      const et = serverTypeDef(model, typeName);
       return et && Array.isArray(et.skills) && et.skills.includes(skill);
     },
 
