@@ -819,14 +819,18 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
   let containerHtml = '';
   const containerLevelEntries = Object.entries(summary.containerLevels || {});
   if (containerLevelEntries.length) {
+    const isBatch = containerLevelEntries.some(([, lvl]) => lvl.aggregation === 'mean-of-replications');
     const containerRows = containerLevelEntries.map(([id, lvl]) => [
       id,
       fin(lvl.min) ?? '—',
       fin(lvl.avg) ?? '—',
       fin(lvl.max) ?? '—',
       fin(lvl.final) ?? '—',
+      ...(isBatch ? [fin(lvl.lowestMin) ?? '—', fin(lvl.highestMax) ?? '—'] : []),
     ]);
-    containerHtml = `<h3>Container levels</h3>${htmlTable(['Container', 'Min', 'Avg', 'Max', 'Final'], containerRows)}`;
+    containerHtml = isBatch
+      ? `<h3>Container levels</h3><p>Min, Avg, Max and Final are each the mean across replications; Lowest/Highest are the extremes any single replication reached.</p>${htmlTable(['Container', 'Min (mean)', 'Avg (mean)', 'Max (mean)', 'Final (mean)', 'Lowest in any rep', 'Highest in any rep'], containerRows)}`
+      : `<h3>Container levels</h3>${htmlTable(['Container', 'Min', 'Avg', 'Max', 'Final'], containerRows)}`;
   }
 
   // Queue balking/blocking table — perQueue is a top-level sibling of summary,
@@ -1269,14 +1273,22 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
   if (containerLevelEntries.length) {
     lines.push('### Container Levels');
     lines.push('');
+    const isBatch = containerLevelEntries.some(([, lvl]) => lvl.aggregation === 'mean-of-replications');
     const containerRows = containerLevelEntries.map(([id, lvl]) => [
       id,
       formatN(lvl.min) ?? '—',
       formatN(lvl.avg) ?? '—',
       formatN(lvl.max) ?? '—',
       formatN(lvl.final) ?? '—',
+      ...(isBatch ? [formatN(lvl.lowestMin) ?? '—', formatN(lvl.highestMax) ?? '—'] : []),
     ]);
-    lines.push(mdTable(['Container', 'Min', 'Avg', 'Max', 'Final'], containerRows));
+    if (isBatch) {
+      lines.push('Min, Avg, Max and Final are each the mean across replications; Lowest/Highest are the extremes any single replication reached.');
+      lines.push('');
+    }
+    lines.push(mdTable(isBatch
+      ? ['Container', 'Min (mean)', 'Avg (mean)', 'Max (mean)', 'Final (mean)', 'Lowest in any rep', 'Highest in any rep']
+      : ['Container', 'Min', 'Avg', 'Max', 'Final'], containerRows));
     lines.push('');
   }
 

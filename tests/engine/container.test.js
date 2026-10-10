@@ -444,3 +444,39 @@ describe('timeSeries byContainer', () => {
     for (const pt of result.timeSeries) expect(pt.byContainer).toBeUndefined();
   });
 });
+
+// ── Warm-up resets container statistics ───────────────────────────────────────
+
+describe('container stats exclude the warm-up period', () => {
+  test('min/max/avg cover only post-warm-up time', () => {
+    // 100 → FILL 400 at t=2 (warm-up) → 500; warm-up ends t=5; DRAIN 100 at t=8 → 400; end t=10
+    const model = makeContainerModel({
+      containers: [{ id: 'Stock', capacity: '1000', initialLevel: '100' }],
+      bEffects: [
+        { id: 'fill',  name: 'Fill',  scheduledTime: '2', effect: 'FILL(Stock, 400)',  schedules: [] },
+        { id: 'drain', name: 'Drain', scheduledTime: '8', effect: 'DRAIN(Stock, 100)', schedules: [] },
+      ],
+      maxTime: 10,
+    });
+    const result = buildEngine(model, 42, 5, 10).runAll();
+    const lvl = result.summary.containerLevels.Stock;
+    expect(lvl.min).toBe(400);        // not the pre-warm-up 100
+    expect(lvl.max).toBe(500);
+    expect(lvl.avg).toBeCloseTo(460); // (500×3 + 400×2) / 5, not the inflated 4000 / 5 = 800
+    expect(lvl.avg).toBeLessThanOrEqual(lvl.max);
+    expect(lvl.final).toBe(400);
+  });
+
+  test('without warm-up the whole run counts', () => {
+    const model = makeContainerModel({
+      containers: [{ id: 'Stock', capacity: '1000', initialLevel: '100' }],
+      bEffects: [
+        { id: 'fill', name: 'Fill', scheduledTime: '2', effect: 'FILL(Stock, 400)', schedules: [] },
+      ],
+      maxTime: 10,
+    });
+    const lvl = buildEngine(model, 42, 0, 10).runAll().summary.containerLevels.Stock;
+    expect(lvl.min).toBe(100);
+    expect(lvl.avg).toBeCloseTo((100 * 2 + 500 * 8) / 10);
+  });
+});

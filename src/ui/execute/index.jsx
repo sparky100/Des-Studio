@@ -35,7 +35,7 @@ import { enumerateSweepableParams, applySweepValues, generate2DSweepValues, MAX_
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
 import { computeSensitivityRanking } from "../../engine/sweep-sensitivity.js";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
-import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, sweepGoalKpiOptions, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, sweepGoalKpiOptions, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildParameterOverrideRecord, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { SampledParamRangeList, SampledResultsTable, SensitivityPanel } from "./StudyPlanViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
@@ -449,6 +449,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     return applySweepValues(model, effectiveOverrides);
   }, [model, effectiveOverrides]);
 
+  // What the run actually used, for the results file — see
+  // buildParameterOverrideRecord. Empty when the run used the model as saved.
+  const parameterOverrideRecord = useMemo(
+    () => buildParameterOverrideRecord(effectiveOverrides, new Set(resolvedRunOverrides.map(o => o.paramConfig.path))),
+    [effectiveOverrides, resolvedRunOverrides],
+  );
+
   const complexityEstimate = useMemo(() => estimateRunComplexity(model, {
     terminationMode,
     maxSimTime,
@@ -668,7 +675,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         terminationMode,
         terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
         seed: runSeedRef.current,
+        parameterOverrides: parameterOverrideRecord,
       };
+      // The model that was actually simulated (overrides applied) — consumers read
+      // results._model_snapshot before the saved copy arrives from the database.
+      fullResult._model_snapshot = effectiveModel;
       setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, fullResult.runtimeMetrics));
       setResults(fullResult);
       onResultsReady?.(fullResult);
@@ -682,6 +693,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           replications: 1,
           terminationMode,
           terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+          parameterOverrides: parameterOverrideRecord,
         }, stepSeed, { includeModelSnapshot: true });
         const config = {
           seed: stepSeed,
@@ -719,7 +731,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         }
       }
     }
-  }, [userId, modelId, model, effectiveModel, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory, storeRunNarrative]);
+  }, [userId, modelId, model, effectiveModel, parameterOverrideRecord, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory, storeRunNarrative]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -870,7 +882,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               terminationMode,
               terminationCondition: stopConditionForRun,
               seed: runSeed,
+              parameterOverrides: parameterOverrideRecord,
             };
+            // The model that was actually simulated (overrides applied) — consumers read
+            // results._model_snapshot before the saved copy arrives from the database.
+            batchResult._model_snapshot = effectiveModel;
             setBatchStatus("complete");
             setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, batchResult.runtimeMetrics));
             setResults(batchResult);
@@ -884,6 +900,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               replications,
               terminationMode,
               terminationCondition: stopConditionForRun,
+              parameterOverrides: parameterOverrideRecord,
             }, runSeed, { includeModelSnapshot: true });
             const batchConfig = {
               seed: runSeed, runLabel: effectiveRunLabel, replications, warmupPeriod, maxTime: maxTimeForRun, batchId,
@@ -1021,7 +1038,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       terminationMode,
       terminationCondition: stopConditionForRun,
       seed: runSeed,
+      parameterOverrides: parameterOverrideRecord,
     };
+    // The model that was actually simulated (overrides applied) — consumers read
+    // results._model_snapshot before the saved copy arrives from the database.
+    result._model_snapshot = effectiveModel;
 
     setCurrentSnap(result.snap);
     setResults(result);
@@ -1047,6 +1068,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       replications: 1,
       terminationMode,
       terminationCondition: stopConditionForRun,
+      parameterOverrides: parameterOverrideRecord,
     }, runSeed, { includeModelSnapshot: true });
     const config = {
       seed: runSeed,
@@ -1083,7 +1105,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Local history record completed." }]);
       onRunSaved?.(null);
     }
-  }, [model, effectiveModel, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory, storeRunNarrative, effectiveCollectTrace, traceAutoDisabled]);
+  }, [model, effectiveModel, parameterOverrideRecord, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory, storeRunNarrative, effectiveCollectTrace, traceAutoDisabled]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;

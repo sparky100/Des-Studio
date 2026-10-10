@@ -518,6 +518,12 @@ export function buildKpis(model = {}, results = {}) {
   const containerLevels = extractContainerLevels(model, summary, results?.timeSeries);
   if (containerLevels) kpis.containerLevels = containerLevels;
   if (hasOverTime(containerLevels)) kpis.containerLevelsNote = CONTAINER_OVER_TIME_NOTE;
+  // Parameter values this run used instead of the model's own — without this
+  // an overridden run (e.g. a closure switched on) reads as a baseline run.
+  const overrides = results?._experiment_config?.parameterOverrides;
+  if (Array.isArray(overrides) && overrides.length) {
+    kpis.parameterOverrides = overrides.map(o => ({ parameter: o.label ?? o.path, modelValue: o.baseValue, valueUsed: o.value }));
+  }
   if (summary.activityCounts) kpis.activityCounts = summary.activityCounts;
   if (summary.preemptCounts) kpis.preemptCounts = summary.preemptCounts;
   if (summary.phaseCTruncated) {
