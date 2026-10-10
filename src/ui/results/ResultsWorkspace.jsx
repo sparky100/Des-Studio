@@ -479,7 +479,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
   const rejectionEntries = Object.entries(results?.perQueue || {})
     .filter(([, counts]) => (counts.balkCount || 0) > 0 || (counts.blockingCount || 0) > 0);
   const activityEntries = Object.entries(summary.activityCounts || {})
-    .map(([id, entry]) => ({ id, name: entry.name || id, count: entry.count || 0 }))
+    .map(([id, entry]) => ({ id, name: entry.name || id, count: entry.count || 0, firings: entry.firings }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   const preemptEntries = Object.entries(summary.preemptCounts || {})
     .map(([type, acc]) => ({ type, total: acc.total || 0, byReason: acc.byReason || {} }))
@@ -807,6 +807,11 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                 <div style={{ fontSize: 18, color: C.accent, fontFamily: FONT, fontWeight: 700 }}>
                   {formatMetricValue(isMultiRep ? avgPerRun(a.count) : a.count, 0)}
                 </div>
+                {a.firings != null && a.firings !== a.count && (
+                  <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 3 }}>
+                    from {formatMetricValue(isMultiRep ? avgPerRun(a.firings) : a.firings, 0)} firings — one DELAY firing starts every waiting entity
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -2070,10 +2075,10 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                       title={series.label}
                       color={color}
                       sourceLabel={series.sourceLabel}
-                      statItems={lineSeriesStats(series, "entities", color)}
+                      statItems={lineSeriesStats(series, series.yLabel || "entities", color)}
                       dataPreview={<SeriesDataPreview series={series} />}
                     >
-                      <MiniLineChart title="" ariaTitle={series.label} points={series.chartPoints || series.points} color={color} yLabel="entities" />
+                      <MiniLineChart title="" ariaTitle={series.label} points={series.chartPoints || series.points} color={color} yLabel={series.yLabel || "entities"} />
                     </ChartCard>
                   );
                 })}

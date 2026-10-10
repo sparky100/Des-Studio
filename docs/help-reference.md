@@ -34,6 +34,8 @@ Two roles. Defined in `entityTypes[]` array.
 
 **Attributes:** Customer entities carry named numeric attributes (priority, dueDate, etc.) set at arrival or updated mid-simulation via SET_ATTR.
 
+**Quantity attribute (`quantityAttr`):** A customer entity type can name one of its **number** attributes as its quantity — e.g. `volume` on a crude cargo (Aframax ≈ 0.7 Mb, Suezmax ≈ 1 Mb, VLCC ≈ 2 Mb). Set it with the **Quantity attribute** picker in the Entity Types editor. Results then also total that attribute alongside the usual entity counts: quantity served, quantity in system, quantity through each queue, quantity processed by each resource, and quantity per outcome and journey (see **Quantities** under Results). The value is read from the entity's current attribute when it is measured, so SET_ATTR changes are reflected. Validation: the attribute must exist on that type and be a number (V78, blocking); a warning (V79) fires if it has no default value and no distribution, since every entity's quantity would then be 0.
+
 **Entity family / inheritance (`parentTypeId`):** An entity type can set `parentTypeId` to another entity type's `id` (same role) to inherit its `attrDefs`, `skills`, and `skillProfiles` at model-load time — a build-time merge, not a runtime concept the engine is otherwise aware of. Child values override the parent's on name collision. Must be same-role, non-self-referential, and acyclic (V67).
 
 **Service sequence enforcement (`requiredSequence`):** A customer entity type can set `requiredSequence` — an ordered list of queue names it should visit in order. Design-time only: the engine does not enforce it at run time, but validation (V68) traces the model's actual routing and warns if this entity type is ever routed backward through the declared stages. Not a blocking error, since rework/retry loops are a legitimate pattern.
@@ -76,7 +78,15 @@ State-triggered events. Fire when condition becomes true. Defined in `cEvents[]`
 - `priority`: Integer; lower fires first
 - `cSchedules[]`: Service duration distributions
 
-**Condition syntax limitation — variable-vs-literal only:** Each clause (`queue(...).length > 0`, `idle(...).count == 0`, `stateVarName == 1`, etc.) compares one dynamic token against a literal constant. The right-hand side is captured as a fixed literal when the model loads — it is never re-resolved as another queue length, server count, or state variable. A clause like `queue(TraumaQueue).length > traumaInService` parses the right side as a non-numeric literal and silently evaluates to `false` forever (no error, no warning — the Conditional event just never fires). To gate on a dynamic threshold, compare each side against its own literal in a separate `AND` clause instead of comparing two dynamic tokens to each other, e.g. `queue(TraumaQueue).length > 0 AND traumaInService == 0`.
+**What the right-hand side of a condition can be:** Each clause compares a left side with a right side — no arithmetic on either side. The right-hand side is read **dynamically** (its current value at the moment the condition is checked) when it is:
+- one of the function-call tokens `queue(Q).length`, `idle(T).count`, `busy(T).count`, `container(C).level|capacity|min|max`, `attr(T, a)` — e.g. shortest-queue routing `queue(A).length < queue(B).length`;
+- a **state variable**, written as its bare name or as `state.<name>` — e.g. `clock >= closureStart`, `queue(TraumaQueue).length > traumaInService`.
+
+Anything else is a **literal**: a number (`3`), or text (`"sour"`) — e.g. `Entity.grade == "sour"`. A bare word is read as a state variable only if a state variable of exactly that name exists; otherwise it stays literal text. `Entity.<attr>` on the right-hand side is not resolved — it is literal text.
+
+A non-numeric literal on the right of a numeric comparison (an ordering operator `<`, `>`, `<=`, `>=`, or a numeric left side such as `clock` or `queue(Q).length`) is almost always a typo — e.g. `clock >= closureStrat` — and would make the clause always false. Validation warns about it (**V76**).
+
+**Time-based gates without a daily tick:** because `clock` and state variables can now be compared directly, a timed closure needs no repeating "status check" Bound event — two Conditional events do it: one with `clock >= closureStart AND clock < closureEnd AND closureEnabled == 1 AND isOpen == 1` and effect `SET(isOpen, 0)`, and one with `clock >= closureEnd AND isOpen == 0` and effect `SET(isOpen, 1)`. Conditional events are checked after every event, so the gate flips at the first event at or after the given time.
 
 **Starvation anti-pattern:** When two Conditional events share a resource and one has a lower priority number (higher urgency), the other may never fire if the first queue is always populated. Symptom: entities accumulate in mid-journey queues; `served=0` or very low for some replications. Diagnosis: check whether any terminal Conditional event (discharge, exit) has a higher priority number than an entry Conditional event on the same resource. Fix: set the terminal Conditional event priority to 0 (highest) so completions are not deferred indefinitely.
 
@@ -88,7 +98,7 @@ Model-level numeric counters. Defined in `stateVariables[]` array.
 
 **Purpose:** Track cumulative counts, implement flags, accumulate custom metrics.
 
-**Access:** Read in conditions as plain names; write via SET(varName, expr) macro.
+**Access:** Read in conditions as plain names (or `state.<name>`), on either side of a comparison — e.g. `closureEnabled == 1` or `clock >= closureStart`; write via SET(varName, expr) macro.
 
 ### Containers
 
@@ -96,7 +106,11 @@ Level-based resource pools. Defined in `containerTypes[]` array.
 
 **Purpose:** Model inventory, blood bank stocks, fuel tanks, warehouse buffers.
 
-**Operations:** FILL adds quantity (clamped to capacity); DRAIN removes quantity (only fires when sufficient level exists).
+**Operations:** FILL adds quantity (clamped to capacity); DRAIN removes quantity (does nothing unless the full amount is available); DRAIN_PARTIAL removes whatever is there up to the amount and can record the shortfall in a second container.
+
+**Modelling unmet demand:** `DRAIN_PARTIAL(products, dailyDemand, unmet)` on a daily demand Bound event draws `min(level, dailyDemand)` from the product stock and adds the rest to the `unmet` container, so `unmet` accumulates exactly the demand that could not be met — no lot-size remainder. This is **lost-sales** semantics: the shortfall is recorded when it happens and is not served later. If unmet demand should instead wait as back-orders and be filled when product arrives, keep a backlog container that demand FILLs and a supply Conditional event that DRAINs it together with the stock.
+
+**Results:** each container reports min, avg, max and final level (post-warm-up), plus a **level over time** chart and trough/peak tiles (see Results). For multi-replication runs min, avg, max and final are each the **mean across replications**; the lowest and highest level any single replication reached are shown separately.
 
 Edited in the UI via the **Model Data** tab, which also holds Skills, the **Distances** registry, and State Variables.
 
@@ -116,7 +130,11 @@ Performance targets. Defined in `goals[]` array.
 
 **Purpose:** Drive AI suggestion prioritisation, colour sweep charts (green=feasible, red=infeasible), display pass/fail on KPI cards.
 
-**Fields:** metric, operator, target, label.
+**Fields:** metric, operator, target, label, and an optional scope (a queue, resource or container).
+
+**Quantity goals:** with a quantity attribute set (see Entity Types), goals can also target `summary.servedQuantity` (quantity served), `summary.quantityThrough` scoped to a queue, and `resource.quantityProcessed` scoped to a resource.
+
+**Outcomes in the results file:** every run records each goal's result, gap and status (`met`, `not-met`, or `no-data` when the metric could not be evaluated) as `goalOutcomes`, exported in the JSON and the workbook's **Goals** sheet.
 
 ---
 
@@ -138,6 +156,7 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | ASSIGN (skilled) | `ASSIGN(QueueName, ServerType, "Skill")` | Seizes server, only considers idle servers whose type has the named skill | Sets server to busy with skill tracking | Skill not in model registry (V-SKILL-2) |
 | ASSIGN (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Reads skill from entity attribute at runtime; null = any server | Supports per-entity skill variation from one Conditional event | Attribute undefined on customer type (V-SKILL-3) |
 | ASSIGN (any type) | `ASSIGN(QueueName, ANY, "Skill")` | Seizes an idle server of **any** server type that has the named skill, instead of one fixed type | Pools candidates across every server type; still prefers higher `skillProfiles[].priority` when multiple match | Omitting the skill argument (ANY has no meaning without a skill filter); naming a real server type `ANY` (reserved word, V62) |
+| ASSIGN (scan ahead) | `ASSIGN(QueueName, ServerType, Entity.attrName, SCAN)` or `ASSIGN(QueueName, ANY, "Skill", SCAN:N)` | Without SCAN only the **front** entity is tried — if no idle server has its skill, nothing is assigned even when entities behind it could be served. With SCAN the queue is walked in discipline order and the first entity whose skill has an idle server is assigned (FIFO order is kept among entities of the same skill). `SCAN:N` limits the look-ahead to the first N entities. Lets one queue per hub hold several grades/skills instead of one queue per grade | Same as skilled ASSIGN once an entity is chosen; the step log notes how many entities were passed | Using SCAN without a skill argument (V77); N must be a positive whole number (V77) |
 | ASSIGN (consumable-gated) | `ASSIGN(QueueName, ServerType, ContainerId:amount)` | Gates the assignment on a declared container having level ≥ `amount`; server claim and container deduction commit atomically together | Deducts `amount` from the container level (same clamping/logging as DRAIN); no-op (both server and container untouched) if either check fails | Referencing an undeclared container (V27); combine with a skill by putting the container clause last: `ASSIGN(Queue, Server, "Skill", ContainerId:amount)` |
 | RENEGE | `RENEGE(ctx)` | Removes context entity from queue (abandonment) | Increments reneged count | Using entity type name instead of ctx |
 | RENEGE_OLDEST | `RENEGE_OLDEST(EntityType)` | Removes oldest entity of specified type from queue | Increments reneged count; used for max-queue policies | Confusing with RENEGE(ctx) |
@@ -185,6 +204,9 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 |-------|--------|---------|--------------|-----------------|
 | FILL | `FILL(containerId, expr)` | Adds quantity to container | Updates container level, clamped to capacity | containerId must match declared container id |
 | DRAIN | `DRAIN(containerId, expr)` | Removes quantity from container | Updates container level, clamped to zero | No-op if level < amount (does not go negative) |
+| DRAIN_PARTIAL | `DRAIN_PARTIAL(containerId, expr)` or `DRAIN_PARTIAL(containerId, expr, shortfallContainerId)` | Removes `min(level, amount)`; when a shortfall container is named, adds the part that could not be drawn to it (clamped to its capacity) | Updates one or both container levels | Naming the same container as source and shortfall, an undeclared container, or a non-positive amount (V27) |
+
+**ASSIGN that finds no match does nothing:** if an ASSIGN's condition is true but no waiting entity can be paired with an idle server (for example every idle unit lacks the waiting entities' skill), the firing changes nothing, schedules nothing and is not counted in activity throughput.
 
 **Safe expression evaluator:** All expr fields support numeric literals, +, -, *, /, parentheses, Entity.attrName, stateVarName, clock, and functions min(a,b), max(a,b), abs(a), round(a), floor(a), ceil(a). No eval() or new Function() used.
 
@@ -409,6 +431,10 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | totalCost | Cumulative cost from COST macro | High operational cost | Low cost (may indicate under-investment) |
 | costPerServed | totalCost / served | High cost per unit served | Efficient cost utilisation |
 | avgWIP | Time-average work-in-progress (Little's Law integral) | High inventory or queue buildup | Lean operation |
+| servedQuantity | Sum of the quantity attribute over served entities (only when a type sets `quantityAttr`) | High volume delivered | Low volume delivered |
+| quantityInSystem | Sum of the quantity attribute over entities still waiting or in service at the end | Large volume stuck in the system | Little left in progress |
+
+**Batch runs:** entity counts (served, reneged, balked) are summed across replications and shown per run; average-type metrics are means. Quantities are the **mean per replication** (labelled `quantityAggregation: "mean-of-replications"`).
 
 ### Confidence Intervals
 
@@ -444,9 +470,38 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | perShiftUtil[] | Per-shift utilisation breakdown for weekly-pattern servers | Array of `{ shiftLabel, utilPct, entitiesPerCap, totalUtilTime, shiftDuration }` — only present for server types with `schedulePattern.type === 'weekly'` |
 | scheduleAdherence | Ratio of actual utilisation to expected schedule utilisation (0–1+) for weekly-pattern servers | < 1.0 = actual below plan; > 1.0 = actual exceeds plan. Displayed as colour-coded badge: green ≤ 10 % deviation from 1.0, amber ≤ 25 %, red > 25 %. |
 
+### Quantities
+
+Shown when an entity type sets a quantity attribute (see Entity Types). Volume-weighted versions of the counts, so results stay meaningful in barrels, tonnes, etc. when entities differ in size:
+
+| Where | Field |
+|-------|-------|
+| Summary cards | Quantity served, Quantity in system at end (`summary.servedQuantity`, `summary.quantityInSystem`; also `renegedQuantity`, `balkedQuantity`) |
+| Per queue | Quantity through each queue (`summary.quantityThroughByQueue`) — credited per completed post-warm-up service |
+| Per resource | Quantity processed (`perResource[].quantityProcessed`), shown on each resource tile |
+| Per outcome / journey | `outcomes[].quantity`, `journeyQuantities`, `queueJourneyQuantities` alongside the counts |
+| Time series | `quantityInSystem` and `byQueue[].quantityWaiting` at every sample |
+
+Exported in the JSON, the workbook's **Quantities** sheet, the LLM export pack and AI analysis.
+
 ### Activity Throughput
 
-Per-activity completion cards showing how many entities each Activity node finished processing. Complements the queue- and resource-level metrics above by attributing throughput to the process step itself rather than only to the resource serving it — useful when several activities share one resource pool or one activity draws from several queues.
+Per-activity cards showing how many **entities each activity started** (`activityCounts[].count`), plus how many times the Conditional event fired (`firings`). These differ for DELAY: one DELAY firing starts every entity waiting in its queue, so a DELAY that released 20 lots at once counts 20 entities from 1 firing. For ASSIGN-type activities each firing starts one entity, so the two are equal. Complements the queue- and resource-level metrics above by attributing throughput to the process step itself.
+
+### Container Levels
+
+Each container reports **min, avg, max and final** level over the post-warm-up period (container statistics restart when warm-up ends, like every other statistic). For a multi-replication run all four are the **mean across replications** (a typical run), and the **lowest / highest level any single replication reached** are shown separately — so a container goal is judged against a typical replication, not the worst one.
+
+**Level over time:** the time series records each container's level at every sample (`byContainer`) — the actual level at that moment, not an average over the interval, so a stock hitting zero shows as a dip to zero. The Results tab charts it per container with **trough** (lowest level and when), peak, final and point-count tiles, and the Run tab's Charts panel shows it live. Exported in the JSON and the workbook's **Container Levels Over Time** sheet. For multi-replication runs each point is the mean across replications, resampled to 150 points, so a very brief zero between points may not show (the min figure is still exact).
+
+**Running dry:** Key Findings flag a container that ran empty (H14) or is being drawn down (H15); the LLM pack and AI analysis get each container's trough and time, first time empty, number of times emptied, % of the run spent empty and a short level profile.
+
+### What a Results File Records
+
+- **Parameter overrides** — any parameter values the run used instead of the model's own (from a loaded experiment or the Run tab's **Adjust parameters**), with model value, value used and source (`_experiment_config.parameterOverrides`). The Results tab shows a note naming them; a baseline run records an empty list.
+- **Model snapshot** — the model actually simulated (overrides applied), with its `experimentDefaults` set to the run's own replications, run length, warm-up, seed and termination.
+- **Goal outcomes** — pass/fail per goal (`goalOutcomes`).
+- **Time series** — queue depth and wait, resource use, WIP, throughput, container levels (`byContainer`) and, with a quantity attribute, quantities.
 
 ### Interruptions
 
@@ -490,7 +545,7 @@ Per-skill utilisation stats, aggregated correctly across multi-replication batch
 | V24 | loopConfig.maxLoopCount < 1, or loopConfig.exitQueueName references an unknown queue | Set maxLoopCount ≥ 1; correct exit queue name |
 | V25 | RENEGE('TypeName') used instead of RENEGE(ctx) | Use exactly RENEGE(ctx) |
 | V26 | Container has an empty/duplicate id, capacity ≤ 0, or initialLevel < 0 or > capacity | Set a valid unique id, positive capacity, and initialLevel within [0, capacity] |
-| V27 | FILL/DRAIN, or ASSIGN's optional ContainerId:amount clause, references an undeclared container | Create container or correct id |
+| V27 | FILL/DRAIN/DRAIN_PARTIAL, or ASSIGN's optional ContainerId:amount clause, references an undeclared container; DRAIN_PARTIAL uses the same container as source and shortfall, or a non-positive amount | Create container or correct id; use two different containers; use a positive amount |
 | V28 | Model epoch is not a valid ISO 8601 datetime | Correct the epoch format |
 | V30 | Bound event/Conditional event routes to exit (null queue) with no COMPLETE(), RENEGE(ctx), or RELEASE() effect | Add a terminal lifecycle effect so entities are counted as served |
 | V31 | Event routes to exit but doesn't explicitly end the lifecycle | Add COMPLETE(), RENEGE(ctx), or RELEASE() |
@@ -523,6 +578,8 @@ Per-skill utilisation stats, aggregated correctly across multi-replication batch
 | V67 | `parentTypeId` is self-referential, references an unknown entity type, references a different-role entity type, or creates a circular inheritance chain | Point `parentTypeId` at a real entity type of the same role, with no cycle |
 | V68 | An entry in `requiredSequence` doesn't match any declared queue (blocking), or the model's routing sends this entity type backward through the declared stages (warning — intentional rework loops can be ignored) | Correct the queue name; or review the routing edge and confirm the backward jump is intentional |
 | V69 | A `distances[]` entry has an empty/duplicate id, `fromQueue`/`toQueue` doesn't match a declared queue or the two are the same, a non-positive `distance`, or a duplicate entry for the same undirected pair | Fix the id, queue names, distance value, or remove the duplicate pair |
+| V77 | `ASSIGN(..., SCAN)` has no skill argument, or `SCAN:N` is not a positive whole number | Put the skill (`"Skill"` or `Entity.attr`) before SCAN; use e.g. `SCAN:10` |
+| V78 | An entity type's `quantityAttr` names an attribute it doesn't have, a non-number attribute, or is set on a server type | Pick a number attribute of that customer type, or clear the quantity attribute |
 | V70 | A `Distance`-typed schedule has an invalid `from`/`to`/`speedSource`/`speedAttr` (blocking), or references a pair/attribute that isn't declared (warning — falls back to a duration of 0) | Correct the distParams; or declare the missing distance/attribute |
 
 Gaps in the numbering (e.g. no V7) are intentional — codes were retired or renumbered during development and are not reused.
@@ -550,6 +607,8 @@ Gaps in the numbering (e.g. no V7) are intentional — codes were retired or ren
 | V47 | DELAY's cSchedule doesn't have "Pass entity context" enabled, or samples the delay from "Server attribute" | Falls back to a fixed delay of 1 |
 | V62 | A server entity type is named `ANY` | Collides with the reserved `ASSIGN(..., ANY, ...)` cross-type-pooling sentinel — rename the server type |
 | V-SKILL-2 (ANY variant) | `ASSIGN(Q, ANY, "Skill")` references a skill no registered server type actually has | The cross-type pool is guaranteed empty — add the skill to a server type, or correct the skill name |
+| V76 | A condition compares a numeric value with non-numeric text that is not a state variable or dynamic reference (e.g. `clock >= closureStrat`) | The clause is always false — fix the spelling, or declare the name as a state variable |
+| V79 | A `quantityAttr` attribute has no default value and no distribution | Every entity's quantity is 0 unless an effect sets it |
 | W-CAP-01 | Two or more Conditional events SEIZE/ASSIGN the same server type | Results may be sensitive to Conditional event priority ordering |
 | W-CAP-02 | Bound event schedule has an Exponential mean interval < 0.001 | simmodlr models discrete entities — consider SD Studio for continuous flow |
 
@@ -576,6 +635,10 @@ are listed worst-first.
 | H9 | A resource was continuously starved for longer than 2× the mean service time | warning | Check upstream delivery to this resource — work isn't reaching it, suggesting a routing or blocking issue |
 | H10 | A resource sustained ≥90% utilisation for 15+ consecutive time units | warning | Add capacity or throttle arrivals — sustained high utilisation means the queue will not recover naturally |
 | H11 | A resource was idle for an extended period (zombie asset) while arrivals were active | warning | Check entity routing and Bound event destinations — the resource may be unreachable or blocked by an upstream queue |
+| H12 | A resource with failures was available <80% (critical) or <90% (warning) of the run | warning / critical | Review MTBF/MTTR or add redundant capacity |
+| H13 | The run hit the internal cycle limit before its intended end | critical | Re-run; if it recurs, look for a runaway Conditional event chain |
+| H14 | A container that held stock ran empty — reports how many times, % of the run spent empty and when it first happened (mean level across replications for batch runs) | warning | If activities DRAIN from it, demand went unmet while it was empty — raise the initial level, FILL faster or more, or add capacity |
+| H15 | A container's level is trending down (late-run mean < half the early-run mean) without having run empty yet | warning | A longer run may run it dry — check the balance of FILL and DRAIN |
 
 ### Live Flags (computed per-step, during execution)
 
@@ -602,6 +665,7 @@ context (no suggestion text is shown live).
 2. **Assign to server types** in Entity Types tab. Expand a server type, tick skills in the Skills panel.
 3. **Use in Conditional Events** via ASSIGN with quoted skill: `ASSIGN(Queue, Doctor, "Surgery")` — only doctors with Surgery skill are considered.
 4. **Pool across server types** — use `ASSIGN(Queue, ANY, "Surgery")` instead of a fixed server type to seize any idle server, of any type, that has the skill. Requires a skill argument.
+5. **Mixed skills in one queue** — when one queue holds entities needing different skills (e.g. sour and sweet crude at one refinery hub), add `SCAN`: `ASSIGN(Hub Crude Queue, Hub Unit, Entity.grade, SCAN)`. Without it a sour cargo at the front blocks the sweet cargoes behind it whenever only sweet units are idle; with it the first entity that has an idle matching unit is served. This replaces one-queue-per-grade designs (3 hubs × 2 grades = 6 queues and 6 Conditional events become 3 of each). Use per-instance skill profiles (below) for a unit type whose units have different skills.
 
 ### Per-instance server skills
 

@@ -110,6 +110,11 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
             label: `Start ${cName} with ${s} (← Entity.${attr}) and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`,
             value: `ASSIGN(${q.name}, ${s}, Entity.${attr})`,
           });
+          // B2 — look past a front entity whose skill has no idle server.
+          opts.push({
+            label: `Start ${cName} with ${s} (← Entity.${attr}, look ahead) and the first ${q.customerType||'entity'} in ${queueDisplayName(q.name)} with a free matching ${s}`,
+            value: `ASSIGN(${q.name}, ${s}, Entity.${attr}, SCAN)`,
+          });
         });
       });
     });
@@ -452,6 +457,11 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const [assignServer, setAssignServer] = useState('');
   const [assignSkill, setAssignSkill] = useState(''); // '' | `lit:<skill>` | `attr:<name>`
   const [assignContainer, setAssignContainer] = useState('');
+  // B2 — SCAN look-ahead for skill-matched ASSIGN ('' = front entity only).
+  const [assignScan, setAssignScan] = useState(false);
+  const [assignScanLimit, setAssignScanLimit] = useState('');
+  // C — DRAIN_PARTIAL's optional shortfall container ('' = none).
+  const [partialShortfall, setPartialShortfall] = useState('');
   const [assignAmount, setAssignAmount] = useState('1');
   const [failRepairType, setFailRepairType] = useState('');
   const [preemptFinishType, setPreemptFinishType] = useState('');
@@ -552,18 +562,29 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
       add(`${exprMacro}(${preemptFinishType}${criterionArg})`);
       return;
     }
-    if (exprMacro === 'DRAIN' || exprMacro === 'FILL') {
+    if (exprMacro === 'DRAIN' || exprMacro === 'FILL' || exprMacro === 'DRAIN_PARTIAL') {
       if (!opContainer) return;
       const v = exprValue.trim();
       if (!v) return;
-      if (isPositiveNumber(v)) { add(`${exprMacro}(${opContainer}, ${Number(v)})`); setExprValue(''); return; }
-      if (isValidAmountExpr(v, stateVars)) { add(`${exprMacro}(${opContainer}, ${v})`); setExprValue(''); return; }
+      const amount = isPositiveNumber(v) ? Number(v) : (isValidAmountExpr(v, stateVars) ? v : null);
+      if (amount == null) return;
+      // DRAIN_PARTIAL's optional third argument records the unmet remainder.
+      const shortfall = exprMacro === 'DRAIN_PARTIAL' && partialShortfall && partialShortfall !== opContainer ? `, ${partialShortfall}` : '';
+      add(`${exprMacro}(${opContainer}, ${amount}${shortfall})`);
+      setExprValue('');
       return;
     }
     if (exprMacro === 'ASSIGN') {
       if (!assignSource || !assignServer) return;
       const skillClause = assignSkill.startsWith('lit:') ? `, "${assignSkill.slice(4)}"`
         : assignSkill.startsWith('attr:') ? `, Entity.${assignSkill.slice(5)}` : '';
+      // SCAN only makes sense with a skill; N (optional) must be a positive whole number.
+      let scanClause = '';
+      if (assignSkill && assignScan) {
+        const n = assignScanLimit.trim();
+        if (n && !/^[1-9]\d*$/.test(n)) return;
+        scanClause = n ? `, SCAN:${n}` : ', SCAN';
+      }
       let containerClause = '';
       if (assignContainer) {
         const amt = assignAmount.trim();
@@ -571,7 +592,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
         if (validAmt == null) return;
         containerClause = `, ${assignContainer}:${validAmt}`;
       }
-      add(`ASSIGN(${assignSource}, ${assignServer}${skillClause}${containerClause})`);
+      add(`ASSIGN(${assignSource}, ${assignServer}${skillClause}${scanClause}${containerClause})`);
       return;
     }
     if (!exprValue.trim()) return;
@@ -782,6 +803,14 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     color:exprMacro==='DRAIN'?C.purple:C.muted,cursor:'pointer',fontWeight:700}}>DRAIN</button>
               )}
               {containerNames.length>0&&(
+                <button onClick={()=>{setExprMacro('DRAIN_PARTIAL');setExprValue('');if(!opContainer)setOpContainer(containerNames[0]);}}
+                  title="Draw what is there, up to the amount; optionally record the shortfall in another container"
+                  style={{background:exprMacro==='DRAIN_PARTIAL'?C.purple+'22':'transparent',
+                    border:`1px solid ${exprMacro==='DRAIN_PARTIAL'?C.purple:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='DRAIN_PARTIAL'?C.purple:C.muted,cursor:'pointer',fontWeight:700}}>DRAIN_PARTIAL</button>
+              )}
+              {containerNames.length>0&&(
                 <button onClick={()=>{setExprMacro('FILL');setExprValue('');if(!opContainer)setOpContainer(containerNames[0]);}}
                   style={{background:exprMacro==='FILL'?C.purple+'22':'transparent',
                     border:`1px solid ${exprMacro==='FILL'?C.purple:C.border}`,
@@ -935,6 +964,22 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     </select>
                   </div>
                 )}
+                {assignSkill&&(
+                  <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                    <label style={{display:'flex',gap:5,alignItems:'center',fontSize:10,color:C.muted,fontFamily:FONT,cursor:'pointer'}}>
+                      <input type="checkbox" checked={assignScan} onChange={e=>setAssignScan(e.target.checked)} aria-label="Look ahead in the queue (SCAN)" />
+                      Look ahead (SCAN) — serve the first waiting entity whose skill has an idle server, not just the front one
+                    </label>
+                    {assignScan&&(
+                      <input value={assignScanLimit} onChange={e=>setAssignScanLimit(e.target.value)}
+                        onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
+                        placeholder="limit (optional)" aria-label="SCAN look-ahead limit"
+                        style={{width:110,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                          color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
+                      />
+                    )}
+                  </div>
+                )}
                 {containerNames.length>0&&(
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Container gate (optional):</span>
@@ -956,7 +1001,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                 )}
                 <div>
                   <Btn small variant="ghost" onClick={addExpr}
-                    disabled={!assignSource||!assignServer||(assignContainer&&!(isPositiveNumber(assignAmount.trim())||isValidAmountExpr(assignAmount.trim(),stateVars)))}>Add</Btn>
+                    disabled={!assignSource||!assignServer||(assignContainer&&!(isPositiveNumber(assignAmount.trim())||isValidAmountExpr(assignAmount.trim(),stateVars)))||(assignSkill&&assignScan&&assignScanLimit.trim()!==''&&!/^[1-9]\d*$/.test(assignScanLimit.trim()))}>Add</Btn>
                 </div>
               </div>
             )}
@@ -1065,7 +1110,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                   </select>
                 </>
               )}
-              {(exprMacro==='DRAIN'||exprMacro==='FILL')&&containerNames.length>0&&(
+              {(exprMacro==='DRAIN'||exprMacro==='FILL'||exprMacro==='DRAIN_PARTIAL')&&containerNames.length>0&&(
                 <select value={opContainer||containerNames[0]} onChange={e=>setOpContainer(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.purple}55`,borderRadius:4,
                     color:C.purple,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
@@ -1110,15 +1155,25 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     style={{width:120,flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
                       color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
                   />
-                ):exprMacro==='DRAIN'||exprMacro==='FILL'?(
-                  <input
-                    value={exprValue}
-                    onChange={e=>setExprValue(e.target.value)}
-                    onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
-                    placeholder="amount — number or expression (e.g. Entity.units * 2)"
-                    style={{width:220,flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
-                      color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
-                  />
+                ):exprMacro==='DRAIN'||exprMacro==='FILL'||exprMacro==='DRAIN_PARTIAL'?(
+                  <>
+                    <input
+                      value={exprValue}
+                      onChange={e=>setExprValue(e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
+                      placeholder="amount — number or expression (e.g. Entity.units * 2)"
+                      style={{width:220,flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                        color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
+                    />
+                    {exprMacro==='DRAIN_PARTIAL'&&(
+                      <select value={partialShortfall} onChange={e=>setPartialShortfall(e.target.value)} aria-label="Shortfall container"
+                        style={{background:C.bg,border:`1px solid ${C.purple}55`,borderRadius:4,
+                          color:C.purple,fontFamily:FONT,fontSize:12,padding:'6px 8px',flexShrink:0}}>
+                        <option value="">— shortfall not recorded —</option>
+                        {containerNames.filter(c=>c!==(opContainer||containerNames[0])).map(c=><option key={c} value={c}>shortfall → {c}</option>)}
+                      </select>
+                    )}
+                  </>
                 ):exprMacro==='FAIL'||exprMacro==='REPAIR'?(
                   <input type="number" min={1} step={1}
                     value={exprValue}
@@ -1152,7 +1207,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     : exprMacro==='BATCH' ? (!opQueue||(batchSizeMode==='attribute'?!batchAttr:!exprValue.trim()))
                     : exprMacro==='SPLIT' ? (!opQueue||!exprValue.trim())
                     : exprMacro==='JOIN' ? (!opQueue||!joinTarget||opQueue===joinTarget)
-                    : exprMacro==='DRAIN'||exprMacro==='FILL' ? (!opContainer||!(isPositiveNumber(exprValue.trim())||isValidAmountExpr(exprValue.trim(),stateVars)))
+                    : exprMacro==='DRAIN'||exprMacro==='FILL'||exprMacro==='DRAIN_PARTIAL' ? (!opContainer||!(isPositiveNumber(exprValue.trim())||isValidAmountExpr(exprValue.trim(),stateVars)))
                     : exprMacro==='FAIL'||exprMacro==='REPAIR' ? (!failRepairType||!Number.isInteger(Math.round(Number(exprValue)))||Number(exprValue)<1)
                     : (!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0])))
                   }>Add</Btn>

@@ -984,3 +984,29 @@ describe("exportToSimPy", () => {
     });
   });
 });
+
+describe("exportToSimPy — DRAIN_PARTIAL and ASSIGN SCAN", () => {
+  const model = {
+    name: "Oil",
+    entityTypes: [
+      { id: "c", name: "Crude", role: "customer", attrDefs: [{ name: "grade", valueType: "string" }] },
+      { id: "u", name: "Unit", role: "server", count: 2, skills: ["sweet"], attrDefs: [] },
+    ],
+    queues: [{ id: "q", name: "Hub", discipline: "FIFO" }],
+    containerTypes: [{ id: "Stock", initialLevel: 10 }, { id: "Unmet", initialLevel: 0 }],
+    stateVariables: [],
+    bEvents: [
+      { id: "arr", name: "Arrive", scheduledTime: "0", effect: ["ARRIVE(Crude, Hub)"], schedules: [{ eventId: "arr", dist: "Exponential", distParams: { mean: "1" } }] },
+      { id: "dem", name: "Demand", scheduledTime: "1", effect: ["DRAIN_PARTIAL(Stock, 4, Unmet)"], schedules: [{ eventId: "dem", dist: "Fixed", distParams: { value: "1" } }] },
+      { id: "done", name: "Done", scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
+    ],
+    cEvents: [{ id: "c1", name: "Refine", priority: 1, effect: ["ASSIGN(Hub, Unit, Entity.grade, SCAN)"],
+      condition: "queue(Hub).length > 0 AND idle(Unit).count > 0",
+      cSchedules: [{ eventId: "done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] }],
+  };
+  it("warns that neither is auto-translated", () => {
+    const { warnings } = exportToSimPy(model);
+    expect(warnings.some(w => /DRAIN_PARTIAL/.test(w))).toBe(true);
+    expect(warnings.some(w => /SCAN/.test(w))).toBe(true);
+  });
+});

@@ -428,3 +428,71 @@ describe("composer → engine: Sprint 94 composers", () => {
     expect(merged._matchedFrom.sort((a, b) => a - b)).toEqual(parts.map(p => p.id).sort((a, b) => a - b));
   });
 });
+
+describe("composer → engine: B2 SCAN and C DRAIN_PARTIAL", () => {
+  it("a composed ASSIGN with SCAN serves the sweet cargo behind a blocked sour one", () => {
+    const effect = composeEffect(
+      { matchQueues: [{ name: "Hub", type: "Crude" }], serverTypes: ["Sweet Unit"], stringAttrs: ["grade"] },
+      () => {
+        fireEvent.click(screen.getByRole("button", { name: "ASSIGN (any server, skill + container)" }));
+        fireEvent.change(screen.getByDisplayValue("— none —"), { target: { value: "attr:grade" } });
+        fireEvent.click(screen.getByRole("checkbox", { name: "Look ahead in the queue (SCAN)" }));
+      },
+    );
+    expect(effect).toBe("ASSIGN(Hub, Sweet Unit, Entity.grade, SCAN)");
+
+    const arrive = (id, grade) => ({ id, name: id, scheduledTime: "0", effect: `ARRIVE(Crude, Hub);SET_ATTR(grade, "${grade}")`, schedules: [] });
+    const model = {
+      entityTypes: [
+        { id: "crude", name: "Crude", role: "customer", attrDefs: [{ name: "grade", valueType: "string", defaultValue: "sour" }] },
+        { id: "su", name: "Sweet Unit", role: "server", count: 1, skills: ["sweet"], attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [{ id: "q", name: "Hub", discipline: "FIFO" }],
+      bEvents: [arrive("a1", "sour"), arrive("a2", "sweet"),
+        { id: "done", name: "Refined", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] }],
+      cEvents: [{ id: "refine", name: "Refine", priority: 1, effect,
+        condition: "queue(Hub).length > 0 AND idle(Sweet Unit).count > 0",
+        cSchedules: [{ eventId: "done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] }],
+    };
+    const result = run(model, 5);
+    expect(result.summary.served).toBe(1); // the sweet one; the sour one still waits
+    expect(customers(result).find(e => e.attrs?.grade === "sour").status).toBe("waiting");
+  });
+
+  it("SCAN:N is composed from the limit field", () => {
+    const effect = composeEffect(
+      { matchQueues: [{ name: "Hub", type: "Crude" }], serverTypes: ["Unit"], stringAttrs: ["grade"] },
+      () => {
+        fireEvent.click(screen.getByRole("button", { name: "ASSIGN (any server, skill + container)" }));
+        fireEvent.change(screen.getByDisplayValue("— none —"), { target: { value: "attr:grade" } });
+        fireEvent.click(screen.getByRole("checkbox", { name: "Look ahead in the queue (SCAN)" }));
+        fireEvent.change(screen.getByRole("textbox", { name: "SCAN look-ahead limit" }), { target: { value: "10" } });
+      },
+    );
+    expect(effect).toBe("ASSIGN(Hub, Unit, Entity.grade, SCAN:10)");
+  });
+
+  it("a composed DRAIN_PARTIAL records unmet demand in the shortfall container", () => {
+    const effect = composeEffect(
+      { containerTypes: [{ id: "Products" }, { id: "Unmet" }] },
+      () => {
+        fireEvent.click(screen.getByRole("button", { name: "DRAIN_PARTIAL" }));
+        fireEvent.change(screen.getByPlaceholderText("amount — number or expression (e.g. Entity.units * 2)"), { target: { value: "13.12" } });
+        fireEvent.change(screen.getByRole("combobox", { name: "Shortfall container" }), { target: { value: "Unmet" } });
+      },
+    );
+    expect(effect).toBe("DRAIN_PARTIAL(Products, 13.12, Unmet)");
+
+    const model = {
+      entityTypes: [{ id: "x", name: "X", role: "customer", attrDefs: [] }],
+      stateVariables: [], queues: [], cEvents: [],
+      containerTypes: [{ id: "Products", capacity: "600", initialLevel: "30" }, { id: "Unmet", initialLevel: "0" }],
+      bEvents: [{ id: "demand", name: "Demand", scheduledTime: "1", effect: [effect],
+        schedules: [{ eventId: "demand", dist: "Fixed", distParams: { value: "1" } }] }],
+    };
+    const c = run(model, 4.5).snap.containers; // demand on days 1–4
+    expect(c.Products.level).toBe(0);
+    expect(c.Unmet.level).toBeCloseTo(4 * 13.12 - 30, 8);
+  });
+});

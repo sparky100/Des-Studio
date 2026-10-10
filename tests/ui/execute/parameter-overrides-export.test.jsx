@@ -178,3 +178,15 @@ describe("quantity (B1) in exports", () => {
     expect(buildLLMBundle({ name: "x" }, { summary: { served: 3 } }, {})).not.toContain("### Quantities");
   });
 });
+
+describe("activity throughput shows firings when they differ (DELAY)", () => {
+  it("notes the firing count under the entities-started figure", () => {
+    const results = { summary: { activityCounts: {
+      ret: { name: "Return to Hormuz", count: 106, firings: 4 },
+      load: { name: "Load", count: 50, firings: 50 },
+    } } };
+    render(<ResultsWorkspace results={results} model={{ queues: [], entityTypes: [] }} />);
+    expect(screen.getByText(/from 4 firings/)).toBeTruthy();
+    expect(screen.queryByText(/from 50 firings/)).toBeNull();
+  });
+});

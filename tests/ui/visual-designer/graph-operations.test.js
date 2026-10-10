@@ -471,6 +471,25 @@ describe("visual designer graph operations", () => {
     expect(next.queues.find(q => q.id === "balk-q").balkCondition.variable).toBe("container(Reservoir).level");
   });
 
+  it("updateVisualNode container rename keeps array effects as arrays and renames DRAIN_PARTIAL's source and shortfall", () => {
+    const modelWithContainers = {
+      ...baseModel,
+      containerTypes: [{ id: "Stock", capacity: "600", initialLevel: "100" }, { id: "Unmet", initialLevel: "0" }],
+      bEvents: [
+        ...baseModel.bEvents,
+        { id: "refined", name: "Refined", scheduledTime: "9999", effect: ["FILL(Stock, 4.12)", "COMPLETE()"], schedules: [] },
+        { id: "demand", name: "Demand", scheduledTime: "1", effect: ["DRAIN_PARTIAL(Stock, 13.12, Unmet)"], schedules: [] },
+      ],
+    };
+    const graph = deriveGraphFromModel(modelWithContainers);
+    const afterStock = updateVisualNode(modelWithContainers, graph.nodes.find(n => n.id === "container:Stock"), { id: "Products" });
+    expect(afterStock.bEvents.find(e => e.id === "refined").effect).toEqual(["FILL(Products, 4.12)", "COMPLETE()"]);
+    expect(afterStock.bEvents.find(e => e.id === "demand").effect).toEqual(["DRAIN_PARTIAL(Products, 13.12, Unmet)"]);
+    const graph2 = deriveGraphFromModel(afterStock);
+    const afterUnmet = updateVisualNode(afterStock, graph2.nodes.find(n => n.id === "container:Unmet"), { id: "Lost" });
+    expect(afterUnmet.bEvents.find(e => e.id === "demand").effect).toEqual(["DRAIN_PARTIAL(Products, 13.12, Lost)"]);
+  });
+
   it("updateVisualNode updates container capacity and initialLevel without renaming", () => {
     const modelWithContainer = { ...baseModel, containerTypes: [{ id: "Tank", capacity: "1000", initialLevel: "500" }] };
     const graph = deriveGraphFromModel(modelWithContainer);

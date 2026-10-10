@@ -322,10 +322,17 @@ function replaceServerName(text = "", oldName, newName) {
 
 function replaceContainerName(text = "", oldName, newName) {
   if (!oldName || !newName) return text;
+  // Effects are usually arrays of macro strings — rename each element rather
+  // than String()-ing the array, which would join it into one comma-separated
+  // (and unparseable) effect.
+  if (Array.isArray(text)) return text.map(part => replaceContainerName(part, oldName, newName));
   const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return String(text || "")
     .replace(new RegExp(`FILL\\(${esc}\\s*,`, "gi"), `FILL(${newName},`)
     .replace(new RegExp(`DRAIN\\(${esc}\\s*,`, "gi"), `DRAIN(${newName},`)
+    // DRAIN_PARTIAL(source, amount[, shortfall]) — rename either container.
+    .replace(new RegExp(`DRAIN_PARTIAL\\(${esc}\\s*,`, "gi"), `DRAIN_PARTIAL(${newName},`)
+    .replace(new RegExp(`(DRAIN_PARTIAL\\([^,)]+,[^,)]+,\\s*)${esc}\\s*\\)`, "gi"), `$1${newName})`)
     .replace(new RegExp(`container\\(${esc}\\)`, "gi"), `container(${newName})`);
 }
 

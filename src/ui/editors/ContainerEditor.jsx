@@ -24,7 +24,8 @@ const ContainerEditor = ({ containers, onChange }) => {
       <InfoBox color={C.accent}>
         A container is a named continuous-level store (tank, buffer, inventory).{" "}
         <strong style={{ color: C.accent }}>FILL</strong> adds to it (B-event);{" "}
-        <strong style={{ color: C.accent }}>DRAIN</strong> subtracts when level ≥ amount (C-event).{" "}
+        <strong style={{ color: C.accent }}>DRAIN</strong> subtracts when level ≥ amount (C-event);{" "}
+        <strong style={{ color: C.accent }}>DRAIN_PARTIAL</strong> takes what is there up to the amount and can add the shortfall to a second container — use it to record unmet demand.{" "}
         Leave capacity unset for an unbounded container (no upper limit).
       </InfoBox>
       {containers.length === 0 && (
