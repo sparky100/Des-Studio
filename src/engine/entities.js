@@ -1363,11 +1363,6 @@ export function createServerEntities(entityTypes, sampleAttrsFn, rng = null) {
 /**
  * Status filter helpers — all case-insensitive on type name.
  */
-/**
- * @param {Record<string, any>[]} entities
- * @param {Record<string, any>|null} [model]
- * @param {QueueIndex|null} [index]
- */
 // Server entity-type definitions by normalised name, cached per model object.
 /** @type {WeakMap<object, Map<string, any>>} */
 const _serverTypeDefCache = new WeakMap();
@@ -1385,6 +1380,11 @@ function serverTypeDef(model, typeName) {
   return byName.get(norm(typeName));
 }
 
+/**
+ * @param {Record<string, any>[]} entities
+ * @param {Record<string, any>|null} [model]
+ * @param {QueueIndex|null} [index]
+ */
 export function makeHelpers(entities, model = null, index = null) {
   const match = (/** @type {any} */ a, /** @type {any} */ b) => norm(a) === norm(b);
 

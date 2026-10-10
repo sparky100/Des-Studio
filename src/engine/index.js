@@ -712,9 +712,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     if (attr) _quantityAttrByType.set(String(et.name).trim().toLowerCase(), attr);
   }
   const quantityEnabled = _quantityAttrByType.size > 0;
-  /** @param {any} e @returns {number} */
   /** @type {Map<any, string|undefined>} */
   const _quantityAttrByRawType = new Map();
+  /** @param {any} e @returns {number} */
   const qtyOf = (e) => {
     if (!e || e.role === "server") return 0;
     let attr = _quantityAttrByRawType.get(e.type);
