@@ -222,7 +222,7 @@ describe("makeBatchResult timeSeries averaging", () => {
 // only for single-replication runs and vanished once a run went through
 // makeBatchResult (the multi-replication/batch aggregation path).
 describe("makeBatchResult container/skill/adherence aggregation", () => {
-  it("aggregates containerLevels: min/max as extremes across reps, avg/final as the mean across reps", () => {
+  it("aggregates containerLevels with one rule — mean across reps — and labels the extremes separately", () => {
     const replicationPayloads = [
       { result: { summary: { containerLevels: { Bikes: { min: 2, max: 18, avg: 10, final: 5 } } } } },
       { result: { summary: { containerLevels: { Bikes: { min: 0, max: 15, avg: 8, final: 3 } } } } },
@@ -230,7 +230,11 @@ describe("makeBatchResult container/skill/adherence aggregation", () => {
 
     const batch = makeBatchResult(replicationPayloads, {}, 10, 0);
     expect(batch.summary.containerLevels).toEqual({
-      Bikes: { min: 0, max: 18, avg: 9, final: 4 },
+      Bikes: {
+        min: 1, max: 16.5, avg: 9, final: 4,
+        lowestMin: 0, highestMax: 18,
+        aggregation: "mean-of-replications", replications: 2,
+      },
     });
   });
 

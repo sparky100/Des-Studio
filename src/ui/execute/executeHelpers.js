@@ -91,6 +91,26 @@ export function makeBatchRuntimeMetrics(replicationPayloads, replications, wallC
   };
 }
 
+// The parameter values a run actually used when they differ from the saved
+// model — from a loaded experiment and/or the Run tab's ad-hoc "Adjust
+// parameters". Stored on results._experiment_config.parameterOverrides (and
+// the saved run record) so a results file never reads as a baseline run when
+// it wasn't. `baseValue` is the model's own value; `value` is what ran.
+// `adhocPaths` marks which overrides came from the Run tab rather than an
+// experiment.
+export function buildParameterOverrideRecord(effectiveOverrides = [], adhocPaths = new Set()) {
+  const finiteOrNull = v => (Number.isFinite(v) ? v : null);
+  return effectiveOverrides.map(({ paramConfig = {}, value }) => ({
+    path: paramConfig.path ?? null,
+    label: paramConfig.label ?? paramConfig.path ?? null,
+    type: paramConfig.type ?? null,
+    targetId: paramConfig.targetId ?? null,
+    baseValue: finiteOrNull(paramConfig.currentValue),
+    value: finiteOrNull(value),
+    source: adhocPaths.has(paramConfig.path) ? "adhoc" : "experiment",
+  }));
+}
+
 // Streaming accumulator: processes each replication's time series as it arrives
 // (O(M) per rep) and accumulates sums into TypedArrays, so the raw per-rep
 // series can be freed immediately rather than held until all reps finish.
@@ -359,30 +379,38 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
   }
   const perQueue = Object.keys(perQueueAcc).length ? perQueueAcc : undefined;
 
-  // Aggregate container levels across replications. min/max are the extremes
-  // actually observed across all reps (the useful number for capacity
-  // planning — "the worst level any replication reached"); avg/final are
-  // simple means across reps, mirroring perResourceAcc's mean-across-reps
-  // convention above.
+  // Aggregate container levels across replications. One rule for the four
+  // headline fields: min, max, avg and final are each the MEAN across
+  // replications (the typical replication), matching every other batch
+  // summary figure and what container goals are judged against. The
+  // extremes any single replication reached are kept separately and named
+  // as such — lowestMin / highestMax — for capacity planning.
   const containerAcc = {};
   for (const s of summaries) {
     if (!s.containerLevels) continue;
     for (const [id, lvl] of Object.entries(s.containerLevels)) {
-      if (!containerAcc[id]) containerAcc[id] = { min: Infinity, max: -Infinity, avgSum: 0, finalSum: 0, count: 0 };
+      if (!containerAcc[id]) containerAcc[id] = { minSum: 0, maxSum: 0, avgSum: 0, finalSum: 0, lowestMin: Infinity, highestMax: -Infinity, count: 0 };
       const acc = containerAcc[id];
-      acc.min = Math.min(acc.min, lvl.min);
-      acc.max = Math.max(acc.max, lvl.max);
+      acc.minSum += lvl.min ?? 0;
+      acc.maxSum += lvl.max ?? 0;
       acc.avgSum += lvl.avg ?? 0;
       acc.finalSum += lvl.final ?? 0;
+      acc.lowestMin = Math.min(acc.lowestMin, lvl.min ?? Infinity);
+      acc.highestMax = Math.max(acc.highestMax, lvl.max ?? -Infinity);
       acc.count++;
     }
   }
+  const meanOf = (sum, count) => (count ? +(sum / count).toFixed(4) : 0);
   const containerLevels = Object.keys(containerAcc).length
     ? Object.fromEntries(Object.entries(containerAcc).map(([id, acc]) => [id, {
-        min: +acc.min.toFixed(4),
-        max: +acc.max.toFixed(4),
-        avg: acc.count ? +(acc.avgSum / acc.count).toFixed(4) : 0,
-        final: acc.count ? +(acc.finalSum / acc.count).toFixed(4) : 0,
+        min: meanOf(acc.minSum, acc.count),
+        max: meanOf(acc.maxSum, acc.count),
+        avg: meanOf(acc.avgSum, acc.count),
+        final: meanOf(acc.finalSum, acc.count),
+        lowestMin: Number.isFinite(acc.lowestMin) ? +acc.lowestMin.toFixed(4) : null,
+        highestMax: Number.isFinite(acc.highestMax) ? +acc.highestMax.toFixed(4) : null,
+        aggregation: "mean-of-replications",
+        replications: acc.count,
       }]))
     : undefined;
 
@@ -695,6 +723,9 @@ export function buildResultsExportPayload({
       maxSimTime: config.maxSimTime ?? null,
       terminationMode: config.terminationMode ?? "time",
       terminationCondition: config.terminationCondition ?? null,
+      // Parameter values the run used that differ from the model as saved —
+      // empty for a baseline run.
+      parameterOverrides: results?._experiment_config?.parameterOverrides ?? config.parameterOverrides ?? [],
     },
     results: resultData,
     replications: replicationResults.map(payload => ({
@@ -808,6 +839,18 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
   ];
   sheets.push({ name: 'Summary', rows: summaryRows, colWidths: [22, 18] });
 
+  // Sheet: Parameter Overrides — the values this run used that differ from the
+  // model as saved (absent for a baseline run).
+  const overrides = results?._experiment_config?.parameterOverrides ?? config.parameterOverrides ?? [];
+  if (overrides.length) {
+    summaryRows.push(['Parameter Overrides', `${overrides.length} — see Parameter Overrides sheet`]);
+    const poRows = [['Parameter', 'Path', 'Model value', 'Value used', 'Source']];
+    for (const o of overrides) poRows.push([o.label ?? '', o.path ?? '', o.baseValue ?? '', o.value ?? '', o.source ?? '']);
+    sheets.push({ name: 'Parameter Overrides', rows: poRows, colWidths: [32, 32, 12, 12, 12] });
+  } else {
+    summaryRows.push(['Parameter Overrides', 'None — model run as saved']);
+  }
+
   // Sheet 2: Replications
   const repRows = [['Replication', 'Seed', 'Arrived', 'Served', 'Reneged', 'Balked', 'Preempted', 'Completion Rate', 'Avg Wait', 'Avg Svc', 'Avg Sojourn', 'Avg Time in System', 'Total Cost', 'Cost per Served', 'Final Time']];
   const resultRows = replicationResults.length
@@ -867,12 +910,16 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
   const containerLevels = summary.containerLevels || {};
   const containerIds = Object.keys(containerLevels);
   if (containerIds.length) {
-    const clRows = [['Container', 'Min', 'Avg', 'Max', 'Final']];
+    const isBatch = containerIds.some(id => containerLevels[id]?.aggregation === 'mean-of-replications');
+    const clRows = isBatch
+      ? [['Container', 'Min (mean of reps)', 'Avg (mean of reps)', 'Max (mean of reps)', 'Final (mean of reps)', 'Lowest in any rep', 'Highest in any rep']]
+      : [['Container', 'Min', 'Avg', 'Max', 'Final']];
     for (const id of containerIds) {
       const lvl = containerLevels[id];
-      clRows.push([id, lvl.min ?? '', lvl.avg ?? '', lvl.max ?? '', lvl.final ?? '']);
+      clRows.push([id, lvl.min ?? '', lvl.avg ?? '', lvl.max ?? '', lvl.final ?? '',
+        ...(isBatch ? [lvl.lowestMin ?? '', lvl.highestMax ?? ''] : [])]);
     }
-    sheets.push({ name: 'Container Levels', rows: clRows, colWidths: [18, 10, 10, 10, 10] });
+    sheets.push({ name: 'Container Levels', rows: clRows, colWidths: isBatch ? [18, 18, 18, 18, 18, 18, 18] : [18, 10, 10, 10, 10] });
   }
 
   // Sheet: Container Levels Over Time — one row per time-series sample, one

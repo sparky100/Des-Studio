@@ -311,7 +311,7 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
   }, [results, replicationResults, aggregateStats, config, base, onClose]);
 
   const exportResultsXlsx = useCallback(() => {
-    buildResultsXlsx({ results, replicationResults, aggregateStats, config, model });
+    buildResultsXlsx({ results, replicationResults, aggregateStats, config, model: results?._model_snapshot ?? model });
     onClose();
   }, [results, replicationResults, aggregateStats, config, model, onClose]);
 
@@ -323,10 +323,13 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
       warmupPeriod: config.warmupPeriod,
       seed: config.seed,
       ranAt: new Date().toISOString(),
+      parameterOverrides: results?._experiment_config?.parameterOverrides ?? config.parameterOverrides ?? [],
     };
     const activeResults = results || (replicationResults.length ? replicationResults[replicationResults.length - 1]?.result : null);
     const bundleResults = { ...activeResults, aggregateStats, replications: replicationResults.map(p => ({ replicationIndex: p.replicationIndex, seed: p.seed, summary: p.result?.summary ?? p.summary ?? {} })) };
-    const md = buildLLMBundle(model, bundleResults, bundleConfig);
+    // Describe the model that was actually simulated (parameter overrides
+    // applied), not whatever the editor holds now.
+    const md = buildLLMBundle(results?._model_snapshot ?? model, bundleResults, bundleConfig);
     downloadTextFile(md, `${base}-llm-bundle.md`, "text/markdown;charset=utf-8");
     onClose();
   }, [model, results, replicationResults, aggregateStats, config, base, onClose]);

@@ -36,6 +36,9 @@ export const buildRunRecord = (model, results, experimentConfig, resolvedSeed, o
       seed:                 resolvedSeed,
       terminationMode:      experimentConfig.terminationMode,
       terminationCondition: experimentConfig.terminationCondition ?? null,
+      // Parameter values that differed from the saved model for this run
+      // (experiment and/or Run-tab overrides) — see buildParameterOverrideRecord.
+      parameterOverrides:   Array.isArray(experimentConfig.parameterOverrides) ? experimentConfig.parameterOverrides : [],
     },
     summary:   results.summary ?? results,
     run_label: '',

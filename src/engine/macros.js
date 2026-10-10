@@ -66,6 +66,12 @@ function updateContainerMinMax(state, cName, newLevel) {
   const maxKey = `__containerMax_${cName}`;
   if (newLevel < (state[minKey] ?? newLevel)) state[minKey] = newLevel;
   if (newLevel > (state[maxKey] ?? newLevel)) state[maxKey] = newLevel;
+  // Reporting min/max — reset at warm-up (engine/index.js), unlike the
+  // condition-visible keys above.
+  const statMinKey = `__containerStatMin_${cName}`;
+  const statMaxKey = `__containerStatMax_${cName}`;
+  if (newLevel < (state[statMinKey] ?? newLevel)) state[statMinKey] = newLevel;
+  if (newLevel > (state[statMaxKey] ?? newLevel)) state[statMaxKey] = newLevel;
 }
 
 

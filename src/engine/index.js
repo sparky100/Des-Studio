@@ -757,6 +757,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     state[`__containerCap_${ct.id}`]      = cap;
     state[`__containerMin_${ct.id}`]      = init;
     state[`__containerMax_${ct.id}`]      = init;
+    state[`__containerStatMin_${ct.id}`]  = init;
+    state[`__containerStatMax_${ct.id}`]  = init;
     state[`__containerIntegral_${ct.id}`] = 0;
     state[`__containerPrev_${ct.id}`]     = 0;
   }
@@ -1219,6 +1221,21 @@ const cycleLog = [];
         _statsResetTime = clock;
         _wipIntegral = 0;
         _lastWipSnapTime = clock;
+        // Container level stats (G21) restart from the current level, like
+        // every other statistic here. Without this the level×time integral
+        // kept its pre-warm-up area but was divided by post-warm-up elapsed
+        // time (avg inflated, even above max), and min/max reflected the
+        // warm-up period that's meant to be excluded. The reported min/max
+        // live in __containerStatMin/Max; __containerMin/Max are left alone
+        // because model conditions read them (container(X).min/.max) and a
+        // statistics reset must not change model behaviour.
+        for (const ct of runtimeModel.containerTypes || []) {
+          const level = state[`__container_${ct.id}`] ?? 0;
+          state[`__containerIntegral_${ct.id}`] = 0;
+          state[`__containerPrev_${ct.id}`]     = clock;
+          state[`__containerStatMin_${ct.id}`]  = level;
+          state[`__containerStatMax_${ct.id}`]  = level;
+        }
         const msg = `Warm-up complete at t=${clock.toFixed(3)}. Statistics reset.`;
         cycleLog.push({ phase: "WARMUP", time: clock, message: msg });
         log.push(_trace("WARMUP", { message: msg }));
@@ -2252,8 +2269,8 @@ const cycleLog = [];
       // Flush remaining area up to current clock
       const totalIntegral = integral + level * Math.max(0, clock - prev);
       containerLevels[ct.id] = {
-        min:   +(state[`__containerMin_${ct.id}`] ?? level).toFixed(4),
-        max:   +(state[`__containerMax_${ct.id}`] ?? level).toFixed(4),
+        min:   +(state[`__containerStatMin_${ct.id}`] ?? level).toFixed(4),
+        max:   +(state[`__containerStatMax_${ct.id}`] ?? level).toFixed(4),
         avg:   elapsed > 0 ? +(totalIntegral / elapsed).toFixed(4) : +level.toFixed(4),
         final: +level.toFixed(4),
       };

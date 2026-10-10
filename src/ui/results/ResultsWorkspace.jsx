@@ -139,6 +139,28 @@ const PREEMPT_REASON_LABEL = {
   SHIFT_CHANGE: "capacity reduced",
 };
 
+// Shown when the run used parameter values other than the model's own (a
+// loaded experiment or Run-tab "Adjust parameters"), so the results are never
+// mistaken for a baseline run.
+function ParameterOverridesNote({ overrides }) {
+  const { C, FONT } = useTheme();
+  if (!Array.isArray(overrides) || overrides.length === 0) return null;
+  return (
+    <div role="note" aria-label="Parameter overrides" style={{
+      background: alpha(C.accent, 0.08), border: `1px solid ${alpha(C.accent, 0.3)}`, borderRadius: 6,
+      padding: "8px 12px", fontSize: 11, color: C.text, fontFamily: FONT, lineHeight: 1.6,
+    }}>
+      <strong>Run with {overrides.length} parameter override{overrides.length !== 1 ? "s" : ""}:</strong>{" "}
+      {overrides.map((o, i) => (
+        <span key={o.path || i}>
+          {i > 0 && " · "}
+          {o.label ?? o.path} <span style={{ color: C.muted }}>{o.baseValue ?? "—"} →</span> <strong>{o.value ?? "—"}</strong>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ── StatCards ─────────────────────────────────────────────────────────────────
 // Unified stat footer used by both line-chart panels and histogram panels.
 // Replaces the ad-hoc MetricStrip that appeared below time-series charts.
@@ -656,6 +678,12 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
             CONTAINER LEVELS
           </div>
+          {containerEntries.some(([, lvl]) => lvl.aggregation === "mean-of-replications") && (
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+              Final, min, avg and max are each the mean across {containerEntries[0][1].replications ?? "all"} replications (a typical run).
+              Lowest / highest show the extreme any single replication reached.
+            </div>
+          )}
           {/* Bounded flex-wrap, not an auto-fit/1fr grid: a model usually has
               just one or two containers, and a 1fr track stretches a lone card
               to the full row width — a mostly-empty tile next to the tightly
@@ -681,6 +709,12 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                       { label: "Max", value: formatMetricValue(lvl.max) },
                     ]}
                   />
+                  {(lvl.lowestMin != null || lvl.highestMax != null) && (
+                    <div aria-label={`${id} replication extremes`} style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 6 }}>
+                      Lowest in any rep <strong style={{ color: C.text }}>{formatMetricValue(lvl.lowestMin)}</strong>
+                      {" · "}Highest in any rep <strong style={{ color: C.text }}>{formatMetricValue(lvl.highestMax)}</strong>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1860,6 +1894,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
         <KeyFindingsBanner healthFlags={healthFlags} C={C} FONT={FONT} />
+      <ParameterOverridesNote overrides={results?._experiment_config?.parameterOverrides} />
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
           <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
@@ -1943,6 +1978,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
       <KeyFindingsBanner healthFlags={healthFlags} C={C} FONT={FONT} />
+      <ParameterOverridesNote overrides={results?._experiment_config?.parameterOverrides} />
       {/* ── 1. Headline KPIs ───────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
         <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />

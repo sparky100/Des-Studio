@@ -187,7 +187,21 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (config.scheduleName) lines.push(`| Schedule | ${config.scheduleName} |`);
   if (config.engineVersion) lines.push(`| Engine version | ${config.engineVersion} |`);
   if (config.prngAlgorithm) lines.push(`| PRNG | ${config.prngAlgorithm} |`);
+  const overrides = config.parameterOverrides ?? results?._experiment_config?.parameterOverrides ?? [];
+  lines.push(`| Parameter overrides | ${overrides.length ? overrides.length : 'None — model run as saved'} |`);
   lines.push('');
+  if (overrides.length) {
+    lines.push('### Parameter Overrides');
+    lines.push('');
+    lines.push('This run used these values instead of the model\'s own. The Model Definition above already reflects them.');
+    lines.push('');
+    lines.push('| Parameter | Model value | Value used | Source |');
+    lines.push('|-----------|-------------|------------|--------|');
+    for (const o of overrides) {
+      lines.push(`| ${o.label ?? o.path} | ${o.baseValue ?? '—'} | ${o.value ?? '—'} | ${o.source === 'adhoc' ? 'Run tab adjustment' : 'Experiment'} |`);
+    }
+    lines.push('');
+  }
   lines.push('---');
   lines.push('');
 
@@ -433,11 +447,22 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (kpis.containerLevels && Object.keys(kpis.containerLevels).length) {
     lines.push('### Container Levels');
     lines.push('');
-    lines.push('| Container | Min | Avg | Max | Final |');
-    lines.push('|-----------|-----|-----|-----|-------|');
-    for (const [id, lvl] of Object.entries(kpis.containerLevels)) {
-      const f = v => v != null ? Number(v).toFixed(2) : '—';
-      lines.push(`| ${id} | ${f(lvl.min)} | ${f(lvl.avg)} | ${f(lvl.max)} | ${f(lvl.final)} |`);
+    const batchContainers = Object.values(kpis.containerLevels).some(l => l?.aggregation === 'mean-of-replications');
+    const f = v => v != null ? Number(v).toFixed(2) : '—';
+    if (batchContainers) {
+      lines.push('Min, Avg, Max and Final are each the **mean across replications** (a typical run). Lowest/Highest are the extremes any single replication reached.');
+      lines.push('');
+      lines.push('| Container | Min (mean) | Avg (mean) | Max (mean) | Final (mean) | Lowest in any rep | Highest in any rep |');
+      lines.push('|-----------|------------|------------|------------|--------------|-------------------|--------------------|');
+      for (const [id, lvl] of Object.entries(kpis.containerLevels)) {
+        lines.push(`| ${id} | ${f(lvl.min)} | ${f(lvl.avg)} | ${f(lvl.max)} | ${f(lvl.final)} | ${f(lvl.lowestMin)} | ${f(lvl.highestMax)} |`);
+      }
+    } else {
+      lines.push('| Container | Min | Avg | Max | Final |');
+      lines.push('|-----------|-----|-----|-----|-------|');
+      for (const [id, lvl] of Object.entries(kpis.containerLevels)) {
+        lines.push(`| ${id} | ${f(lvl.min)} | ${f(lvl.avg)} | ${f(lvl.max)} | ${f(lvl.final)} |`);
+      }
     }
     lines.push('');
 
