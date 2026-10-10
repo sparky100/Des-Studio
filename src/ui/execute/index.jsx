@@ -36,7 +36,7 @@ import { enumerateSweepableParams, applySweepValues, generate2DSweepValues, MAX_
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
 import { computeSensitivityRanking } from "../../engine/sweep-sensitivity.js";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
-import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, sweepGoalKpiOptions, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildParameterOverrideRecord, buildRunModelSnapshot, buildGoalOutcomes, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, sweepGoalKpiOptions, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, TIME_SERIES_GRID_POINTS, buildParameterOverrideRecord, buildRunModelSnapshot, buildGoalOutcomes, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { SampledParamRangeList, SampledResultsTable, SensitivityPanel } from "./StudyPlanViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
@@ -839,7 +839,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setReplicationResults([]);
       setAggregateStats({});
 
-      const tsAccumulator = effectiveCollectTimeSeries ? makeTimeSeriesAccumulator(150, maxTimeForRun) : null;
+      const tsAccumulator = effectiveCollectTimeSeries ? makeTimeSeriesAccumulator(TIME_SERIES_GRID_POINTS, maxTimeForRun) : null;
 
       runnerRef.current = runReplications({
         model: runModel,
@@ -853,6 +853,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         collectTimeSeries: effectiveCollectTimeSeries,
         schedulesMap: activeSchedulesMap,
         onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
+        // Workers keep only the samples the 150-point accumulator reads.
+        timeSeriesGridPoints: tsAccumulator && Number.isFinite(maxTimeForRun) && maxTimeForRun > 0 ? TIME_SERIES_GRID_POINTS : null,
         onProgress: progress => setBatchProgress(progress),
         onReplicationComplete: payload => {
           completedPayloads[payload.replicationIndex] = payload;

@@ -238,6 +238,17 @@ function retireIdleExcessServers(ctx, serverTypeName) {
   return retired;
 }
 
+// Optional observer of new stage records — set by the engine for the duration
+// of one cycle when it samples chart data on a coarse grid (see
+// timeSeriesGridPoints in engine/index.js), so it can fold each stage's wait
+// in without scanning every entity's stage history per cycle.
+/** @type {((entity: Record<string, any>, record: Record<string, any>) => void) | null} */
+let _stageRecordSink = null;
+/** @param {((entity: Record<string, any>, record: Record<string, any>) => void) | null} sink */
+export function setStageRecordSink(sink) {
+  _stageRecordSink = sink;
+}
+
 // srvOrServers: a single server (existing single-resource callers) or an array
 // of servers (a COSEIZE hold releasing more than one type at once) — pass the
 // full array so the stage record retains every co-seized resource type, not
@@ -257,7 +268,7 @@ export function buildStageRecord(cust, srvOrServers, clock) {
   const svc = serviceStartedAt != null
     ? Math.max(0, clock - serviceStartedAt)
     : 0;
-  return {
+  const record = {
     serverType: servers[0]?.type || (cust._isDelay ? "delay" : "unknown"),
     ...(servers.length > 1 ? { serverTypes: servers.map(s => s.type) } : {}),
     queueName: cust.lastQueue || cust.queue || null,
@@ -267,6 +278,8 @@ export function buildStageRecord(cust, srvOrServers, clock) {
     stageWait:  +wait.toFixed(4),
     stageService: +svc.toFixed(4),
   };
+  _stageRecordSink?.(cust, record);
+  return record;
 }
 
 /**

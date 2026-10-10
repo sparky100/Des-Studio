@@ -12,11 +12,36 @@ import { runReplicationPayload, WORKER_MESSAGE_TYPES } from "./worker.js";
  */
 
 /** @param {number} replications */
-function defaultWorkerCount(replications) {
-  const cores = typeof navigator !== "undefined" && Number.isFinite(navigator.hardwareConcurrency)
-    ? navigator.hardwareConcurrency
-    : 2;
-  return Math.min(replications, Math.max(1, cores - 1));
+// Default replication worker caps (workers = cores − 1, then capped).
+// Phones and tablets report every core — often 8, mostly slow efficiency
+// cores — and run hot under sustained load: 7 workers there was slower than 4.
+// Desktops keep using their cores, up to 8. Devices that report 4 GB of
+// memory or less (navigator.deviceMemory, Chromium only) get 2.
+export const MAX_DESKTOP_WORKERS = 8;
+export const MAX_MOBILE_WORKERS = 4;
+export const MAX_LOW_MEMORY_WORKERS = 2;
+
+/**
+ * Phone or tablet? userAgentData.mobile where available (Chromium); otherwise
+ * the user agent, plus iPadOS, which reports itself as a Mac with touch.
+ * @param {Record<string, any>} nav
+ */
+export function isMobileDevice(nav) {
+  if (typeof nav?.userAgentData?.mobile === "boolean") return nav.userAgentData.mobile;
+  const ua = String(nav?.userAgent || "");
+  if (/Android|iPhone|iPad|iPod|Mobile|Mobi/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && Number(nav?.maxTouchPoints) > 1;
+}
+
+/**
+ * @param {number} replications
+ * @param {Record<string, any>} [nav]  navigator-like: hardwareConcurrency, deviceMemory, userAgent, userAgentData, maxTouchPoints
+ */
+export function defaultWorkerCount(replications, nav = typeof navigator !== "undefined" ? navigator : {}) {
+  const cores = Number.isFinite(nav?.hardwareConcurrency) ? /** @type {number} */ (nav.hardwareConcurrency) : 2;
+  let cap = isMobileDevice(nav) ? MAX_MOBILE_WORKERS : MAX_DESKTOP_WORKERS;
+  if (Number.isFinite(nav?.deviceMemory) && /** @type {number} */ (nav.deviceMemory) <= 4) cap = Math.min(cap, MAX_LOW_MEMORY_WORKERS);
+  return Math.min(replications, cap, Math.max(1, cores - 1));
 }
 
 /** @returns {ReplicationWorker} */
@@ -141,6 +166,7 @@ export function createReplicationPool({ createWorker = createBrowserWorker } = {
  *   maxCycles?: number,
  *   maxCPasses?: number,
  *   maxCEventScans?: number|null,
+ *   timeSeriesGridPoints?: number|null,
  *   collectTimeSeries?: boolean,
  *   collectTrace?: boolean,
  *   schedulesMap?: Record<string, any>,
@@ -171,6 +197,7 @@ export function runReplications(options = {}) {
     maxCycles = 5000,
     maxCPasses = 5000,
     maxCEventScans = null,
+    timeSeriesGridPoints = null,
     collectTimeSeries,
     schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
     workerCount,
@@ -199,6 +226,9 @@ export function runReplications(options = {}) {
     maxCycles,
     maxCPasses,
     maxCEventScans,
+    // Charts for a batch are resampled to a fixed grid (makeTimeSeriesAccumulator);
+    // when the caller says which grid, workers record only the samples it reads.
+    timeSeriesGridPoints,
     collectTimeSeries,
     // Batch replications never surface the structured trace (compaction strips
     // log, persistence strips trace), so skip building it inside the engine.
