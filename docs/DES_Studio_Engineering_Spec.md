@@ -868,13 +868,13 @@ DES Studio `DRAIN` fails immediately if container level < amount (guard). SimPy 
 | Scenario | Target | Notes |
 |---------|--------|-------|
 | Single replication, 10,000 events | < 2 seconds | Main thread or Web Worker |
-| 30 replications, 100,000 events each | < 60 seconds | Persistent worker pool, `min(hardwareConcurrency − 1, 4)` workers |
+| 30 replications, 100,000 events each | < 60 seconds | Persistent worker pool, `hardwareConcurrency − 1` workers, capped at 8 (4 on phones/tablets) |
 | M/M/1 analytical accuracy | Within 5% of formula | Benchmark gate in CI (`mm1_benchmark.js`) |
 | M/M/c analytical accuracy | Within 5% of formula | Benchmark gate in CI (`mmc_benchmark.js`) |
 | model_json parse + validate | < 100 ms | V1–V70 (V7 unused); 79 distinct rules |
 | Visual Designer canvas: 50 nodes | 60 fps | @xyflow/react default render loop |
 
-Worker pool size defaults to `navigator.hardwareConcurrency - 1`, capped at `MAX_DEFAULT_WORKERS = 4` (2 when `navigator.deviceMemory` reports ≤ 4 GB), minimum 1 (`defaultWorkerCount`, `replication-runner.js`). Phones report every core — often 8, mostly slow efficiency cores — and each worker holds a whole replication; 7 at once ran slower, hotter and with several times the memory of 4. Workers are **persistent** — spawned once per batch run via `createReplicationPool()` and reused across all rounds (adaptive batch, sweep points). The model and run configuration are sent to each worker exactly once via an `INIT_RUN` message; subsequent `RUN_REPLICATION` messages carry only `{ replicationIndex, seed, entityDetail }`, avoiding a `structuredClone` of the full model per job.
+Worker pool size defaults to `navigator.hardwareConcurrency - 1`, minimum 1, capped by device (`defaultWorkerCount`, `replication-runner.js`): 8 on desktops (`MAX_DESKTOP_WORKERS`), 4 on phones and tablets (`MAX_MOBILE_WORKERS`; `navigator.userAgentData.mobile`, else the user agent, with iPadOS detected as a Mac with touch), and 2 when `navigator.deviceMemory` reports ≤ 4 GB. Phones report every core — often 8, mostly slow efficiency cores — and throttle under sustained load: 7 workers there ran slower than 4. Workers are **persistent** — spawned once per batch run via `createReplicationPool()` and reused across all rounds (adaptive batch, sweep points). The model and run configuration are sent to each worker exactly once via an `INIT_RUN` message; subsequent `RUN_REPLICATION` messages carry only `{ replicationIndex, seed, entityDetail }`, avoiding a `structuredClone` of the full model per job.
 
 Utilisation streak tracking (§3.1.3) has zero overhead when `collectTimeSeries` is disabled (batch runs, sweeps, experiments). When enabled, overhead is O(resourceTypes) per timeSeries sample — negligible compared to the entity-level operations in the main loop.
 

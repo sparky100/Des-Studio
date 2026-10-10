@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { compactReplicationPayload, runReplications, defaultWorkerCount, MAX_DEFAULT_WORKERS } from '../../src/engine/replication-runner.js';
+import { compactReplicationPayload, runReplications, defaultWorkerCount, MAX_DESKTOP_WORKERS, MAX_MOBILE_WORKERS, MAX_LOW_MEMORY_WORKERS } from '../../src/engine/replication-runner.js';
 
 function deferredWorkerFactory() {
   const workers = [];
@@ -252,19 +252,28 @@ describe('runReplications', () => {
 });
 
 describe('defaultWorkerCount', () => {
-  test('uses cores − 1, capped at MAX_DEFAULT_WORKERS (phones report every core)', () => {
-    expect(MAX_DEFAULT_WORKERS).toBe(4);
-    expect(defaultWorkerCount(10, { hardwareConcurrency: 8 })).toBe(4);
-    expect(defaultWorkerCount(10, { hardwareConcurrency: 4 })).toBe(3);
+  const desktop = { hardwareConcurrency: 16, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0' };
+  const iphone = { hardwareConcurrency: 8, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1', maxTouchPoints: 5 };
+
+  test('desktop: cores − 1, capped at 8', () => {
+    expect(defaultWorkerCount(30, desktop)).toBe(MAX_DESKTOP_WORKERS);
+    expect(defaultWorkerCount(30, { ...desktop, hardwareConcurrency: 6 })).toBe(5);
+  });
+
+  test('phones and tablets: capped at 4 (iPadOS reports as a Mac with touch)', () => {
+    expect(defaultWorkerCount(10, iphone)).toBe(MAX_MOBILE_WORKERS);
+    expect(defaultWorkerCount(10, { hardwareConcurrency: 8, userAgentData: { mobile: true } })).toBe(4);
+    expect(defaultWorkerCount(10, { hardwareConcurrency: 10, userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1', maxTouchPoints: 5 })).toBe(4);
+    expect(defaultWorkerCount(10, { hardwareConcurrency: 10, userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1', maxTouchPoints: 0 })).toBe(8);
+  });
+
+  test('low-memory devices: 2 workers', () => {
+    expect(defaultWorkerCount(10, { ...desktop, deviceMemory: 4 })).toBe(MAX_LOW_MEMORY_WORKERS);
+    expect(defaultWorkerCount(10, { ...desktop, deviceMemory: 8 })).toBe(8);
+  });
+
+  test('never more workers than replications, never fewer than 1', () => {
+    expect(defaultWorkerCount(2, desktop)).toBe(2);
     expect(defaultWorkerCount(10, { hardwareConcurrency: 1 })).toBe(1);
-  });
-
-  test('never more workers than replications', () => {
-    expect(defaultWorkerCount(2, { hardwareConcurrency: 8 })).toBe(2);
-  });
-
-  test('keeps low-memory devices to 2 workers', () => {
-    expect(defaultWorkerCount(10, { hardwareConcurrency: 8, deviceMemory: 4 })).toBe(2);
-    expect(defaultWorkerCount(10, { hardwareConcurrency: 8, deviceMemory: 8 })).toBe(4);
   });
 });

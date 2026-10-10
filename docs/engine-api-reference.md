@@ -173,7 +173,7 @@ Runs multiple independent replications and aggregates results. Uses Web Workers 
 | `baseSeed` | `number` | required | First replication uses `baseSeed`, second `baseSeed+1`, etc. |
 | `warmupPeriod` | `number` | `0` | Warmup period for each replication |
 | `maxSimTime` | `number` | required | Run time per replication |
-| `workerCount` | `number` | `min(cores − 1, 4)`; 2 on ≤ 4 GB devices | Parallel workers (default from `defaultWorkerCount`) |
+| `workerCount` | `number` | cores − 1, capped at 8 (4 on phones/tablets, 2 on ≤ 4 GB devices) | Parallel workers (default from `defaultWorkerCount`) |
 | `timeSeriesGridPoints` | `number \| null` | `null` | Keep only the chart samples a resampling onto this many equal points over `[0, maxSimTime]` reads (batch charts use 150); results are unchanged |
 | `maxCycles` | `number` | `5000` | Max cycles per replication |
 | `onComplete` | `function` | required | Called with `results[]` when all replications finish |

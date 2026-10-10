@@ -12,21 +12,35 @@ import { runReplicationPayload, WORKER_MESSAGE_TYPES } from "./worker.js";
  */
 
 /** @param {number} replications */
-// At most this many replication workers by default. Phones report every core
-// (often 8, mostly slow efficiency cores), and each worker holds a whole
-// replication's state — running 7 at once was slower, hotter and far heavier
-// on memory than 4.
-export const MAX_DEFAULT_WORKERS = 4;
+// Default replication worker caps (workers = cores − 1, then capped).
+// Phones and tablets report every core — often 8, mostly slow efficiency
+// cores — and run hot under sustained load: 7 workers there was slower than 4.
+// Desktops keep using their cores, up to 8. Devices that report 4 GB of
+// memory or less (navigator.deviceMemory, Chromium only) get 2.
+export const MAX_DESKTOP_WORKERS = 8;
+export const MAX_MOBILE_WORKERS = 4;
+export const MAX_LOW_MEMORY_WORKERS = 2;
+
+/**
+ * Phone or tablet? userAgentData.mobile where available (Chromium); otherwise
+ * the user agent, plus iPadOS, which reports itself as a Mac with touch.
+ * @param {Record<string, any>} nav
+ */
+export function isMobileDevice(nav) {
+  if (typeof nav?.userAgentData?.mobile === "boolean") return nav.userAgentData.mobile;
+  const ua = String(nav?.userAgent || "");
+  if (/Android|iPhone|iPad|iPod|Mobile|Mobi/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && Number(nav?.maxTouchPoints) > 1;
+}
 
 /**
  * @param {number} replications
- * @param {{ hardwareConcurrency?: number, deviceMemory?: number }} [nav]
+ * @param {Record<string, any>} [nav]  navigator-like: hardwareConcurrency, deviceMemory, userAgent, userAgentData, maxTouchPoints
  */
 export function defaultWorkerCount(replications, nav = typeof navigator !== "undefined" ? navigator : {}) {
   const cores = Number.isFinite(nav?.hardwareConcurrency) ? /** @type {number} */ (nav.hardwareConcurrency) : 2;
-  let cap = MAX_DEFAULT_WORKERS;
-  // navigator.deviceMemory (GB, Chromium only) — keep low-memory devices to 2.
-  if (Number.isFinite(nav?.deviceMemory) && /** @type {number} */ (nav.deviceMemory) <= 4) cap = 2;
+  let cap = isMobileDevice(nav) ? MAX_MOBILE_WORKERS : MAX_DESKTOP_WORKERS;
+  if (Number.isFinite(nav?.deviceMemory) && /** @type {number} */ (nav.deviceMemory) <= 4) cap = Math.min(cap, MAX_LOW_MEMORY_WORKERS);
   return Math.min(replications, cap, Math.max(1, cores - 1));
 }
 
