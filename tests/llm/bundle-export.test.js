@@ -156,3 +156,30 @@ describe("buildLLMBundle", () => {
     expect(wordCount).toBeGreaterThan(100);
   });
 });
+
+describe("buildLLMBundle — container levels over time", () => {
+  const containerModel = { ...model, containerTypes: [{ id: "ct_products", capacity: "200", initialLevel: "100" }] };
+  const containerResults = {
+    ...singleRepResults,
+    summary: { ...singleRepResults.summary, containerLevels: { ct_products: { min: 0, avg: 40, max: 100, final: 40 } } },
+    timeSeries: [
+      { t: 0, byQueue: {}, byType: {}, byContainer: { ct_products: 100 } },
+      { t: 20, byQueue: {}, byType: {}, byContainer: { ct_products: 0 } },
+      { t: 40, byQueue: {}, byType: {}, byContainer: { ct_products: 40 } },
+      { t: 100, byQueue: {}, byType: {}, byContainer: { ct_products: 40 } },
+    ],
+  };
+
+  it("adds a Container Levels Over Time section with trough, stockout figures and a profile", () => {
+    const bundle = buildLLMBundle(containerModel, containerResults, { replications: 1 });
+    expect(bundle).toContain("### Container Levels Over Time");
+    expect(bundle).toContain("| ct_products | 0.00 (t=20.00) | 100.00 (t=0.00) | 20.00 | 1 | 20% |");
+    expect(bundle).toMatch(/- \*\*ct_products\*\*: 0: 100 \(100\)/);
+  });
+
+  it("omits the section when no time series was recorded", () => {
+    const bundle = buildLLMBundle(containerModel, { ...containerResults, timeSeries: undefined }, { replications: 1 });
+    expect(bundle).toContain("### Container Levels");
+    expect(bundle).not.toContain("### Container Levels Over Time");
+  });
+});

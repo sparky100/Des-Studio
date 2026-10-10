@@ -1,4 +1,5 @@
 import { scopedGoalKey, CONTAINER_METRIC_KEY } from "../engine/statistics.js";
+import { summarizeContainerSeries } from "../engine/containerSeriesStats.js";
 import { MAX_STUDY_REPLICATIONS } from "../engine/sweep-params.js";
 import { SUMMARY_METRIC_FIELDS } from "../contracts/study";
 import { LLM_TASKS } from "./contracts.js";
@@ -153,17 +154,41 @@ function extractResources(model = {}, summary = {}) {
 
 // Shared by buildKpis() and the prompts that bypass it (buildPlanRefinementPrompt,
 // buildReportRecommendationsPrompt) — merges capacity/initialLevel from the model's
-// containerTypes into the run's summary.containerLevels. Returns null when the run
-// has no container data at all.
-function extractContainerLevels(model = {}, summary = {}) {
-  if (!summary.containerLevels || !Object.keys(summary.containerLevels).length) return null;
+// containerTypes into the run's summary.containerLevels, and, when the run
+// recorded a time series, an `overTime` digest per container (trough and when,
+// first time empty, times emptied, % of run empty, early/late mean, and a
+// ~20-point level profile — see engine/containerSeriesStats.js). Returns null
+// when the run has no container data at all.
+function extractContainerLevels(model = {}, summary = {}, timeSeries = null) {
+  const overTime = summarizeContainerSeries(timeSeries) || {};
+  const ids = [...new Set([...Object.keys(summary.containerLevels || {}), ...Object.keys(overTime)])];
+  if (!ids.length) return null;
   const containerMeta = Object.fromEntries((model.containerTypes || []).map(ct => [ct.id, ct]));
   return Object.fromEntries(
-    Object.entries(summary.containerLevels).map(([id, lvl]) => [
+    ids.map(id => [
       id,
-      { ...lvl, capacity: containerMeta[id]?.capacity ?? null, initialLevel: containerMeta[id]?.initialLevel ?? null },
+      {
+        ...(summary.containerLevels?.[id] || {}),
+        capacity: containerMeta[id]?.capacity ?? null,
+        initialLevel: containerMeta[id]?.initialLevel ?? null,
+        ...(overTime[id] ? { overTime: overTime[id] } : {}),
+      },
     ])
   );
+}
+
+// Tells the model how to read containerLevels[*].overTime. Attached alongside
+// containerLevels whenever any container carries an over-time digest.
+export const CONTAINER_OVER_TIME_NOTE =
+  "containerLevels[*].overTime is derived from the level recorded at each time-series sample " +
+  "(the mean across replications for a batch run). trough is the lowest level and when it occurred; " +
+  "firstEmptyAt / timesEmptied / pctTimeEmpty describe when the container sat at zero; earlyMean vs lateMean " +
+  "(first vs last 20% of samples) shows whether it is being drawn down or building up; profile lists equal time " +
+  "buckets with each bucket's minimum and closing level. For a stock that activities DRAIN from, time at zero " +
+  "means a stockout (unmet demand) — cite these figures rather than inferring stockouts from min/avg alone.";
+
+function hasOverTime(containerLevels) {
+  return !!containerLevels && Object.values(containerLevels).some(c => c?.overTime);
 }
 
 // Builds a { resourceName: utilisationPercent } map from buildKpis().resources, for use
@@ -490,8 +515,9 @@ export function buildKpis(model = {}, results = {}) {
   if (summary.totalCost) kpis.totalCost = finiteOrNull(summary.totalCost);
   if (summary.costPerServed) kpis.costPerServed = finiteOrNull(summary.costPerServed);
   if (summary.maxWIP) kpis.maxWIP = finiteOrNull(summary.maxWIP);
-  const containerLevels = extractContainerLevels(model, summary);
+  const containerLevels = extractContainerLevels(model, summary, results?.timeSeries);
   if (containerLevels) kpis.containerLevels = containerLevels;
+  if (hasOverTime(containerLevels)) kpis.containerLevelsNote = CONTAINER_OVER_TIME_NOTE;
   if (summary.activityCounts) kpis.activityCounts = summary.activityCounts;
   if (summary.preemptCounts) kpis.preemptCounts = summary.preemptCounts;
   if (summary.phaseCTruncated) {
@@ -1595,7 +1621,7 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
     else kpiSummary.push({ name: r.name, meanWait: null, p90Wait: null, utilisation: r.utilisation });
   }
 
-  const containerLevels = extractContainerLevels(model, summary);
+  const containerLevels = extractContainerLevels(model, summary, results?.timeSeries);
 
   const payload = {
     model: {
@@ -1608,6 +1634,7 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
     goalGaps: goalGaps || [],
     kpiSummary,
     ...(containerLevels ? { containerLevels } : {}),
+    ...(hasOverTime(containerLevels) ? { containerLevelsNote: CONTAINER_OVER_TIME_NOTE } : {}),
     constraintStatement: "Resource counts and shift windows are fixed. Recommend schedule timing and sequencing changes only.",
   };
 
@@ -1808,7 +1835,7 @@ export function buildReportRecommendationsPrompt(model = {}, results = {}) {
   const queues = extractQueues(model, results);
   const resources = extractResources(model, summary);
   const outcomes = extractOutcomes(summary);
-  const containerLevels = extractContainerLevels(model, summary);
+  const containerLevels = extractContainerLevels(model, summary, results?.timeSeries);
 
   const payload = {
     model: { name: model.name || DEFAULT_MODEL_NAME, goals: goalsToPrompt(model) },
@@ -1822,6 +1849,7 @@ export function buildReportRecommendationsPrompt(model = {}, results = {}) {
     resources,
     ...(entityAnomalies ? { entityAnomalies } : {}),
     ...(containerLevels ? { containerLevels } : {}),
+    ...(hasOverTime(containerLevels) ? { containerLevelsNote: CONTAINER_OVER_TIME_NOTE } : {}),
   };
 
   return {

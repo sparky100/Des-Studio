@@ -380,6 +380,11 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
 
   // Keep the menu inside the viewport — the Export button often sits at the
   // right edge of its toolbar, so a left-anchored menu overflows on phones.
+  // Measured exactly once, at the unshifted position, on open. Re-measuring
+  // after each shift never settles: layout reports fractional positions that
+  // don't round-trip exactly, so measure → setState → re-measure looped until
+  // React aborted with "Maximum update depth exceeded" (error #185). The
+  // width is pinned to max-content so shifting can't change it either.
   const menuRef = useRef(null);
   const [shiftX, setShiftX] = useState(0);
   useLayoutEffect(() => {
@@ -387,11 +392,9 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
     if (!el || typeof window === "undefined") return;
     const margin = 8;
     const rect = el.getBoundingClientRect();
-    const naturalLeft = rect.left - shiftX;
-    const overflowRight = naturalLeft + rect.width - (window.innerWidth - margin);
-    const next = overflowRight > 0 ? Math.max(-overflowRight, margin - naturalLeft) : 0;
-    if (next !== shiftX) setShiftX(next);
-  }, [shiftX]);
+    const overflowRight = rect.left + rect.width - (window.innerWidth - margin);
+    if (overflowRight > 0) setShiftX(Math.round(Math.max(-overflowRight, margin - rect.left)));
+  }, []);
 
   return (
     <>
@@ -399,6 +402,7 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
         position: "absolute",
         top: "calc(100% + 4px)",
         left: shiftX,
+        width: "max-content",
         maxWidth: "calc(100vw - 16px)",
         zIndex: 100,
         background: C.cardBg,

@@ -440,6 +440,31 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
       lines.push(`| ${id} | ${f(lvl.min)} | ${f(lvl.avg)} | ${f(lvl.max)} | ${f(lvl.final)} |`);
     }
     lines.push('');
+
+    // Container levels over time — digest of timeSeries[].byContainer
+    const withOverTime = Object.entries(kpis.containerLevels).filter(([, lvl]) => lvl?.overTime);
+    if (withOverTime.length) {
+      const f = v => v != null ? Number(v).toFixed(2) : '—';
+      lines.push('### Container Levels Over Time');
+      lines.push('');
+      lines.push(isMultiRepBundle
+        ? `Derived from the level recorded at each time-series sample, averaged across ${nReps} replications (so "empty" means every replication was empty at that time). For a stock that activities DRAIN from, time spent empty is a stockout.`
+        : 'Derived from the level recorded at each time-series sample. For a stock that activities DRAIN from, time spent empty is a stockout.');
+      lines.push('');
+      lines.push('| Container | Trough (at t) | Peak (at t) | First empty at | Times emptied | % of run empty | Early → late mean |');
+      lines.push('|-----------|---------------|-------------|----------------|---------------|----------------|-------------------|');
+      for (const [id, { overTime: o }] of withOverTime) {
+        lines.push(`| ${id} | ${f(o.trough.level)} (t=${f(o.trough.t)}) | ${f(o.peak.level)} (t=${f(o.peak.t)}) | ${o.firstEmptyAt != null ? f(o.firstEmptyAt) : 'never'} | ${o.timesEmptied} | ${o.pctTimeEmpty}% | ${f(o.earlyMean)} → ${f(o.lateMean)} |`);
+      }
+      lines.push('');
+      lines.push('Level profile — equal time buckets, each shown as `t: closing level (bucket minimum)`:');
+      lines.push('');
+      for (const [id, { overTime: o }] of withOverTime) {
+        if (!o.profile?.length) continue;
+        lines.push(`- **${id}**: ${o.profile.map(p => `${p.t}: ${p.level} (${p.min})`).join(' · ')}`);
+      }
+      lines.push('');
+    }
   }
 
   // Activity throughput — how many times each activity actually completed
