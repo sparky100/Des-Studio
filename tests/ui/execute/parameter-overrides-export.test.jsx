@@ -131,3 +131,50 @@ describe("goal outcomes in exports", () => {
     expect(sheets.find(s => s.name === "Goals").rows).toContainEqual(["Avg wait under 1", "summary.avgWait", "", "<", 1, 2.5, 1.5, "not-met"]);
   });
 });
+
+describe("quantity (B1) in exports", () => {
+  const qtyResults = { summary: {
+    served: 30, servedQuantity: 37, quantityInSystem: 2, quantityAttrs: { Cargo: "volume" },
+    quantityThroughByQueue: { "Berth Queue": 37 },
+    perResource: { Terminal: { total: 1, utilisation: 0.5, quantityProcessed: 37 } },
+    outcomes: { done: { routeId: "done", routeLabel: "Loaded", count: 30, quantity: 37 } },
+  } };
+
+  it("AI KPIs carry a quantity block", () => {
+    const q = buildKpis({}, qtyResults).quantity;
+    expect(q.served).toBe(37);
+    expect(q.throughByQueue).toEqual({ "Berth Queue": 37 });
+    expect(q.processedByResource).toEqual({ Terminal: 37 });
+  });
+
+  it("LLM export pack has a Quantities section", () => {
+    const md = buildLLMBundle({ name: "Oil" }, qtyResults, { replications: 1 });
+    expect(md).toContain("### Quantities");
+    expect(md).toContain("Cargo.volume");
+    expect(md).toContain("| Served | 37.00 |");
+    expect(md).toContain("| Berth Queue | 37.00 |");
+    expect(md).toContain("| Terminal | 37.00 |");
+  });
+
+  it("workbook gets Summary rows and a Quantities sheet", async () => {
+    await buildResultsXlsx({ results: qtyResults, model: { name: "Oil" } });
+    const sheets = downloadWorkbook.mock.calls.at(-1)[0];
+    expect(sheets.find(s => s.name === "Summary").rows).toContainEqual(["Quantity Served", 37]);
+    const q = sheets.find(s => s.name === "Quantities").rows;
+    expect(q).toContainEqual(["Queue (through)", "Berth Queue", 37]);
+    expect(q).toContainEqual(["Resource (processed)", "Terminal", 37]);
+    expect(q).toContainEqual(["Outcome", "Loaded", 37]);
+  });
+
+  it("Results summary shows quantity cards", () => {
+    render(<ResultsWorkspace results={qtyResults} model={{ queues: [], entityTypes: [] }} />);
+    expect(screen.getByText("QUANTITY SERVED")).toBeTruthy();
+    expect(screen.getByText("sum of volume")).toBeTruthy();
+    expect(screen.getByText(/Quantity processed: 37/)).toBeTruthy();
+  });
+
+  it("no quantity output for models without quantityAttr", () => {
+    expect(buildKpis({}, { summary: { served: 3 } }).quantity).toBeUndefined();
+    expect(buildLLMBundle({ name: "x" }, { summary: { served: 3 } }, {})).not.toContain("### Quantities");
+  });
+});

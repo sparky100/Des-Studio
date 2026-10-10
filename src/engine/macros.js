@@ -414,17 +414,25 @@ export const MACROS = [
   // declared container having at least `amount` available — mirrors DRAIN's
   // guard, but checked atomically alongside the server claim: if either the
   // server or the container check fails, neither is committed.
+  // Optional SCAN / SCAN:N after the skill argument (B2): instead of testing
+  // only the front entity, walk the queue in discipline order and assign the
+  // first entity for which an idle server with ITS skill exists — so a sour
+  // cargo at the front no longer blocks sweet cargoes behind it. SCAN:N caps
+  // the look-ahead at the first N entities. Without SCAN, behaviour is
+  // unchanged. Validation requires a skill argument with SCAN (V77).
   {
     name:    "ASSIGN",
-    pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"([^"]+)"|\s*,\s*Entity\.(\w+))?(?:\s*,\s*([A-Za-z_]\w*):([^)]+))?\)$/i,
+    pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"([^"]+)"|\s*,\s*Entity\.(\w+))?(?:\s*,\s*(SCAN)(?::(\d+))?)?(?:\s*,\s*([A-Za-z_]\w*):([^)]+))?\)$/i,
     apply(match, ctx) {
       const cType = match[1].trim();
       const sType = match[2].trim();
       const isAnyType = sType.toUpperCase() === "ANY";
       const skillLiteral = match[3] ? match[3].trim() : null;
       const skillAttrName = match[4] ? match[4].trim() : null;
-      const containerName = match[5] ? match[5].trim() : null;
-      const rawContainerAmount = match[6] ? match[6].trim() : null;
+      const scan = !!match[5];
+      const scanLimit = match[6] ? parseInt(match[6], 10) : null;
+      const containerName = match[7] ? match[7].trim() : null;
+      const rawContainerAmount = match[8] ? match[8].trim() : null;
       const { entities, helpers, state, clock, setLastCustId, setLastSrvId, msgs, _arbitration } = ctx;
       const arbitrationTarget = _arbitration && typeof _arbitration === "object" ? _arbitration : null;
 
@@ -441,28 +449,50 @@ export const MACROS = [
         ? (helpers.allServers ? helpers.allServers().filter((/** @type {any} */ s) => s.status === "idle" && !s._suspended) : [])
         : (helpers.idleOf(sType) || []);
 
-      const cust = candidates[0] ?? null;
-
       // Resolve skill: literal takes precedence, otherwise resolve from entity attribute
-      let skill = skillLiteral;
-      if (!skill && skillAttrName && cust) {
-        const raw = cust.attrs?.[skillAttrName];
-        skill = (raw !== null && raw !== undefined && raw !== '') ? String(raw) : null;
-      }
+      const skillFor = (/** @type {any} */ entity) => {
+        if (skillLiteral) return skillLiteral;
+        if (skillAttrName && entity) {
+          const raw = entity.attrs?.[skillAttrName];
+          return (raw !== null && raw !== undefined && raw !== '') ? String(raw) : null;
+        }
+        return null;
+      };
 
       // Filter by skill (cross-type pooling uses the dedicated helper so it
-      // stays consistent with per-type skill resolution)
-      const idleServers = skill
-        ? (isAnyType
-            ? (helpers.idleOfAnySkill ? helpers.idleOfAnySkill(skill) : []) || []
-            : allIdleServers.filter((/** @type {any} */ s) => helpers.hasSkillType(s.type, skill) || (Array.isArray(s.skills) && s.skills.includes(skill))))
-        : allIdleServers;
+      // stays consistent with per-type skill resolution). Skill-based
+      // preference: higher SkillProfile.priority wins; stable sort preserves
+      // FIFO-by-idle-time order within the same tier.
+      /** @type {Map<string, any[]>} */
+      const serversBySkill = new Map();
+      const rankedServersFor = (/** @type {string|null} */ sk) => {
+        if (!sk) return allIdleServers;
+        const cached = serversBySkill.get(sk);
+        if (cached) return cached;
+        const idle = isAnyType
+          ? (helpers.idleOfAnySkill ? helpers.idleOfAnySkill(sk) : []) || []
+          : allIdleServers.filter((/** @type {any} */ s) => helpers.hasSkillType(s.type, sk) || (Array.isArray(s.skills) && s.skills.includes(sk)));
+        const ranked = [...idle].sort((/** @type {any} */ a, /** @type {any} */ b) => (b._skillPriority || 0) - (a._skillPriority || 0));
+        serversBySkill.set(sk, ranked);
+        return ranked;
+      };
 
-      // Skill-based preference: higher SkillProfile.priority wins; stable
-      // sort preserves FIFO-by-idle-time order within the same tier.
-      const rankedServers = skill
-        ? [...idleServers].sort((/** @type {any} */ a, /** @type {any} */ b) => (b._skillPriority || 0) - (a._skillPriority || 0))
-        : idleServers;
+      // Without SCAN only the front entity is considered. With SCAN, walk the
+      // queue (discipline order, optionally capped at N) and take the first
+      // entity whose skill has an idle server.
+      /** @type {any} */
+      let cust = candidates[0] ?? null;
+      let scannedPast = 0;
+      if (scan && allIdleServers.length > 0) {
+        const limit = scanLimit && scanLimit > 0 ? Math.min(scanLimit, candidates.length) : candidates.length;
+        cust = null;
+        for (let i = 0; i < limit; i++) {
+          if (rankedServersFor(skillFor(candidates[i])).length > 0) { cust = candidates[i]; scannedPast = i; break; }
+        }
+        if (!cust) cust = candidates[0] ?? null;
+      }
+      const skill = skillFor(cust);
+      const rankedServers = rankedServersFor(skill);
 
       /** @type {Record<string, any>} */
       const arbitration = {
@@ -530,9 +560,10 @@ export const MACROS = [
           .map(e => ({ entityId: e.id, reason: "lower priority or later arrival" }));
         if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
         const skillSuffix = skill ? ` (skill: ${skill}${skillAttrName ? ` ← Entity.${skillAttrName}` : ''})` : '';
+        const scanSuffix = scannedPast > 0 ? ` (SCAN: passed ${scannedPast} ahead with no matching idle server)` : '';
         const servedByType = isAnyType ? srv.type : sType;
         msgs.push(
-          `#${cust.id} (${cType}) → serving by #${srv.id} (${servedByType})${skillSuffix} ` +
+          `#${cust.id} (${cType}) → serving by #${srv.id} (${servedByType})${skillSuffix}${scanSuffix} ` +
           `[waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
         );
       } else {
@@ -542,6 +573,12 @@ export const MACROS = [
         if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
         const skillSuffix = skill ? ` (skill: ${skill})` : '';
         msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${candidates.length} idle=${allIdleServers.length}${skillSuffix}`);
+        // Nothing changed — report a no-op so Phase C doesn't restart its scan
+        // for this firing. Without this, a condition like
+        // `queue(Q).length > 0 AND idle(T).count > 0` that stays true while the
+        // waiting entities' skills don't match the idle servers re-fired this
+        // C-event until the Phase C pass limit on every clock tick.
+        ctx.markNoOp?.();
       }
     },
   },
@@ -1117,6 +1154,67 @@ export const MACROS = [
       updateContainerMinMax(state, cName, newLevel);
       msgs.push(`DRAIN(${cName},${amount}): level → ${newLevel.toFixed(4)}`);
       ctx.trace?.push?.({ event: "Drain", container: cName, amount, level: newLevel, time: clock });
+    },
+  },
+
+  // ── DRAIN_PARTIAL(ContainerName, amount[, ShortfallContainer]) ──────────────
+  // Removes min(level, amount) — unlike DRAIN, which does nothing unless the
+  // full amount is available. When a shortfall container is named, the part
+  // that couldn't be drawn (amount − removed) is added to it (clamped to its
+  // capacity), so unmet demand accumulates exactly, with no lot-size remainder.
+  // Marked a no-op only when nothing changed (empty source, no shortfall
+  // container), so it can't spin Phase C.
+  {
+    name:    "DRAIN_PARTIAL",
+    pattern: /^DRAIN_PARTIAL\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*([^,)]+))?\)$/i,
+    apply(match, ctx) {
+      const cName     = match[1].trim();
+      const rawAmount = match[2].trim();
+      const shortName = match[3] ? match[3].trim() : null;
+      const { state, clock, msgs } = ctx;
+      const entity = resolveContextEntity(ctx);
+      const amount = evalEntityExpr(rawAmount, { state, clock, entity });
+      const key = `__container_${cName}`;
+      if (!(key in state)) {
+        msgs.push(`DRAIN_PARTIAL(${cName}): container '${cName}' not declared in containerTypes`);
+        return;
+      }
+      const shortKey = shortName ? `__container_${shortName}` : null;
+      if (shortKey && !(shortKey in state)) {
+        msgs.push(`DRAIN_PARTIAL(${cName}): shortfall container '${shortName}' not declared in containerTypes`);
+        return;
+      }
+      if (isNaN(amount) || amount <= 0) {
+        msgs.push(`DRAIN_PARTIAL(${cName},${rawAmount}): amount must be a positive number`);
+        return;
+      }
+      const removed = Math.min(Math.max(0, state[key]), amount);
+      const shortfall = amount - removed;
+      if (removed <= 0 && (!shortKey || shortfall <= 0)) {
+        ctx.markNoOp?.();
+        msgs.push(`DRAIN_PARTIAL(${cName},${amount}): '${cName}' is empty — nothing drawn`);
+        return;
+      }
+      if (removed > 0) {
+        flushContainerIntegral(state, clock, cName);
+        const newLevel = state[key] - removed;
+        state[key] = newLevel;
+        updateContainerMinMax(state, cName, newLevel);
+        ctx.trace?.push?.({ event: "Drain", container: cName, amount: removed, level: newLevel, time: clock });
+      }
+      let shortNote = '';
+      if (shortKey && shortName && shortfall > 0) {
+        flushContainerIntegral(state, clock, shortName);
+        const cap = state[`__containerCap_${shortName}`] ?? Infinity;
+        const newShort = Math.min(state[shortKey] + shortfall, cap);
+        state[shortKey] = newShort;
+        updateContainerMinMax(state, shortName, newShort);
+        ctx.trace?.push?.({ event: "Fill", container: shortName, amount: shortfall, level: newShort, time: clock });
+        shortNote = `; shortfall ${shortfall.toFixed(4)} → '${shortName}' (${newShort.toFixed(4)})`;
+      } else if (shortfall > 0) {
+        shortNote = `; shortfall ${shortfall.toFixed(4)} not recorded`;
+      }
+      msgs.push(`DRAIN_PARTIAL(${cName},${amount}): drew ${removed.toFixed(4)}, level → ${state[key].toFixed(4)}${shortNote}`);
     },
   },
 

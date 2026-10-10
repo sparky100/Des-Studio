@@ -324,6 +324,8 @@ export function renameContainer(model, oldId, newId) {
       effect: mapEffects(event.effect, (/** @type {any} */ effect) => {
         let next = replaceMacroArg(effect, "FILL", 0, oldId, newId);
         next = replaceMacroArg(next, "DRAIN", 0, oldId, newId);
+        next = replaceMacroArg(next, "DRAIN_PARTIAL", 0, oldId, newId);
+        next = replaceMacroArg(next, "DRAIN_PARTIAL", 2, oldId, newId);
         return next;
       }),
       routing: (event.routing || []).map((/** @type {any} */ route) => ({
@@ -337,6 +339,8 @@ export function renameContainer(model, oldId, newId) {
       effect: (() => {
         let next = replaceMacroArg(event.effect, "FILL", 0, oldId, newId);
         next = replaceMacroArg(next, "DRAIN", 0, oldId, newId);
+        next = replaceMacroArg(next, "DRAIN_PARTIAL", 0, oldId, newId);
+        next = replaceMacroArg(next, "DRAIN_PARTIAL", 2, oldId, newId);
         return next;
       })(),
     })),

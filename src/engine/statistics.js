@@ -154,6 +154,9 @@ export const SUMMARY_METRICS = [
   "summary.total", "summary.avgWait", "summary.avgSvc", "summary.avgSojourn",
   "summary.avgTimeInSystem", "summary.served", "summary.reneged", "summary.balked",
   "summary.servedRatio", "summary.totalCost", "summary.costPerServed",
+  // Quantity (B1) — present only when an entity type sets quantityAttr; an
+  // absent metric yields an empty CI, same as totalCost on cost-free models.
+  "summary.servedQuantity",
 ];
 
 // A goal's `metric` field for a container scope is written as `container.<key>`,
@@ -178,7 +181,12 @@ export const CONTAINER_METRIC_KEY = { minLevel: "min", maxLevel: "max", avgLevel
 export function scopedGoalKey(metric, scope) {
   if (!scope) return null;
   if (scope.type === "queue") return `queue.${metric.replace("summary.", "")}.${scope.id}`;
-  if (scope.type === "resource") return `resource.utilisation.${scope.name || scope.id}`;
+  if (scope.type === "resource") {
+    // Quantity processed (B1) needs its own key — every other resource goal is
+    // utilisation, which shares one key per resource.
+    if (metric === "resource.quantityProcessed") return `resource.quantityProcessed.${scope.name || scope.id}`;
+    return `resource.utilisation.${scope.name || scope.id}`;
+  }
   if (scope.type === "container") return `container.${metric.replace("container.", "")}.${scope.name || scope.id}`;
   return null;
 }
@@ -207,7 +215,12 @@ export function resolveGoalValueForReplication(goal, replicationResult) {
 
   if (scope?.type === "resource") {
     const r = result.summary?.perResource?.[scope.name || scope.id || ""];
-    const v = r?.calendarUtilisation ?? r?.utilisation;
+    const v = metric === "resource.quantityProcessed" ? r?.quantityProcessed : (r?.calendarUtilisation ?? r?.utilisation);
+    return Number.isFinite(v) ? v : null;
+  }
+  if (scope?.type === "queue" && metric === "summary.quantityThrough") {
+    const byQ = result.summary?.quantityThroughByQueue || {};
+    const v = byQ[scope.name || ""] ?? byQ[scope.id || ""] ?? (result.summary?.servedQuantity !== undefined ? 0 : null);
     return Number.isFinite(v) ? v : null;
   }
   if (scope?.type === "queue") {

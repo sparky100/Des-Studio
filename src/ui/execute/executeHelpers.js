@@ -167,6 +167,9 @@ export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) 
   // queue waiting — not a delta counter).
   let containerSums = grid ? {} : null;
   let wipSums = grid ? new Float64Array(grid.length) : null;
+  // Quantity (B1): quantity in system, and per-queue quantity waiting — levels,
+  // averaged like wip / queue waiting. Null until a series reports them.
+  let qtySums = null;
   let completedSums = grid ? new Float64Array(grid.length) : null;
   let count = 0;
 
@@ -180,6 +183,8 @@ export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) 
   function ensureQueueKey(k) {
     if (!queueSums[k]) queueSums[k] = {
       waiting: new Float64Array(grid.length),
+      quantityWaiting: new Float64Array(grid.length),
+      hasQuantity: false,
       total: new Float64Array(grid.length),
       // avgWait is weighted by waitN (entities that cleared the queue in this
       // bucket), not by replication count — a rep with no completions in a
@@ -239,6 +244,11 @@ export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) 
         const s = ensureQueueKey(k);
         s.waiting[gi] += q.waiting ?? 0;
         s.total[gi] += q.total ?? 0;
+        if (typeof q.quantityWaiting === "number") { s.quantityWaiting[gi] += q.quantityWaiting; s.hasQuantity = true; }
+      }
+      if (typeof pt.quantityInSystem === "number") {
+        if (!qtySums) qtySums = new Float64Array(grid.length);
+        qtySums[gi] += pt.quantityInSystem;
       }
       for (const [k, ty] of Object.entries(pt.byType || {})) {
         const s = ensureTypeKey(k);
@@ -268,6 +278,7 @@ export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) 
           total: s.total[gi] / count,
           avgWait: s.waitN[gi] > 0 ? s.waitSum[gi] / s.waitN[gi] : null,
           waitN: s.waitN[gi],
+          ...(s.hasQuantity ? { quantityWaiting: s.quantityWaiting[gi] / count } : {}),
         };
       for (const [k, s] of Object.entries(typeSums))
         byType[k] = { waiting: s.waiting[gi] / count, busy: s.busy[gi] / count, idle: s.idle[gi] / count, total: s.total[gi] / count };
@@ -280,11 +291,39 @@ export function makeTimeSeriesAccumulator(maxPoints = 150, knownMaxTime = null) 
           if (s.n[gi] > 0) byContainer[k] = s.sum[gi] / s.n[gi];
         }
       }
-      return { t, byQueue, byType, ...(byContainer ? { byContainer } : {}), wip: wipSums[gi] / count, completed: completedSums[gi] / count };
+      return { t, byQueue, byType, ...(byContainer ? { byContainer } : {}), ...(qtySums ? { quantityInSystem: qtySums[gi] / count } : {}), wip: wipSums[gi] / count, completed: completedSums[gi] / count };
     });
   }
 
   return { addSeries, getResult };
+}
+
+// Quantity results (B1) across replications: every quantity is the MEAN per
+// replication (labelled via quantityAggregation), unlike entity counts such as
+// served, which batch results sum. A replication that never recorded a key
+// (e.g. no lots took a journey) contributes 0 to that key's mean.
+function aggregateBatchQuantities(summaries) {
+  const withQty = summaries.filter(s => s && s.servedQuantity !== undefined);
+  if (!withQty.length) return null;
+  const n = summaries.length;
+  const mean = (get) => +(summaries.reduce((sum, s) => sum + (Number(get(s)) || 0), 0) / n).toFixed(4);
+  const meanMap = (field) => {
+    const keys = new Set(summaries.flatMap(s => Object.keys(s?.[field] || {})));
+    if (!keys.size) return undefined;
+    return Object.fromEntries([...keys].map(k => [k, mean(s => s?.[field]?.[k])]));
+  };
+  return {
+    servedQuantity: mean(s => s.servedQuantity),
+    quantityInSystem: mean(s => s.quantityInSystem),
+    renegedQuantity: mean(s => s.renegedQuantity),
+    balkedQuantity: mean(s => s.balkedQuantity),
+    quantityThroughByQueue: meanMap("quantityThroughByQueue") || {},
+    ...(meanMap("journeyQuantities") ? { journeyQuantities: meanMap("journeyQuantities") } : {}),
+    ...(meanMap("queueJourneyQuantities") ? { queueJourneyQuantities: meanMap("queueJourneyQuantities") } : {}),
+    quantityAttrs: withQty[0].quantityAttrs,
+    quantityAggregation: "mean-of-replications",
+    _meanQty: mean,
+  };
 }
 
 export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, warmupPeriod, precomputedTimeSeries) {
@@ -319,6 +358,14 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
     }
   }
   for (const o of Object.values(outcomeAcc)) finalizeWeightedStats(o);
+  const batchQuantities = aggregateBatchQuantities(summaries);
+  if (batchQuantities) {
+    // Outcome counts are summed across replications; their quantity is the
+    // mean per replication (see aggregateBatchQuantities).
+    for (const [routeId, o] of Object.entries(outcomeAcc)) {
+      o.quantity = batchQuantities._meanQty(s => s.outcomes?.[routeId]?.quantity);
+    }
+  }
 
   // Average perResource utilisation across replications
   const perResourceAcc = {};
@@ -364,6 +411,7 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
               ? Object.fromEntries(Object.entries(acc.skillUtilSum).map(([skill, sum]) => [skill, +(sum / acc.count).toFixed(4)]))
               : undefined,
             scheduleAdherence: acc.adherenceCount ? +(acc.adherenceSum / acc.adherenceCount).toFixed(4) : undefined,
+            ...(batchQuantities ? { quantityProcessed: batchQuantities._meanQty(s => s.perResource?.[type]?.quantityProcessed) } : {}),
           },
         ])
       )
@@ -563,23 +611,25 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
   return timeGrid.map((t, gi) => {
     const byQueue = {};
     const byType = {};
-    let sumWip = 0, sumCompleted = 0, wipCount = 0, completedCount = 0;
+    let sumWip = 0, sumCompleted = 0, wipCount = 0, completedCount = 0, sumQty = 0, qtyCount = 0;
     for (const snaps of repSnapshots) {
       const pt = snaps[gi];
       if (pt == null) continue;
       if (typeof pt.wip === "number") { sumWip += pt.wip; wipCount++; }
+      if (typeof pt.quantityInSystem === "number") { sumQty += pt.quantityInSystem; qtyCount++; }
       if (typeof pt.completed === "number") { sumCompleted += pt.completed; completedCount++; }
     }
     const wip = wipCount > 0 ? sumWip / wipCount : undefined;
     const completed = completedCount > 0 ? sumCompleted / completedCount : undefined;
 
     for (const qName of queueNames) {
-      let sumWaiting = 0, sumTotal = 0, count = 0, waitSum = 0, waitN = 0;
+      let sumWaiting = 0, sumTotal = 0, count = 0, waitSum = 0, waitN = 0, sumQtyW = 0, qtyW = 0;
       for (const snaps of repSnapshots) {
         const q = snaps[gi]?.byQueue?.[qName];
         if (q != null) {
           sumWaiting += q.waiting ?? 0; sumTotal += q.total ?? 0; count++;
           if (q.waitN) { waitSum += q.avgWait * q.waitN; waitN += q.waitN; }
+          if (typeof q.quantityWaiting === "number") { sumQtyW += q.quantityWaiting; qtyW++; }
         }
       }
       if (count > 0) byQueue[qName] = {
@@ -587,6 +637,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
         total: sumTotal / count,
         avgWait: waitN > 0 ? waitSum / waitN : null,
         waitN,
+        ...(qtyW > 0 ? { quantityWaiting: sumQtyW / qtyW } : {}),
       };
     }
 
@@ -612,7 +663,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       }
     }
 
-    return { t, byQueue, byType, ...(byContainer ? { byContainer } : {}), ...(wip !== undefined ? { wip } : {}), ...(completed !== undefined ? { completed } : {}) };
+    return { t, byQueue, byType, ...(byContainer ? { byContainer } : {}), ...(qtyCount > 0 ? { quantityInSystem: sumQty / qtyCount } : {}), ...(wip !== undefined ? { wip } : {}), ...(completed !== undefined ? { completed } : {}) };
   });
 }
 
@@ -665,6 +716,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       sections,
       journeys,
       queueJourneys,
+      ...(batchQuantities ? (({ _meanQty, ...q }) => q)(batchQuantities) : {}),
       waitSamplesBreakdown: {
         served: summaries.reduce((s, sm) => s + (sm.waitSamplesBreakdown?.served || 0), 0),
         reneged: summaries.reduce((s, sm) => s + (sm.waitSamplesBreakdown?.reneged || 0), 0),
@@ -888,6 +940,23 @@ export async function buildResultsXlsx({ results, replicationResults = [], aggre
     sheets.push({ name: 'Parameter Overrides', rows: poRows, colWidths: [32, 32, 12, 12, 12] });
   } else {
     summaryRows.push(['Parameter Overrides', 'None — model run as saved']);
+  }
+
+  // Sheet: Quantities (B1) — volume-weighted totals when an entity type sets
+  // quantityAttr; batch figures are the mean per replication.
+  if (summary.servedQuantity !== undefined) {
+    const perRun = summary.quantityAggregation === 'mean-of-replications' ? ' (mean / replication)' : '';
+    summaryRows.push([`Quantity Served${perRun}`, summary.servedQuantity ?? '']);
+    summaryRows.push([`Quantity in System at End${perRun}`, summary.quantityInSystem ?? '']);
+    const qRows = [['Kind', 'Name', `Quantity${perRun}`]];
+    for (const [name, v] of Object.entries(summary.quantityThroughByQueue || {})) qRows.push(['Queue (through)', name, v]);
+    for (const [name, r] of Object.entries(summary.perResource || {})) {
+      if (r?.quantityProcessed !== undefined) qRows.push(['Resource (processed)', name, r.quantityProcessed]);
+    }
+    for (const [routeId, o] of Object.entries(summary.outcomes || {})) {
+      if (o?.quantity !== undefined) qRows.push(['Outcome', o.routeLabel || routeId, o.quantity]);
+    }
+    sheets.push({ name: 'Quantities', rows: qRows, colWidths: [20, 32, 18] });
   }
 
   // Sheet: Goals — pass/fail per goal (recorded at run time, or evaluated now

@@ -1202,10 +1202,49 @@ export function validateModel(model) {
         }
       });
 
+      // ── V27 also covers DRAIN_PARTIAL(c, amount[, shortfallContainer]) ──
+      const partialHits = text.match(/\bDRAIN_PARTIAL\([^)]+\)/gi) || [];
+      partialHits.forEach(hit => {
+        const inner = hit.match(/^DRAIN_PARTIAL\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*([^,)]+))?\)$/i);
+        if (!inner) {
+          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ${hit} — expected DRAIN_PARTIAL(Container, amount[, ShortfallContainer]).`, tab,
+            { eventIds: [ev.id] });
+          return;
+        }
+        for (const name of [inner[1], inner[3]].filter(Boolean).map(n => n.trim())) {
+          if (!containerIdsLower.has(name.toLowerCase())) {
+            err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' DRAIN_PARTIAL references undeclared container '${name}'.`, tab,
+              { eventIds: [ev.id] });
+          }
+        }
+        if (inner[3] && inner[1].trim().toLowerCase() === inner[3].trim().toLowerCase()) {
+          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' DRAIN_PARTIAL uses '${inner[1].trim()}' as both source and shortfall container.`, tab,
+            { eventIds: [ev.id] });
+        }
+        const amountRaw = inner[2].trim();
+        if (/^-?\d+(\.\d+)?$/.test(amountRaw) && parseFloat(amountRaw) <= 0) {
+          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' DRAIN_PARTIAL amount (${amountRaw}) must be a positive number.`, tab,
+            { eventIds: [ev.id] });
+        }
+      });
+
       const assignHits = text.match(/\bASSIGN\([^)]+\)/gi) || [];
       assignHits.forEach(hit => {
-        const inner = hit.match(/^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"[^"]+"|\s*,\s*Entity\.\w+)?(?:\s*,\s*([A-Za-z_]\w*):([^)]+))?\)$/i);
-        if (!inner || !inner[3]) return;
+        // ── V77: SCAN look-ahead (B2) needs a skill argument and a positive N ──
+        const scanArg = hit.match(/,\s*SCAN\b\s*(?::\s*([^,)]*))?/i);
+        if (scanArg) {
+          const hasSkillArg = /^ASSIGN\([^,)]+,\s*[^,)]+,\s*(?:"[^"]+"|Entity\.\w+)\s*,\s*SCAN\b/i.test(hit);
+          if (!hasSkillArg) {
+            err('V77', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' uses SCAN without a skill argument — SCAN looks past entities whose required skill has no idle server, so it needs ASSIGN(Queue, ServerType, "Skill" or Entity.attr, SCAN).`, tab,
+              { eventIds: [ev.id] });
+          }
+          if (scanArg[1] !== undefined && !/^[1-9]\d*$/.test(scanArg[1].trim())) {
+            err('V77', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' SCAN:${scanArg[1].trim()} — the look-ahead limit must be a positive whole number (e.g. SCAN:10).`, tab,
+              { eventIds: [ev.id] });
+          }
+        }
+        const inner = hit.match(/^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"[^"]+"|\s*,\s*Entity\.\w+)?(?:\s*,\s*SCAN(?::\d+)?)?(?:\s*,\s*([A-Za-z_]\w*):([^)]+))?\)$/i);
+        if (!inner || !inner[3] || /^SCAN$/i.test(inner[3].trim())) return;
         const name = inner[3].trim();
         const amountRaw = inner[4].trim();
         if (!containerIdsLower.has(name.toLowerCase())) {
@@ -2121,6 +2160,33 @@ export function validateModel(model) {
         `C-Event '${c.name || c.id}' uses calendar conditions (${calendarVars.filter(v => condText.includes(v)).join(', ')}) but the model has no epoch set. Calendar variables will return defaults (isWeekday=true, hourOfDay=0). Set a Real-world start date in Model Settings.`,
         'cevents',
         { eventIds: [c.id] });
+    }
+  });
+
+  // ── V78 / V79: quantityAttr (B1) — checked on the inheritance-merged types,
+  // so a child type can rely on its parent's attribute (or quantityAttr).
+  mergedEntityTypes.forEach((/** @type {any} */ et) => {
+    const attr = typeof et.quantityAttr === 'string' ? et.quantityAttr.trim() : '';
+    if (!attr) return;
+    const label = `Entity type '${et.name || et.id || '?'}'`;
+    if (et.role === 'server') {
+      err('V78', `${label} is a resource — quantityAttr applies to entities that flow through the model, not to servers.`, 'entities', { entityTypeIds: [et.id] });
+      return;
+    }
+    const defs = Array.isArray(et.attrDefs) ? et.attrDefs : [];
+    const def = defs.find((/** @type {any} */ a) => String(a?.name || '').trim() === attr);
+    if (!def) {
+      err('V78', `${label} sets quantityAttr '${attr}', but has no attribute of that name. Add a numeric attribute '${attr}' or pick an existing one.`, 'entities', { entityTypeIds: [et.id] });
+      return;
+    }
+    const numeric = def.valueType === 'number' || (def.valueType == null && def.dist);
+    if (!numeric) {
+      err('V78', `${label} quantityAttr '${attr}' must be a number attribute (it is '${def.valueType || 'untyped'}').`, 'entities', { entityTypeIds: [et.id] });
+      return;
+    }
+    const hasDefault = def.defaultValue !== undefined && def.defaultValue !== null && def.defaultValue !== '';
+    if (!hasDefault && !def.dist) {
+      warn('V79', `${label} quantityAttr '${attr}' has no default value and no distribution, so every entity's quantity is 0 unless an effect sets it.`, 'entities', { entityTypeIds: [et.id] });
     }
   });
 

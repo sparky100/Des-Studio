@@ -432,6 +432,24 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
       color: C.green,
     },
   ];
+  // Quantity (B1) — only when an entity type sets quantityAttr. Batch results
+  // already hold the mean per replication (quantityAggregation).
+  if (summary.servedQuantity !== undefined) {
+    const attrNames = [...new Set(Object.values(summary.quantityAttrs || {}))].join(", ");
+    const perRun = summary.quantityAggregation === "mean-of-replications" ? " (avg / run)" : "";
+    cards.push({
+      label: `Quantity served${perRun}`,
+      value: formatMetricValue(summary.servedQuantity),
+      ciPath: "summary.servedQuantity",
+      desc: attrNames ? `sum of ${attrNames}` : undefined,
+      color: C.served,
+    });
+    cards.push({
+      label: `Quantity in system at end${perRun}`,
+      value: formatMetricValue(summary.quantityInSystem),
+      color: C.text,
+    });
+  }
   if (Number.isFinite(summary.totalCost) && summary.totalCost > 0) {
     cards.push({
       label: "Total cost",
@@ -508,6 +526,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
               <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>{card.value}</span>
               {card.ciPath && <CiBadge ci={results?.aggregateStats?.[card.ciPath]} C={C} FONT={FONT} />}
             </div>
+            {card.desc && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 3 }}>{card.desc}</div>}
           </div>
         ))}
       </div>
@@ -651,6 +670,11 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                   <div style={{ fontSize: 11, color: r.scheduleAdherence >= 0.9 ? C.green : C.amber, fontFamily: FONT, lineHeight: 1.5 }}>
                     Schedule adherence: {Math.round(r.scheduleAdherence * 100)}%
                     {r.scheduleAdherence >= 0.9 ? " ✓" : ""}
+                  </div>
+                )}
+                {r.quantityProcessed !== undefined && (
+                  <div style={{ fontSize: 11, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
+                    Quantity processed: {formatMetricValue(r.quantityProcessed)}{summary.quantityAggregation === "mean-of-replications" ? " (avg / run)" : ""}
                   </div>
                 )}
               </div>
