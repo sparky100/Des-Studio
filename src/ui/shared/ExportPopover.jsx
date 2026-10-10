@@ -79,6 +79,7 @@ const SCHEMA_REFERENCE_TEXT = `simmodlr.results.v1 — JSON Export Schema
     },
     phaseCTruncated: false,           // Phase C limit hit?
     cycleLimitReached: false,         // engine cycle limit reached?
+    scanLimitReached: false,          // per-replication C-event scan cap (2× tier limit) reached?
     runtimeMetrics: {
       eventsProcessed: 15000,
       cEventScans: 1200,

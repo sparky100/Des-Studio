@@ -268,6 +268,7 @@ export function AdaptiveBatchPanel({
         schedulesMap,
         collectTimeSeries: effectiveCollectCharts,
         maxCycles: estimateMaxCycles(admission.complexityEstimate),
+        maxCEventScans: admission.effectiveSettings?.maxCEventScans,
         onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
         signal,
         onProgress: ({ completed, relativeHalfWidth }) => {
@@ -485,6 +486,7 @@ export function AdaptiveBatchPanel({
           schedulesMap,
           collectTimeSeries: false,
           maxCycles: estimateMaxCycles(admission.complexityEstimate),
+          maxCEventScans: admission.effectiveSettings?.maxCEventScans,
           onComplete: resolve,
           onError: reject,
         });

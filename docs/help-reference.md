@@ -287,6 +287,12 @@ All 6 queue disciplines.
 
 **Run readiness** collapses to one line by default ("Ready to run" or "Needs attention" plus an advisory count when there are any); click **Details ▸** to see the full breakdown (blocking issues, advisories, and the workload estimate). A genuine blocking issue always shows full detail automatically — it never collapses to a one-line "Blocked" with no explanation.
 
+**C-event scan limit (per replication).** Each plan has a limit on C-event condition checks per replication (Free 50,000 · Standard 250,000 · Pro 1,000,000). The workload estimate counts B-events per replication — arrivals, one completion per activity each entity actually visits along its route (probabilistic branches weighted, conditional branches taking the longest path), and any other self-repeating B-event such as a clock tick or a daily demand top-up — and multiplies by the scans each B-event costs: one per C-event by default (1.5 per C-event below 8 C-events), or the ratio measured on this model's last run once you have run it. Because it is an estimate:
+- **Under the limit** — runs normally (a warning at 80% or more).
+- **Between 1× and 2× the limit** — runs, with a warning and a confirmation.
+- **More than 2× the limit** — blocked (RA7). The message shows the estimate and its basis.
+- **At run time**, any replication that reaches 2× the limit stops early and is flagged (Key Finding H16), whatever the estimate said.
+
 **Canvas scale parity with Draw:** the Execute canvas opens at the same pan and zoom you last used on the Draw canvas for this model (both canvases share coordinates), rather than always zooming out to fit everything. First-time viewing of a model (or opening it on a different browser/device, since this is a local per-browser setting) falls back to fitting the whole model.
 
 **Maximised canvas:** the Execute canvas fills the available window height by default and recalculates on resize/rotation; drag its bottom edge to set a manual height instead, which is then remembered. The Bottom Panel (Log/Entities/Charts/Live Metrics/Future Events) stays collapsed by default so the canvas gets the space; expanding it is remembered for next time.
@@ -639,6 +645,7 @@ are listed worst-first.
 | H13 | The run hit the internal cycle limit before its intended end | critical | Re-run; if it recurs, look for a runaway Conditional event chain |
 | H14 | A container that held stock ran empty — reports how many times, % of the run spent empty and when it first happened (mean level across replications for batch runs) | warning | If activities DRAIN from it, demand went unmet while it was empty — raise the initial level, FILL faster or more, or add capacity |
 | H15 | A container's level is trending down (late-run mean < half the early-run mean) without having run empty yet | warning | A longer run may run it dry — check the balance of FILL and DRAIN |
+| H16 | A replication hit the C-event scan limit (2× the plan's per-replication limit) and stopped early — batch results say how many replications | critical | Shorten the run, reduce arrivals, or merge C-events that wait on the same queue (e.g. one queue per station with `ASSIGN … SCAN`) |
 
 ### Live Flags (computed per-step, during execution)
 

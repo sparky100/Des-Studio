@@ -22,6 +22,7 @@ export function runReplicationPayload(payload = {}, shared = null) {
     terminationCondition = null,
     maxCycles = 5000,
     maxCPasses = 5000,
+    maxCEventScans,
     collectTimeSeries,
     collectTrace,
     entityDetail,
@@ -38,7 +39,7 @@ export function runReplicationPayload(payload = {}, shared = null) {
     maxCPasses,
     collectTimeSeries,
     undefined,
-    { schedulesMap, collectTrace, entityDetail }
+    { schedulesMap, collectTrace, entityDetail, maxCEventScans }
   );
 
   return {

@@ -921,11 +921,13 @@ Tiers (`RUN_ADMISSION_TIERS`): **Free** (10 reps / 50,000 scans / 2,000 planned 
 | RA2 | Run duration exceeds tier's `maxSimTime` — hard error |
 | RA3 | Replication count exceeds tier's `maxReplications` — hard error |
 | RA4 / RA5+RA6 | Planned schedule rows over / near (≥80%) tier's `maxPlannedRows` — hard error / warning+confirmation |
-| RA7 / RA8+RA9 | Estimated C-event scans over / near (≥80%) tier's `maxScans` — hard error / warning+confirmation |
+| RA7 / RA8+RA9 | Estimated C-event scans **per replication** over 2× tier's `maxScans` — hard error; between 1× and 2× — warning+confirmation (the run is allowed and the engine caps each replication at 2× `maxScans`); near (≥80%) — warning+confirmation. Messages state the estimate's basis (B-events × scans per B-event, default or measured) |
 | RA10+RA11 | Stop-on-condition termination — warning+confirmation (run size is inherently less predictable) |
 | RA12 | Bottleneck queue flagged by the complexity estimator — warning |
 | RA13+RA14 | Chart/time-series collection will be auto-disabled — warning+confirmation |
 | RA15+RA16 | Live event trace will be auto-disabled — warning+confirmation |
+
+**Scan estimate** (`estimateRunComplexity`, per replication): `estimatedBEventFirings` = arrival firings + stage visits along each arrival queue's traced route (queue → ASSIGN/COSEIZE/DELAY C-event → scheduled B-event → routing/probabilistic routing/`RELEASE` target; falls back to every entity × every stage C-event for loops, SPLIT/JOIN and MATCH/BATCH/UNBATCH) + firings of other self-recurring B-events. `estimatedCEventScans = estimatedBEventFirings × scansPerBEvent`, where `scansPerBEvent` is measured from the model's last run (`calibration`, via `scansPerBEventFromMetrics`, used only while the C-event count is unchanged) or defaults to N C-events (filtered Phase C, N ≥ 8) or 1.5·N. `effectiveSettings.maxCEventScans` (2× `maxScans`) is passed to `buildEngine` as `options.maxCEventScans`; a replication reaching it stops with `scanLimitReached: true` (Key Finding H16).
 
 **Auto-disable gates**, both independent of the tier-driven `riskLevel` (which is dominated by scan count) and instead keyed to the actual cost driver for each feature:
 - `collectTimeSeries` is disabled when `estimatedSnapLiteCost = expectedEntities * estimatedBEventFirings / cEventCount` exceeds `100,000,000` — this tracks `snapLite`'s O(entities) per-B-event-cycle cost, which a high-scan/low-entity model can avoid even at "large" risk.

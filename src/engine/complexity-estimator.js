@@ -1,7 +1,26 @@
 // @ts-check
 import { getPiecewisePeriods, normalizeDistributionName } from "./distributions.js";
 
-const STAGE_MACROS = new Set(["ASSIGN", "COSEIZE", "MATCH", "BATCH", "UNBATCH"]);
+const STAGE_MACROS = new Set(["ASSIGN", "COSEIZE", "MATCH", "BATCH", "UNBATCH", "DELAY"]);
+// Stage macros whose input queue is args[0] and whose output is the B-event(s)
+// the C-event schedules — the ones the flow walk below can follow. MATCH,
+// BATCH and UNBATCH move or merge entities through queues named inside the
+// macro, so a model using them falls back to the conservative stage count.
+const FLOW_STAGE_MACROS = new Set(["ASSIGN", "COSEIZE", "DELAY"]);
+// SPLIT creates child entities mid-route, so per-arrival visits undercount.
+const ENTITY_MULTIPLYING_MACROS = new Set(["SPLIT", "JOIN"]);
+// Phase C only evaluates C-events whose inputs changed (dirty-set filtering)
+// once a model has this many C-events — mirrors enableFilteredPhaseC in
+// engine/index.js.
+const FILTERED_PHASE_C_MIN_CEVENTS = 8;
+// Scans per B-event firing when no measured ratio is available. Calibrated on
+// the built-in templates and the World Oil Network model: without filtering
+// every C-event is evaluated once per pass and a firing usually triggers a
+// second pass (measured 1.3–1.7 × C-events per B-event); with filtering the
+// skipped C-events roughly offset the restart passes (measured 0.9 × C-events
+// on the oil model, 23 C-events).
+const DEFAULT_FILTERED_SCAN_FRACTION = 1;
+const DEFAULT_UNFILTERED_PASSES = 1.5;
 const SERVICE_MACROS = new Set(["ASSIGN", "COSEIZE"]);
 
 /** @param {any} effect */
@@ -166,7 +185,7 @@ function resolveScheduleRows(schedule, schedulesMap) {
  */
 function estimateRecurringArrivals(bEvent, maxSimTime, unknowns, schedulesMap = {}) {
   const calls = parseCalls(bEvent.effect).filter(call => call.macro === "ARRIVE");
-  if (!calls.length) return { plannedArrivals: 0, expectedArrivals: 0, meanArrivalRateByQueue: {} };
+  if (!calls.length) return { plannedArrivals: 0, expectedArrivals: 0, meanArrivalRateByQueue: {}, expectedArrivalsByQueue: {}, firings: 0 };
 
   const scheduledTime = Number.isFinite(Number(bEvent.scheduledTime)) ? Number(bEvent.scheduledTime) : 0;
   const selfSchedules = (bEvent.schedules || []).filter((/** @type {any} */ schedule) => schedule.eventId === bEvent.id);
@@ -217,7 +236,127 @@ function estimateRecurringArrivals(bEvent, maxSimTime, unknowns, schedulesMap = 
     }
   }
 
-  return { plannedArrivals, expectedArrivals, meanArrivalRateByQueue };
+  // Every ARRIVE call in the effect fires once per firing of the event, so
+  // each call's queue receives expectedArrivals / calls.length entities.
+  const firings = expectedArrivals / calls.length;
+  /** @type {Record<string, number>} */
+  const expectedArrivalsByQueue = {};
+  for (const call of calls) {
+    const queueName = queueKey(call.args[1]);
+    expectedArrivalsByQueue[queueName] = (expectedArrivalsByQueue[queueName] || 0) + firings;
+  }
+  return { plannedArrivals, expectedArrivals, meanArrivalRateByQueue, expectedArrivalsByQueue, firings };
+}
+
+/** @param {any} name */
+function queueKey(name) {
+  return String(name || "").trim().toLowerCase();
+}
+
+/**
+ * Firings of a B-event that does not ARRIVE entities but re-schedules itself
+ * (a clock tick, a daily demand top-up, a status refresh). Each firing is a
+ * cycle and a Phase C scan even though no entity moves.
+ * @param {Record<string, any>} bEvent
+ * @param {number|null} maxSimTime
+ */
+function estimateRecurringNonArrivalFirings(bEvent, maxSimTime) {
+  if (maxSimTime == null) return 0;
+  if (parseCalls(bEvent.effect).some(call => call.macro === "ARRIVE")) return 0;
+  const selfSchedules = (bEvent.schedules || []).filter((/** @type {any} */ schedule) => schedule.eventId === bEvent.id);
+  if (!selfSchedules.length) return 0;
+  const scheduledTime = Number(bEvent.scheduledTime);
+  if (!Number.isFinite(scheduledTime) || scheduledTime > maxSimTime) return 0;
+  let firings = 1;
+  for (const schedule of selfSchedules) {
+    const mean = meanForDistribution(schedule.dist, schedule.distParams || {});
+    if (mean == null || !Number.isFinite(mean) || mean <= 0) continue;
+    firings += Math.ceil(Math.max(0, maxSimTime - scheduledTime) / mean);
+  }
+  return firings;
+}
+
+/**
+ * Expected number of stage visits (C-event firings that each schedule one
+ * completion B-event) for an entity entering each queue, found by walking the
+ * model's flow: queue → consuming ASSIGN/COSEIZE/DELAY C-event → the B-event
+ * it schedules → routing / probabilistic routing / RELEASE target queue → …
+ * Probabilistic branches are weighted by probability; conditional branches
+ * and alternative consumers of the same queue take the longest path, so the
+ * figure errs high. Returns null when the flow can't be followed (loops,
+ * MATCH/BATCH/UNBATCH stages), in which case the caller falls back to
+ * assuming every entity visits every stage.
+ * @param {Record<string, any>} model
+ * @returns {((queueName: string) => number) | null}
+ */
+function buildStageVisitEstimator(model) {
+  const cEvents = model?.cEvents || [];
+  const bEventsById = new Map((model?.bEvents || []).map((/** @type {any} */ b) => [b.id, b]));
+  /** @type {Map<string, any[]>} */
+  const consumersByQueue = new Map();
+  for (const cEvent of cEvents) {
+    const calls = parseCalls(cEvent.effect);
+    if (calls.some(call => (STAGE_MACROS.has(call.macro) && !FLOW_STAGE_MACROS.has(call.macro)) || ENTITY_MULTIPLYING_MACROS.has(call.macro))) return null;
+    const stage = calls.find(call => FLOW_STAGE_MACROS.has(call.macro));
+    if (!stage) continue;
+    const key = queueKey(stage.args[0]);
+    if (!consumersByQueue.has(key)) consumersByQueue.set(key, []);
+    /** @type {any[]} */ (consumersByQueue.get(key)).push(cEvent);
+  }
+  if ((model?.bEvents || []).some((/** @type {any} */ b) => b.loopConfig || parseCalls(b.effect).some(call => ENTITY_MULTIPLYING_MACROS.has(call.macro)))) return null;
+
+  /** @type {Map<string, number>} */
+  const memo = new Map();
+  let cyclic = false;
+
+  /** @param {any} bEvent @param {Set<string>} stack */
+  function visitsAfter(bEvent, stack) {
+    if (!bEvent) return 0;
+    let best = 0;
+    const conditional = [
+      ...(bEvent.routing || []).map((/** @type {any} */ branch) => branch?.queueName),
+      bEvent.defaultQueueName,
+      ...parseCalls(bEvent.effect)
+        .filter(call => call.macro === "RELEASE" || call.macro === "RELEASE_COSEIZED")
+        .map(call => call.macro === "RELEASE" ? call.args[1] : null),
+    ].filter(Boolean);
+    for (const queueName of conditional) best = Math.max(best, visits(queueName, stack));
+    const probabilistic = bEvent.probabilisticRouting || [];
+    if (probabilistic.length) {
+      let weighted = 0;
+      for (const branch of probabilistic) {
+        const p = Number(branch?.probability);
+        if (branch?.queueName && Number.isFinite(p) && p > 0) weighted += p * visits(branch.queueName, stack);
+      }
+      best = Math.max(best, weighted);
+    }
+    return best;
+  }
+
+  /** @param {string} queueName @param {Set<string>} stack */
+  function visits(queueName, stack) {
+    const key = queueKey(queueName);
+    if (memo.has(key)) return /** @type {number} */ (memo.get(key));
+    if (stack.has(key)) { cyclic = true; return 0; }
+    const consumers = consumersByQueue.get(key) || [];
+    if (!consumers.length) { memo.set(key, 0); return 0; }
+    stack.add(key);
+    let best = 0;
+    for (const cEvent of consumers) {
+      let after = 0;
+      for (const schedule of cEvent.cSchedules || []) {
+        after = Math.max(after, visitsAfter(bEventsById.get(schedule.eventId), stack));
+      }
+      best = Math.max(best, 1 + after);
+    }
+    stack.delete(key);
+    memo.set(key, best);
+    return best;
+  }
+
+  for (const key of consumersByQueue.keys()) visits(key, new Set());
+  if (cyclic) return null;
+  return (queueName) => visits(queueName, new Set());
 }
 
 /**
@@ -331,25 +470,54 @@ export function estimateRunComplexity(model, options = {}) {
 
   let plannedArrivals = initialCustomerEntities;
   let expectedEntities = initialCustomerEntities;
+  let arrivalFirings = 0;
+  let otherRecurringFirings = 0;
   /** @type {Record<string, number>} */
   const arrivalRateByQueue = {};
+  /** @type {Record<string, number>} */
+  const expectedArrivalsByQueue = {};
 
   for (const bEvent of model?.bEvents || []) {
     const estimate = estimateRecurringArrivals(bEvent, maxSimTime, unknowns, schedulesMap);
     plannedArrivals += estimate.plannedArrivals;
     expectedEntities += estimate.expectedArrivals;
+    arrivalFirings += estimate.firings;
+    otherRecurringFirings += estimateRecurringNonArrivalFirings(bEvent, maxSimTime);
     for (const [queueName, rate] of Object.entries(estimate.meanArrivalRateByQueue)) {
       arrivalRateByQueue[queueName] = (arrivalRateByQueue[queueName] || 0) + rate;
     }
+    for (const [queueName, count] of Object.entries(estimate.expectedArrivalsByQueue)) {
+      expectedArrivalsByQueue[queueName] = (expectedArrivalsByQueue[queueName] || 0) + count;
+    }
   }
 
+  const cEventCount = (model?.cEvents || []).length;
   const stageCount = Math.max(
     1,
     (model?.cEvents || []).filter((/** @type {any} */ cEvent) => parseCalls(cEvent.effect).some(call => STAGE_MACROS.has(call.macro))).length
   );
-  const estimatedStageTransitions = expectedEntities * stageCount;
-  const estimatedBEventFirings = expectedEntities + estimatedStageTransitions;
-  const estimatedCEventScans = estimatedBEventFirings * Math.max(1, (model?.cEvents || []).length);
+  // Stage visits per entity: follow the flow from each arrival queue when the
+  // model's routing can be traced, else assume every entity visits every stage.
+  const stageVisitsFor = buildStageVisitEstimator(model);
+  let estimatedStageTransitions;
+  let stageVisitBasis;
+  if (stageVisitsFor) {
+    const queueVisits = Object.entries(expectedArrivalsByQueue).map(([queueName, count]) => ({ count, visits: stageVisitsFor(queueName) }));
+    // Initial entities have no arrival queue — give them the longest route.
+    const longest = queueVisits.reduce((max, entry) => Math.max(max, entry.visits), 0) || stageCount;
+    estimatedStageTransitions = queueVisits.reduce((sum, entry) => sum + entry.count * entry.visits, 0)
+      + initialCustomerEntities * longest;
+    stageVisitBasis = "flow";
+  } else {
+    estimatedStageTransitions = expectedEntities * stageCount;
+    stageVisitBasis = "all-stages";
+  }
+  const meanStageVisitsPerEntity = expectedEntities > 0 ? estimatedStageTransitions / expectedEntities : 0;
+  // One cycle per arrival, per stage completion, and per firing of any other
+  // self-recurring B-event (ticks, demand top-ups) — each followed by a Phase C scan.
+  const estimatedBEventFirings = Math.ceil(arrivalFirings + estimatedStageTransitions + otherRecurringFirings);
+  const scanBasis = resolveScanBasis(cEventCount, options.calibration);
+  const estimatedCEventScans = Math.ceil(estimatedBEventFirings * scanBasis.scansPerBEvent);
   const totalEstimatedEntities = expectedEntities * replications;
   const totalEstimatedScans = estimatedCEventScans * replications;
 
@@ -372,23 +540,79 @@ export function estimateRunComplexity(model, options = {}) {
     plannedScheduleRows,
     expectedEntities,
     bEventCount: (model?.bEvents || []).length,
-    cEventCount: (model?.cEvents || []).length,
+    cEventCount,
     estimatedStageTransitions,
+    meanStageVisitsPerEntity: +meanStageVisitsPerEntity.toFixed(2),
+    stageVisitBasis,
+    otherRecurringFirings,
     estimatedBEventFirings,
+    scansPerBEvent: scanBasis.scansPerBEvent,
+    scanBasis: scanBasis.source,
+    scanBasisDescription: scanBasis.description,
     estimatedCEventScans,
     replications,
     totalEstimatedEntities,
     totalEstimatedScans,
+    // Whole-run (all replications) size — drives how much detail is saved.
+    // The tier scan limit and runtime scan cap are per replication instead.
     riskLevel: classifyRisk(totalEstimatedScans, totalEstimatedEntities, plannedScheduleRows),
     bottlenecks,
     confidence,
     assumptions: [
       "Recurring ARRIVE schedules are estimated from distribution means rather than sampled trajectories.",
-      "Stage transitions assume each active service-stage C-event can fire once per arriving entity.",
+      stageVisitBasis === "flow"
+        ? "Stage visits follow each arrival queue's route through the model (probabilistic branches weighted, conditional branches taking the longest path)."
+        : "Stage transitions assume each service/activity-stage C-event fires once per arriving entity (the route could not be traced).",
+      `C-event scans per run: ${scanBasis.description}`,
       "Bottlenecks are flagged only when arrival pressure and service capacity are both obvious from model structure.",
     ],
     unknowns: Array.from(new Set(unknowns)),
   };
+}
+
+/**
+ * How many C-event condition evaluations one B-event firing costs.
+ * @param {number} cEventCount
+ * @param {{ scansPerBEvent?: number, cEventCount?: number }|null|undefined} calibration
+ *   measured ratio from a previous run of this model (see scansPerBEventFromMetrics)
+ */
+function resolveScanBasis(cEventCount, calibration) {
+  const n = Math.max(1, cEventCount);
+  const measured = Number(calibration?.scansPerBEvent);
+  if (Number.isFinite(measured) && measured > 0 && Number(calibration?.cEventCount) === cEventCount) {
+    return {
+      scansPerBEvent: +measured.toFixed(3),
+      source: "measured",
+      description: `${measured.toFixed(1)} scans per B-event, measured on this model's last run.`,
+    };
+  }
+  if (cEventCount >= FILTERED_PHASE_C_MIN_CEVENTS) {
+    const perEvent = n * DEFAULT_FILTERED_SCAN_FRACTION;
+    return {
+      scansPerBEvent: perEvent,
+      source: "filtered",
+      description: `about ${perEvent.toFixed(1)} scans per B-event (one per C-event — the engine skips C-events whose inputs did not change, which roughly offsets the re-scan after each firing).`,
+    };
+  }
+  const perEvent = n * DEFAULT_UNFILTERED_PASSES;
+  return {
+    scansPerBEvent: perEvent,
+    source: "full",
+    description: `about ${perEvent.toFixed(1)} scans per B-event (all ${cEventCount} C-events checked each pass, plus a re-scan after a firing).`,
+  };
+}
+
+/**
+ * Measured scans per B-event firing from a completed run's runtimeMetrics,
+ * for feeding back into estimateRunComplexity({ calibration }).
+ * @param {Record<string, any>|null|undefined} runtimeMetrics
+ * @param {number} cEventCount
+ */
+export function scansPerBEventFromMetrics(runtimeMetrics, cEventCount) {
+  const scans = Number(runtimeMetrics?.c_event_scans);
+  const bFirings = Number(runtimeMetrics?.events_processed) - Number(runtimeMetrics?.c_events_fired || 0);
+  if (!Number.isFinite(scans) || !Number.isFinite(bFirings) || bFirings < 100 || scans <= 0) return null;
+  return { scansPerBEvent: scans / bFirings, cEventCount };
 }
 
 // Derives a per-replication cycle cap from the complexity estimate instead of

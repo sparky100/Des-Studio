@@ -33,6 +33,24 @@ export const RUN_ADMISSION_TIERS = Object.freeze({
   }),
 });
 
+// RA7 blocks only when the estimate exceeds this multiple of the tier's
+// maxScans; the engine stops any replication at the same multiple at runtime.
+export const SCAN_BLOCK_FACTOR = 2;
+
+/**
+ * One sentence on how the scan estimate was reached, for RA7/RA8 messages.
+ * @param {Record<string, any>} estimate
+ */
+function describeScanEstimate(estimate) {
+  const events = Number(estimate?.estimatedBEventFirings);
+  const perEvent = Number(estimate?.scansPerBEvent);
+  if (!Number.isFinite(events) || !Number.isFinite(perEvent)) return "";
+  const basis = estimate.scanBasis === "measured"
+    ? "measured on this model's last run"
+    : `estimated for ${Number(estimate.cEventCount) || 0} C-events`;
+  return ` Basis: about ${Math.round(events).toLocaleString()} B-events per replication × ${perEvent.toFixed(1)} scans each (${basis}).`;
+}
+
 /** @type {Record<string, number>} */
 const RISK_ORDER = {
   small: 0,
@@ -184,15 +202,34 @@ export function getRunAdmission(model, options = {}) {
       "This run uses a large planned schedule and may take longer than usual to prepare."
     ));
   }
-  if (estimatedCEventScans > tierPolicy.maxScans) {
+  // The scan estimate is a sizing guide, not a measurement, so it only blocks
+  // a run when it is more than SCAN_BLOCK_FACTOR × the tier limit. Between the
+  // limit and that, the run is allowed with a warning and the engine enforces
+  // the same SCAN_BLOCK_FACTOR × limit per replication at runtime
+  // (effectiveSettings.maxCEventScans) — a replication that really needs more
+  // stops cleanly and is flagged instead of running unbounded.
+  const scanLimitLabel = `${tierPolicy.label.toLowerCase()} tier limit of ${tierPolicy.maxScans.toLocaleString()} per replication`;
+  const scanEstimateText = `${Math.round(estimatedCEventScans).toLocaleString()} per replication`;
+  const scanBasisText = describeScanEstimate(complexityEstimate);
+  const runtimeScanCap = Math.round(tierPolicy.maxScans * SCAN_BLOCK_FACTOR);
+  if (estimatedCEventScans > runtimeScanCap) {
     hardErrors.push(makeDecisionIssue(
       "RA7",
-      `Estimated C-event scans per run (${Math.round(estimatedCEventScans).toLocaleString()}) exceed the ${tierPolicy.label.toLowerCase()} tier limit of ${tierPolicy.maxScans.toLocaleString()}.`
+      `Estimated C-event scans (${scanEstimateText}) are more than ${SCAN_BLOCK_FACTOR}× the ${scanLimitLabel}.${scanBasisText} Shorten the run, reduce arrivals, or merge C-events that share a queue.`
+    ));
+  } else if (estimatedCEventScans > tierPolicy.maxScans) {
+    warnings.push(makeDecisionIssue(
+      "RA8",
+      `Estimated C-event scans (${scanEstimateText}) exceed the ${scanLimitLabel}, but are within the ${SCAN_BLOCK_FACTOR}× margin allowed for estimate error.${scanBasisText} Any replication that reaches ${runtimeScanCap.toLocaleString()} scans will stop early and be flagged.`
+    ));
+    confirmations.push(makeDecisionIssue(
+      "RA9",
+      `This run is estimated to be over the scan limit. It will run, but a replication that reaches ${runtimeScanCap.toLocaleString()} C-event scans stops early and its results cover only part of the run.`
     ));
   } else if (estimatedCEventScans >= nearScanThreshold && estimatedCEventScans > 0) {
     warnings.push(makeDecisionIssue(
       "RA8",
-      `Estimated C-event scans are close to the ${tierPolicy.label.toLowerCase()} tier limit (${Math.round(estimatedCEventScans).toLocaleString()} of ${tierPolicy.maxScans.toLocaleString()}).`
+      `Estimated C-event scans are close to the ${scanLimitLabel} (${scanEstimateText}).${scanBasisText}`
     ));
     confirmations.push(makeDecisionIssue(
       "RA9",
@@ -229,7 +266,9 @@ export function getRunAdmission(model, options = {}) {
   // not on overall risk level which is dominated by C-event scan count. A model with
   // many C-events but few in-flight entities is cheap to snapshot; a high-volume
   // low-complexity model can be expensive. Threshold: ~100M iterations per rep.
-  const estimatedBEventFirings = complexityEstimate.estimatedCEventScans / Math.max(1, complexityEstimate.cEventCount);
+  const estimatedBEventFirings = Number.isFinite(complexityEstimate.estimatedBEventFirings)
+    ? complexityEstimate.estimatedBEventFirings
+    : complexityEstimate.estimatedCEventScans / Math.max(1, complexityEstimate.cEventCount);
   const estimatedSnapLiteCost = complexityEstimate.expectedEntities * estimatedBEventFirings;
   const effectiveCollectTimeSeries = requestedCollectTimeSeries && estimatedSnapLiteCost <= 100_000_000;
   if (requestedCollectTimeSeries && !effectiveCollectTimeSeries) {
@@ -270,6 +309,7 @@ export function getRunAdmission(model, options = {}) {
       allowRun: hardErrors.length === 0,
       collectTimeSeries: effectiveCollectTimeSeries,
       collectTrace: effectiveCollectTrace,
+      maxCEventScans: runtimeScanCap,
     },
     tier,
     tierPolicy,

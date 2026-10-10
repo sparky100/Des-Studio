@@ -241,6 +241,18 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
       suggestion: "Re-run — the engine now sizes its cycle limit to the model automatically, so this should be rare. If it recurs, the model may have a runaway condition (e.g. a C-event chain that never stabilises)." });
   }
 
+  // H16 — C-event scan limit reached (per-replication runtime cap, 2× the tier limit)
+  if (results?.scanLimitReached === true || summary.scanLimitReached === true) {
+    const count = results?.scanLimitReplicationCount ?? summary.scanLimitReplicationCount;
+    const reps = summary.numReplications;
+    const scope = Number.isFinite(count) && Number.isFinite(reps) && reps > 1
+      ? `${count} of ${reps} replications`
+      : "This run";
+    flags.push({ code: "H16", severity: "critical",
+      message: `${scope} hit the C-event scan limit (2× the plan's per-replication limit) and stopped before reaching the intended duration or termination condition — results reflect a partial run, not the full simulated period.`,
+      suggestion: "Shorten the run, reduce the arrival rate, or merge C-events that wait on the same queue (e.g. one queue per station with ASSIGN … SCAN) so each event needs fewer condition checks." });
+  }
+
   // H8 — Little's Law discrepancy (run may be too short)
   const d = summary.waitDiscrepancy;
   if (Number.isFinite(d) && d > 5) {
