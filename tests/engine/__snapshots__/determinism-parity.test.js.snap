@@ -54,6 +54,24 @@ exports[`determinism parity — fixed-seed benchmark scenarios > large-queues-st
 }
 `;
 
+exports[`determinism parity — fixed-seed benchmark scenarios > large-queues-stress (seed=48) 2`] = `
+{
+  "avgSojourn": 404.2496,
+  "avgSvc": 2.4893,
+  "avgWIP": 971.5153,
+  "avgWait": 411.4336,
+  "c_event_scans": 3148,
+  "c_events_fired": 401,
+  "entities_created": 2348,
+  "events_processed": 3148,
+  "finalTime": 1000,
+  "max_future_event_list_size": 3,
+  "reneged": 0,
+  "served": 400,
+  "total": 2347,
+}
+`;
+
 exports[`determinism parity — fixed-seed benchmark scenarios > many-c-events-high-churn (seed=47) 1`] = `
 {
   "avgSojourn": 14.7644,

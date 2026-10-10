@@ -137,8 +137,47 @@ const CONTAINER_TOKEN_RE = /^container\(([^)]+)\)\.(level|capacity|min|max)$/i;
 // prefix as the function-call tokens above, so it's safe to resolve on the RHS too.
 const OTHER_ATTR_RE = /^Other\.\w+$/;
 
+// B3 — state variables on the RHS. `state.<name>` is unambiguous and always
+// resolves. A bare identifier is ambiguous with a literal string of the same
+// text, so it resolves only when it names a state variable that actually
+// exists in this run (a key in the engine's scalar state, excluding the
+// engine's own `__`-prefixed internals) — checked at evaluation time, since
+// a compiled predicate doesn't know the model. A literal like "sour" with no
+// state variable called sour stays a literal. No arithmetic: the RHS is a
+// single reference, never an expression.
+const STATE_DOT_RE = /^state\.([A-Za-z_]\w*)$/;
+const BARE_IDENT_RE = /^[A-Za-z_]\w*$/;
+
 /** @param {any} value */
-function isResolvableExpression(value) {
+function stateVarRhsName(value) {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  const dotted = text.match(STATE_DOT_RE);
+  if (dotted) return { name: dotted[1], explicit: true };
+  if (BARE_IDENT_RE.test(text) && !text.startsWith("__")) return { name: text, explicit: false };
+  return null;
+}
+
+/**
+ * Resolve a state-variable RHS, or report that it isn't one.
+ * @param {{ name: string, explicit: boolean }} ref
+ * @param {any} state
+ * @returns {{ hit: boolean, value?: any }}
+ */
+function resolveStateVarRhs(ref, state) {
+  const scalars = state.scalars;
+  if (scalars && Object.prototype.hasOwnProperty.call(scalars, ref.name)) return { hit: true, value: scalars[ref.name] };
+  // Test-built predicate states put state vars at the top level.
+  if (!scalars && Object.prototype.hasOwnProperty.call(state, ref.name)
+      && !["currentEntity", "otherEntity", "helpers", "model", "entities", "resources", "queues", "clock"].includes(ref.name)) {
+    return { hit: true, value: state[ref.name] };
+  }
+  if (ref.explicit) return { hit: true, value: undefined };
+  return { hit: false };
+}
+
+/** @param {any} value */
+export function isResolvableExpression(value) {
   if (typeof value !== "string") return false;
   const text = value.trim();
   return QUEUE_TOKEN_RE.test(text) || IDLE_TOKEN_RE.test(text) || BUSY_TOKEN_RE.test(text)
@@ -363,6 +402,11 @@ export function getPredicateDependencies(predicate) {
     if (isResolvableExpression(normalized.value)) {
       addLeafDependency(deps, normalized.value);
     }
+    // A state-variable RHS (B3) — tracked so the filtered Phase C re-evaluates
+    // when that variable changes. Over-subscribing a bare literal that turns
+    // out not to be a state variable only costs an extra re-evaluation.
+    const rhsStateVar = stateVarRhsName(normalized.value);
+    if (rhsStateVar) deps.stateVars.add(rhsStateVar.name);
   }
 
   if (predicate && typeof predicate === "object") {
@@ -410,10 +454,22 @@ export function compilePredicate(predicate) {
     // like `queue(A).length < queue(B).length` (shortest-queue routing). Deliberately
     // scoped to just these five patterns; see isResolvableExpression for why a bare
     // state-variable name is excluded (ambiguous with a literal string of the same text).
+    //
+    // B3: a RHS of `state.<name>`, or a bare name that is a state variable in
+    // this run, resolves to that variable's current value — e.g.
+    // `clock >= closureStart`. See resolveStateVarRhs for the ambiguity rule.
     const rhsResolvable = isResolvableExpression(value);
+    const rhsStateVar = rhsResolvable ? null : stateVarRhsName(value);
     compiled = (state) => {
-      const left = resolveVariable(variable, state || {});
-      const right = rhsResolvable ? resolveVariable(value, state || {}) : value;
+      const st = state || {};
+      const left = resolveVariable(variable, st);
+      let right = value;
+      if (rhsResolvable) {
+        right = resolveVariable(value, st);
+      } else if (rhsStateVar) {
+        const hit = resolveStateVarRhs(rhsStateVar, st);
+        if (hit.hit) right = hit.value;
+      }
       return !!applyOperator(left, operator, right);
     };
   }

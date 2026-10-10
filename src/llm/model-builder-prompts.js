@@ -166,23 +166,20 @@ pattern, consult §10 directly.`,
     ✗ WRONG — COMPLETE() blocks the routing, entity exits immediately and never routes:
       "effect": ["COMPLETE()"], "probabilisticRouting": [{"queueName": "Voucher Queue", "probability": 0.9}, {"queueName": null, "probability": 0.1}]
 
-12. Condition strings only resolve the right-hand side dynamically for the five
-    function-call-style patterns — queue(...)/idle(...)/busy(...)/container(...)/attr(...) — never
-    for a bare state-variable name or Entity.<attr>. Comparing two of those five patterns to each
-    other (e.g. shortest-queue routing) works correctly in any condition (C-event, routing[],
-    balkCondition, cSchedules[].when). But a bare state-variable name or Entity.<attr> on the
-    right-hand side is still always parsed as a fixed literal at model-load time — it is never
-    re-resolved. A condition comparing a dynamic left side against a state-variable right side
-    silently evaluates to false forever (the literal parses as NaN) — no error, no warning, the
-    C-event just never fires. To gate on a state-variable threshold, compare it against its own
-    literal constant in its own AND-clause instead.
+12. The right-hand side of a condition clause is read dynamically when it is one of the
+    function-call tokens queue(...)/idle(...)/busy(...)/container(...)/attr(...), or a declared
+    state variable (bare name or state.<name>). Anything else — a number, a quoted string, or
+    Entity.<attr> — is a literal. There is no arithmetic on either side.
 
-    ✓ CORRECT: "condition": "queue(TraumaQueue).length > idle(Doctor).count"  — both sides are
-               function-call tokens, resolves dynamically
-    ✓ CORRECT: "condition": "queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"
-    ✗ WRONG:   "condition": "queue(TraumaQueue).length > traumaInService"  — right side is a bare
-               state-variable name, always treated as a literal, parses to NaN, comparison is
-               always false, C-event never fires
+    ✓ CORRECT: "condition": "queue(TraumaQueue).length > idle(Doctor).count"
+    ✓ CORRECT: "condition": "queue(TraumaQueue).length > traumaInService"  — traumaInService is a
+               declared state variable, read live
+    ✓ CORRECT: "condition": "clock >= closureStart AND clock < closureEnd AND closureEnabled == 1"
+               — a timed gate needs no repeating "status check" B-event
+    ✗ WRONG:   "condition": "clock >= closureStart + closureDays"  — no arithmetic; declare a
+               closureEnd state variable instead
+    ✗ WRONG:   a right-hand side naming a state variable that is not declared — it is read as text
+               and the clause is always false (V76)
 
 13. C-event name MUST NOT start with the word "Start".
     The effect picker prepends "Start" automatically — a C-event named "Start Triage"
@@ -208,9 +205,12 @@ pattern, consult §10 directly.`,
     "summary.reneged" | "summary.totalCost" | "summary.costPerServed"
     "resource.utilisation"
     "container.minLevel" | "container.avgLevel" | "container.maxLevel"
+    "summary.servedQuantity" | "summary.quantityThrough" | "resource.quantityProcessed"
+      (the three quantity metrics need an entity type with quantityAttr — rule 23)
     Do not use short-form keys ("avgWait") or invent other paths — the engine evaluates no other path.
     For queue-scoped goals, add: "scope": { "type": "queue", "id": "q_...", "name": "..." }.
-    For resource.utilisation and container.* metrics, "scope" is required (set type/id/name).
+    For resource.utilisation, resource.quantityProcessed, summary.quantityThrough and container.*
+    metrics, "scope" is required (set type/id/name).
     Time metrics (avgWait, avgSvc, avgSojourn, avgTimeInSystem) support percentile operators: "p50" | "p75" | "p90" | "p95" | "p99".
 
 14. NEVER invent a server type to model a resource-free wait (cooling period, mandatory
@@ -271,7 +271,25 @@ pattern, consult §10 directly.`,
     queue regardless of how it arrived (ARRIVE, RELEASE-routing, BATCH, SPLIT), with no extra
     B-event or schedule needed. Reserve the manual RENEGE(ctx) B-event pattern (rule 8) for
     reneging that must be conditional on something other than a fixed/sampled wait duration (e.g.
-    only renege while a specific state variable holds a value).`,
+    only renege while a specific state variable holds a value).
+
+21. When one queue holds entities needing different skills (e.g. sour and sweet crude at one
+    refinery), use ONE queue and ONE C-event with SCAN, not one queue per skill:
+    "effect": ["ASSIGN(Asia Crude Queue, Asia Unit, Entity.grade, SCAN)"], and give the server type
+    per-instance skillProfiles, e.g. [{"count": 12, "skills": ["sour"]}, {"count": 4, "skills": ["sweet"]}].
+    SCAN needs a skill argument before it; SCAN:N caps the look-ahead (positive integer) — V77.
+
+22. Unmet demand that is LOST (not served later): one demand B-event with
+    "DRAIN_PARTIAL(ct_products, 13.12, ct_unmet)" draws what stock there is and adds the rest to
+    ct_unmet. Demand that WAITS as back-orders keeps the backlog pattern (demand FILLs a backlog
+    container; a supply C-event DRAINs backlog and stock together). DRAIN still does nothing unless
+    the full amount is available.
+
+23. When entities differ in size (cargo volume, tonnes, pallets), give the customer entity type a
+    number attribute and set "quantityAttr" to its name, e.g. "quantityAttr": "volume" with
+    {"name": "volume", "valueType": "number", "defaultValue": 4}; set per-entity sizes with
+    SET_ATTR(volume, 2) after ARRIVE. Results then report quantities (served, in system, through each
+    queue, processed per resource) alongside counts. quantityAttr must name a number attribute (V78).`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:

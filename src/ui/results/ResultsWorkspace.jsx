@@ -432,6 +432,24 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
       color: C.green,
     },
   ];
+  // Quantity (B1) — only when an entity type sets quantityAttr. Batch results
+  // already hold the mean per replication (quantityAggregation).
+  if (summary.servedQuantity !== undefined) {
+    const attrNames = [...new Set(Object.values(summary.quantityAttrs || {}))].join(", ");
+    const perRun = summary.quantityAggregation === "mean-of-replications" ? " (avg / run)" : "";
+    cards.push({
+      label: `Quantity served${perRun}`,
+      value: formatMetricValue(summary.servedQuantity),
+      ciPath: "summary.servedQuantity",
+      desc: attrNames ? `sum of ${attrNames}` : undefined,
+      color: C.served,
+    });
+    cards.push({
+      label: `Quantity in system at end${perRun}`,
+      value: formatMetricValue(summary.quantityInSystem),
+      color: C.text,
+    });
+  }
   if (Number.isFinite(summary.totalCost) && summary.totalCost > 0) {
     cards.push({
       label: "Total cost",
@@ -461,7 +479,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
   const rejectionEntries = Object.entries(results?.perQueue || {})
     .filter(([, counts]) => (counts.balkCount || 0) > 0 || (counts.blockingCount || 0) > 0);
   const activityEntries = Object.entries(summary.activityCounts || {})
-    .map(([id, entry]) => ({ id, name: entry.name || id, count: entry.count || 0 }))
+    .map(([id, entry]) => ({ id, name: entry.name || id, count: entry.count || 0, firings: entry.firings }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   const preemptEntries = Object.entries(summary.preemptCounts || {})
     .map(([type, acc]) => ({ type, total: acc.total || 0, byReason: acc.byReason || {} }))
@@ -508,6 +526,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
               <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>{card.value}</span>
               {card.ciPath && <CiBadge ci={results?.aggregateStats?.[card.ciPath]} C={C} FONT={FONT} />}
             </div>
+            {card.desc && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 3 }}>{card.desc}</div>}
           </div>
         ))}
       </div>
@@ -653,6 +672,11 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                     {r.scheduleAdherence >= 0.9 ? " ✓" : ""}
                   </div>
                 )}
+                {r.quantityProcessed !== undefined && (
+                  <div style={{ fontSize: 11, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
+                    Quantity processed: {formatMetricValue(r.quantityProcessed)}{summary.quantityAggregation === "mean-of-replications" ? " (avg / run)" : ""}
+                  </div>
+                )}
               </div>
               );
             })}
@@ -783,6 +807,11 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                 <div style={{ fontSize: 18, color: C.accent, fontFamily: FONT, fontWeight: 700 }}>
                   {formatMetricValue(isMultiRep ? avgPerRun(a.count) : a.count, 0)}
                 </div>
+                {a.firings != null && a.firings !== a.count && (
+                  <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 3 }}>
+                    from {formatMetricValue(isMultiRep ? avgPerRun(a.firings) : a.firings, 0)} firings — one DELAY firing starts every waiting entity
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -2046,10 +2075,10 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                       title={series.label}
                       color={color}
                       sourceLabel={series.sourceLabel}
-                      statItems={lineSeriesStats(series, "entities", color)}
+                      statItems={lineSeriesStats(series, series.yLabel || "entities", color)}
                       dataPreview={<SeriesDataPreview series={series} />}
                     >
-                      <MiniLineChart title="" ariaTitle={series.label} points={series.chartPoints || series.points} color={color} yLabel="entities" />
+                      <MiniLineChart title="" ariaTitle={series.label} points={series.chartPoints || series.points} color={color} yLabel={series.yLabel || "entities"} />
                     </ChartCard>
                   );
                 })}

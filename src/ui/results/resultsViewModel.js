@@ -300,14 +300,33 @@ export function buildWipSeries(results = {}) {
   const points = timeSeries
     .filter(entry => entry?.wip != null)
     .map(entry => ({ t: finiteNumber(entry.t), value: finiteNumber(entry.wip) }));
-  return [{
+  const series = [{
     id: "wip",
     label: "Entities in system",
+    yLabel: "entities",
     points,
     chartPoints: binSeriesPoints(points, { aggregate: "avg" }),
     hasData: points.length >= 2,
     sourceLabel: "Count of entities in the model (excluding servers, completed, and reneged entities) at each sampled time point",
   }];
+  // Quantity (B1) — the same measure weighted by each entity's quantity
+  // attribute, when an entity type sets quantityAttr.
+  const qtyPoints = timeSeries
+    .filter(entry => entry?.quantityInSystem != null)
+    .map(entry => ({ t: finiteNumber(entry.t), value: finiteNumber(entry.quantityInSystem) }));
+  if (qtyPoints.length >= 2) {
+    const attrs = [...new Set(Object.values(results?.summary?.quantityAttrs || {}))].join(", ");
+    series.push({
+      id: "quantity-in-system",
+      label: "Quantity in system",
+      yLabel: attrs || "quantity",
+      points: qtyPoints,
+      chartPoints: binSeriesPoints(qtyPoints, { aggregate: "avg" }),
+      hasData: true,
+      sourceLabel: `Sum of ${attrs || "the quantity attribute"} over entities in the model at each sampled time point`,
+    });
+  }
+  return series;
 }
 
 export function buildThroughputSeries(results = {}) {

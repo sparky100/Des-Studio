@@ -524,6 +524,23 @@ export function buildKpis(model = {}, results = {}) {
   if (Array.isArray(overrides) && overrides.length) {
     kpis.parameterOverrides = overrides.map(o => ({ parameter: o.label ?? o.path, modelValue: o.baseValue, valueUsed: o.value }));
   }
+  // Quantity (B1) — volume-weighted totals alongside entity counts, when an
+  // entity type sets quantityAttr.
+  if (summary.servedQuantity !== undefined) {
+    const perResourceQty = Object.fromEntries(Object.entries(summary.perResource || {})
+      .filter(([, r]) => r?.quantityProcessed !== undefined).map(([t, r]) => [t, r.quantityProcessed]));
+    kpis.quantity = {
+      attributes: summary.quantityAttrs || {},
+      ...(summary.quantityAggregation ? { aggregation: summary.quantityAggregation } : {}),
+      served: finiteOrNull(summary.servedQuantity),
+      inSystemAtEnd: finiteOrNull(summary.quantityInSystem),
+      reneged: finiteOrNull(summary.renegedQuantity),
+      balked: finiteOrNull(summary.balkedQuantity),
+      throughByQueue: summary.quantityThroughByQueue || {},
+      processedByResource: perResourceQty,
+      note: "Quantities sum the named attribute (e.g. volume) over entities; counts elsewhere count entities. Prefer quantities when entities differ in size.",
+    };
+  }
   if (summary.activityCounts) kpis.activityCounts = summary.activityCounts;
   if (summary.preemptCounts) kpis.preemptCounts = summary.preemptCounts;
   if (summary.phaseCTruncated) {
@@ -830,6 +847,11 @@ function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}
   if (aggKey && aggregateStats[aggKey]?.mean != null) return aggregateStats[aggKey].mean;
   if (scope?.type === "queue") {
     const qId = scope.id;
+    // Quantity (B1) through this queue — keyed by queue name.
+    if (metric === "summary.quantityThrough") {
+      const byQ = summary.quantityThroughByQueue || {};
+      return byQ[scope.name] ?? byQ[qId] ?? (summary.servedQuantity !== undefined ? 0 : null);
+    }
     if (metric === "summary.maxWIP") {
       const maxLengths = summary.runtimeMetrics?.max_queue_length_by_queue;
       if (maxLengths && typeof maxLengths === "object") {
@@ -854,6 +876,9 @@ function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}
   }
   if (scope?.type === "resource") {
     const rName = scope.name || scope.id;
+    if (metric === "resource.quantityProcessed") {
+      return summary.perResource?.[rName]?.quantityProcessed ?? null;
+    }
     // Prefer the calendar-aware figure (open-hours-only denominator) for any
     // resource with a weekly schedulePattern — the plain `utilisation` field's
     // wall-clock denominator understates true busy-while-open utilisation.
@@ -895,6 +920,7 @@ const GOAL_SUMMARY_KEY = {
   'summary.avgWIP':     'avgWIP',
   'summary.maxWIP':     'maxWIP',
   'summary.served':     'served',
+  'summary.servedQuantity': 'servedQuantity',
   'summary.servedRatio': 'servedRatio',
   'summary.reneged':    'reneged',
   'summary.balked':     'balked',

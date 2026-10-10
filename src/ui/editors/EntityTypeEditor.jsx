@@ -299,6 +299,24 @@ const EntityTypeEditor=({types,sections=[],stateVariables=[],queues=[],epoch=nul
                 role={et.role||'customer'}
                 onChange={v=>upd(i,'attrDefs',v)}
               />
+              {et.role!=="server"&&(() => {
+                // B1 — results also total this numeric attribute (e.g. volume
+                // in Mb) alongside entity counts.
+                const numericAttrs = (Array.isArray(et.attrDefs)?et.attrDefs:[]).filter(a => a?.name && a.valueType === "number");
+                if (numericAttrs.length === 0 && !et.quantityAttr) return null;
+                return (
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <label htmlFor={`quantity-attr-${et.id||i}`} style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Quantity attribute:</label>
+                    <select id={`quantity-attr-${et.id||i}`} value={et.quantityAttr||""} onChange={e=>upd(i,"quantityAttr",e.target.value||undefined)}
+                      style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px"}}>
+                      <option value="">— count entities only —</option>
+                      {numericAttrs.map(a=><option key={a.name} value={a.name}>{a.name}</option>)}
+                      {et.quantityAttr&&!numericAttrs.some(a=>a.name===et.quantityAttr)&&<option value={et.quantityAttr}>{et.quantityAttr} (not a number attribute)</option>}
+                    </select>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>results also total this attribute — quantity served, in system, through each queue and processed by each resource</span>
+                  </div>
+                );
+              })()}
               {(() => {
                 const candidates = types.filter(t => t.id !== et.id && (t.role || 'customer') === (et.role || 'customer') && !wouldCreateInheritanceCycle(et.id, t.id, types));
                 if (candidates.length === 0 && !et.parentTypeId) return null;

@@ -1,11 +1,12 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 2.6.0
-**Date:** 2026-08-26
+**Version:** 2.7.0
+**Date:** 2026-10-10
 **Sprint baseline:** Sprint 88
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
+| v2.7.0 | 2026-10-10 | Full-scale network enablers | **State variable on the right-hand side (§6.1, §5 routing):** a RHS that is a declared state variable (bare name or `state.<name>`) now resolves dynamically — `clock >= closureStart` works; the old "RHS state variable is always a literal" rule is removed. New warning V76 for a non-numeric literal in a numeric comparison. **`ASSIGN(..., SCAN[:N])` (§6):** look past a front entity whose skill has no idle server; V77. **ASSIGN no-match is a no-op.** **`DRAIN_PARTIAL(c, amount[, shortfall])` (§5, §6, §8):** draws `min(level, amount)`, records the remainder. **`quantityAttr` (§2, §9):** volume-weighted results; V78/V79; new goal metrics `summary.servedQuantity`, `summary.quantityThrough`, `resource.quantityProcessed`. **Results (§8):** container stats exclude warm-up; batch container min/avg/max/final are means across replications with `lowestMin`/`highestMax`. Two new TOP LLM MISTAKES (#25, #26). |
 | v2.6.0 | 2026-08-26 | Business view curation field | Added the optional top-level `exposedParams` field to §1 — an **app-managed** array the model owner curates in the UI (Access tab → Business view) to choose which parameters viewer-role users may adjust. LLMs must **never generate or modify** this field: it references internal sweep-parameter paths that only the app can resolve, and the app preserves the current value across AI applies regardless of what a generation emits. Documented so LLMs reading an exported model don't treat it as unknown/invalid or strip it on round-trip. |
 | v2.5.0 | 2026-07-02 | Bare `defaultQueueName` enforcement | A real-world model shipped with four B-events using `defaultQueueName` alone (no `routing[]`/`probabilisticRouting[]`) as if it were a standalone "route to this queue" mechanism — it is not; the engine only consults `defaultQueueName` as a fallback *inside* `routing[]` (see `fireBEvent`, `engine/phases.js`). Every entity reaching the first such event was silently stuck forever, stalling the entire downstream pathway (0% of entities completed) while the model still saved, loaded, and validated cleanly. Added **V61** (§10) — blocking error when the entity isn't otherwise resolved, warning if it is (dead-field case). Added **TOP LLM MISTAKES #21**. Strengthened the §6.2 DELAY-completion "routing table" option to state explicitly that `defaultQueueName` alone is insufficient and to point single-fixed-destination cases at `probabilisticRouting: [{ probability: 1.0, queueName: "..." }]` instead. Also fixed a related bug in the LLM-facing model digest generator (`src/llm/prompts.js`) that labelled a bare `defaultQueueName` as routing type `"fixed"` — implying it was a third working routing mode alongside `"conditional"`/`"probabilistic"` — which could itself mislead an LLM iterating on an existing model into reproducing the pattern. |
 | v2.4.0 | 2026-06-27 | Unified condition storage format | Rewrote §6.1: the predicate object is now the single canonical *stored* representation for all four condition-bearing fields (`cEvents[].condition`, `queues[].balkCondition`, `bEvents[].routing[].condition`, `cEvents[].cSchedules[].when`); the old "two incompatible formats" framing is removed — a string shorthand is accepted on all four fields and parsed into the object form at save time, never persisted as a string. CHK-011/CHK-012 no longer error on every string — only on a string that fails to parse; added CHK-014 for `cSchedules[].when` string-shape symmetry. Updated TOP LLM MISTAKES #4/#5 and §13.13 to match. |
@@ -99,6 +100,8 @@ Read this before writing any model JSON.
 | 22 | Assuming `CANCEL(EventName)` cancels every pending instance of that event | `CANCEL` is **entity-scoped** — it only removes the pending FEL entry belonging to the entity currently in context (matched by `_contextCustId`), never a global "cancel all" for that event name. It is meant for racing a timeout against normal completion for the *same* entity (e.g. `"effect": ["CANCEL(TimeoutCheck)", "COMPLETE()"]` on the normal-completion B-event, where `TimeoutCheck` was scheduled for the same entity via a second `cSchedules` entry). Do not use it to try to stop a recurring/self-scheduling B-event model-wide. |
 | 23 | `ASSIGN(QueueName, ANY)` with no skill argument | The `ANY` cross-type-pooling sentinel only makes sense paired with a skill filter — `ASSIGN(QueueName, ANY, "Skill")`. Without a skill argument there is no basis to decide which servers across types are eligible. Always supply a skill literal (or `Entity.attrName`) when using `ANY`. |
 | 24 | Arithmetic expression used as a condition's entire `variable` — e.g. `(clock - state.lastSlotTime) >= 60` | The condition grammar has **no arithmetic evaluator** at all — `variable` must be a single resolvable token (`queue(...)`, `idle(...)`, `Entity.attr`, a bare state-variable name, etc.), never a parenthesized expression. `(clock - state.lastSlotTime)` is parsed as one opaque literal token, matches no known namespace, and throws `Unknown variable namespace in predicate` at runtime — with no validation-time warning, since string conditions aren't statically checked against the resolvable-token list. For "N time units since the last event," use a self-rescheduling timer B-event that sets a boolean flag instead — see §6.2 "DELAY with slot capacity" for the full pattern. |
+| 25 | A repeating "status check" B-event that recomputes a flag from `clock` every time unit (e.g. a daily `SET(isOpen, 1 - enabled * min(1, max(0, floor(clock) - start + 1)) * ...)`) | A state variable may be the **right-hand side** of a condition, so compare `clock` to it directly: two C-events — `clock >= closureStart AND clock < closureEnd AND closureEnabled == 1 AND isOpen == 1` → `SET(isOpen, 0)`, and `clock >= closureEnd AND isOpen == 0` → `SET(isOpen, 1)`. No tick events, no nested min/max/floor. See §6.1. |
+| 26 | One queue + one C-event per skill/grade at the same station (e.g. `Asia Sour Crude Queue` and `Asia Sweet Crude Queue`) only to stop one grade blocking another | Use one queue per station and `ASSIGN(Queue, UnitType, Entity.grade, SCAN)` — SCAN assigns the first waiting entity whose skill has an idle unit, so a sour lot at the front no longer blocks sweet lots behind it. Give the unit type per-instance `skillProfiles` for its mix of skills. Fewer queues and C-events means fewer C-event scans per event. See §6. |
 | 25 | Putting a `Distance`-typed schedule on a B-event's own self-rescheduling `schedules[]` instead of a C-event's `cSchedules` | `Distance` reads a speed attribute from the matched server or arriving entity at the moment a service starts — that pairing only exists after a C-event's `ASSIGN` (or similar) has resolved a customer/server context for the current `cSchedules` entry. A B-event's `schedules[]` (used for e.g. `b_arrive` scheduling its own next arrival) has no such context, so `speedSource` has nothing to read and the leg silently falls back to a duration of 0. Use `Distance` only inside a C-event's `cSchedules`, immediately after the `ASSIGN` that starts the leg. |
 
 ---
@@ -228,6 +231,7 @@ In this example, 40% of arriving entities have `requiredSkill = "Surgery"`, 30% 
 - `attrDefs[].name` must be unique within the entity type (V2).
 - `attrDefs[].name` must not start with `Resource` or `Queue` (reserved namespaces — V10).
 - `attrDefs[].valueType` is `"number"`, `"string"`, or `"boolean"`.
+- **`quantityAttr`** (optional, customer types only): the name of one of this type's **number** attributes to treat as the entity's quantity — e.g. `"quantityAttr": "volume"` with `{"name": "volume", "valueType": "number", "defaultValue": 4}`. Results then also report quantity alongside entity counts: `summary.servedQuantity`, `summary.quantityInSystem`, `summary.quantityThroughByQueue`, `perResource[].quantityProcessed`, `outcomes[].quantity`, journey quantities, and `quantityInSystem` / `byQueue[].quantityWaiting` in the time series. Use it whenever entities differ in size (cargoes of 0.7 / 1 / 2 Mb, pallets, batches) so throughput is meaningful in physical units. The attribute must exist on the type and be a number (V78, blocking); give it a `defaultValue` or a `dist` (V79 warns otherwise). Set or change the value at arrival with `SET_ATTR(volume, 2)`. Not inherited via `parentTypeId` — set it on each type that needs it.
 - `attrDefs[].defaultValue` must match the declared `valueType` (V3).
   - `number` → numeric string or number, e.g. `"3"` or `3`
   - `boolean` → `"true"` or `"false"` (string)
@@ -680,6 +684,7 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | `RENEGE` | `RENEGE(ctx)` | Marks current entity as reneged (abandoned). Always use `ctx` as the argument. |
 | `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch entity, sends each member to `QueueName`. `QueueName` must reference a defined queue (V23). Every UNBATCH should be paired with a corresponding BATCH that created the batch entity being unbatched. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id`. `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
+| `DRAIN_PARTIAL` | `DRAIN_PARTIAL(containerId, amount)` or `DRAIN_PARTIAL(containerId, amount, shortfallContainerId)` | Removes `min(level, amount)` — unlike `DRAIN`, it draws what is there instead of doing nothing. When a shortfall container is named, the part that could not be drawn is added to it (clamped to its capacity). Use for **lost-sales demand**: one daily `DRAIN_PARTIAL(ct_products, 13.12, ct_unmet)` on the demand B-event records exactly the unmet volume, with no lot-size remainder and no separate supply C-event. Both containers must be declared and different, and a literal `amount` must be > 0 (V27). |
 | `PREEMPT` | `PREEMPT(ServerType[, Criterion])` | Interrupts in-progress service; displaced entity re-queues with remaining service time. Optional Criterion selects which busy server to interrupt when more than one is busy: `PRIORITY(attrName)` (lowest value targeted), `LONGEST`/`SHORTEST` (by elapsed service time). Omitted or unrecognized criterion picks the first busy server (today's behavior). |
 | `FAIL` | `FAIL(ServerType[, N])` | Marks up to N servers of this type as failed; interrupts in-progress service on any that must be preempted. Prefers idle servers first — busy ones are only touched once idle capacity runs out. Omitted or non-positive N means "all" servers of the type. Pair with a scheduled `REPAIR` B-event. |
 | `REPAIR` | `REPAIR(ServerType[, N])` | Restores up to N failed servers of this type to idle, oldest-failure-first; triggers a C-scan for waiting entities. Omitted or non-positive N means "all". |
@@ -714,7 +719,7 @@ Predicate object fields:
 |---|---|---|
 | `variable` | string | Typically `Entity.<attrName>`, but may also be `queue(Name).length`, `idle(Type).count`, `busy(Type).count`, `container(Id).level`, or `attr(Type, attrName)` — see shortest-queue example below. |
 | `operator` | string | One of `==`, `!=`, `<`, `>`, `<=`, `>=` |
-| `value` | string \| number \| boolean | The comparison value. Usually a literal matching the attribute's `valueType` — but if `value` is itself one of the five dynamic patterns above (`queue(...)`, `idle(...)`, `busy(...)`, `container(...)`, `attr(...)`), it is resolved dynamically instead of treated as a literal string (this works in any condition, not just `routing[]` — see §6.1 below). A bare state-variable name or `Entity.<attr>` on the RHS is still always treated as a literal. |
+| `value` | string \| number \| boolean | The comparison value. Usually a literal matching the attribute's `valueType` — but if `value` is itself one of the five dynamic patterns above (`queue(...)`, `idle(...)`, `busy(...)`, `container(...)`, `attr(...)`), it is resolved dynamically instead of treated as a literal string (this works in any condition, not just `routing[]` — see §6.1 below). A declared state variable — bare name or `state.<name>` — on the RHS is also resolved to its current value. `Entity.<attr>` on the RHS is treated as a literal. |
 
 - `routing` and `probabilisticRouting` are mutually exclusive.
 - `routing` cannot be combined with a queue argument in `RELEASE(Server, Queue)`.
@@ -1015,8 +1020,9 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 |-------|--------|---------|
 | `ASSIGN` | `ASSIGN(QueueName, ServerType)` | Seizes a server of `ServerType`, starts serving the front entity from `QueueName`. Schedules `cSchedules` B-events. Both `QueueName` and `ServerType` must reference defined objects. |
 | `ASSIGN` (skilled) | `ASSIGN(QueueName, ServerType, "Skill")` | Same as ASSIGN above but only idle servers whose `skills[]` contains `"Skill"` are considered. The skill name must be a valid entry in the model's top-level `skills` registry (V-SKILL-2). The skill string is case-sensitive and must exactly match the declared skill name. |
-| `ASSIGN` (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Same as ASSIGN above but the required skill is read from the entity's `attrs[attrName]` at runtime. If the attribute value is `null`, `undefined`, or `""`, no skill filter is applied — any idle server of `ServerType` is eligible. The engine takes the first waiting entity by queue discipline and filters servers by **that entity's** resolved skill; if no matching server is idle, the ASSIGN fails (it does not scan subsequent entities). Use entity filters (`entityFilter`) on the C-event to pre-scope the queue when multiple entity types share a queue. `attrName` must be a defined attribute on at least one customer entity type reachable from `QueueName` (V-SKILL-3). |
+| `ASSIGN` (entity skill) | `ASSIGN(QueueName, ServerType, Entity.attrName)` | Same as ASSIGN above but the required skill is read from the entity's `attrs[attrName]` at runtime. If the attribute value is `null`, `undefined`, or `""`, no skill filter is applied — any idle server of `ServerType` is eligible. The engine takes the first waiting entity by queue discipline and filters servers by **that entity's** resolved skill; if no matching server is idle, nothing is assigned — add `SCAN` (the "scan ahead" row below) to look past it. Use entity filters (`entityFilter`) on the C-event to pre-scope the queue when multiple entity types share a queue. `attrName` must be a defined attribute on at least one customer entity type reachable from `QueueName` (V-SKILL-3). |
 | `ASSIGN` (any type, cross-type pooling) | `ASSIGN(QueueName, ANY, "Skill")` | Reserved token `ANY` (case-insensitive) in the server-type position pools idle servers **across every server type** that has the given skill (type-level `skills[]` or any `skillProfiles[].skills`), instead of one named type. Requires a skill argument — see TOP LLM MISTAKES #23. Use for "seize any resource with skill X" without duplicating one C-event per server type. When multiple cross-type candidates match, `skillProfiles[].priority` preference (see §2) still applies. |
+| `ASSIGN` (scan ahead) | `ASSIGN(QueueName, ServerType\|ANY, "Skill"\|Entity.attrName, SCAN)` or `..., SCAN:N)` | Walks the queue in discipline order and assigns the **first entity whose skill has an idle server**, instead of trying only the front entity. FIFO order is kept among entities of the same skill. `SCAN:N` limits the look-ahead to the first N entities (bounds the cost on long queues). Without SCAN, behaviour is unchanged. Requires a skill argument; N must be a positive integer (V77, blocking). Use it to keep several grades/skills in **one** queue per station (TOP LLM MISTAKES #26), e.g. `"ASSIGN(Asia Crude Queue, Asia Unit, Entity.grade, SCAN)"` with `Asia Unit` given `skillProfiles` `[{"count": 12, "skills": ["sour"]}, {"count": 4, "skills": ["sweet"]}]`. |
 | `ASSIGN` (consumable-gated) | `ASSIGN(QueueName, ServerType, ContainerId:amount)` | Optional trailing `ContainerId:amount` clause gates the assignment on a declared container (§8) having a level ≥ `amount`. The server claim and the container deduction happen **atomically** — if either the server or the container check fails, neither is committed (no partial seizure). `ContainerId` must match a declared container `id` (V27); `amount` accepts the same literal/state-variable/expression forms as `DRAIN`. Combine with a skill clause by putting the container clause last: `ASSIGN(QueueName, ServerType, "Skill", ContainerId:amount)`. Use for "this activity also consumes a physical/consumable resource" (a test kit, a dose, a part) in addition to seizing staff/equipment. |
 | `DELAY` | `DELAY(QueueName)` | Holds the front entity from `QueueName` for the duration sampled by the `cSchedules` entry, **without seizing any server**. Use for resource-free waits (cooling period, mandatory hold, recovery, paperwork delay). `DELAY` must be the entire effect — never combine with `ASSIGN`/`RELEASE` in the same C-event. The completion B-event needs `"useEntityCtx": true` to know which entity to route, and may use `COMPLETE()` or routing-table exit, same as a normal service completion. `QueueName` must reference a defined queue (V47). See §6.2. |
 | `BATCH` | `BATCH(QueueName, N)` | Accumulates N entities from `QueueName` into a parent batch entity. N ≥ 2 (V22). `QueueName` must reference a defined queue. |
@@ -1030,6 +1036,7 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `RENEGE_OLDEST` | `RENEGE_OLDEST(CustomerType)` | Removes the oldest entity of the given type from its queue. `CustomerType` must exactly match a defined customer entity type name (case-sensitive). Used for max-queue-length policies or timeout eviction. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id` (V27). `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
 | `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not) (V27). `amount` accepts the same literal/state-variable/expression forms as `FILL`. |
+| `DRAIN_PARTIAL` | `DRAIN_PARTIAL(containerId, amount)` or `DRAIN_PARTIAL(containerId, amount, shortfallContainerId)` | Removes `min(level, amount)` — unlike `DRAIN`, it draws what is there instead of doing nothing. When a shortfall container is named, the part that could not be drawn is added to it (clamped to its capacity). Use for **lost-sales demand**: one daily `DRAIN_PARTIAL(ct_products, 13.12, ct_unmet)` on the demand B-event records exactly the unmet volume, with no lot-size remainder and no separate supply C-event. Both containers must be declared and different, and a literal `amount` must be > 0 (V27). |
 | `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2. `QueueName` must reference a defined queue.Pair with `JOIN(Queue, Target)` for fork/join (see below). |
 | `CANCEL` | `CANCEL(EventName)` | Removes the pending FEL entry named `EventName` scheduled for the **current context entity only**. See the B-Event macro table above and TOP LLM MISTAKES #22 for full semantics — identical behavior in C-events. |
 | `ROUND_ROBIN` | `ROUND_ROBIN(StateVar, N)` | Advances `StateVar` through a `0..N-1` rotation. See the B-Event macro table above for full semantics — identical behavior in C-events. |
@@ -1170,22 +1177,33 @@ strings — malformed syntax there throws at evaluation time instead). A string 
 parses successfully is silently converted to the canonical object form the next time the
 model is saved — nothing further to do.
 
-> **Variable-vs-variable comparisons work only for the five function-call-style patterns on
-> the right-hand side — never for a bare state-variable name or `Entity.<attr>`.** The RHS of
-> every clause is parsed at save time; if it exactly matches `queue(...)`, `idle(...)`,
-> `busy(...)`, `container(...)`, or `attr(...)`, it is resolved dynamically at evaluation
-> time (this is what makes `"queue(A).length < queue(B).length"` work as a genuine live
-> comparison, in any condition — C-event, `routing[]`, `balkCondition`, `cSchedules[].when`).
-> Anything else on the RHS — a bare state-variable name, `Entity.<attr>`, or `Other.<attr>`
-> outside `MATCH`'s compatibility predicate — is still always parsed as a fixed literal, never
-> re-resolved. A condition like `"queue(TraumaQueue).length > traumaInService"` parses the right
-> side as a non-numeric literal (`NaN`) and silently evaluates to `false` forever — no error, no
-> warning, the C-event simply never fires. To gate logic on a state-variable threshold, compare
-> it against its own literal constant in a separate `AND` clause instead:
+> **What the right-hand side (`value`) can be.** The RHS of every clause is resolved
+> **dynamically** — read at evaluation time — when it is:
+> - one of the function-call tokens `queue(...)`, `idle(...)`, `busy(...)`, `container(...)`,
+>   `attr(...)` (e.g. `"queue(A).length < queue(B).length"` — shortest-queue routing); or
+> - a **state variable**: `state.<name>`, or a bare name that exactly matches a declared
+>   `stateVariables[].name` (e.g. `"clock >= closureStart"`, `"queue(TraumaQueue).length > traumaInService"`).
 >
-> ✓ `"queue(TraumaQueue).length > idle(Doctor).count"` — both sides are function-call tokens, resolves dynamically
-> ✓ `"queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0"` — state variable compared to its own literal
-> ✗ `"queue(TraumaQueue).length > traumaInService"` — right side is a bare state-variable name, still parsed as a literal
+> Anything else is a literal: a number, a quoted string (`Entity.grade == "sour"`), or
+> `Entity.<attr>` / `Other.<attr>` outside `MATCH`'s compatibility predicate. A bare word that
+> is **not** a declared state variable stays literal text, so a literal like `"sour"` is never
+> mistaken for a variable. There is **no arithmetic** on either side — `clock >= closureStart + closureDays`
+> is not valid; declare `closureEnd` as its own state variable instead. Applies to every
+> condition field (C-event, `routing[]`, `balkCondition`, `cSchedules[].when`).
+>
+> A non-numeric literal on the right of a numeric comparison (ordering operator, or a numeric
+> left side such as `clock`, `queue(...).length`, `container(...).level`) is almost always a
+> misspelt variable and makes the clause always false — validation warns (**V76**).
+>
+> ✓ `"clock >= closureStart AND clock < closureEnd AND closureEnabled == 1"` — state variables on the RHS, resolved live
+> ✓ `"queue(TraumaQueue).length > idle(Doctor).count"` — both sides function-call tokens
+> ✓ `"queue(TraumaQueue).length > traumaInService"` — RHS is a declared state variable
+> ✗ `"clock >= closureStart + 30"` — no arithmetic; use a `closureEnd` state variable
+> ✗ `"clock >= closureStrat"` — not a declared variable, read as text, always false (V76)
+>
+> Conditional events are evaluated after every event, so a clock-based condition becomes true
+> at the first event at or after the target time — no repeating "tick" B-event is needed
+> (TOP LLM MISTAKES #25).
 
 ---
 
@@ -1207,7 +1225,7 @@ Global variables that can be read and written during simulation.
 - `valueType`: always `"number"` for user-defined state variables.
 - `resetOnWarmup` (optional, default `true`): if `true`, the variable resets to `initialValue` when the warm-up period ends.
 - Set via `SET(variableName, expression)` in B-event or C-event effects.
-- Read in conditions via `state.variableName`.
+- Read in conditions via `state.variableName` or the bare name — on either side of a comparison (`closureEnabled == 1`, `clock >= closureStart`). See §6.1.
 
 ---
 
@@ -1217,7 +1235,7 @@ Continuous-level resources (tanks, buffers, stock).
 
 > **Container vs state variable — when to use each:** Use a `containerType` when the resource has a physical level that is bounded, shared across entity interactions, and must be tracked continuously (e.g. a fuel tank, a blood inventory, a buffer). Use a **state variable** when you need a simple scalar counter or flag that is set/incremented by events and read in C-event conditions (e.g. a shift active flag, an entity count, a mode toggle). Containers expose `FILL`/`DRAIN` semantics with capacity clamping; state variables expose `SET()` arithmetic with no bounds enforcement.
 
-> **UI note:** Container types are fully editable in the UI via the "Model Data" tab (Define sub-nav) — users can add, edit, and remove containers (`id`, `capacity`, `initialLevel`) after import. Containers can also be added and deleted as standalone nodes on the Draw canvas (they don't connect to other nodes, since they don't participate in entity flow). Simulation results carry per-container `containerLevels[id] = {min, avg, max, final}`, surfaced in the Overview tab, the Results tab, and all generated reports (Model Definition, Markdown/HTML results). The AI-facing KPI payload additionally includes `capacity`/`initialLevel` alongside the level stats, so analysis prompts can reason about utilization and overflow/stockout risk.
+> **UI note:** Container types are fully editable in the UI via the "Model Data" tab (Define sub-nav) — users can add, edit, and remove containers (`id`, `capacity`, `initialLevel`) after import. Containers can also be added and deleted as standalone nodes on the Draw canvas (they don't connect to other nodes, since they don't participate in entity flow). Simulation results carry per-container `containerLevels[id] = {min, avg, max, final}` over the **post-warm-up** period (container statistics restart when warm-up ends), surfaced in the Overview tab, the Results tab, and all generated reports (Model Definition, Markdown/HTML results). For multi-replication results all four are the **mean across replications**, and `lowestMin` / `highestMax` give the extremes any single replication reached (`aggregation: "mean-of-replications"`), so container goals are judged against a typical replication. The time series records each container's level at every sample (`timeSeries[].byContainer`), charted per container with trough/peak tiles; AI analysis receives a digest (`containerLevels[id].overTime`: trough and time, first time empty, times emptied, % of run empty, a level profile). The AI-facing KPI payload additionally includes `capacity`/`initialLevel` alongside the level stats, so analysis prompts can reason about utilization and overflow/stockout risk.
 
 ```json
 {
@@ -1232,6 +1250,7 @@ Continuous-level resources (tanks, buffers, stock).
 - `initialLevel` (optional, default 0): must be ≥ 0 and ≤ `capacity` (V26).
 - Manipulated by `FILL(id, amount)` and `DRAIN(id, amount)` in both B-events and C-events — the first argument must match the container's `id` exactly (case-insensitive) (V27).
 - `DRAIN` is a no-op (with error log) if the current level < amount — levels never go negative.
+- `DRAIN_PARTIAL(id, amount[, shortfallId])` draws `min(level, amount)` instead, and adds any remainder to the shortfall container. Use it for **lost-sales** demand (unmet volume recorded when it occurs). For **back-orders** that wait and are filled when product arrives, keep the backlog pattern instead: demand `FILL`s a backlog container and a supply C-event `DRAIN`s backlog and stock together.
 - `ASSIGN` can also gate on and deduct from a container via its optional trailing `ContainerId:amount` clause (§6, `ASSIGN` (consumable-gated) row) — use this when a service both seizes a server/skill **and** consumes a physical/consumable resource (a test kit, a dose, a part) in one atomic step, instead of a separate `DRAIN` alongside `ASSIGN`.
 
 > **Reading container levels in conditions:** Use `container(Id).level`, `.capacity`, `.min`, or `.max` directly inside any `cEvents[].condition` (or routing/balk) string — see §6.1 Format A. There is no need to fall back to a raw `state` key. This is what makes a "blocking DRAIN" possible: give a C-event a condition like `"container(Tank).level >= 10"` and effect `["DRAIN(Tank, 10)"]`, and the Three-Phase engine's per-cycle C-event re-scan will simply leave it un-fired until the level condition is met — no special blocking syntax required.
@@ -1331,6 +1350,9 @@ Container-scoped goals target a specific container. `scope` is **required** for 
 | `container.minLevel` | Minimum container level during run | **Container** (required) |
 | `container.avgLevel` | Average container level during run | **Container** (required) |
 | `container.maxLevel` | Maximum container level during run | **Container** (required) |
+| `summary.servedQuantity` | Sum of the quantity attribute over served entities — requires `quantityAttr` on an entity type (§2) | — |
+| `summary.quantityThrough` | Quantity that passed through a queue (completed services) — requires `quantityAttr` | **Queue** (required) |
+| `resource.quantityProcessed` | Quantity a resource type processed — requires `quantityAttr` | **Resource** (required) |
 
 `operator`: one of `<`, `<=`, `>`, `>=`
 
@@ -1347,16 +1369,18 @@ For time-scoped goals (`summary.avgWait`, `summary.avgSvc`, `summary.avgSojourn`
 }
 ```
 
-⚠ The fifteen `metric` values listed above are the **only** valid values. Do not invent other paths (`queue.avgLength`, `section.Triage.avgWait`, etc.) — the engine evaluates no other metric path and the UI will not display it. Always use the full prefix form shown in the table.
+⚠ The eighteen `metric` values listed above are the **only** valid values. Do not invent other paths (`queue.avgLength`, `section.Triage.avgWait`, etc.) — the engine evaluates no other metric path and the UI will not display it. Always use the full prefix form shown in the table.
 
-> **Batch-mode note:** For multi-replication runs, count goals (`summary.served`, `summary.reneged`) and `summary.avgWIP`/`summary.maxWIP` are evaluated against the **per-replication average** (the CI mean), not the cumulative total across all replications.
+> **Batch-mode note:** For multi-replication runs, count goals (`summary.served`, `summary.reneged`) and `summary.avgWIP`/`summary.maxWIP` are evaluated against the **per-replication average** (the CI mean), not the cumulative total across all replications. Quantity goals use the per-replication mean too, and container goals use the mean of each replication's min/avg/max.
+>
+> **Goal outcomes are stored with each run** as `goalOutcomes[]` (`label`, `metric`, `target`, `current`, `gap`, `met`, `status`: `met` / `not-met` / `no-data`).
 
 ### Scope field reference
 
 | `scope.type` | `scope.id` | `scope.name` | Used by |
 |---|---|---|---|
-| `"queue"` | Queue `id` | Queue `name` | `summary.avgWait`, `summary.avgWIP`, `summary.maxWIP`, `summary.served`, `summary.reneged` |
-| `"resource"` | Server entity type `id` | Server entity type `name` | `resource.utilisation` (required — must select a resource) |
+| `"queue"` | Queue `id` | Queue `name` | `summary.avgWait`, `summary.avgWIP`, `summary.maxWIP`, `summary.served`, `summary.reneged`, `summary.quantityThrough` (required) |
+| `"resource"` | Server entity type `id` | Server entity type `name` | `resource.utilisation`, `resource.quantityProcessed` (required — must select a resource) |
 | `"container"` | Container `id` | Container `id` | `container.minLevel`, `container.avgLevel`, `container.maxLevel` (required — must select a container) |
 
 When `scope` is omitted, the metric applies system-wide.
@@ -1412,7 +1436,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V24 | `loopConfig.maxLoopCount` must be an integer ≥ 1. `loopConfig.exitQueueName`, when set, must reference a defined queue. |
 | V25 | `RENEGE` must always use `(ctx)` as its argument — never an entity type name like `RENEGE(Patient)` |
 | V26 | Container `id` must be unique and non-empty; `capacity` > 0 when set; `initialLevel` ≥ 0 and ≤ `capacity`. Also: B-event `scheduledTime` must be numeric. |
-| V27 | `FILL`, `DRAIN`, and `ASSIGN`'s optional `ContainerId:amount` clause must reference a declared container `id`. A bare numeric `amount` ≤ 0 is a blocking error. A bare non-numeric `amount` that doesn't match a declared state variable name is a warning (likely a typo). `amount` expressions containing operators/parens (e.g. `RefillRate * 2`) can't be statically validated and are accepted without a check. |
+| V27 | `FILL`, `DRAIN`, `DRAIN_PARTIAL` (both its source and shortfall container, which must differ), and `ASSIGN`'s optional `ContainerId:amount` clause must reference a declared container `id`. A bare numeric `amount` ≤ 0 is a blocking error. A bare non-numeric `amount` that doesn't match a declared state variable name is a warning (likely a typo). `amount` expressions containing operators/parens (e.g. `RefillRate * 2`) can't be statically validated and are accepted without a check. |
 | V28 | `epoch`, when set, must be a valid ISO 8601 datetime string (e.g. `"2026-05-18T08:00:00"`) |
 | V30 | If `probabilisticRouting` contains a `null` (exit) branch, the B-event's effect **must** include `COMPLETE()`, `RENEGE(ctx)`, or `RELEASE()` — otherwise entities routed to exit aren't counted as served. Use `RELEASE()` for mid-network events that free a server; use `COMPLETE()` for terminal events. |
 | V31 | If `routing` (conditional) contains a `null` (exit) branch, the B-event's effect **must** include `COMPLETE()`, `RENEGE(ctx)`, or `RELEASE()`. |
@@ -1450,6 +1474,8 @@ All generated model JSON MUST pass every blocking rule below.
 | V67 | `parentTypeId` must reference a real entity type of the same `role`, must not be self-referential, and the inheritance chain must not contain a cycle. Blocking error. |
 | V68 | Every entry in `requiredSequence` must match a declared queue's `name`. Blocking error (an unmatched name silently disables the backward-routing check for that stage). The backward-routing check itself (routing that jumps to an earlier stage) is a warning, not a blocking error — see the Warnings table. |
 | V69 | Each `distances[]` entry must have a non-empty/unique `id`; `fromQueue`/`toQueue` must each reference a declared queue and be different from each other; `distance` must be a positive finite number; no duplicate entry for the same unordered `(fromQueue, toQueue)` pair. Blocking error. |
+| V77 | `ASSIGN(..., SCAN)` must have a skill argument (`"Skill"` or `Entity.attrName`) before `SCAN`, and `SCAN:N` must be a positive whole number. Blocking error. |
+| V78 | `quantityAttr` must name an attribute of that (customer) entity type whose `valueType` is `"number"`. Blocking error. Not allowed on server types. |
 | V70 | A `Distance`-typed schedule's `from`/`to` must reference declared queues, `speedSource` must be `"entity"` or `"server"`, and `speedAttr` must be non-empty. Blocking error. (Referencing a pair not present in `distances[]`, or a `speedAttr` not declared on any matching entity type, is a warning instead — see the Warnings table.) |
 
 ### Warnings (run proceeds, banner shown)
@@ -1484,6 +1510,8 @@ All generated model JSON MUST pass every blocking rule below.
 | V-SKILL-6 | All weight-based profiles on a server type have weight 0 — no servers will receive instance skills from weight-based profiles. Warning-only code (no blocking counterpart). |
 | V-SKILL-7 | An entity-side `Categorical` attribute feeding `ASSIGN(Q, ServerType, Entity.attrName)` has a required value with no server instance — neither type-level `skills[]` nor any `skillProfiles[].skills` — that covers it. Entities requiring that value will queue indefinitely with no server ever able to serve them. Warning-only code. |
 | V-SKILL-2 | (ANY variant) `ASSIGN(Q, ANY, "Skill")` references a skill that no registered server type actually has (neither type-level `skills[]` nor any `skillProfiles[].skills`, across every server type). The cross-type pool is guaranteed empty and the effect will never match. Emitted with the same code as the blocking V-SKILL-2 rule above — severity is distinguished by which list it appears in. |
+| V76 | A condition (C-event or `routing[]`) compares a numeric left side, or uses an ordering operator, against text on the right that is not a number, a declared state variable, or a dynamic reference — e.g. `clock >= closureStrat`. The clause is always false. Usually a misspelt variable. |
+| V79 | A `quantityAttr` attribute has no `defaultValue` and no `dist` — every entity's quantity is 0 unless an effect sets it. |
 | V62 | A server entity type is literally named `ANY` (case-insensitive) — this collides with the reserved `ASSIGN(..., ANY, ...)` cross-type-pooling sentinel and makes any `ANY`-based ASSIGN in the model ambiguous. Rename the server type. |
 | V68 | An entity type's `requiredSequence` has a routing edge (traced through ASSIGN/DELAY/COSEIZE/BATCH/JOIN/MATCH sources and RELEASE/routing-table/ARRIVE/MATCH/SPLIT/JOIN destinations, including C-event → scheduled B-event links via `cSchedules`) whose destination queue is an **earlier** stage than its source queue. Likely a routing-table typo or a copy-paste mistake — but also matches an intentional rework/retry loop, so this is a warning, not a blocking error, and can be ignored when the backward routing is deliberate. |
 | V70 | A `Distance`-typed schedule references a `(from, to)` pair not present in `distances[]` (falls back to a duration of 0 at run time), or a `speedAttr` not declared as a numeric attribute on any entity type matching `speedSource` (always falls back to 0). Both are warnings, not blocking errors, since the model may still be under construction. |

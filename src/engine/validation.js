@@ -10,9 +10,9 @@
 // tab maps to ModelDetail tab IDs: 'entities' | 'state' | 'bevents' | 'cevents' | 'queues' | 'execute'
 
 import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
-import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
+import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRoutingBranch, migrateLegacyCondition } from "../model/conditionFormat.js";
 import { getPatternInitialCapacity } from "./schedule-pattern.js";
-import { evaluatePredicate } from "./conditions.js";
+import { evaluatePredicate, isResolvableExpression } from "./conditions.js";
 import { applyEntityInheritance } from "./entity-inheritance.js";
 
 export const DEFAULT_MAX_SIM_TIME = 500;
@@ -1202,10 +1202,49 @@ export function validateModel(model) {
         }
       });
 
+      // ── V27 also covers DRAIN_PARTIAL(c, amount[, shortfallContainer]) ──
+      const partialHits = text.match(/\bDRAIN_PARTIAL\([^)]+\)/gi) || [];
+      partialHits.forEach(hit => {
+        const inner = hit.match(/^DRAIN_PARTIAL\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*([^,)]+))?\)$/i);
+        if (!inner) {
+          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ${hit} — expected DRAIN_PARTIAL(Container, amount[, ShortfallContainer]).`, tab,
+            { eventIds: [ev.id] });
+          return;
+        }
+        for (const name of [inner[1], inner[3]].filter(Boolean).map(n => n.trim())) {
+          if (!containerIdsLower.has(name.toLowerCase())) {
+            err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' DRAIN_PARTIAL references undeclared container '${name}'.`, tab,
+              { eventIds: [ev.id] });
+          }
+        }
+        if (inner[3] && inner[1].trim().toLowerCase() === inner[3].trim().toLowerCase()) {
+          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' DRAIN_PARTIAL uses '${inner[1].trim()}' as both source and shortfall container.`, tab,
+            { eventIds: [ev.id] });
+        }
+        const amountRaw = inner[2].trim();
+        if (/^-?\d+(\.\d+)?$/.test(amountRaw) && parseFloat(amountRaw) <= 0) {
+          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' DRAIN_PARTIAL amount (${amountRaw}) must be a positive number.`, tab,
+            { eventIds: [ev.id] });
+        }
+      });
+
       const assignHits = text.match(/\bASSIGN\([^)]+\)/gi) || [];
       assignHits.forEach(hit => {
-        const inner = hit.match(/^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"[^"]+"|\s*,\s*Entity\.\w+)?(?:\s*,\s*([A-Za-z_]\w*):([^)]+))?\)$/i);
-        if (!inner || !inner[3]) return;
+        // ── V77: SCAN look-ahead (B2) needs a skill argument and a positive N ──
+        const scanArg = hit.match(/,\s*SCAN\b\s*(?::\s*([^,)]*))?/i);
+        if (scanArg) {
+          const hasSkillArg = /^ASSIGN\([^,)]+,\s*[^,)]+,\s*(?:"[^"]+"|Entity\.\w+)\s*,\s*SCAN\b/i.test(hit);
+          if (!hasSkillArg) {
+            err('V77', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' uses SCAN without a skill argument — SCAN looks past entities whose required skill has no idle server, so it needs ASSIGN(Queue, ServerType, "Skill" or Entity.attr, SCAN).`, tab,
+              { eventIds: [ev.id] });
+          }
+          if (scanArg[1] !== undefined && !/^[1-9]\d*$/.test(scanArg[1].trim())) {
+            err('V77', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' SCAN:${scanArg[1].trim()} — the look-ahead limit must be a positive whole number (e.g. SCAN:10).`, tab,
+              { eventIds: [ev.id] });
+          }
+        }
+        const inner = hit.match(/^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*"[^"]+"|\s*,\s*Entity\.\w+)?(?:\s*,\s*SCAN(?::\d+)?)?(?:\s*,\s*([A-Za-z_]\w*):([^)]+))?\)$/i);
+        if (!inner || !inner[3] || /^SCAN$/i.test(inner[3].trim())) return;
         const name = inner[3].trim();
         const amountRaw = inner[4].trim();
         if (!containerIdsLower.has(name.toLowerCase())) {
@@ -2122,6 +2161,81 @@ export function validateModel(model) {
         'cevents',
         { eventIds: [c.id] });
     }
+  });
+
+  // ── V78 / V79: quantityAttr (B1) — checked on the inheritance-merged types,
+  // so a child type can rely on its parent's attribute (or quantityAttr).
+  mergedEntityTypes.forEach((/** @type {any} */ et) => {
+    const attr = typeof et.quantityAttr === 'string' ? et.quantityAttr.trim() : '';
+    if (!attr) return;
+    const label = `Entity type '${et.name || et.id || '?'}'`;
+    if (et.role === 'server') {
+      err('V78', `${label} is a resource — quantityAttr applies to entities that flow through the model, not to servers.`, 'entities', { entityTypeIds: [et.id] });
+      return;
+    }
+    const defs = Array.isArray(et.attrDefs) ? et.attrDefs : [];
+    const def = defs.find((/** @type {any} */ a) => String(a?.name || '').trim() === attr);
+    if (!def) {
+      err('V78', `${label} sets quantityAttr '${attr}', but has no attribute of that name. Add a numeric attribute '${attr}' or pick an existing one.`, 'entities', { entityTypeIds: [et.id] });
+      return;
+    }
+    const numeric = def.valueType === 'number' || (def.valueType == null && def.dist);
+    if (!numeric) {
+      err('V78', `${label} quantityAttr '${attr}' must be a number attribute (it is '${def.valueType || 'untyped'}').`, 'entities', { entityTypeIds: [et.id] });
+      return;
+    }
+    const hasDefault = def.defaultValue !== undefined && def.defaultValue !== null && def.defaultValue !== '';
+    if (!hasDefault && !def.dist) {
+      warn('V79', `${label} quantityAttr '${attr}' has no default value and no distribution, so every entity's quantity is 0 unless an effect sets it.`, 'entities', { entityTypeIds: [et.id] });
+    }
+  });
+
+  // ── V76: non-numeric literal on the right of a numeric comparison ─────────
+  // A condition's right-hand side is a literal unless it is one of the dynamic
+  // references (queue()/idle()/busy()/container()/attr(), `state.<name>`, or a
+  // declared state-variable name — see conditions.js). A misspelt variable on
+  // the right is therefore compared as the literal text, and a numeric
+  // comparison against text is silently false — e.g. `clock >= closureStrat`.
+  const declaredStateVars = new Map((model.stateVariables || [])
+    .filter((/** @type {any} */ sv) => sv?.name)
+    .map((/** @type {any} */ sv) => [String(sv.name).trim(), sv]));
+  const NUMERIC_LHS_RE = /^(queue\(.+\)\.(length|count|size)|idle\(.+\)\.count|busy\(.+\)\.count|container\(.+\)\.(level|capacity|min|max)|clock|served|reneged|balked|loopCount|hourOfDay|dayOfWeek|(Queue|Resource)\.\w+\.\w+)$/i;
+  const ORDERING_OPS = new Set(['<', '>', '<=', '>=']);
+  const isNumericStateVar = (/** @type {string} */ name) => {
+    const sv = declaredStateVars.get(name);
+    return !!sv && (sv.valueType === 'number' || typeof sv.initialValue === 'number'
+      || (sv.valueType == null && sv.initialValue !== '' && Number.isFinite(Number(sv.initialValue))));
+  };
+  /** @param {any} cond @param {(leaf: any) => void} visit */
+  const eachLeaf = (cond, visit) => {
+    let normalized;
+    try { normalized = migrateLegacyCondition(cond); } catch { return; }
+    if (!normalized) return;
+    if (normalized.operator === 'AND' || normalized.operator === 'OR') (normalized.clauses || []).forEach((/** @type {any} */ c) => eachLeaf(c, visit));
+    else visit(normalized);
+  };
+  /** @param {any} cond @param {string} where @param {string} tab @param {any} extra */
+  const checkRhsLiterals = (cond, where, tab, extra) => {
+    eachLeaf(cond, leaf => {
+      const rhs = leaf.value;
+      if (typeof rhs !== 'string') return;
+      const text = rhs.trim();
+      if (text === '' || Number.isFinite(Number(text)) || isResolvableExpression(text)) return;
+      const stateName = text.startsWith('state.') ? text.slice('state.'.length) : text;
+      if (declaredStateVars.has(stateName)) return; // resolved dynamically (B3)
+      const lhs = String(leaf.variable || '').trim();
+      const lhsNumeric = NUMERIC_LHS_RE.test(lhs) || isNumericStateVar(lhs.startsWith('state.') ? lhs.slice(6) : lhs);
+      if (!ORDERING_OPS.has(leaf.operator) && !lhsNumeric) return;
+      warn('V76', `${where} compares '${lhs}' ${leaf.operator} '${text}', but '${text}' is not a number, a state variable, or a queue/resource/container reference — it is read as literal text and the comparison will always be false. Check the spelling, or declare '${text}' as a state variable.`, tab, extra);
+    });
+  };
+  cEvents.forEach(c => {
+    if (c.condition) checkRhsLiterals(c.condition, `C-Event '${c.name || c.id}' condition`, 'cevents', { eventIds: [c.id] });
+  });
+  bEvents.forEach(b => {
+    (Array.isArray(b.routing) ? b.routing : []).forEach((/** @type {any} */ branch, /** @type {number} */ idx) => {
+      if (branch?.condition) checkRhsLiterals(branch.condition, `B-Event '${b.name || b.id}' routing rule ${idx + 1}`, 'bevents', { eventIds: [b.id] });
+    });
   });
 
   // V-CAL-2: hourOfDay comparison value should be 0-23

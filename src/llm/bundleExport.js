@@ -492,6 +492,38 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     }
   }
 
+  // Quantity (B1) — volume-weighted results when an entity type sets quantityAttr
+  if (kpis.quantity) {
+    const q = kpis.quantity;
+    const f = v => v != null ? Number(v).toFixed(2) : '—';
+    const attrs = Object.entries(q.attributes || {}).map(([t, a]) => `${t}.${a}`).join(', ');
+    lines.push('### Quantities');
+    lines.push('');
+    lines.push(`Sums of each entity's quantity attribute (${attrs || 'quantityAttr'}), alongside the entity counts above.${q.aggregation === 'mean-of-replications' ? ' Batch figures are the **mean per replication**.' : ''}`);
+    lines.push('');
+    lines.push('| Measure | Quantity |');
+    lines.push('|---------|----------|');
+    lines.push(`| Served | ${f(q.served)} |`);
+    lines.push(`| In system at end | ${f(q.inSystemAtEnd)} |`);
+    if (q.reneged) lines.push(`| Reneged | ${f(q.reneged)} |`);
+    if (q.balked) lines.push(`| Balked | ${f(q.balked)} |`);
+    lines.push('');
+    const qRows = Object.entries(q.throughByQueue || {});
+    if (qRows.length) {
+      lines.push('| Queue | Quantity through |');
+      lines.push('|-------|------------------|');
+      for (const [name, v] of qRows.sort((a, b) => b[1] - a[1])) lines.push(`| ${name} | ${f(v)} |`);
+      lines.push('');
+    }
+    const rRows = Object.entries(q.processedByResource || {});
+    if (rRows.length) {
+      lines.push('| Resource | Quantity processed |');
+      lines.push('|----------|--------------------|');
+      for (const [name, v] of rRows.sort((a, b) => b[1] - a[1])) lines.push(`| ${name} | ${f(v)} |`);
+      lines.push('');
+    }
+  }
+
   // Activity throughput — how many entities each activity started (a DELAY
   // firing can start several at once)
   if (kpis.activityCounts && Object.keys(kpis.activityCounts).length) {

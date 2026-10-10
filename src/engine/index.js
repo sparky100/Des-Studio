@@ -175,7 +175,12 @@ function compileEffectImpactTemplate(effectStr) {
     let m;
     if ((m = part.match(/^ARRIVE\(([^,)]+)(?:\s*,\s*([^,)]+))?\)$/i))) {
       actions.push({ kind: "arrive", typeName: m[1].trim(), queueName: m[2]?.trim() || `${m[1].trim()}Queue` });
-    } else if ((m = part.match(/^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)\)$/i))) {
+    } else if ((m = part.match(/^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)(?:\s*,\s*(?:"[^"]+"|Entity\.\w+))?(?:\s*,\s*SCAN(?::\d+)?)?\)$/i))
+               && m[2].trim().toUpperCase() !== "ANY") {
+      // Skill and SCAN arguments don't change which queue/resource the ASSIGN
+      // touches, so they get precise dirty marking too (ANY pools every server
+      // type and container-gated forms change a container — both fall through
+      // to the conservative default).
       actions.push({ kind: "assign", queueName: m[1].trim(), resourceName: m[2].trim() });
     } else if (part.match(/^COMPLETE\(\)$/i)) {
       actions.push({ kind: "complete" });
@@ -689,6 +694,30 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     _perQueue[qName][field]++;
   };
 
+  // ── Quantity (B1): entity types may name one numeric attribute as their
+  // quantity (`quantityAttr`, e.g. "volume"). When any type does, results also
+  // accumulate that attribute alongside the existing counts (servedQuantity,
+  // quantityInSystem, per-queue/resource/outcome/journey quantities). The
+  // value is read from the entity's current attributes when it's measured.
+  /** @type {Map<string, string>} */
+  const _quantityAttrByType = new Map();
+  for (const et of runtimeModel.entityTypes || []) {
+    if (et?.role === "server" || !et?.name) continue;
+    const attr = typeof et.quantityAttr === "string" ? et.quantityAttr.trim() : "";
+    if (attr) _quantityAttrByType.set(String(et.name).trim().toLowerCase(), attr);
+  }
+  const quantityEnabled = _quantityAttrByType.size > 0;
+  /** @param {any} e @returns {number} */
+  const qtyOf = (e) => {
+    if (!e || e.role === "server") return 0;
+    const attr = _quantityAttrByType.get(String(e.type || "").trim().toLowerCase());
+    if (!attr) return 0;
+    const v = Number(e.attrs?.[attr]);
+    return Number.isFinite(v) ? v : 0;
+  };
+  /** @param {number} v */
+  const roundQty = (v) => +v.toFixed(4);
+
   // ── Event fire counts: how many times each B/C-event has fired ─────────────
   /** @type {Record<string, number>} */
   const _eventCounts = {};
@@ -934,6 +963,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         total: seenEntities.length,
         reneged: seenEntities.filter((/** @type {any} */ e) => e.status === "reneged").length,
         balked: balkedByQueue[qName] || 0,
+        ...(quantityEnabled ? { quantityWaiting: roundQty(waitingEntities.reduce((sum, e) => sum + qtyOf(e), 0)) } : {}),
       };
     });
     // nextArrivals: maps each b-event id to its next scheduled time in the FEL.
@@ -1002,11 +1032,15 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       }
       if (e.role !== "server" && (e.queue || e.lastQueue)) {
         const qName = e.queue || e.lastQueue;
-        if (!byQueue[qName]) byQueue[qName] = { waiting: 0, total: 0 };
+        if (!byQueue[qName]) byQueue[qName] = quantityEnabled ? { waiting: 0, total: 0, quantityWaiting: 0 } : { waiting: 0, total: 0 };
         byQueue[qName].total++;
-        if (e.status === "waiting") byQueue[qName].waiting++;
+        if (e.status === "waiting") {
+          byQueue[qName].waiting++;
+          if (quantityEnabled) byQueue[qName].quantityWaiting += qtyOf(e);
+        }
       }
     }
+    if (quantityEnabled) for (const q of Object.values(byQueue)) q.quantityWaiting = roundQty(q.quantityWaiting);
     return { byType, byQueue };
   }
 
@@ -1619,7 +1653,11 @@ const cycleLog = [];
         }
         return out;
       };
-      const wipCountAtSample = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged" && e.status !== "balked").length;
+      const wipAtSample = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged" && e.status !== "balked");
+      const wipCountAtSample = wipAtSample.length;
+      const quantityField = quantityEnabled
+        ? { quantityInSystem: roundQty(wipAtSample.reduce((sum, e) => sum + qtyOf(e), 0)) }
+        : {};
       const completedSinceSample = state.__completedSinceSample || 0;
       // Container levels (G21) — the instantaneous level at this sample time,
       // not an interval average: FILL/DRAIN move a level in jumps, and an
@@ -1630,7 +1668,7 @@ const cycleLog = [];
         byContainer = {};
         for (const ct of runtimeModel.containerTypes) byContainer[ct.id] = state[`__container_${ct.id}`] ?? 0;
       }
-      const containerField = byContainer ? { byContainer } : {};
+      const containerField = { ...(byContainer ? { byContainer } : {}), ...quantityField };
       if (stepSnap) {
         _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: withRecentWaits(stepSnap.byQueue), ...containerField, wip: wipCountAtSample, completed: completedSinceSample });
       } else {
@@ -2068,18 +2106,23 @@ const cycleLog = [];
           status: outcome.status || (entity.status === "reneged" ? "reneged" : "completed"),
           endedBy: outcome.endedBy || "unknown",
           count: 0,
+          ...(quantityEnabled ? { quantity: 0 } : {}),
           _waitSum: 0, _waitN: 0,
           _sojournSum: 0, _sojournN: 0,
         };
       }
       outcomes[routeId].count++;
+      if (quantityEnabled) outcomes[routeId].quantity += qtyOf(entity);
       const wait = entityWaitAfterWarmup(entity);
       if (Number.isFinite(wait)) { outcomes[routeId]._waitSum += wait; outcomes[routeId]._waitN++; }
       const endTime = entity.completionTime ?? entity.renegeTime ?? entity.balkTime ?? null;
       const sojourn = endTime != null ? truncateInterval(entity.arrivalTime, endTime) : null;
       if (Number.isFinite(sojourn)) { outcomes[routeId]._sojournSum += sojourn; outcomes[routeId]._sojournN++; }
     }
-    for (const o of Object.values(outcomes)) finalizeWeightedStats(o);
+    for (const o of Object.values(outcomes)) {
+      finalizeWeightedStats(o);
+      if (quantityEnabled) o.quantity = roundQty(o.quantity);
+    }
     const elapsed = clock - _statsResetTime;
     const avgWip = elapsed > 0 ? +(_wipIntegral / elapsed).toFixed(4) : 0;
     // Little's Law check: L = λW → W = L/λ
@@ -2293,6 +2336,8 @@ const cycleLog = [];
     const sectionStats = {};
     /** @type {Record<string, any>} */
     const journeys = {};
+    /** @type {Record<string, number>} */
+    const journeyQuantities = {};
     if (runtimeModel.sections?.length) {
       /** @type {Record<string, any>} */
       const queueIdByName = {};
@@ -2338,6 +2383,7 @@ const cycleLog = [];
             ? [...visitedSections, sink].join("→")
             : visitedSections.join("→");
           journeys[key] = (journeys[key] || 0) + 1;
+          if (quantityEnabled) journeyQuantities[key] = (journeyQuantities[key] || 0) + qtyOf(entity);
         }
       }
       for (const sec of runtimeModel.sections) {
@@ -2349,6 +2395,8 @@ const cycleLog = [];
 
     /** @type {Record<string, any>} */
     const queueJourneys = {};
+    /** @type {Record<string, number>} */
+    const queueJourneyQuantities = {};
     for (const entity of customers) {
       if (!entity.stages?.length) continue;
       const queueParts = entity.stages.map((/** @type {any} */ s) => s.queueName).filter(Boolean);
@@ -2362,6 +2410,32 @@ const cycleLog = [];
       else                                  sink = null;
       const path = sink != null ? [...queueParts, sink].join("→") : queueParts.join("→");
       queueJourneys[path] = (queueJourneys[path] || 0) + 1;
+      if (quantityEnabled) queueJourneyQuantities[path] = (queueJourneyQuantities[path] || 0) + qtyOf(entity);
+    }
+
+    // Quantity (B1) through each queue / processed by each resource type:
+    // credited per completed post-warm-up stage, so it lines up with the
+    // stage-based wait/service statistics. A co-seized stage credits every
+    // server type that took part.
+    /** @type {Record<string, number>} */
+    const quantityThroughByQueue = {};
+    if (quantityEnabled) {
+      for (const entity of customers) {
+        const q = qtyOf(entity);
+        if (!q || !entity.stages?.length) continue;
+        for (const stage of entity.stages) {
+          if ((stage.serviceStartedAt ?? 0) < _statsResetTime) continue;
+          if (stage.queueName) quantityThroughByQueue[stage.queueName] = (quantityThroughByQueue[stage.queueName] || 0) + q;
+          const types = Array.isArray(stage.serverTypes) ? stage.serverTypes : [stage.serverType];
+          for (const t of types) {
+            if (t && perResource[t]) perResource[t].quantityProcessed = (perResource[t].quantityProcessed || 0) + q;
+          }
+        }
+      }
+      for (const k of Object.keys(quantityThroughByQueue)) quantityThroughByQueue[k] = roundQty(quantityThroughByQueue[k]);
+      for (const r of Object.values(perResource)) r.quantityProcessed = roundQty(r.quantityProcessed || 0);
+      for (const k of Object.keys(journeyQuantities)) journeyQuantities[k] = roundQty(journeyQuantities[k]);
+      for (const k of Object.keys(queueJourneyQuantities)) queueJourneyQuantities[k] = roundQty(queueJourneyQuantities[k]);
     }
 
     // Activity throughput: how many entities each activity (C-event) started.
@@ -2412,6 +2486,17 @@ const cycleLog = [];
       sections:          Object.keys(sectionStats).length  ? sectionStats  : undefined,
       journeys:          Object.keys(journeys).length      ? journeys      : undefined,
       queueJourneys:     Object.keys(queueJourneys).length ? queueJourneys : undefined,
+      // Quantity (B1) — only when an entity type sets quantityAttr.
+      ...(quantityEnabled ? {
+        servedQuantity:          roundQty(served.reduce((sum, e) => sum + qtyOf(e), 0)),
+        quantityInSystem:        roundQty(customers.filter(e => e.status === "waiting" || e.status === "serving").reduce((sum, e) => sum + qtyOf(e), 0)),
+        renegedQuantity:         roundQty(reneged.reduce((sum, e) => sum + qtyOf(e), 0)),
+        balkedQuantity:          roundQty(balked.reduce((sum, e) => sum + qtyOf(e), 0)),
+        quantityThroughByQueue,
+        ...(Object.keys(journeyQuantities).length ? { journeyQuantities } : {}),
+        ...(Object.keys(queueJourneyQuantities).length ? { queueJourneyQuantities } : {}),
+        quantityAttrs:           Object.fromEntries((runtimeModel.entityTypes || []).filter((/** @type {any} */ et) => et.role !== "server" && et.quantityAttr).map((/** @type {any} */ et) => [et.name, et.quantityAttr])),
+      } : {}),
       warmupPeriod,
       excludedCount:     _excludedCount,
       phaseCTruncated:   _phaseCTruncated,

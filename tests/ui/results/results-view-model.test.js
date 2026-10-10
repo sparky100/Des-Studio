@@ -364,3 +364,19 @@ describe("buildContainerLevelSeries", () => {
     expect(section.series).toEqual([]);
   });
 });
+
+describe("quantity in system trend (B1)", () => {
+  test("adds a quantity series next to entities in system when recorded", () => {
+    const results = {
+      summary: { quantityAttrs: { Cargo: "volume" } },
+      timeSeries: [{ t: 0, wip: 1, quantityInSystem: 4 }, { t: 1, wip: 2, quantityInSystem: 6 }],
+    };
+    const series = buildWipSeries(results);
+    expect(series.map(s => s.id)).toEqual(["wip", "quantity-in-system"]);
+    expect(series[1].yLabel).toBe("volume");
+    expect(series[1].points).toEqual([{ t: 0, value: 4 }, { t: 1, value: 6 }]);
+  });
+  test("no quantity series without quantity data", () => {
+    expect(buildWipSeries({ timeSeries: [{ t: 0, wip: 1 }, { t: 1, wip: 2 }] }).map(s => s.id)).toEqual(["wip"]);
+  });
+});
