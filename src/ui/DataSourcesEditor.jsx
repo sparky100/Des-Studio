@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Btn } from "./shared/components.jsx";
 import { SANS } from "./shared/tokens.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { NumberInput } from "./shared/NumberInput.jsx";
 
 // ── Data Sources Editor ──────────────────────────────────────────────────────
 
@@ -167,8 +168,8 @@ export function DataSourcesEditor({ sources, onChange, canEdit }) {
                   </div>
                   <div style={{...S.field, flex:1}}>
                     <span style={S.fieldLabel}>Radius (nautical miles)</span>
-                    <input style={S.input} type="number" value={src.radiusNm||50} disabled={!canEdit}
-                      onChange={e => update(idx, { radiusNm: Math.max(5, parseInt(e.target.value) || 50) })}/>
+                    <NumberInput style={S.input} integer min={5} fallback={50} value={src.radiusNm||50} disabled={!canEdit}
+                      onValueChange={v => update(idx, { radiusNm: v })}/>
                   </div>
                 </div>
                 <div style={{fontSize:10, color:C.muted, fontFamily:FONT, lineHeight:1.5}}>

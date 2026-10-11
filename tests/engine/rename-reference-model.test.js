@@ -16,10 +16,11 @@ import OIL from '../../reference-models/world-oil-network/oil-network-fleet-stor
 
 const SEED = 492153378;
 // The closure scenario exercises more reference sites (bypass, return wave);
-// it is moved to days 20–35 so a 60-day run covers closing, reopening and the
-// return to Hormuz.
-const DAYS = 60;
-const CLOSURE = { closureEnabled: 1, closureStart: 20, closureEnd: 35 };
+// it is moved to days 6–12 so a 25-day run (~0.3 s) covers closing, the
+// bypass, reopening, the return to Hormuz and refinery completions. Kept short
+// so this file doesn't load the CPU under the soak tier's wall-clock checks.
+const DAYS = 25;
+const CLOSURE = { closureEnabled: 1, closureStart: 6, closureEnd: 12 };
 const BASE = {
   ...structuredClone(OIL),
   stateVariables: OIL.stateVariables.map(sv => (sv.name in CLOSURE ? { ...sv, initialValue: CLOSURE[sv.name] } : sv)),
@@ -58,7 +59,7 @@ function staleIdentifierRefs(model, oldName) {
 
 const baseline = fingerprint(BASE);
 // Guard: the shortened run must still exercise the closure paths.
-if (!(baseline.activity.c_bypass > 0 && baseline.activity.c_bypass_return > 0 && baseline.activity.c_reopen_hormuz > 0)) {
+if (!(baseline.activity.c_bypass > 0 && baseline.activity.c_bypass_return > 0 && baseline.activity.c_reopen_hormuz > 0 && baseline.served > 0)) {
   throw new Error(`rename test model no longer reaches the bypass / return paths: ${JSON.stringify(baseline.activity)}`);
 }
 const baselineErrors = errorsOf(BASE);
