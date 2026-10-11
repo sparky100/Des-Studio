@@ -3,6 +3,7 @@ import { SHADOW } from "./tokens.js";
 import { useTheme } from "./ThemeContext.jsx";
 import { useToast } from "./ToastContext.jsx";
 import { Btn } from "./components.jsx";
+import { ResponsivePanel, useIsSheetViewport } from "./ResponsivePanel.jsx";
 import { downloadTextFile, slugifyResultName, timestampForFilename } from "./utils.js";
 import { buildResultsExportPayload, buildResultsCsv, buildResultsXlsx } from "../execute/executeHelpers.js";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
@@ -105,6 +106,9 @@ const SCHEMA_REFERENCE_TEXT = `simmodlr.results.v1 — JSON Export Schema
   }
 }
 `;
+
+// The sheet layout never reads an anchor.
+const NO_ANCHOR = { current: null };
 
 // ── Simple row button for popover menus ────────────────────────────────────
 
@@ -389,6 +393,7 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
   // don't round-trip exactly, so measure → setState → re-measure looped until
   // React aborted with "Maximum update depth exceeded" (error #185). The
   // width is pinned to max-content so shifting can't change it either.
+  const isSheet = useIsSheetViewport();
   const menuRef = useRef(null);
   const [shiftX, setShiftX] = useState(0);
   useLayoutEffect(() => {
@@ -397,8 +402,65 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
     const margin = 8;
     const rect = el.getBoundingClientRect();
     const overflowRight = rect.left + rect.width - (window.innerWidth - margin);
-    if (overflowRight > 0) setShiftX(Math.round(Math.max(-overflowRight, margin - rect.left)));
-  }, []);
+    let shift = overflowRight > 0 ? -overflowRight : 0;
+    if (rect.left + shift < margin) shift = margin - rect.left; // the left edge wins
+    if (shift !== 0) setShiftX(Math.round(shift));
+  }, [isSheet]);
+
+  const menuItems = (
+    <>
+    <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>RESULTS DATA</span>
+    <PopoverRow label="Full model results (.json)" onClick={() => exportResultsJson(false)} />
+    <PopoverRow label="Metrics only (.json)" onClick={() => exportResultsJson(true)} mute hint="KPIs only — no time series or entity data" />
+    <PopoverRow label="Results table (.csv)" onClick={exportResultsCsv} />
+    <PopoverRow label="Results workbook (.xlsx)" onClick={exportResultsXlsx} mute hint="Multi-sheet Excel workbook — Summary, Replications, Entity Journeys" />
+
+    {(onCreateReport) && (
+      <>
+        <div style={{ height: 1, background: C.border, margin: "4px 8px" }} />
+        <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>AI & REPORTS</span>
+        <PopoverRow label="LLM Bundle (.md)" onClick={exportLLMBundle} mute hint="Model + results as Markdown — paste into any AI tool" />
+        <PopoverRow label="Create Report…" onClick={() => { setShowCreateReportModal(true); }} />
+      </>
+    )}
+
+    <div style={{ height: 1, background: C.border, margin: "4px 8px" }} />
+    <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>REFERENCE</span>
+    <PopoverRow label="Schema reference" onClick={() => setShowSchemaModal(true)} mute hint="Field-by-field documentation of the JSON export format" />
+    </>
+  );
+
+  const modals = (
+    <>
+      {showCreateReportModal && (
+        <CreateReportModal
+          reportType={reportType}
+          setReportType={setReportType}
+          reportFormat={reportFormat}
+          setReportFormat={setReportFormat}
+          reportGenerating={reportGenerating}
+          onCreateReport={handleCreateReport}
+          onClose={() => setShowCreateReportModal(false)}
+        />
+      )}
+
+      {showSchemaModal && <SchemaInfoModal onClose={() => setShowSchemaModal(false)} />}
+    </>
+  );
+
+  // Phones: a bottom sheet rather than a menu hanging off the button. Hidden
+  // (not closed) while one of its modals is up, so the modal isn't underneath it.
+  if (isSheet) {
+    return (
+      <>
+        <ResponsivePanel open={!showCreateReportModal && !showSchemaModal} onClose={onClose}
+          anchorRef={NO_ANCHOR} title="Export" testId="export-sheet">
+          {menuItems}
+        </ResponsivePanel>
+        {modals}
+      </>
+    );
+  }
 
   return (
     <>
@@ -419,39 +481,9 @@ export function ExportPopover({ model, results, replicationResults = [], aggrega
         minWidth: 240,
         boxShadow: SHADOW.dropdown,
       }}>
-        <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>RESULTS DATA</span>
-        <PopoverRow label="Full model results (.json)" onClick={() => exportResultsJson(false)} />
-        <PopoverRow label="Metrics only (.json)" onClick={() => exportResultsJson(true)} mute hint="KPIs only — no time series or entity data" />
-        <PopoverRow label="Results table (.csv)" onClick={exportResultsCsv} />
-        <PopoverRow label="Results workbook (.xlsx)" onClick={exportResultsXlsx} mute hint="Multi-sheet Excel workbook — Summary, Replications, Entity Journeys" />
-
-        {(onCreateReport) && (
-          <>
-            <div style={{ height: 1, background: C.border, margin: "4px 8px" }} />
-            <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>AI & REPORTS</span>
-            <PopoverRow label="LLM Bundle (.md)" onClick={exportLLMBundle} mute hint="Model + results as Markdown — paste into any AI tool" />
-            <PopoverRow label="Create Report…" onClick={() => { setShowCreateReportModal(true); }} />
-          </>
-        )}
-
-        <div style={{ height: 1, background: C.border, margin: "4px 8px" }} />
-        <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, padding: "4px 8px 2px" }}>REFERENCE</span>
-        <PopoverRow label="Schema reference" onClick={() => setShowSchemaModal(true)} mute hint="Field-by-field documentation of the JSON export format" />
+        {menuItems}
       </div>
-
-      {showCreateReportModal && (
-        <CreateReportModal
-          reportType={reportType}
-          setReportType={setReportType}
-          reportFormat={reportFormat}
-          setReportFormat={setReportFormat}
-          reportGenerating={reportGenerating}
-          onCreateReport={handleCreateReport}
-          onClose={() => setShowCreateReportModal(false)}
-        />
-      )}
-
-      {showSchemaModal && <SchemaInfoModal onClose={() => setShowSchemaModal(false)} />}
+      {modals}
     </>
   );
 }

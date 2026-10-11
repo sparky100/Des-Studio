@@ -43,12 +43,13 @@ import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
 import { ParamBrowserPanel, paramColor } from "../shared/ParamBrowserPanel.jsx";
-import { alpha, RADIUS, SHADOW } from "../shared/tokens.js";
+import { alpha, RADIUS } from "../shared/tokens.js";
 import { generateReport, sanitizeFilename } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useConfirm } from "../shared/useConfirm.jsx";
 import { ExportPopover } from "../shared/ExportPopover.jsx";
+import { ResponsivePanel } from "../shared/ResponsivePanel.jsx";
 
 /** Collect {{env.VAR}} secrets from sessionStorage for live-data adapters. */
 function collectEnvSecrets(dataSources) {
@@ -320,6 +321,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [runOverrides, setRunOverrides] = useState([]);
   const [runOverridesPickerOpen, setRunOverridesPickerOpen] = useState(false);
   const [showRunOverridesPanel, setShowRunOverridesPanel] = useState(false);
+  const runOverridesAnchorRef = useRef(null);
+  const liveFlagsAnchorRef = useRef(null);
+  const closeRunOverridesPanel = useCallback(() => { setShowRunOverridesPanel(false); setRunOverridesPickerOpen(false); }, []);
+  const closeLiveFlags = useCallback(() => setLiveFlagsOpen(false), []);
   const [reportGenerating, setReportGenerating] = useState(false); // still used for report progress indicator in status banner
   const [modelCheckerIssues, setModelCheckerIssues] = useState(null);
   const [modelCheckerOpen, setModelCheckerOpen] = useState(false);
@@ -2721,7 +2726,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, overflowWrap: "anywhere", minWidth: 0 }}>
             {replications} rep{replications !== 1 ? "s" : ""} · {terminationMode === "time" ? `${maxSimTime} time units` : "condition stop"} · seed {seed}{warmupPeriod > 0 ? ` · warm-up ${warmupPeriod}` : ""}
           </span>
-          <div style={{ position: "relative" }}>
+          <div ref={runOverridesAnchorRef} style={{ position: "relative" }}>
             <Btn small variant={effectiveOverrides.length ? "primary" : "ghost"}
               title="Change parameter values for this run only — no experiment or scenario needed"
               onClick={() => {
@@ -2730,43 +2735,37 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               }}>
               🎛 {effectiveOverrides.length > 0 ? `${effectiveOverrides.length} param${effectiveOverrides.length !== 1 ? "s" : ""}` : "Adjust parameters"}
             </Btn>
-            {showRunOverridesPanel && (
-              <>
-                <div style={{ position: "fixed", inset: 0, zIndex: 99 }}
-                  onClick={() => { setShowRunOverridesPanel(false); setRunOverridesPickerOpen(false); }} />
-                <div style={{
-                  position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 100, width: 360, maxWidth: "calc(100vw - 32px)",
-                  background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 12,
-                  display: "flex", flexDirection: "column", gap: 8, boxShadow: SHADOW.dropdown,
-                }}>
-                  <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
-                    Change parameter values for this run only — no experiment or scenario needed. Resets when you switch models or reload the page.
-                  </div>
-                  {activeExpOverrides.length > 0 && (
-                    <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
-                      {activeExpOverrides.length} loaded from an experiment; ad-hoc changes for the same parameter take priority.
-                    </div>
-                  )}
-                  <OverrideChipList overrides={runOverrides} setOverrides={setRunOverrides}
-                    sweepParams={sweepParams.length ? sweepParams : enumerateSweepableParams(model)}
-                    pickerOpen={runOverridesPickerOpen} setPickerOpen={setRunOverridesPickerOpen}
-                    extraAlreadyAdded={activeExpOverrides.map(o => o.paramConfig.path)} />
-                  <div style={{ display: "flex", gap: 8, justifyContent: "space-between", marginTop: 4 }}>
+            <ResponsivePanel open={showRunOverridesPanel} onClose={closeRunOverridesPanel}
+              anchorRef={runOverridesAnchorRef} title="Adjust parameters" testId="run-overrides-panel"
+              footer={
+                <div style={{ display: "flex", gap: 8, justifyContent: "space-between", flexWrap: "wrap" }}>
+                  <Btn small variant="ghost" disabled={!effectiveOverrides.length}
+                    onClick={() => { setRunOverrides([]); setActiveExpOverrides([]); }}>Reset all</Btn>
+                  {userId && (
                     <Btn small variant="ghost" disabled={!effectiveOverrides.length}
-                      onClick={() => { setRunOverrides([]); setActiveExpOverrides([]); }}>Reset all</Btn>
-                    {userId && (
-                      <Btn small variant="ghost" disabled={!effectiveOverrides.length}
-                        title="Keep these changes as a named, reusable Experiment"
-                        onClick={() => {
-                          setExpFormSeed({ overrides: effectiveOverrides.map(o => ({ path: o.paramConfig.path, value: String(o.value) })) });
-                          setExecuteSection("saved-experiments");
-                          setShowRunOverridesPanel(false);
-                        }}>Save as Experiment…</Btn>
-                    )}
-                  </div>
+                      title="Keep these changes as a named, reusable Experiment"
+                      onClick={() => {
+                        setExpFormSeed({ overrides: effectiveOverrides.map(o => ({ path: o.paramConfig.path, value: String(o.value) })) });
+                        setExecuteSection("saved-experiments");
+                        closeRunOverridesPanel();
+                      }}>Save as Experiment…</Btn>
+                  )}
                 </div>
-              </>
-            )}
+              }>
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                Change parameter values for this run only — no experiment or scenario needed. Resets when you switch models or reload the page.
+              </div>
+              {activeExpOverrides.length > 0 && (
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                  {activeExpOverrides.length} loaded from an experiment; ad-hoc changes for the same parameter take priority.
+                </div>
+              )}
+              <OverrideChipList overrides={runOverrides} setOverrides={setRunOverrides}
+                sweepParams={sweepParams.length ? sweepParams : enumerateSweepableParams(model)}
+                pickerOpen={runOverridesPickerOpen} setPickerOpen={setRunOverridesPickerOpen}
+                extraAlreadyAdded={activeExpOverrides.map(o => o.paramConfig.path)}
+                fillContainer />
+            </ResponsivePanel>
           </div>
           <Btn small variant="ghost" onClick={() => setShowRunSetup(v => !v)}>{showRunSetup ? "▲ Hide" : "⚙ Edit"}</Btn>
         </div>
@@ -2791,7 +2790,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           />
         </div>
         {liveFlags.length > 0 ? (
-          <div style={{ position: "relative" }}>
+          <div ref={liveFlagsAnchorRef} style={{ position: "relative" }}>
             <button type="button" onClick={() => setLiveFlagsOpen(v => !v)} style={{
               background: liveFlags.some(f => f.severity === "critical") ? C.red + "22" : C.amber + "22",
               border: `1px solid ${liveFlags.some(f => f.severity === "critical") ? C.red + "44" : C.amber + "44"}`,
@@ -2799,32 +2798,22 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               color: liveFlags.some(f => f.severity === "critical") ? C.red : C.amber,
               fontFamily: FONT, cursor: "pointer", whiteSpace: "nowrap", lineHeight: 1.5,
             }}>{"\u26A0"} {liveFlags.length}</button>
-            {liveFlagsOpen && (
-              <>
-                <div style={{ position: "fixed", inset: 0, zIndex: 199 }} onClick={() => setLiveFlagsOpen(false)} />
-                <div style={{
-                position: "absolute", top: "100%", right: 0, marginTop: 4,
-                background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8,
-                padding: 8, minWidth: 260, maxWidth: "90vw",
-                boxShadow: SHADOW.dropdown, zIndex: 200,
-                display: "flex", flexDirection: "column", gap: 6,
-              }}>
-                {liveFlags.map((f, i) => {
-                  const isCritical = f.severity === "critical";
-                  return (
-                    <div key={i} style={{
-                      borderLeft: `2px solid ${isCritical ? C.red : C.amber}`,
-                      paddingLeft: 8, fontSize: 10, fontFamily: FONT,
-                      color: isCritical ? C.red : C.amber, lineHeight: 1.4,
-                    }}>
-                      {f.resource && <span style={{ color: C.muted }}>{f.resource}: </span>}
-                      {f.message}
-                    </div>
+            <ResponsivePanel open={liveFlagsOpen} onClose={closeLiveFlags} anchorRef={liveFlagsAnchorRef}
+              title="Live warnings" width={360} testId="live-flags-panel">
+              {liveFlags.map((f, i) => {
+                const isCritical = f.severity === "critical";
+                return (
+                  <div key={i} style={{
+                    borderLeft: `2px solid ${isCritical ? C.red : C.amber}`,
+                    paddingLeft: 8, fontSize: 10, fontFamily: FONT,
+                    color: isCritical ? C.red : C.amber, lineHeight: 1.4, overflowWrap: "anywhere",
+                  }}>
+                    {f.resource && <span style={{ color: C.muted }}>{f.resource}: </span>}
+                    {f.message}
+                  </div>
                 );
               })}
-              </div>
-              </>
-            )}
+            </ResponsivePanel>
           </div>
         ) : null}
         <Btn variant="danger" onClick={() => {
