@@ -2003,6 +2003,7 @@ const cycleLog = [];
         // scheduleAdherence read 0% regardless of actual adherence. Look up
         // through a lowercase-keyed view instead, matching the normName/match
         // convention used elsewhere for this same map (macros.js, phases.js).
+        /** @type {Record<string, any>} */
         const byTypeNorm = {};
         for (const [t, bt] of Object.entries(byType)) byTypeNorm[String(t).trim().toLowerCase()] = bt;
         for (const [srvType, desired] of Object.entries(state.__desiredServerCapacity)) {
@@ -2496,7 +2497,7 @@ const cycleLog = [];
       // (if this server is busy right now) needs adding here, against its current
       // label. Do not use the lifetime `busyTime` total here — that would
       // re-misattribute every prior stint to just the current label again.
-      const addToBucket = (label, amount) => {
+      const addToBucket = (/** @type {string} */ label, /** @type {number} */ amount) => {
         if (!label || !amount) return;
         if (!perShiftBuckets[srv.type]) perShiftBuckets[srv.type] = {};
         if (!perShiftBuckets[srv.type][label]) perShiftBuckets[srv.type][label] = { busyTimeSum: 0, completions: 0 };

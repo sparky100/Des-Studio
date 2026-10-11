@@ -860,7 +860,7 @@ export function consumeLostClaim(cust, serverType) {
  * @param {Record<string, any>} srv
  * @param {number} clock
  * @param {Record<string, any>} ctx
- * @param {string} [reason] — what triggered this interruption: "PREEMPT" (default,
+ * @param {string} [reason] - what triggered this interruption: "PREEMPT" (default,
  *   the PREEMPT macro), "FAIL" (the FAIL macro), "FAILURE" (automatic MTBF/MTTR
  *   breakdown), or "SHIFT_CHANGE" (reactive capacity retirement when a shift closes).
  */
