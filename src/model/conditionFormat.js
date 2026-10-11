@@ -251,6 +251,33 @@ export function mapConditionVariables(condition, mapper = value => value) {
   return condition;
 }
 
+/**
+ * Like mapConditionVariables, but also maps a clause's right-hand side when it
+ * is a string. A string value can name a state variable (`clock >= closureStart`)
+ * or hold a reference token (`queue(A).length < queue(B).length`), so renames
+ * have to reach both sides of every clause.
+ */
+export function mapConditionOperands(condition, mapper = value => value) {
+  if (!condition) return condition;
+  if (typeof condition === "string") {
+    return conditionToLegacyString(mapConditionOperands(migrateLegacyCondition(condition), mapper));
+  }
+  if (isLogicalCondition(condition)) {
+    return {
+      ...condition,
+      clauses: condition.clauses.map(clause => mapConditionOperands(clause, mapper)),
+    };
+  }
+  if (isLeafCondition(condition)) {
+    return {
+      ...condition,
+      variable: mapper(condition.variable || ""),
+      ...(typeof condition.value === "string" ? { value: mapper(condition.value) } : {}),
+    };
+  }
+  return condition;
+}
+
 function normalizeConditionShape(condition) {
   if (!condition) return null;
   return migrateLegacyCondition(condition);

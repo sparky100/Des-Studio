@@ -301,6 +301,33 @@ describe("visual designer graph operations", () => {
     expect(updated.condition).toContain("queue(Main Queue).length > 0");
   });
 
+  it("switching an activity's server keeps an object condition and an array effect intact", () => {
+    // Regression: the switch ran a string replace over the condition, turning a
+    // { operator, clauses } condition into "[object Object]", and joined an
+    // array effect into one string.
+    const model = {
+      ...baseModel,
+      entityTypes: [...baseModel.entityTypes, { id: "manager", name: "Manager", role: "server", count: 1, attrDefs: [] }],
+      cEvents: [{
+        ...baseModel.cEvents[0],
+        condition: { operator: "AND", clauses: [
+          { variable: "queue(Main Queue).length", operator: ">", value: 0 },
+          { variable: "idle(Clerk).count", operator: ">", value: 0 },
+        ] },
+        effect: ["ASSIGN(Main Queue, Clerk)"],
+      }],
+    };
+    const activity = deriveGraphFromModel(model).nodes.find(node => node.id === "activity:start-service");
+
+    const updated = updateVisualNode(model, activity, { serverType: "Manager" }).cEvents[0];
+
+    expect(updated.condition).toEqual({ operator: "AND", clauses: [
+      { variable: "queue(Main Queue).length", operator: ">", value: 0 },
+      { variable: "idle(Manager).count", operator: ">", value: 0 },
+    ] });
+    expect(updated.effect).toEqual(["ASSIGN(Main Queue, Manager)"]);
+  });
+
   it("deleteVisualEdge removes the queue target from an arrival (Source→Queue) edge", () => {
     const graph = deriveGraphFromModel(baseModel);
     const arrivalEdge = graph.edges.find(e => e.source === "arrival");
