@@ -4,12 +4,10 @@
 // existing test imports, so both import paths stay valid.
 import pkg from '../../package.json';
 import { getRunResultsJson } from "./../db/models.js";
+import { MODEL_JSON_ARRAY_FIELDS, MODEL_JSON_OBJECT_FIELDS, pickModelJsonFields } from "../model/modelJsonFields.js";
 
-// Every model_json array/object the app saves (db/models.js modelJsonFromModel)
-// must be exported too, or an export → import round trip silently loses it:
-// `skills` used to be missing, which dropped the skill registry that
-// ASSIGN(..., skill) and server skillProfiles rely on.
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "distances", "skills", "goals", "graph", "experimentDefaults"];
+// Optional arrays an export leaves out when empty (older files never had them).
+const OMIT_WHEN_EMPTY = new Set(["dataSources", "sections", "exposedParams"]);
 
 export function slugifyModelName(name = "") {
   return (name || "untitled")
@@ -19,31 +17,50 @@ export function slugifyModelName(name = "") {
     .replace(/^-+|-+$/g, "") || "untitled";
 }
 
+// Every model_json field (model/modelJsonFields.js) is exported; graph and
+// experimentDefaults only when they are objects, a few optional arrays only
+// when non-empty, scalars only when set.
 export function modelJsonFromModel(model = {}) {
-  const json = MODEL_JSON_KEYS.reduce((acc, key) => {
-    if (key === "graph") {
-      return model.graph && typeof model.graph === "object" && !Array.isArray(model.graph)
-        ? { ...acc, graph: model.graph }
-        : acc;
-    }
-    if (key === "experimentDefaults") {
-      return model.experimentDefaults && typeof model.experimentDefaults === "object" && !Array.isArray(model.experimentDefaults)
-        ? { ...acc, experimentDefaults: model.experimentDefaults }
-        : acc;
-    }
-    return {
-      ...acc,
-      [key]: Array.isArray(model[key]) ? model[key] : [],
-    };
-  }, { schemaVersion: model.schemaVersion ?? 1 });
-  // Preserve live-data and time fields in exported JSON
-  if (model.timeUnit)                  json.timeUnit    = model.timeUnit;
-  if (model.epoch)                     json.epoch       = model.epoch;
-  if (model.dataSources?.length)       json.dataSources = model.dataSources;
-  if (model.sections?.length)          json.sections    = model.sections;
-  if (model.exposedParams?.length)     json.exposedParams = model.exposedParams;
-  if (typeof model.notes === "string" && model.notes) json.notes = model.notes;
+  const picked = pickModelJsonFields(model);
+  /** @type {Record<string, any>} */
+  const json = { schemaVersion: model.schemaVersion ?? 1 };
+  for (const key of MODEL_JSON_ARRAY_FIELDS) {
+    if (!OMIT_WHEN_EMPTY.has(key) || picked[key].length) json[key] = picked[key];
+  }
+  for (const key of MODEL_JSON_OBJECT_FIELDS) {
+    if (model[key] && typeof model[key] === "object" && !Array.isArray(model[key])) json[key] = model[key];
+  }
+  for (const [key, value] of Object.entries(picked)) {
+    if (!(key in json) && !MODEL_JSON_ARRAY_FIELDS.includes(key) && !MODEL_JSON_OBJECT_FIELDS.includes(key)) json[key] = value;
+  }
   return json;
+}
+
+/**
+ * The model after restoring a saved version: every model_json field comes from
+ * the version (it used to restore only 8, leaving today's containers, skills,
+ * distances, sections, notes … next to the old events). Identity, sharing and
+ * a scalar the version doesn't carry stay as they are.
+ * @param {Record<string, any>} current
+ * @param {Record<string, any>} versionModelJson
+ */
+export function restoreModelFromVersion(current, versionModelJson = {}) {
+  return { ...current, ...pickModelJsonFields(versionModelJson) };
+}
+
+/**
+ * The model to save when a user starts from a template: every model_json field
+ * the template carries, as a private copy.
+ * @param {Record<string, any>} template
+ */
+export function modelPayloadFromTemplate(template) {
+  return {
+    name: template.name,
+    description: template.description,
+    visibility: "private",
+    access: {},
+    ...pickModelJsonFields(template),
+  };
 }
 
 // buildModelExportPayload — creates a self-contained JSON export of the model.

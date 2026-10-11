@@ -6,9 +6,14 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Must cover every field in src/model/modelJsonFields.js (this function is
+// deployed on its own and can't import it); tests/db/model-json-fields.test.js
+// checks this file against that list. skills, distances, exposedParams and
+// notes used to be dropped here.
 const MODEL_JSON_KEYS = [
   "entityTypes", "stateVariables", "bEvents", "cEvents",
   "queues", "graph", "experimentDefaults", "goals", "containerTypes",
+  "distances", "skills",
 ];
 
 type ModelRecord = Record<string, unknown>;
@@ -42,6 +47,8 @@ function normalizeModel(payload: ModelRecord, nameOverride?: string): ModelRecor
   if (source.epoch)    model.epoch    = source.epoch;
   if (Array.isArray(source.dataSources)) model.dataSources = source.dataSources;
   if (Array.isArray(source.sections))    model.sections    = source.sections;
+  if (Array.isArray(source.exposedParams)) model.exposedParams = source.exposedParams;
+  if (typeof source.notes === "string" && source.notes) model.notes = source.notes;
   return model;
 }
 
@@ -407,6 +414,8 @@ Deno.serve(async (request: Request) => {
       cEvents:            model.cEvents            || [],
       queues:             model.queues             || [],
       containerTypes:     model.containerTypes     || [],
+      distances:          model.distances          || [],
+      skills:             model.skills             || [],
       graph:              model.graph              || null,
       experimentDefaults: model.experimentDefaults || {},
       goals:              model.goals              || [],
@@ -414,6 +423,8 @@ Deno.serve(async (request: Request) => {
       epoch:              model.epoch              || null,
       ...(Array.isArray(model.dataSources) && model.dataSources.length ? { dataSources: model.dataSources } : {}),
       ...(Array.isArray(model.sections)    && model.sections.length    ? { sections:    model.sections }    : {}),
+      ...(Array.isArray(model.exposedParams) && model.exposedParams.length ? { exposedParams: model.exposedParams } : {}),
+      ...(typeof model.notes === "string" && model.notes ? { notes: model.notes } : {}),
     },
     owner_id: user.id,
   };

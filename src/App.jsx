@@ -26,6 +26,7 @@ import { AppNavBar }                        from "./ui/AppNavBar.jsx";
 import { ModelLibrary }                     from "./ui/ModelLibrary.jsx";
 import { extractImportedModelPayload }      from "./ui/shared/utils.js";
 import { ModelDetail }                      from "./ui/ModelDetail.jsx";
+import { modelPayloadFromTemplate }         from "./ui/modelDetailHelpers.js";
 import { StakeholderView }                  from "./ui/StakeholderView.jsx";
 import { validateModel }                    from "./engine/validation.js";
 import { decodeModelFromUrl, validateLinkModel } from "./utils/importLink.js";
@@ -421,30 +422,7 @@ export default function App({ onThemeChange }){
     if(!uid)return;
     setLoading(true);setError('');
     try{
-      const payload={
-        name: template.name,
-        description: template.description,
-        visibility: "private",
-        access: {},
-        entityTypes: template.entityTypes || [],
-        stateVariables: template.stateVariables || [],
-        bEvents: template.bEvents || [],
-        cEvents: template.cEvents || [],
-        queues: template.queues || [],
-        goals: template.goals || [],
-        containerTypes: template.containerTypes || [],
-        distances: template.distances || [],
-      };
-      // Preserve optional top-level fields that templates may carry
-      if(template.graph!=null)          payload.graph          = template.graph;
-      if(template.experimentDefaults)   payload.experimentDefaults = template.experimentDefaults;
-      if(template.dataSources?.length)  payload.dataSources    = template.dataSources;
-      if(template.timeUnit)             payload.timeUnit       = template.timeUnit;
-      if(template.epoch)                payload.epoch          = template.epoch;
-      if(template.skills?.length)       payload.skills         = template.skills;
-      if(template.sections?.length)     payload.sections       = template.sections;
-      if(template.exposedParams?.length) payload.exposedParams = template.exposedParams;
-      if(template.notes)                payload.notes          = template.notes;
+      const payload=modelPayloadFromTemplate(template);
       const saved=await saveModel(payload, uid);
       await loadData();
       setOpenModelOptions({ initialTab: "execute", autoRun: true, showStarterGuide: false });
