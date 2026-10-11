@@ -155,6 +155,18 @@ describe('Specific template properties', () => {
     expect(berths.count).toBe(3);
   });
 
+  it('World Oil Network (reference) is the reference-model file, at its baseline', () => {
+    const t = TEMPLATES.find(t => t.id === 'world-oil-network');
+    expect(t).toBeDefined();
+    // Same settings the reference check runs (reference-models/world-oil-network).
+    expect(t.experimentDefaults).toMatchObject({ seed: 492153378, replications: 10, maxSimTime: 300, warmupPeriod: 60 });
+    expect(t.stateVariables.find(sv => sv.name === 'closureEnabled').initialValue).toBe(0);
+    // Fields the template copy must carry for the model to work as documented.
+    expect(t.skills).toEqual(['sour', 'sweet']);
+    expect(t.sections.length).toBe(5);
+    expect(t.timeUnit).toBe('days');
+  });
+
   it('all templates have a domain field from the expected set', () => {
     const validDomains = new Set(['Academic', 'Healthcare', 'Service Systems', 'Manufacturing', 'Logistics', 'Technology', 'Transport']);
     TEMPLATES.forEach(t => {

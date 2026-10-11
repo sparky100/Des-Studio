@@ -1084,6 +1084,17 @@ Run both in isolation with `npx vitest run --project soak tests/benchmarks/golde
 
 (These were originally two standalone `node`-runnable scripts, `tests/engine/mm1_benchmark.js`/`mmc_benchmark.js`, run by a separate CI job; both were removed when the test suite was retiered — `golden.test.js`'s tolerances were already equal or stricter, and CI's "Analytical correctness benchmarks" job was a pure duplicate of it.)
 
+### 12.7a Reference Models (opt-in)
+
+`reference-models/` holds full-size models with recorded expected results (currently the World Oil Network: tanker fleet, storage, Hormuz closure). `npm run test:reference` (`scripts/reference-check.mjs`, run with `vite-node`) runs each model's scenarios headless through the app's batch path and compares every recorded value: runtime counts, served/total/balked, activity counts, queue peaks and per-replication arrays **exactly**; all other numbers within 1e-6 relative; timing is reported only. It exits non-zero on any difference and prints `metric · expected · actual · delta · rule`.
+
+It is deliberately **not** part of `npm test`, `npm run test:all`, the soak tier or any push/PR CI job (a run takes a few minutes). Run it:
+
+- before a release;
+- for engine changes touching scheduling, C-event scanning, resource/claim handling, turnaround, quantities, routing, containers or results aggregation.
+
+The **Reference models** workflow (`.github/workflows/reference-models.yml`) runs it weekly and on manual dispatch. For an intentional result change, run `npm run test:reference -- --update` and commit the regenerated expected file in the same commit, saying why. Details: `reference-models/README.md`.
+
 ### 12.8 Completion Gates by Sprint
 
 These are the minimum test requirements before a sprint can be declared done. Codex must run all gates and report pass/fail before closing a sprint.
@@ -1132,6 +1143,8 @@ npm run test:soak                    # Heavy tier: full simulations, replication
 npm run test:all                     # Everything (fast + soak) — CI's overall bar; use before a final push
 npm run test:watch                   # Watch mode (vitest)
 npm run test:quick                   # vitest run --changed — only tests related to uncommitted changes
+npm run test:reference               # Opt-in: reference models vs recorded results (§12.7a) — not in test/test:all/CI
+npm run test:reference -- --update   # Regenerate expected results after an intentional result change
 # Default to test:quick while iterating, npm test before pushing, and
 # npm run test:all (or push and let CI's parallel test+soak jobs run) as the
 # final check — the soak tier alone is several minutes of CPU-bound

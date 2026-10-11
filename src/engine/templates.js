@@ -2,6 +2,10 @@
 // Rule: ARRIVE always uses two arguments — ARRIVE(EntityType, QueueName) —
 // so the queue name is explicit and matches the registered queue definition.
 
+// Reference models live in reference-models/ with their expected results
+// (npm run test:reference); the gallery copy is the same file.
+import WORLD_OIL_NETWORK_MODEL from "../../reference-models/world-oil-network/oil-network-fleet-storage.json";
+
 // ── Academic / Benchmark ──────────────────────────────────────────────────────
 
 const MM1 = {
@@ -1293,6 +1297,21 @@ const RASE_SERVICE_REQUEST = {
   },
 };
 
+// ── Reference models ──────────────────────────────────────────────────────────
+
+const WORLD_OIL_NETWORK = {
+  ...WORLD_OIL_NETWORK_MODEL,
+  name: "World Oil Network (reference)",
+  description: "Toy world oil network with a tanker fleet, terminal storage and a switchable Strait of Hormuz closure (set closureEnabled = 1): where shortages appear and what limits recovery.",
+  domain: "Logistics",
+  templateMeta: {
+    scenarioType: "Supply network disruption (reference model)",
+    keyMacros: ["COSEIZE", "RELEASE_COSEIZED", "ASSIGN … SCAN", "DRAIN_PARTIAL", "FILL", "turnaroundDist", "quantityAttr", "balkCondition"],
+    paramGuide: "Days and Mb. Baseline: closureEnabled = 0. Closure: closureEnabled = 1, closureStart/closureEnd (default days 100–130). Storage limits storageGulfVlcc … storageUsAframax, in cargoes. Reference settings: seed 492153378, 10 replications, 300 days, warm-up 60.",
+    limitations: "Toy volumes, not calibrated. Tanker return voyages averaged per fleet; bypass cargoes keep their tanker; no prices or demand response. Full notes: reference-models/world-oil-network/oil-network-fleet-model.md.",
+  },
+};
+
 export const TEMPLATES = [
   // Academic
   { id: "mm1",             ...MM1 },
@@ -1319,6 +1338,7 @@ export const TEMPLATES = [
   // Logistics
   { id: "port-berth",      ...PORT_BERTH },
   { id: "courier-ground-transport", ...COURIER_GROUND_TRANSPORT },
+  { id: "world-oil-network", ...WORLD_OIL_NETWORK },
   // Technology
   { id: "data-center",     ...DATA_CENTER },
   // Capability showcases (Sprint 41-45)

@@ -12,6 +12,7 @@ This project uses **OpenCode**, not Claude Code. See the following files for aut
 | `docs/reviews/sprint-89-probabilistic-routing-canvas-edit-plan.md` | Current sprint plan — Sprint 89: Visual Designer inline probabilistic-branch editing (latest shipped) |
 | `docs/reviews/sprint-88-plan.md` | Sprint 88 — Export Consolidation & Data Portability (shipped; see also `sprint-88-closure-report.md`) |
 | `docs/addition1_entity_model.md` | Entity model, action vocabulary, distribution specs |
+| `reference-models/README.md` | Opt-in reference models and `npm run test:reference` (not part of `npm test` or push/PR CI) |
 | `docs/reviews/expert-review-2026-08-remediation-register.md` | Consolidated 2026-08 expert-review remediation register (prioritised) |
 | `docs/reviews/expert-review-2026-08-ux.md` | 2026-08 UX expert / modeller review (maturity 7.5/10) |
 | `docs/reviews/expert-review-2026-08-functionality.md` | 2026-08 functionality & capability review |
