@@ -57,7 +57,8 @@ export default [
     // decomposed before and grown back (execute/index.jsx: 2,678 → 2,293
     // after sprint 55a → 3,540 by 2026-08 → 2,749 after the 2026-10
     // extraction of runHelpers.js, RunReadinessPanel, RunStatusBanners and
-    // BatchResultsPanel; ModelDetail.jsx 1,743 → 1,559 with DataSourcesEditor). The limits below are each file's
+    // BatchResultsPanel; ModelDetail.jsx 1,743 → 1,559 with DataSourcesEditor → 1,549
+    // with restoreModelFromVersion). The limits below are each file's
     // size at ratchet time: growth fails CI, shrinking is free. CONTRACT:
     // never raise a limit — when an extraction lands, lower it to the new
     // line count in the same PR. New features must not add state here; put
@@ -67,6 +68,6 @@ export default [
   },
   {
     files: ['src/ui/ModelDetail.jsx'],
-    rules: { 'max-lines': ['error', { max: 1559, skipBlankLines: false, skipComments: false }] },
+    rules: { 'max-lines': ['error', { max: 1549, skipBlankLines: false, skipComments: false }] },
   },
 ];

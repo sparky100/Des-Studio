@@ -12,6 +12,7 @@ import { getPlatformConfig, setPlatformConfig, updateUserRole,
 import { RUN_ADMISSION_TIERS } from "../engine/run-admission.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 import { getAccessToken } from "../db/auth.js";
+import { NumberInput } from "./shared/NumberInput.jsx";
 
 const LLM_PROVIDERS = [
   { value: "anthropic",    label: "Anthropic" },
@@ -506,20 +507,20 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                 </div>
 
                 <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Temperature</span>
-                <input type="number" min="0" max="1" step="0.05" value={temperature}
-                  onChange={e => setTemperature(parseFloat(e.target.value) || 0.3)}
+                <NumberInput min={0} max={1} step="0.05" value={temperature}
+                  onValueChange={setTemperature}
                   style={{ ...inp({ color: C.amber, width: 100 })}}
                 />
 
                 <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Max tokens per analysis</span>
-                <input type="number" min="50" max="4000" step="50" value={maxTokens}
-                  onChange={e => setMaxTokens(parseInt(e.target.value) || 450)}
+                <NumberInput integer min={50} max={4000} step="50" value={maxTokens}
+                  onValueChange={setMaxTokens}
                   style={{ ...inp({ color: C.amber, width: 120 })}}
                 />
 
                 <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Rate limit (reqs/hour)</span>
-                <input type="number" min="1" max="500" step="1" value={rateLimit}
-                  onChange={e => setRateLimit(parseInt(e.target.value) || 25)}
+                <NumberInput integer min={1} max={500} value={rateLimit}
+                  onValueChange={setRateLimit}
                   style={{ ...inp({ color: C.amber, width: 100 })}}
                 />
               </div>
@@ -585,13 +586,12 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                           </td>
                           {numFields.map(({ key, def }) => (
                             <td key={key} style={{ padding: "4px 6px" }}>
-                              <input
-                                type="number"
-                                min="1"
-                                step="1"
+                              <NumberInput
+                                integer
+                                min={1}
+                                fallback={def}
                                 value={draft[key] ?? def}
-                                onChange={e => {
-                                  const val = parseInt(e.target.value) || def;
+                                onValueChange={val => {
                                   setTierPoliciesDraft(prev => ({
                                     ...RUN_ADMISSION_TIERS,
                                     ...(prev || {}),

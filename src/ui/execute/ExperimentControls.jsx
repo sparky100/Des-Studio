@@ -6,6 +6,7 @@ import { WarmupChart, CumulativeMeanChart } from "./SweepViews.jsx";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { simToWall, formatWallTime } from "../../engine/clockUtils.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { NumberInput } from "../shared/NumberInput.jsx";
 
 export function ExperimentControls({
   warmupPeriod, setWarmupPeriod,
@@ -91,12 +92,11 @@ export function ExperimentControls({
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>IGNORE EARLY RESULTS</span>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input
+                <NumberInput
                   aria-label="Warm-up period"
-                  type="number"
+                  min={0}
                   value={warmupPeriod}
-                  onChange={e => {
-                    const value = parseFloat(e.target.value) || 0;
+                  onValueChange={value => {
                     setWarmupPeriod(value);
                     setWarmupDetection(null);
                     persistExperimentDefaults({ warmupPeriod: value });
@@ -161,12 +161,11 @@ export function ExperimentControls({
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>NUMBER OF RUNS</span>
-              <input
+              <NumberInput
                 aria-label="Replication count"
-                type="number"
+                integer
                 value={replications}
-                onChange={e => {
-                  const value = parseInt(e.target.value, 10) || 0;
+                onValueChange={value => {
                   setReplications(value);
                   persistExperimentDefaults({ replications: value });
                 }}
@@ -182,11 +181,11 @@ export function ExperimentControls({
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RANDOM STARTING POINT</span>
               <div style={{ display: "flex", gap: 6 }}>
-                <input
+                <NumberInput
                   aria-label="Simulation seed"
-                  type="number"
+                  integer
                   value={seed}
-                  onChange={e => { const v = parseInt(e.target.value) || 0; setSeed(v); persistExperimentDefaults({ seed: v }); }}
+                  onValueChange={v => { setSeed(v); persistExperimentDefaults({ seed: v }); }}
                   style={{ width: 120, background: "transparent", border: `1px solid ${C.border}`,
                     borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
                     padding: "6px 8px" }}
@@ -224,12 +223,11 @@ export function ExperimentControls({
             {terminationMode === "time" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN FOR</span>
-                <input
+                <NumberInput
                   aria-label="Run duration"
-                  type="number"
+                  min={0}
                   value={maxSimTime}
-                  onChange={e => {
-                    const value = parseFloat(e.target.value) || 0;
+                  onValueChange={value => {
                     setMaxSimTime(value);
                     persistExperimentDefaults({ maxSimTime: value, terminationMode: "time" });
                   }}

@@ -10,6 +10,7 @@ import { RouteEdgeDialog } from "./RouteEdgeDialog.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { renameEntityType } from "../../engine/queue-refs.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { NumberInput } from "../shared/NumberInput.jsx";
 
 // Small 14x14 glyph for each align/distribute action in the Arrange menu.
 // Uses currentColor so it inherits the theme's text/accent color.
@@ -1037,9 +1038,9 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                         <option value="server">Server</option>
                       </select>
                       {et.role === "server" && !hasShifts && !hasPattern && (
-                        <input type="number" min="1" value={et.count || "1"} onChange={e => {
+                        <NumberInput integer min={1} fallback={1} value={et.count || 1} onValueChange={v => {
                           const next = [...(model.entityTypes || [])];
-                          next[i] = { ...next[i], count: parseInt(e.target.value, 10) || "1" };
+                          next[i] = { ...next[i], count: v };
                           applyModel({ ...model, entityTypes: next });
                         }}
                           style={{ width: "100%", boxSizing: "border-box", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 3px", textAlign: "center" }}

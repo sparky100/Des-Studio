@@ -47,7 +47,7 @@ import { normalizeModelConditions }         from "../model/conditionFormat.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 import { useModelUndo } from "./hooks/useModelUndo.js";
 import { AccessTab } from "./AccessTab.jsx";
-import { slugifyModelName, modelJsonFromModel, buildModelExportPayload, hydrateResultsFromHistoryRow, isStarterBlankModel, valuesEqual } from "./modelDetailHelpers.js";
+import { slugifyModelName, modelJsonFromModel, buildModelExportPayload, hydrateResultsFromHistoryRow, isStarterBlankModel, valuesEqual, restoreModelFromVersion } from "./modelDetailHelpers.js";
 import { useConfirm } from "./shared/useConfirm.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
@@ -190,17 +190,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   }, [modelId, isOwner]);
 
   const handleRestoreVersion = (versionModelJson) => {
-    const restored = normalizeModelConditions({
-      ...model,
-      entityTypes:        versionModelJson.entityTypes        || [],
-      stateVariables:     versionModelJson.stateVariables     || [],
-      bEvents:            versionModelJson.bEvents            || [],
-      cEvents:            versionModelJson.cEvents            || [],
-      queues:             versionModelJson.queues             || [],
-      graph:              versionModelJson.graph              ?? null,
-      experimentDefaults: versionModelJson.experimentDefaults || {},
-      goals:              versionModelJson.goals              || [],
-    });
+    const restored = normalizeModelConditions(restoreModelFromVersion(model, versionModelJson));
     setWholeModel(restored);
   };
 

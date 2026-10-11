@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Btn, SH, InfoBox } from "./shared/components.jsx";
 import { fetchUserSettings, saveUserSettings } from "../db/models.js";
 import { useTheme, THEME_OPTIONS } from "./shared/ThemeContext.jsx";
+import { NumberInput } from "./shared/NumberInput.jsx";
 
 const TABS = [
   { id: "execute", label: "Simulation" },
@@ -153,18 +154,18 @@ function UserSettingsPanel({ userId, plan, onClose, onThemeChange }) {
               </InfoBox>
               <div style={gridRow}>
                 <span style={lbl}>Default replications</span>
-                <input type="number" min="1" max="1000" step="1" value={defaultReplications}
-                  onChange={e => setDefaultReplications(parseInt(e.target.value) || 1)}
+                <NumberInput integer min={1} max={1000} value={defaultReplications}
+                  onValueChange={setDefaultReplications}
                   style={{ ...inp({ width: 100 }) }} />
 
                 <span style={lbl}>Default warm-up period</span>
-                <input type="number" min="0" step="1" value={defaultWarmup}
-                  onChange={e => setDefaultWarmup(parseFloat(e.target.value) || 0)}
+                <NumberInput min={0} step="1" value={defaultWarmup}
+                  onValueChange={setDefaultWarmup}
                   style={{ ...inp({ width: 100 }) }} />
 
                 <span style={lbl}>Default max simulation time</span>
-                <input type="number" min="1" step="1" value={defaultMaxSimTime}
-                  onChange={e => setDefaultMaxSimTime(parseFloat(e.target.value) || 1000)}
+                <NumberInput min={1} step="1" value={defaultMaxSimTime}
+                  onValueChange={setDefaultMaxSimTime}
                   style={{ ...inp({ width: 120 }) }} />
               </div>
             </div>

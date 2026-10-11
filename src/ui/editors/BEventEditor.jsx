@@ -4,6 +4,7 @@ import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPi
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useConfirm } from "../shared/useConfirm.jsx";
 import { setBEventRoutingMode } from "../visual-designer/graph-operations.js";
+import { NumberInput } from "../shared/NumberInput.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
@@ -389,9 +390,9 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 {loopEnabled&&(<>
                   <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Max loops:</span>
-                    <input type="number" min="1" step="1"
-                      value={ev.loopConfig?.maxLoopCount||""}
-                      onChange={e=>updLoop('maxLoopCount',parseInt(e.target.value)||1)}
+                    <NumberInput integer min={1}
+                      value={ev.loopConfig?.maxLoopCount ?? ""}
+                      onValueChange={v=>updLoop('maxLoopCount',v)}
                       placeholder="3"
                       style={{width:70,background:'transparent',border:`1px solid ${C.purple}55`,borderRadius:4,color:C.purple,fontFamily:FONT,fontSize:11,padding:'4px 8px'}}/>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Exit to:</span>

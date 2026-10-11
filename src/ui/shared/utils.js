@@ -1,9 +1,6 @@
 // ui/shared/utils.js — General utility functions
 
-// Keep in step with the export (ui/modelDetailHelpers.js MODEL_JSON_KEYS):
-// `distances` used to be missing here, so importing an exported model lost its
-// travel distances.
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "goals", "containerTypes", "skills", "distances"];
+import { pickModelJsonFields } from "../../model/modelJsonFields.js";
 
 /**
  * Normalise an imported JSON payload (raw model or DB envelope) into a
@@ -24,31 +21,17 @@ export function extractImportedModelPayload(payload) {
     visibility: "private",
     access: {},
   };
-  for (const key of MODEL_JSON_KEYS) {
-    if (key === "graph") {
-      // Never trust externally-supplied node positions on import: an LLM
-      // asked to fill in flow's schema sometimes hallucinates a `graph` key
-      // with arbitrary/overlapping x/y even though the schema never asks
-      // for one. Always discard it so deriveGraphFromModel() computes a
-      // fresh dagre auto-layout — the same effect as the "↺ Layout" reset
-      // button (resetLayout in VisualDesignerPanel.jsx / relayoutModel in
-      // graph-operations.js, both of which wipe graph.nodes to []).
-      model[key] = null;
-    } else if (key === "experimentDefaults") {
-      model[key] = source[key] && typeof source[key] === "object" && !Array.isArray(source[key])
-        ? source[key]
-        : {};
-    } else {
-      model[key] = Array.isArray(source[key]) ? source[key] : [];
-    }
-  }
-  // Preserve scalar settings that are not array-valued model keys
-  if (source.timeUnit) model.timeUnit = source.timeUnit;
-  if (source.epoch)    model.epoch    = source.epoch;
-  if (Array.isArray(source.dataSources)) model.dataSources = source.dataSources;
-  if (Array.isArray(source.sections)) model.sections = source.sections;
-  if (Array.isArray(source.exposedParams)) model.exposedParams = source.exposedParams;
-  if (typeof source.notes === "string" && source.notes) model.notes = source.notes;
+  // Every model_json field (model/modelJsonFields.js) — a hand-written list
+  // here used to drop `distances`.
+  Object.assign(model, pickModelJsonFields(source));
+  // Never trust externally-supplied node positions on import: an LLM
+  // asked to fill in flow's schema sometimes hallucinates a `graph` key
+  // with arbitrary/overlapping x/y even though the schema never asks
+  // for one. Always discard it so deriveGraphFromModel() computes a
+  // fresh dagre auto-layout — the same effect as the "↺ Layout" reset
+  // button (resetLayout in VisualDesignerPanel.jsx / relayoutModel in
+  // graph-operations.js, both of which wipe graph.nodes to []).
+  model.graph = null;
   return model;
 }
 

@@ -4,6 +4,7 @@
  * experiment captures whatever is set here, not whatever the global Run Setup happens to be. */
 import { ConditionBuilder } from "../editors/index.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { NumberInput } from "../shared/NumberInput.jsx";
 
 export function ExperimentRunSettingsFields({
   warmupPeriod, setWarmupPeriod,
@@ -22,20 +23,20 @@ export function ExperimentRunSettingsFields({
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={labelStyle}>WARM-UP</span>
-          <input aria-label="Warm-up period" type="number" value={warmupPeriod}
-            onChange={e => setWarmupPeriod(parseFloat(e.target.value) || 0)}
+          <NumberInput aria-label="Warm-up period" min={0} value={warmupPeriod}
+            onValueChange={setWarmupPeriod}
             style={fieldStyle} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={labelStyle}>REPLICATIONS</span>
-          <input aria-label="Replication count" type="number" value={replications}
-            onChange={e => setReplications(parseInt(e.target.value, 10) || 0)}
+          <NumberInput aria-label="Replication count" integer value={replications}
+            onValueChange={setReplications}
             style={fieldStyle} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={labelStyle}>SEED</span>
-          <input aria-label="Simulation seed" type="number" value={seed}
-            onChange={e => setSeed(parseInt(e.target.value) || 0)}
+          <NumberInput aria-label="Simulation seed" integer value={seed}
+            onValueChange={setSeed}
             style={fieldStyle} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -54,8 +55,8 @@ export function ExperimentRunSettingsFields({
         {terminationMode === "time" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={labelStyle}>DURATION</span>
-            <input aria-label="Run duration" type="number" value={maxSimTime}
-              onChange={e => setMaxSimTime(parseFloat(e.target.value) || 0)}
+            <NumberInput aria-label="Run duration" min={0} value={maxSimTime}
+              onValueChange={setMaxSimTime}
               style={fieldStyle} />
           </div>
         )}

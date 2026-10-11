@@ -1,6 +1,6 @@
 import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from "./graph.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
-import { renameQueue } from "../../engine/queue-refs.js";
+import { renameQueue, renameContainer, renameServerInEvent } from "../../engine/queue-refs.js";
 import { classifyActivityEffect, effectText, extractReleaseTarget, macroCalls, replaceMacroCall, stripReleaseTarget, withReleaseTarget } from "../../model/macroParser.js";
 
 function clean(value = "") {
@@ -311,52 +311,10 @@ function updateByRef(items, refId, updater) {
   return (items || []).map(item => (item.id === refId ? updater(item) : item));
 }
 
-function replaceServerName(text = "", oldName, newName) {
-  if (!oldName || !newName) return text;
-  const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return String(text || "")
-    .replace(new RegExp(`idle\\(${esc}\\)\\.count`, "gi"), `idle(${newName}).count`)
-    .replace(new RegExp(`busy\\(${esc}\\)\\.count`, "gi"), `busy(${newName}).count`)
-    .replace(new RegExp(`ASSIGN\\(([^,)]+),\\s*${esc}\\)`, "gi"), `ASSIGN($1, ${newName})`);
-}
-
-function replaceContainerName(text = "", oldName, newName) {
-  if (!oldName || !newName) return text;
-  // Effects are usually arrays of macro strings — rename each element rather
-  // than String()-ing the array, which would join it into one comma-separated
-  // (and unparseable) effect.
-  if (Array.isArray(text)) return text.map(part => replaceContainerName(part, oldName, newName));
-  const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return String(text || "")
-    .replace(new RegExp(`FILL\\(${esc}\\s*,`, "gi"), `FILL(${newName},`)
-    .replace(new RegExp(`DRAIN\\(${esc}\\s*,`, "gi"), `DRAIN(${newName},`)
-    // DRAIN_PARTIAL(source, amount[, shortfall]) — rename either container.
-    .replace(new RegExp(`DRAIN_PARTIAL\\(${esc}\\s*,`, "gi"), `DRAIN_PARTIAL(${newName},`)
-    .replace(new RegExp(`(DRAIN_PARTIAL\\([^,)]+,[^,)]+,\\s*)${esc}\\s*\\)`, "gi"), `$1${newName})`)
-    .replace(new RegExp(`container\\(${esc}\\)`, "gi"), `container(${newName})`);
-}
-
 function conditionReferencesQueue(condition, queueName) {
   if (!condition || !queueName) return false;
   const names = extractQueueNamesFromCondition(condition);
   return names.some(n => n.toLowerCase() === queueName.toLowerCase());
-}
-
-// Format B predicate objects ({variable, operator, value} or {operator: "AND"/"OR", clauses: [...]})
-// can also embed a renamed container via a `container(Id).property` token in `variable` —
-// used by bEvents[].routing[].condition, cEvents[].cSchedules[].when, and queues[].balkCondition.
-function renameContainerInPredicate(predicate, oldName, newName) {
-  if (!predicate || typeof predicate !== "object" || !oldName || !newName) return predicate;
-  if (predicate.operator === "AND" || predicate.operator === "OR") {
-    return {
-      ...predicate,
-      clauses: (predicate.clauses || []).map(clause => renameContainerInPredicate(clause, oldName, newName)),
-    };
-  }
-  if (typeof predicate.variable === "string") {
-    return { ...predicate, variable: replaceContainerName(predicate.variable, oldName, newName) };
-  }
-  return predicate;
 }
 
 function findNode(graph, id) {
@@ -1797,8 +1755,11 @@ export function updateVisualNode(model, node, patch = {}) {
         const assignCall = macroCalls(nextEvent.effect || "").find(call => call.macro === "ASSIGN");
         const oldServer = assignCall?.args[1] || "";
         if (oldServer) {
-          nextEvent.condition = replaceServerName(nextEvent.condition || "", oldServer, patch.serverType);
-          nextEvent.effect = replaceServerName(nextEvent.effect || "", oldServer, patch.serverType);
+          // Conditions are objects and effects often arrays — a string replace
+          // here used to turn the condition into "[object Object]".
+          const switched = renameServerInEvent(nextEvent, oldServer, patch.serverType);
+          nextEvent.condition = switched.condition;
+          nextEvent.effect = switched.effect;
         }
       }
       if (patch.serviceTime) {
@@ -1853,31 +1814,9 @@ export function updateVisualNode(model, node, patch = {}) {
       ...(patch.initialLevel !== undefined ? { initialLevel: patch.initialLevel } : {}),
     }));
     if (nextId !== undefined && oldId && nextId && oldId !== nextId) {
-      next.bEvents = (next.bEvents || []).map(event => ({
-        ...event,
-        effect: replaceContainerName(event.effect, oldId, nextId),
-        ...(Array.isArray(event.routing) ? {
-          routing: event.routing.map(branch => ({
-            ...branch,
-            condition: renameContainerInPredicate(branch.condition, oldId, nextId),
-          })),
-        } : {}),
-      }));
-      next.cEvents = (next.cEvents || []).map(event => ({
-        ...event,
-        condition: replaceContainerName(event.condition, oldId, nextId),
-        effect: replaceContainerName(event.effect, oldId, nextId),
-        ...(Array.isArray(event.cSchedules) ? {
-          cSchedules: event.cSchedules.map(schedule => (
-            schedule.when ? { ...schedule, when: renameContainerInPredicate(schedule.when, oldId, nextId) } : schedule
-          )),
-        } : {}),
-      }));
-      next.queues = (next.queues || []).map(queue => (
-        queue.balkCondition
-          ? { ...queue, balkCondition: renameContainerInPredicate(queue.balkCondition, oldId, nextId) }
-          : queue
-      ));
+      // Same propagation as the Forms editor (effects, every condition field,
+      // goal scopes) — engine/queue-refs.js.
+      next = renameContainer(next, oldId, nextId);
     }
   }
   if (patch.sectionId !== undefined) {
