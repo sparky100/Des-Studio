@@ -5,6 +5,8 @@ import {
   buildModelExportPayload,
   slugifyModelName,
 } from '../../src/ui/ModelDetail.jsx';
+import { extractImportedModelPayload } from '../../src/ui/shared/utils.js';
+import OIL_NETWORK from '../../reference-models/world-oil-network/oil-network-fleet-storage.json';
 
 const baseModel = {
   id: 'm1',
@@ -98,6 +100,36 @@ describe('model JSON export', () => {
     expect(payload.model_json).toEqual(expect.objectContaining({
       experimentDefaults: { maxSimTime: 750, warmupPeriod: 50, replications: 3, terminationMode: 'time' },
     }));
+  });
+
+  it('exports skills and notes', () => {
+    const payload = buildModelExportPayload({ ...baseModel, skills: ['sour', 'sweet'], notes: '## Assumptions\n\nToy volumes.' });
+
+    expect(payload.model_json.skills).toEqual(['sour', 'sweet']);
+    expect(payload.model_json.notes).toBe('## Assumptions\n\nToy volumes.');
+  });
+
+  it('omits notes when the model has none', () => {
+    expect(buildModelExportPayload(baseModel).model_json).not.toHaveProperty('notes');
+  });
+
+  // Export → import must not lose anything the engine or the model page reads.
+  // The World Oil Network uses skills (sour/sweet refinery units), sections,
+  // state variables, containers and goals.
+  it('round-trips a full model through export and import without losing fields', () => {
+    const model = {
+      ...OIL_NETWORK,
+      notes: '# Notes\n\nSee the docs.',
+      distances: [{ id: 'd1', fromQueue: 'Gulf VLCC Loading Queue', toQueue: 'Hormuz Queue', distance: 20 }],
+    };
+    const exported = JSON.parse(JSON.stringify(buildModelExportPayload(model, '2026-10-11T00:00:00.000Z')));
+    const imported = extractImportedModelPayload(exported);
+
+    for (const key of ['entityTypes', 'stateVariables', 'bEvents', 'cEvents', 'queues', 'containerTypes', 'distances', 'skills', 'goals', 'experimentDefaults', 'timeUnit', 'sections', 'notes']) {
+      expect(imported[key], key).toEqual(model[key]);
+    }
+    expect(imported.skills).toEqual(['sour', 'sweet']);
+    expect(imported.description).toBe(model.description);
   });
 
   it('omits graph from export payload when model has no graph', () => {

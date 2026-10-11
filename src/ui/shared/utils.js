@@ -1,6 +1,9 @@
 // ui/shared/utils.js — General utility functions
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "goals", "containerTypes", "skills"];
+// Keep in step with the export (ui/modelDetailHelpers.js MODEL_JSON_KEYS):
+// `distances` used to be missing here, so importing an exported model lost its
+// travel distances.
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "goals", "containerTypes", "skills", "distances"];
 
 /**
  * Normalise an imported JSON payload (raw model or DB envelope) into a

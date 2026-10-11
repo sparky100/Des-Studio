@@ -203,7 +203,8 @@ export function validateModel(model) {
         }
       });
       // V71: cycleLength, if present, must be a positive finite number
-      const cycleLength = p.cycleLength != null && p.cycleLength !== '' ? parseFloat(p.cycleLength) : null;
+      // NaN when absent: every check below is guarded by Number.isFinite.
+      const cycleLength = p.cycleLength != null && p.cycleLength !== '' ? parseFloat(p.cycleLength) : NaN;
       if (p.cycleLength != null && p.cycleLength !== '' && !(Number.isFinite(cycleLength) && cycleLength > 0)) {
         err('V71', `${context}: cycleLength, if set, must be a positive number (got '${p.cycleLength}').`, tab);
       }
@@ -309,7 +310,7 @@ export function validateModel(model) {
     if (!parts) return NaN;
     return Number(parts[1]) * 60 + Number(parts[2]);
   }
-  function checkSchedulePatternShape(/** @type {any} */ pat, /** @type {string} */ label, /** @type {any} */ tab, /** @type {any} */ affectedIds) {
+  function checkSchedulePatternShape(/** @type {any} */ pat, /** @type {string} */ label, /** @type {any} */ tab, /** @type {any} */ affectedIds = undefined) {
     if (!Array.isArray(pat.periods) || pat.periods.length === 0) {
       err('V50', `${label} schedulePattern must have at least one period.`, tab, affectedIds);
       return false;
@@ -622,7 +623,7 @@ export function validateModel(model) {
   // string. Mirrors hasAnyNullRoutingExit in simulation/modelChecker.js's CHK-002
   // check, which has the same "does this model have a sink" question to answer.
   const hasArrive = bEvents.some(b => /ARRIVE\s*\(/i.test(effectText(b.effect)));
-  const hasNullRoutingExit = (bEvent) =>
+  const hasNullRoutingExit = (/** @type {any} */ bEvent) =>
     [...(bEvent.routing || []), ...(bEvent.probabilisticRouting || [])].some(branch => !branch.queueName);
   const hasSinkMacro = bEvents.some(b => {
     const text = effectText(b.effect);

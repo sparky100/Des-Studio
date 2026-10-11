@@ -5,7 +5,11 @@
 import pkg from '../../package.json';
 import { getRunResultsJson } from "./../db/models.js";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "distances", "goals", "graph", "experimentDefaults"];
+// Every model_json array/object the app saves (db/models.js modelJsonFromModel)
+// must be exported too, or an export → import round trip silently loses it:
+// `skills` used to be missing, which dropped the skill registry that
+// ASSIGN(..., skill) and server skillProfiles rely on.
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "distances", "skills", "goals", "graph", "experimentDefaults"];
 
 export function slugifyModelName(name = "") {
   return (name || "untitled")
@@ -38,6 +42,7 @@ export function modelJsonFromModel(model = {}) {
   if (model.dataSources?.length)       json.dataSources = model.dataSources;
   if (model.sections?.length)          json.sections    = model.sections;
   if (model.exposedParams?.length)     json.exposedParams = model.exposedParams;
+  if (typeof model.notes === "string" && model.notes) json.notes = model.notes;
   return json;
 }
 
