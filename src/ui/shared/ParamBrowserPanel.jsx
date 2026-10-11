@@ -43,7 +43,9 @@ function ParamRow({ p, color, added, selected, onSelect }) {
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 12, color: added ? C.muted : selected ? color : C.text, fontWeight: selected ? 700 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {/* Full name, wrapping onto more lines when narrow — truncating it
+            ("…ica Terminal") hid the part that tells similar parameters apart. */}
+        <span style={{ fontSize: 12, color: added ? C.muted : selected ? color : C.text, fontWeight: selected ? 700 : 400, overflowWrap: "anywhere" }}>
           {selected && "✓ "}{p.label}
         </span>
         {p.subLabel && (
@@ -68,8 +70,10 @@ function ParamRow({ p, color, added, selected, onSelect }) {
  * @param {boolean}  [props.singleSelect]  — if true, closes after selecting (for sweep parameter pickers)
  * @param {function(path: string)} props.onSelect
  * @param {function} props.onClose
+ * @param {boolean}  [props.fillContainer] — the panel sits inside a container that scrolls as a whole
+ *   (a bottom sheet): no inner scroll box, and the header + search stick to the top of that scroll area
  */
-export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPath = null, singleSelect = false, onSelect, onClose }) {
+export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPath = null, singleSelect = false, onSelect, onClose, fillContainer = false }) {
   const { C, FONT } = useTheme();
   const [query, setQuery] = useState("");
 
@@ -107,8 +111,13 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPa
         <Btn small variant="ghost" onClick={onClose} ariaLabel="Close parameter browser">✕</Btn>
       </div>
 
-      {/* Search input */}
+      {/* Search input — in fill mode pinned to the top of the surrounding
+          scroll area, so it stays in view (above the on-screen keyboard)
+          while the matching rows scroll under it. */}
       {params.length > 0 && (
+        <div style={fillContainer
+          ? { position: "sticky", top: 0, zIndex: 1, background: C.surface, margin: `0 -${SPACE.md}px`, padding: `${SPACE.xs}px ${SPACE.md}px` }
+          : { display: "contents" }}>
         <input
           autoFocus
           type="text"
@@ -118,9 +127,12 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPa
           style={{
             background: C.bg, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm,
             color: C.text, fontFamily: FONT, fontSize: 11,
-            padding: "5px 8px", width: "100%",
+            padding: "5px 8px", width: "100%", boxSizing: "border-box",
+            // 16px stops iOS Safari zooming the page when the field takes focus.
+            ...(fillContainer ? { fontSize: 16, padding: "8px 10px" } : {}),
           }}
         />
+        </div>
       )}
 
       {params.length === 0 && (
@@ -131,7 +143,7 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPa
           parameters (or several expanded groups at once) scrolls inside this
           box instead of growing the popover, and the page under it, without
           limit. Header and search input above stay pinned/visible. */}
-      <div data-testid="param-browser-results" style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: SPACE.sm }}>
+      <div data-testid="param-browser-results" style={{ ...(fillContainer ? {} : { maxHeight: 360, overflowY: "auto" }), display: "flex", flexDirection: "column", gap: SPACE.sm }}>
         {/* Filtered flat list */}
         {filtered !== null && (
           filtered.length === 0

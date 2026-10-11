@@ -103,3 +103,27 @@ describe('ExportPopover viewport clamp', () => {
     }
   });
 });
+
+describe('ExportPopover on phones', () => {
+  it.each([360, 390, 412])('renders as a bottom sheet at %ipx and closes from its backdrop', width => {
+    vi.stubGlobal('matchMedia', vi.fn().mockImplementation(query => {
+      const m = /max-width:\s*(\d+)px/.exec(query);
+      return { matches: m ? width <= Number(m[1]) : false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    }));
+    try {
+      const { onClose } = renderPopover({ onCreateReport: true });
+      const sheet = screen.getByRole('dialog', { name: 'Export' });
+      expect(sheet.dataset.layout).toBe('sheet');
+      expect(screen.getByText(/results table \(\.csv\)/i)).toBeInTheDocument();
+      // A modal opened from the sheet is not hidden underneath it.
+      fireEvent.click(screen.getByText(/create report/i));
+      expect(screen.queryByRole('dialog', { name: 'Export' })).not.toBeInTheDocument();
+      expect(screen.getByText('Generate Report')).toBeInTheDocument();
+      fireEvent.click(screen.getByText('Cancel'));
+      fireEvent.click(screen.getByTestId('export-sheet-backdrop'));
+      expect(onClose).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

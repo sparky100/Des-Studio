@@ -133,4 +133,30 @@ describe("ExecutePanel — Run tab ad-hoc parameter adjustment", () => {
     expect(await screen.findByLabelText(/experiment name/i)).toHaveValue("");
     expect(screen.getByLabelText(/override value 1/i)).toHaveValue(1);
   });
+
+  // Mobile regression: on a ~412px phone the panel was absolutely positioned
+  // right: 0 off a button that wraps to the left edge, so its left ~40% was
+  // off-screen. Below 640px it is now a bottom sheet.
+  it.each([360, 390, 412])("opens as a full-width bottom sheet on a %ipx phone, with full parameter names", (width) => {
+    vi.stubGlobal("matchMedia", vi.fn().mockImplementation(query => {
+      const m = /max-width:\s*(\d+)px/.exec(query);
+      return { matches: m ? width <= Number(m[1]) : false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    }));
+    try {
+      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" plan="pro" />);
+      openAdjustPanel();
+      const sheet = screen.getByRole("dialog", { name: "Adjust parameters" });
+      expect(sheet.dataset.layout).toBe("sheet");
+      expect(sheet.style.left).toBe("0px");
+      expect(sheet.style.right).toBe("0px");
+      fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+      expect(screen.getByPlaceholderText(/filter parameters/i)).toBeInTheDocument();
+      const label = screen.getByRole("button", { name: /^number of server/i }).querySelector("span");
+      expect(label.style.textOverflow).toBe("");
+      fireEvent.click(screen.getByTestId("run-overrides-panel-backdrop"));
+      expect(screen.queryByRole("dialog", { name: "Adjust parameters" })).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
