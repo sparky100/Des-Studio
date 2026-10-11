@@ -875,13 +875,22 @@ export function ExecuteCanvas({
         } else if (node.type === "container") {
           // Live level/capacity from snap.containers when available, falling
           // back to the container type's static initialLevel/capacity before
-          // the first FILL/DRAIN. `clock` drives ExecuteContainerNode's
-          // sparkline history the same way queue nodes track theirs.
+          // the first FILL/DRAIN. `clock` drives ExecuteContainerNode's level
+          // history (its trend line).
           const live = snap.containers?.[node.refId];
           const ct = (model.containerTypes || []).find(c => c.id === node.refId);
           const level = live?.level ?? (ct?.initialLevel != null ? Number(ct.initialLevel) : 0);
           const capacity = live?.capacity ?? (ct?.capacity != null ? Number(ct.capacity) : null);
-          liveData = { level, capacity: Number.isFinite(capacity) ? capacity : null, clock: snap.clock };
+          // The trend shows the last 10% of the run (in sim time), so the node
+          // needs the run length and its unit.
+          const runLength = Number(model.experimentDefaults?.maxSimTime);
+          liveData = {
+            level,
+            capacity: Number.isFinite(capacity) ? capacity : null,
+            clock: snap.clock,
+            trendWindow: Number.isFinite(runLength) && runLength > 0 ? runLength * 0.1 : null,
+            timeUnit: model.timeUnit || "minutes",
+          };
         }
       }
       const dimmed = (showSections && focusedSectionId != null && node.sectionId !== focusedSectionId) ||
