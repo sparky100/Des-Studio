@@ -2,6 +2,13 @@
 // Rule: ARRIVE always uses two arguments — ARRIVE(EntityType, QueueName) —
 // so the queue name is explicit and matches the registered queue definition.
 
+// Reference models live in reference-models/ with their expected results
+// (npm run test:reference). The template is built from the same files at build
+// time, so the two can't drift; opening a template saves a copy to the user's
+// account, so edits never touch the reference files.
+import WORLD_OIL_NETWORK_MODEL from "../../reference-models/world-oil-network/oil-network-fleet-storage.json";
+import WORLD_OIL_NETWORK_DOC from "../../reference-models/world-oil-network/oil-network-fleet-model.md?raw";
+
 // ── Academic / Benchmark ──────────────────────────────────────────────────────
 
 const MM1 = {
@@ -1293,6 +1300,51 @@ const RASE_SERVICE_REQUEST = {
   },
 };
 
+// ── Reference models ──────────────────────────────────────────────────────────
+
+/**
+ * Model notes (Overview tab, markdown) from a reference model's documentation:
+ * keeps the sections a modeller needs and drops the maintainer-only ones.
+ * @param {string} doc  the documentation markdown
+ * @param {number[]} dropSections  "## N." section numbers to leave out
+ * @param {string} preface  replaces the lines above the first section
+ */
+export function referenceDocToNotes(doc, dropSections, preface) {
+  const parts = doc.split(/^(?=## )/m);
+  const kept = parts.slice(1).filter(part => {
+    const n = Number(/^## (\d+)\./.exec(part)?.[1]);
+    return !dropSections.includes(n);
+  });
+  return [preface, ...kept]
+    .join("\n\n")
+    .split("\n")
+    .filter(line => line.trim() !== "---") // MarkdownContent has no horizontal rule
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim() + "\n";
+}
+
+const WORLD_OIL_NETWORK = {
+  ...WORLD_OIL_NETWORK_MODEL,
+  name: "World Oil Network — Hormuz Closure",
+  description: "Physical oil network with a tanker fleet, Hormuz chokepoint and bypass, refining hubs and lost-sales demand. Toggle closureEnabled to compare a 30-day closure against the baseline. Advanced reference model.",
+  domain: "Logistics",
+  // §16 Performance, §17 Version history, §18 Next steps and §20 Reference
+  // results file are for maintainers (reference-models/world-oil-network/).
+  notes: referenceDocToNotes(WORLD_OIL_NETWORK_DOC, [16, 17, 18, 20],
+    "# World Oil Network — Hormuz Closure\n\n" +
+    "Advanced reference model (supply chain, energy, scenario analysis). Baseline: `closureEnabled = 0`. " +
+    "Closure scenario: set `closureEnabled = 1` (Hormuz closed from `closureStart` to `closureEnd`, days 100–130) " +
+    "and run with the same seed to compare. Reference settings: seed 492153378, 10 replications, 300 days, warm-up 60. " +
+    "Units: days and Mb (million barrels); one entity is one cargo."),
+  templateMeta: {
+    scenarioType: "Supply chain · energy · scenario analysis (advanced)",
+    keyMacros: ["COSEIZE", "RELEASE_COSEIZED", "ASSIGN … SCAN", "DRAIN_PARTIAL", "FILL", "turnaroundDist", "quantityAttr", "balkCondition"],
+    paramGuide: "Days and Mb. Baseline: closureEnabled = 0. Closure: closureEnabled = 1, closureStart/closureEnd (default days 100–130). Storage limits storageGulfVlcc … storageUsAframax, in cargoes. Reference settings: seed 492153378, 10 replications, 300 days, warm-up 60.",
+    limitations: "Toy volumes, not calibrated. Tanker return voyages averaged per fleet; bypass cargoes keep their tanker; no prices or demand response.",
+  },
+};
+
 export const TEMPLATES = [
   // Academic
   { id: "mm1",             ...MM1 },
@@ -1319,6 +1371,7 @@ export const TEMPLATES = [
   // Logistics
   { id: "port-berth",      ...PORT_BERTH },
   { id: "courier-ground-transport", ...COURIER_GROUND_TRANSPORT },
+  { id: "world-oil-network", ...WORLD_OIL_NETWORK },
   // Technology
   { id: "data-center",     ...DATA_CENTER },
   // Capability showcases (Sprint 41-45)

@@ -1,0 +1,7 @@
+{
+  "id": "world-oil-network",
+  "title": "World Oil Network (tanker fleet and storage)",
+  "model": "oil-network-fleet-storage.json",
+  "expected": "oil-network-reference-expected.json",
+  "docs": "oil-network-fleet-model.md"
+}

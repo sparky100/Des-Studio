@@ -91,6 +91,7 @@ npm run test:quick                    # Only tests related to uncommitted change
 npm run test:watch                    # Watch mode — re-runs tests affected by the file you save
 npm test -- engine                    # Engine tests only (fast tier)
 npm test -- ui                        # UI tests only
+npm run test:reference                # Opt-in: full reference models vs recorded results (reference-models/README.md)
 
 # Build
 npm run build                         # Production build

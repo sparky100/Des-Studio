@@ -441,6 +441,10 @@ export default function App({ onThemeChange }){
       if(template.dataSources?.length)  payload.dataSources    = template.dataSources;
       if(template.timeUnit)             payload.timeUnit       = template.timeUnit;
       if(template.epoch)                payload.epoch          = template.epoch;
+      if(template.skills?.length)       payload.skills         = template.skills;
+      if(template.sections?.length)     payload.sections       = template.sections;
+      if(template.exposedParams?.length) payload.exposedParams = template.exposedParams;
+      if(template.notes)                payload.notes          = template.notes;
       const saved=await saveModel(payload, uid);
       await loadData();
       setOpenModelOptions({ initialTab: "execute", autoRun: true, showStarterGuide: false });

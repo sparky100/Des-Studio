@@ -16,6 +16,7 @@
     "test:all": "vitest run",
     "test:watch": "vitest",
     "test:quick": "vitest run --changed",
+    "test:reference": "vite-node scripts/reference-check.mjs --",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
     "bench": "vitest run --project soak tests/engine/benchmarks --reporter verbose",

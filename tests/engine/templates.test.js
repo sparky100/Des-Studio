@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { TEMPLATES } from '../../src/engine/templates.js';
+import { TEMPLATES, referenceDocToNotes } from '../../src/engine/templates.js';
+import WORLD_OIL_NETWORK_REFERENCE from '../../reference-models/world-oil-network/oil-network-fleet-storage.json';
 import { validateModel } from '../../src/engine/validation.js';
 import { buildEngine } from '../../src/engine/index.js';
 
@@ -153,6 +154,39 @@ describe('Specific template properties', () => {
     expect(t).toBeDefined();
     const berths = t.entityTypes.find(e => e.name === 'Berth');
     expect(berths.count).toBe(3);
+  });
+
+  it('World Oil Network — Hormuz Closure is built from the reference-model file (single source)', () => {
+    const t = TEMPLATES.find(t => t.id === 'world-oil-network');
+    expect(t).toBeDefined();
+    expect(t.name).toBe('World Oil Network — Hormuz Closure');
+    expect(t.domain).toBe('Logistics');
+    // Every model field is the reference file's, untouched — so the template
+    // and `npm run test:reference` run the same model.
+    for (const [key, value] of Object.entries(WORLD_OIL_NETWORK_REFERENCE)) {
+      if (key === 'name' || key === 'description') continue;
+      expect(t[key], key).toEqual(value);
+    }
+    expect(t.experimentDefaults).toMatchObject({ seed: 492153378, replications: 10, maxSimTime: 300, warmupPeriod: 60 });
+    expect(t.stateVariables.find(sv => sv.name === 'closureEnabled').initialValue).toBe(0);
+    expect(t.skills).toEqual(['sour', 'sweet']);
+  });
+
+  it('World Oil Network notes carry the modeller-facing documentation', () => {
+    const t = TEMPLATES.find(t => t.id === 'world-oil-network');
+    expect(t.notes).toMatch(/^# World Oil Network — Hormuz Closure/);
+    for (const heading of ['## 2. Structure at a glance', '## 11. Parameters (state variables)', '## 13. How to run a scenario', '## 14. Results (reference runs)', '## 15. Known limitations', '## 19. What the model demonstrates']) {
+      expect(t.notes).toContain(heading);
+    }
+    for (const heading of ['## 16. Performance', '## 17. Version history', '## 18. Next steps', '## 20. Reference results file']) {
+      expect(t.notes).not.toContain(heading);
+    }
+    expect(t.notes).not.toMatch(/^---$/m);
+  });
+
+  it('referenceDocToNotes keeps the preface and the sections not dropped', () => {
+    const doc = '# Title\n\nfile line\n\n---\n\n## 1. One\n\nbody 1\n\n---\n\n## 2. Two\n\nbody 2\n\n## 3. Three\n\nbody 3\n';
+    expect(referenceDocToNotes(doc, [2], '# New')).toBe('# New\n\n## 1. One\n\nbody 1\n\n## 3. Three\n\nbody 3\n');
   });
 
   it('all templates have a domain field from the expected set', () => {
