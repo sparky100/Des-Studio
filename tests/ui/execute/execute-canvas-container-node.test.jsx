@@ -108,6 +108,57 @@ describe("ExecuteCanvas — container node live level", () => {
   });
 });
 
+// The trend used to be a sparkline of the last 20 screen updates scaled to its
+// own recent maximum: a steady level always drew as a "full" line at the top.
+// Now: a fill gauge (level ÷ capacity) and a trend over the last 10% of the run
+// on a 0–capacity scale, with its span and min–max written underneath.
+describe("ExecuteCanvas — container fill gauge and level trend", () => {
+  const oilish = { ...containerModel, timeUnit: "days", experimentDefaults: { maxSimTime: 300 }, containerTypes: [{ id: "ct_us_products", capacity: "250", initialLevel: "44" }] };
+  const snapAt = (clock, level) => makeSnap({ clock, containers: { ct_us_products: { level, capacity: 250 } } });
+  const trendLineY = container => {
+    const pts = container.querySelector('[data-testid="container-level-trend"] polyline').getAttribute("points").split(" ");
+    return pts.map(p => Number(p.split(",")[1]));
+  };
+
+  test("the gauge shows level ÷ capacity", () => {
+    render(<ExecuteCanvas model={oilish} snap={snapAt(14, 75)} />);
+    const gauge = screen.getByTestId("container-fill-gauge");
+    expect(gauge).toHaveAttribute("aria-valuenow", "75");
+    expect(gauge).toHaveAttribute("aria-valuemax", "250");
+    expect(parseFloat(gauge.firstChild.style.width)).toBeCloseTo(30, 5);
+    expect(screen.getByText("30%")).toBeInTheDocument();
+  });
+
+  test("a steady level draws at its share of capacity, not as a full line", () => {
+    const { container, rerender } = render(<ExecuteCanvas model={oilish} snap={snapAt(10, 75)} />);
+    rerender(<ExecuteCanvas model={oilish} snap={snapAt(12, 75)} />);
+    rerender(<ExecuteCanvas model={oilish} snap={snapAt(14, 75)} />);
+    // 75/250 = 30% full → 70% of the way down a 22px-high trend (y ≈ 15), not at the top.
+    for (const y of trendLineY(container)) expect(y).toBeCloseTo(21 - 0.3 * 20, 1);
+    expect(screen.getByText("last 4 days · 75")).toBeInTheDocument();
+  });
+
+  test("the trend keeps only the last 10% of the run and labels its span and range", () => {
+    const { rerender } = render(<ExecuteCanvas model={oilish} snap={snapAt(0, 44)} />);
+    rerender(<ExecuteCanvas model={oilish} snap={snapAt(20, 120)} />);
+    rerender(<ExecuteCanvas model={oilish} snap={snapAt(40, 90)} />);
+    rerender(<ExecuteCanvas model={oilish} snap={snapAt(45, 100)} />);
+    // Window = 30 days (10% of 300): at day 45 the day-0 sample (older than
+    // day 15) is dropped; days 20, 40 and 45 remain.
+    expect(screen.getByText("last 25 days · 90–120")).toBeInTheDocument();
+  });
+
+  test("an unbounded container has no gauge and its trend scales to the highest level seen", () => {
+    const unbounded = { ...oilish, containerTypes: [{ id: "ct_us_products", initialLevel: "0" }] };
+    const snap = (clock, level) => makeSnap({ clock, containers: { ct_us_products: { level, capacity: null } } });
+    const { container, rerender } = render(<ExecuteCanvas model={unbounded} snap={snap(1, 10)} />);
+    rerender(<ExecuteCanvas model={unbounded} snap={snap(2, 40)} />);
+    expect(screen.queryByTestId("container-fill-gauge")).toBeNull();
+    const ys = trendLineY(container);
+    expect(ys.at(-1)).toBeCloseTo(1, 1); // highest level at the top
+  });
+});
+
 describe("ExecuteCanvas — balked KPI slot", () => {
   test("a 'balked' KPI slot counts balked entities, matching the served/reneged slots' own precedence pattern", () => {
     const balkedEntities = [
