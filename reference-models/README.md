@@ -21,6 +21,13 @@ The oil network model covers most of the engine's newer features in one model:
 on condition right-hand sides, `balkCondition`, routing on attributes, and
 container results. See §19 of its docs for the full feature map.
 
+It is also in the app's **Templates** tab as *World Oil Network — Hormuz
+Closure* (Logistics). `src/engine/templates.js` imports this folder's model
+JSON and documentation at build time (the documentation becomes the model's
+Notes), so the template and the reference check always use the same model.
+Opening the template saves an editable copy to the user's account; nothing
+in the app writes to these files.
+
 ## Running the check
 
 ```bash

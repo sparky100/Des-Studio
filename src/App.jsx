@@ -444,6 +444,7 @@ export default function App({ onThemeChange }){
       if(template.skills?.length)       payload.skills         = template.skills;
       if(template.sections?.length)     payload.sections       = template.sections;
       if(template.exposedParams?.length) payload.exposedParams = template.exposedParams;
+      if(template.notes)                payload.notes          = template.notes;
       const saved=await saveModel(payload, uid);
       await loadData();
       setOpenModelOptions({ initialTab: "execute", autoRun: true, showStarterGuide: false });

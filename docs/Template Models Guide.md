@@ -15,7 +15,7 @@ Each template teaches a different modelling concept — from a single queue thro
 | v1.2 | Sprint 45 | Three new templates added: Machine Shop with Failures (FAIL/REPAIR macros, MTBF/MTTR), Priority Emergency Department with Triage Escalation (balkCondition, loopConfig Loop Guard, SET_ATTR), Cost-Optimised Call Centre (COST macro, totalCost goal, AI sweep feasibility). |
 | v1.3 | Sprints 62-66 | Appointment Clinic added: showcases Schedule distribution with per-arrival `rows[]` attributes, real-world clock (epoch/timeUnit), attribute-conditional routing at RELEASE, and `cSchedule.when` service-time branching. |
 | v1.4 | Sprint 33 / later | Four new templates added: Surgical Suite (COSEIZE multi-resource seize), Order Fulfillment (MATCH entity sync, EDD discipline), London Underground Live TfL (real-time schedule injection from TfL API), Airport Arrivals Live OpenSky (real-time inter-arrival calibration from OpenSky Network). |
-| v1.5 | 2026-10 | World Oil Network (reference) added: the reference model from `reference-models/world-oil-network/`, with recorded expected results checked by `npm run test:reference`. |
+| v1.5 | 2026-10 | World Oil Network — Hormuz Closure added (Logistics, advanced reference model): built from `reference-models/world-oil-network/`, the same model `npm run test:reference` checks. Its documentation is copied into the model's Notes (Overview tab). |
 
 ---
 
@@ -466,17 +466,21 @@ The model defaults to London Heathrow (ICAO: EGLL). The OpenSky adapter samples 
 
 ---
 
-## 23. World Oil Network (reference)
+## 23. World Oil Network — Hormuz Closure
 
-**Concept:** A large supply-network model, also used as the engine's reference model.
+**Concept:** Physical oil network with a tanker fleet, Hormuz chokepoint and bypass, refining hubs and lost-sales demand. An advanced model, and the engine's reference model.
 
-Crude cargoes from three regions load onto four tanker fleets, sail through or around the Strait of Hormuz to three refining hubs, and refined product meets daily market demand. Set `closureEnabled = 1` to close Hormuz between `closureStart` and `closureEnd` (days 100–130 by default) and see where shortages appear, how much production is shut in, and what limits recovery.
+Crude cargoes from three regions load onto four tanker fleets, sail through or around the Strait of Hormuz to three refining hubs, and refined product meets daily market demand. Set `closureEnabled = 1` to close Hormuz between `closureStart` and `closureEnd` (days 100–130 by default), and compare with the baseline (`closureEnabled = 0`) using the same seed.
 
-**What to watch:** Asia unmet demand (`ct_asia_unmet`) and its spread across replications; loading-queue peaks against the storage limits; Gulf VLCC `utilisation` vs `busyUtilisation`; the Hormuz and bypass queues after reopening.
+**What to watch:** Asia unmet demand (`ct_asia_unmet`) and its spread across replications; loading-queue peaks against the storage limits (shut-in production); Gulf VLCC `utilisation` vs `busyUtilisation`; the Hormuz and bypass queues after reopening.
 
 **Key features:** `COSEIZE` / `RELEASE_COSEIZED` with carried tanker claims, `turnaroundDist` (return voyages), `quantityAttr` volume results, `ASSIGN … SCAN` with refinery skills, `DRAIN_PARTIAL` lost-sales demand, `balkCondition` storage limits, state variables on condition right-hand sides.
 
-**Run settings:** 300 days, warm-up 60, 10 replications, seed 492153378, the reference settings. Opening the template auto-runs the baseline, which should match the recorded baseline results. Full documentation: `reference-models/world-oil-network/oil-network-fleet-model.md`.
+**Run settings:** 300 days, warm-up 60, 10 replications, seed 492153378 (the reference settings). Opening the template saves an editable copy and auto-runs the baseline, which matches the recorded baseline results.
+
+**Documentation:** the copy's **Notes** (Overview tab) hold the model documentation: structure, entity attributes, production, fleet, closure logic, parameters, goals, how to run a scenario, reference results, limitations and the feature map. The full file is `reference-models/world-oil-network/oil-network-fleet-model.md`.
+
+**Single source:** the template is built from the reference files at build time (`src/engine/templates.js` imports the model JSON and the documentation), so it always matches what `npm run test:reference` checks. Editing your copy never changes the reference files.
 
 ---
 
