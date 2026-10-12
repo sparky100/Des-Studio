@@ -194,6 +194,35 @@ describe('ExecutePanel', () => {
     expect(onRunSaved).toHaveBeenCalledOnce();
   });
 
+  it('Auto Run completes through the batched stepping loop and saves one result', async () => {
+    const onRunSaved = vi.fn();
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^auto run$/i }));
+
+    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1), { timeout: 10000 });
+    expect(mockRunReplications).not.toHaveBeenCalled();
+    expect(mockSaveSimulationRun.mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        runtimeMetrics: expect.objectContaining({
+          replications: 1,
+          events_processed: expect.any(Number),
+        }),
+      })
+    );
+    expect(onRunSaved).toHaveBeenCalledOnce();
+  });
+
+  it('Auto Run at maximum speed (Turbo) still completes and saves one result', async () => {
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+    fireEvent.change(screen.getByLabelText(/animation speed multiplier/i), { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: /^auto run$/i }));
+
+    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1), { timeout: 10000 });
+    expect(mockRunReplications).not.toHaveBeenCalled();
+  });
+
   it('allows switching to full archival saves from setup before running', async () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 

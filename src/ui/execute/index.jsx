@@ -195,6 +195,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
   const autoRef = useRef(null);
+  const autoRunningRef = useRef(false);
   const startAutoAfterInitRef = useRef(false);
   const liveHistThrottleRef = useRef(0);
   const runnerRef = useRef(null);
@@ -221,7 +222,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const {
     animationEnabled, toggleAnimation,
     kpiSlots, handleKpiSlotChange,
-    speedMultiplier, setSpeedMultiplier, effectiveAutoSpeed,
+    speedMultiplier, setSpeedMultiplier,
     selectedNodeLabel, setSelectedNodeLabel,
     selectedNodeDetail, setSelectedNodeDetail,
     selectedEntityId, setSelectedEntityId,
@@ -365,7 +366,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     // Cancel any in-flight batch or sweep workers before rebuilding
     if (runnerRef.current) { runnerRef.current.cancel(); runnerRef.current = null; }
     if (sweepRunnerRef.current) { sweepRunnerRef.current.cancel(); sweepRunnerRef.current = null; }
-    if (autoRef.current) { clearInterval(autoRef.current); autoRef.current = null; }
+    if (autoRef.current) { clearTimeout(autoRef.current); autoRef.current = null; }
+    autoRunningRef.current = false;
     setHideRunReadiness(true);
     setExecuteSection("run");
     runSeedRef.current = seed;
@@ -420,11 +422,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }, [model, effectiveModel, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, activeSchedulesMap, purgePeriodEnabled, onRunComplete, runAdmission, effectiveCollectTrace, traceAutoDisabled]);
 
   const stopAuto = useCallback(() => {
+    autoRunningRef.current = false;
     if (autoRef.current) {
-      clearInterval(autoRef.current);
+      clearTimeout(autoRef.current);
       autoRef.current = null;
-      setAutoRunning(false);
     }
+    setAutoRunning(false);
   }, []);
 
   // Store LLM-generated narrative and model description in the run record.
@@ -450,6 +453,124 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     }
   }, [userId, warmupPeriod, maxSimTime, replications, terminationMode]);
 
+  // Throttled live metrics refresh (wait dist / time series / summary / health flags).
+  // Shared by Step and Auto Run so the 400ms throttle is honoured across both paths.
+  const updateLiveMetrics = useCallback((snap) => {
+    const now = Date.now();
+    if (now - liveHistThrottleRef.current <= 400) return;
+    liveHistThrottleRef.current = now;
+    setLiveWaitDist(engineRef.current.getWaitDist?.() || null);
+    setLiveTimeSeries(engineRef.current.getTimeSeries?.() || null);
+    const ls = engineRef.current.getSummary?.();
+    setLiveSummary(ls || null);
+    if (ls && snap) setLiveFlags(evaluateLiveHealth(snap, ls, model));
+  }, [model]);
+
+  // Finalize a completed step-through run — builds the result object, saves it, and
+  // updates every result surface. Shared by Step, Animated Auto Run, and Turbo so all
+  // three produce the identical result for the same engine state.
+  const finalizeSteppedRun = useCallback(async (r, finalLog) => {
+    setMode("done");
+    setLiveWaitDist(null);
+    setLiveTimeSeries(null);
+    setLiveFlags([]);
+    stopAuto();
+    const prepareStartedAt = nowPerf();
+    setSaveStatus({ state: 'saving', message: 'Preparing results...' });
+    await yieldToBrowser();
+    const summary = engineRef.current.getSummary();
+    const wallClockMs = runStartPerfRef.current == null ? null : Math.max(0, Math.round(nowPerf() - runStartPerfRef.current));
+    const finalSummary = {
+      ...summary,
+      phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
+      cycleLimitReached: r.cycleLimitReached || summary.cycleLimitReached,
+      scanLimitReached: r.scanLimitReached || summary.scanLimitReached || false,
+      total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
+      served: r.snap?.served || 0,
+      reneged: r.snap?.reneged || 0,
+    };
+    const fullResult = {
+      snap: r.snap,
+      summary: finalSummary,
+      phaseCTruncated: finalSummary.phaseCTruncated,
+      cycleLimitReached: finalSummary.cycleLimitReached,
+      scanLimitReached: finalSummary.scanLimitReached,
+      timeSeries:    engineRef.current.getTimeSeries?.(),
+      waitDist:      engineRef.current.getWaitDist?.(),
+      waitByArrival:   engineRef.current.getWaitByArrival?.(),
+      entitySummary: engineRef.current.getEntitySummary?.(),
+      runtimeMetrics: {
+        ...engineRef.current.getRuntimeMetrics?.(finalSummary.served),
+        wall_clock_ms: wallClockMs,
+        replications: 1,
+      },
+      log: finalLog,
+    };
+    fullResult.aggregateStats = summarizeReplicationResults([fullResult], CI_METRICS);
+    fullResult._experiment_config = {
+      maxSimTime: terminationMode === 'time' ? maxSimTime : null,
+      warmupPeriod,
+      replications: 1,
+      terminationMode,
+      terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+      seed: runSeedRef.current,
+      parameterOverrides: parameterOverrideRecord,
+    };
+    fullResult._model_snapshot = buildRunModelSnapshot(effectiveModel, fullResult._experiment_config);
+    fullResult.goalOutcomes = buildGoalOutcomes(buildGoalGapsFromResults(effectiveModel, fullResult));
+    setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, fullResult.runtimeMetrics));
+    recordScanCalibration(fullResult.runtimeMetrics);
+    setResults(fullResult);
+    onResultsReady?.(fullResult);
+    onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
+    if (modelId) {
+      const prepareDurationMs = nowPerf() - prepareStartedAt;
+      const stepSeed = runSeedRef.current;
+      const runRecord = buildRunRecord(fullResult._model_snapshot, fullResult, {
+        maxSimTime: terminationMode === 'time' ? maxSimTime : null,
+        warmupPeriod,
+        replications: 1,
+        terminationMode,
+        terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+        parameterOverrides: parameterOverrideRecord,
+      }, stepSeed, { includeModelSnapshot: true });
+      const config = {
+        seed: stepSeed,
+        runLabel: effectiveRunLabel,
+        warmupPeriod,
+        maxTime: terminationMode === 'time' ? maxSimTime : null,
+        versionId: currentVersionId || null,
+        durationMs: wallClockMs,
+        requestedCollectTimeSeries: collectTimeSeries,
+        effectiveCollectTimeSeries: collectTimeSeries,
+        resultDetailLevel: effectiveResultDetailLevel,
+        riskLevel: runAdmission.complexityEstimate.riskLevel,
+        complexityEstimate: runAdmission.complexityEstimate,
+        includeModelSnapshot: true,
+      };
+      if (userId) {
+        setSaveStatus({ state: 'saving', message: 'Saving results…' });
+        doCloudSave(
+          () => saveSimulationRun(modelId, userId, fullResult, { ...config, runRecord }),
+          { setSaveStatus, setLog, prepareDurationMs, snapClock: r.snap.clock },
+        ).then(runId => {
+          if (runId) {
+            setLatestRunId(runId);
+            storeRunNarrative(runId, effectiveModel, fullResult);
+            void refreshRunHistory();
+            onRunSaved?.(runId);
+          }
+        });
+      } else {
+        saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
+        void refreshRunHistory();
+        setSaveStatus({ state: 'success', message: '✓ Results saved' });
+        setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ Local history record completed." }]);
+        onRunSaved?.(null);
+      }
+    }
+  }, [userId, modelId, model, effectiveModel, parameterOverrideRecord, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory, storeRunNarrative]);
+
   const doStep = useCallback(async () => {
     if (batchStatus !== "idle" || replicationResults.length > 0) {
       setBatchStatus("idle");
@@ -469,126 +590,51 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     recordTruncationResult(r);
 
     if (!r.done && engineRef.current) {
-      const now = Date.now();
-      if (now - liveHistThrottleRef.current > 400) {
-        liveHistThrottleRef.current = now;
-        setLiveWaitDist(engineRef.current.getWaitDist?.() || null);
-        setLiveTimeSeries(engineRef.current.getTimeSeries?.() || null);
-        const ls = engineRef.current.getSummary?.();
-        setLiveSummary(ls || null);
-        if (ls) setLiveFlags(evaluateLiveHealth(r.snap, ls, model));
-      }
+      updateLiveMetrics(r.snap);
     }
 
     if (r.done) {
-      setMode("done");
-      setLiveWaitDist(null);
-      setLiveTimeSeries(null);
-      setLiveFlags([]);
-      stopAuto();
-      const prepareStartedAt = nowPerf();
-      setSaveStatus({ state: 'saving', message: 'Preparing results...' });
-      await yieldToBrowser();
-      const summary = engineRef.current.getSummary();
-      const wallClockMs = runStartPerfRef.current == null ? null : Math.max(0, Math.round(nowPerf() - runStartPerfRef.current));
-      const finalLog = nextLog;
-      const finalSummary = {
-        ...summary,
-        phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
-        cycleLimitReached: r.cycleLimitReached || summary.cycleLimitReached,
-        scanLimitReached: r.scanLimitReached || summary.scanLimitReached || false,
-        total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
-        served: r.snap?.served || 0,
-        reneged: r.snap?.reneged || 0,
-      };
-      const fullResult = {
-        snap: r.snap,
-        summary: finalSummary,
-        phaseCTruncated: finalSummary.phaseCTruncated,
-        cycleLimitReached: finalSummary.cycleLimitReached,
-        scanLimitReached: finalSummary.scanLimitReached,
-        timeSeries:    engineRef.current.getTimeSeries?.(),
-        waitDist:      engineRef.current.getWaitDist?.(),
-        waitByArrival:   engineRef.current.getWaitByArrival?.(),
-        entitySummary: engineRef.current.getEntitySummary?.(),
-        runtimeMetrics: {
-          ...engineRef.current.getRuntimeMetrics?.(finalSummary.served),
-          wall_clock_ms: wallClockMs,
-          replications: 1,
-        },
-        log: finalLog,
-      };
-      // aggregateStats assigned after object is created to avoid self-reference
-      fullResult.aggregateStats = summarizeReplicationResults([fullResult], CI_METRICS);
-      // Attach the run's actual config immediately so consumers (e.g. the Simulation
-      // Assistant) don't have to wait for the async DB round-trip to know what was run.
-      fullResult._experiment_config = {
-        maxSimTime: terminationMode === 'time' ? maxSimTime : null,
-        warmupPeriod,
-        replications: 1,
-        terminationMode,
-        terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
-        seed: runSeedRef.current,
-        parameterOverrides: parameterOverrideRecord,
-      };
-      // The model that was actually simulated (overrides applied) — consumers read
-      // results._model_snapshot before the saved copy arrives from the database.
-      fullResult._model_snapshot = buildRunModelSnapshot(effectiveModel, fullResult._experiment_config);
-      // Pass/fail per goal, stored with the results so the file is complete.
-      fullResult.goalOutcomes = buildGoalOutcomes(buildGoalGapsFromResults(effectiveModel, fullResult));
-      setLastRunEstimateAccuracy(computeEstimateAccuracy(runAdmission.complexityEstimate, fullResult.runtimeMetrics));
-      recordScanCalibration(fullResult.runtimeMetrics);
-      setResults(fullResult);
-      onResultsReady?.(fullResult);
-      onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
-      if (modelId) {
-        const prepareDurationMs = nowPerf() - prepareStartedAt;
-        const stepSeed = runSeedRef.current;
-        const runRecord = buildRunRecord(fullResult._model_snapshot, fullResult, {
-          maxSimTime: terminationMode === 'time' ? maxSimTime : null,
-          warmupPeriod,
-          replications: 1,
-          terminationMode,
-          terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
-          parameterOverrides: parameterOverrideRecord,
-        }, stepSeed, { includeModelSnapshot: true });
-        const config = {
-          seed: stepSeed,
-          runLabel: effectiveRunLabel,
-          warmupPeriod,
-          maxTime: terminationMode === 'time' ? maxSimTime : null,
-          versionId: currentVersionId || null,
-          durationMs: wallClockMs,
-          requestedCollectTimeSeries: collectTimeSeries,
-          effectiveCollectTimeSeries: collectTimeSeries,
-          resultDetailLevel: effectiveResultDetailLevel,
-          riskLevel: runAdmission.complexityEstimate.riskLevel,
-          complexityEstimate: runAdmission.complexityEstimate,
-          includeModelSnapshot: true,
-        };
-        if (userId) {
-          setSaveStatus({ state: 'saving', message: 'Saving results…' });
-          doCloudSave(
-            () => saveSimulationRun(modelId, userId, fullResult, { ...config, runRecord }),
-            { setSaveStatus, setLog, prepareDurationMs, snapClock: r.snap.clock },
-          ).then(runId => {
-            if (runId) {
-              setLatestRunId(runId);
-              storeRunNarrative(runId, effectiveModel, fullResult);
-              void refreshRunHistory();
-              onRunSaved?.(runId);
-            }
-          });
-        } else {
-          saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
-          void refreshRunHistory();
-          setSaveStatus({ state: 'success', message: '✓ Results saved' });
-          setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ Local history record completed." }]);
-          onRunSaved?.(null);
-        }
-      }
+      await finalizeSteppedRun(r, nextLog);
     }
-  }, [userId, modelId, model, effectiveModel, parameterOverrideRecord, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory, storeRunNarrative]);
+  }, [batchStatus, replicationResults, updateLiveMetrics, finalizeSteppedRun]);
+
+  // One Auto Run tick. Turbo (speed multiplier at max) drains the engine in the same
+  // batched pattern as a single-replication Batch Run (50 steps per yield); otherwise
+  // it steps `speedMultiplier` cycles per frame. Both render a single snapshot per tick
+  // and finalize through the shared finalizeSteppedRun so results are identical.
+  const tickAuto = useCallback(async () => {
+    if (!engineRef.current || !autoRunningRef.current) return;
+    setMode("stepping");
+    const turbo = speedMultiplier >= 10;
+    const stepsPerTick = turbo ? 50 : Math.max(1, Math.round(speedMultiplier));
+    let completed = false;
+    let finalStep = null;
+    const batchLog = [];
+    for (let i = 0; i < stepsPerTick; i++) {
+      const r = engineRef.current.step({ captureSnap: false });
+      recordTruncationResult(r);
+      if (r.cycleLog?.length) batchLog.push(...r.cycleLog);
+      if (r.done) { completed = true; finalStep = r; break; }
+    }
+    const snap = engineRef.current.getSnap();
+    setCurrentSnap(snap);
+    if (batchLog.length) {
+      logRef.current = [...logRef.current, ...batchLog];
+      setLog(logRef.current);
+    }
+    if (completed) {
+      finalStep.snap = snap;
+      await finalizeSteppedRun(finalStep, logRef.current);
+      return;
+    }
+    updateLiveMetrics(snap);
+    if (!autoRunningRef.current) return;
+    if (turbo) {
+      autoRef.current = setTimeout(tickAuto, 0);
+    } else {
+      autoRef.current = setTimeout(tickAuto, 40);
+    }
+  }, [speedMultiplier, recordTruncationResult, updateLiveMetrics, finalizeSteppedRun]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -1009,15 +1055,20 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }, [modelId, currentVersionId]);
 
   useEffect(() => {
-    if (!autoRunning) return;
-    autoRef.current = setInterval(doStep, effectiveAutoSpeed);
+    if (!autoRunning) {
+      autoRunningRef.current = false;
+      if (autoRef.current) { clearTimeout(autoRef.current); autoRef.current = null; }
+      return;
+    }
+    autoRunningRef.current = true;
+    if (autoRef.current == null) {
+      autoRef.current = setTimeout(tickAuto, 0);
+    }
     return () => {
-      if (autoRef.current) {
-        clearInterval(autoRef.current);
-        autoRef.current = null;
-      }
+      autoRunningRef.current = false;
+      if (autoRef.current) { clearTimeout(autoRef.current); autoRef.current = null; }
     };
-  }, [autoRunning, effectiveAutoSpeed, doStep]);
+  }, [autoRunning, tickAuto]);
 
   useEffect(() => {
     onRunStateChange?.(isRunning);
@@ -2514,7 +2565,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || runBusy}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
-            {speedMultiplier.toFixed(1)}×
+            {speedMultiplier >= 10 ? "Turbo" : `${speedMultiplier.toFixed(1)}×`}
           </span>
           <input
             aria-label="Animation speed multiplier"
@@ -2615,7 +2666,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || runBusy}>{autoRunning ? "⏹ Stop Auto" : "Auto Run"}</Btn>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
-            {speedMultiplier.toFixed(1)}×
+            {speedMultiplier >= 10 ? "Turbo" : `${speedMultiplier.toFixed(1)}×`}
           </span>
           <input
             aria-label="Animation speed multiplier"
