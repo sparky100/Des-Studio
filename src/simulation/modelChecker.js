@@ -1,7 +1,7 @@
 // src/simulation/modelChecker.js — F69.2: Pre-run structural model checker
 // Pure function — no side effects, no API calls.
 
-import { extractQueueNamesFromCondition, migrateLegacyCondition } from "../model/conditionFormat.js";
+import { extractQueueNamesFromCondition, migrateLegacyCondition, hasNullRoutingExit } from "../model/conditionFormat.js";
 
 /**
  * @typedef {{ severity: "error"|"warning"|"info", code: string, message: string, nodeId: string|null, nodeName: string|null }} Issue
@@ -87,7 +87,7 @@ function buildConsumedQueues(cEvents) {
 }
 
 function hasAnyExitEffect(bEvents) {
-  return bEvents.some(b => /\b(COMPLETE|RENEGE)\s*\(/i.test(effectString(b)));
+  return bEvents.some(b => /\b(COMPLETE|RENEGE)\s*\(/i.test(effectString(b)) || hasNullRoutingExit(b));
 }
 
 /**

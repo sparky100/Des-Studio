@@ -9,7 +9,7 @@
 // tab maps to ModelDetail tab IDs: 'entities' | 'state' | 'bevents' | 'cevents' | 'queues' | 'execute'
 
 import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
-import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
+import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRoutingBranch, hasNullRoutingExit } from "../model/conditionFormat.js";
 import { getPatternInitialCapacity } from "./schedule-pattern.js";
 import { evaluatePredicate } from "./conditions.js";
 import { applyEntityInheritance } from "./entity-inheritance.js";
@@ -457,7 +457,7 @@ export function validateModel(model) {
   const hasArrive = bEvents.some(b => /ARRIVE\s*\(/i.test(effectText(b.effect)));
   const hasSinkMacro = bEvents.some(b => {
     const text = effectText(b.effect);
-    return /COMPLETE\s*\(/i.test(text) || /RENEGE\s*\(/i.test(text);
+    return /COMPLETE\s*\(/i.test(text) || /RENEGE\s*\(/i.test(text) || hasNullRoutingExit(b);
   });
 
   if (!hasArrive && !hasSinkMacro) {

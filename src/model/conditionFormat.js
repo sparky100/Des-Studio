@@ -298,3 +298,16 @@ export function isMeaningfulRoutingBranch(branch) {
   if (!branch || typeof branch !== "object") return false;
   return hasConditionDefinition(branch.condition);
 }
+
+// A routing/probabilisticRouting branch with queueName null (or "") means "exit
+// the system" — applyRoute (engine/phases.js) calls completeEntity() directly for
+// it, with no COMPLETE()/RENEGE() macro call ever appearing in the effect string.
+// Any "does this model/bEvent have a sink" heuristic that only greps effect text
+// for COMPLETE(/RENEGE( needs this too, or it false-positives on models that exit
+// entities purely through routing (shared by engine/validation.js's V8 check and
+// simulation/modelChecker.js's CHK-002 check).
+export function hasNullRoutingExit(bEvent) {
+  if (!bEvent) return false;
+  const branches = [...(bEvent.routing || []), ...(bEvent.probabilisticRouting || [])];
+  return branches.some(branch => branch && !branch.queueName);
+}
