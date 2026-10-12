@@ -999,22 +999,34 @@ export const MACROS = [
     },
   },
 
-  // ── PREEMPT(ServerType) ────────────────────────────────────────────────────
-  // Interrupts a busy server, re-queues the current customer with remaining service
+  // ── PREEMPT(ServerType[, "QueueName"]) ──────────────────────────────────────
+  // Interrupts a busy server, re-queues the current customer with remaining service.
+  // The optional queue-name argument narrows the candidate to a server whose
+  // current customer's lastQueue matches it — e.g. PREEMPT(Mechanic, "RepairQueue")
+  // only ever bumps a Mechanic mid-repair, never one mid-customer-transaction, even
+  // when Mechanic serves several queues. Omitting it keeps the original "any busy
+  // server of this type" behavior.
   {
     name:    "PREEMPT",
-    pattern: /^PREEMPT\(([^,)]+)\)$/i,
+    pattern: /^PREEMPT\(([^,)]+)(?:\s*,\s*"([^"]+)")?\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
+      const queueFilter = match[2] ? match[2].trim() : null;
       const { entities, clock, helpers, msgs, _arbitration } = ctx;
-      const key = normName(sType);
 
-      const busyServers = entities.filter(e =>
-        e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving")
-      );
+      let busyServers = helpers?.busyOf?.(sType) || [];
+      if (queueFilter) {
+        const key = queueFilter.toLowerCase();
+        busyServers = busyServers.filter(srv => {
+          const cust = findEntityById(ctx.index, entities, srv.currentCustId);
+          return cust && (cust.lastQueue || "").toLowerCase() === key;
+        });
+      }
 
       if (busyServers.length === 0) {
-        msgs.push(`PREEMPT(${sType}): no busy server found`);
+        msgs.push(queueFilter
+          ? `PREEMPT(${sType}, "${queueFilter}"): no busy server on queue '${queueFilter}' found`
+          : `PREEMPT(${sType}): no busy server found`);
         return;
       }
 
@@ -1036,12 +1048,14 @@ export const MACROS = [
           serverId: srv.id,
           preemptedEntity: cust.id,
           remainingService: +remainingService.toFixed(4),
+          ...(queueFilter ? { targetQueue: queueFilter } : {}),
         });
       }
 
       msgs.push(
         `PREEMPT: server #${srv.id} (${sType}) interrupted #${cust.id} ` +
-        `[remaining ${remainingService.toFixed(3)} t] → re-queued`
+        `[remaining ${remainingService.toFixed(3)} t] → re-queued` +
+        (queueFilter ? ` (targeted queue: ${queueFilter})` : "")
       );
     },
   },
