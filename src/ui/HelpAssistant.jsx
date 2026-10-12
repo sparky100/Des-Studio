@@ -5,57 +5,7 @@ import { Btn, MicIcon, ArrowUpIcon } from './shared/components.jsx';
 import { streamNarrative } from '../llm/apiClient.js';
 import { buildHelpAssistantSystemPrompt, buildHelpUserMessage } from '../llm/help-assistant-prompt.js';
 import { useTheme } from "./shared/ThemeContext.jsx";
-
-// Render a line with **bold** markers converted to <strong> spans
-function renderLine(line, key) {
-
-  const parts = line.split(/(\*\*[^*]+\*\*)/g);
-  return (
-    <span key={key}>
-      {parts.map((part, i) =>
-        part.startsWith('**') && part.endsWith('**')
-          ? <strong key={i} style={{ fontWeight: 700, color: 'inherit' }}>{part.slice(2, -2)}</strong>
-          : part
-      )}
-    </span>
-  );
-}
-
-// Render assistant markdown text: bold, numbered lists, bullet points, blank-line paragraphs
-function MarkdownContent({ text }) {
-  const { C, FONT } = useTheme();
-  const lines = String(text || '').split('\n');
-  const nodes = [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.trim() === '') {
-      nodes.push(<div key={`gap-${i}`} style={{ height: 6 }} />);
-    } else if (/^\d+\.\s/.test(line)) {
-      // Numbered list item
-      const [, num, rest] = line.match(/^(\d+)\.\s(.*)$/);
-      nodes.push(
-        <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
-          <span style={{ color: C.accent, fontWeight: 700, minWidth: 16 }}>{num}.</span>
-          <span>{renderLine(rest, 0)}</span>
-        </div>
-      );
-    } else if (/^[-•]\s/.test(line)) {
-      // Bullet point
-      const rest = line.replace(/^[-•]\s/, '');
-      nodes.push(
-        <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
-          <span style={{ color: C.accent, minWidth: 10 }}>•</span>
-          <span>{renderLine(rest, 0)}</span>
-        </div>
-      );
-    } else {
-      nodes.push(<div key={i} style={{ marginBottom: 2 }}>{renderLine(line, 0)}</div>);
-    }
-    i++;
-  }
-  return <>{nodes}</>;
-}
+import { MarkdownContent } from "./shared/MarkdownContent.jsx";
 
 // Simple message bubble for conversation
 function MessageBubble({ role, content }) {
@@ -87,7 +37,7 @@ function MessageBubble({ role, content }) {
         </div>
       )}
       <div style={{ color: isSystem ? C.muted : C.text }}>
-        {isAssistant ? <MarkdownContent text={content} /> : content}
+        {isAssistant ? <MarkdownContent text={content} palette={C} /> : content}
       </div>
     </div>
   );

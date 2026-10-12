@@ -1,5 +1,5 @@
 // ui/shared/MarkdownContent.jsx — Lightweight markdown-to-React renderer
-import { C, RADIUS, SPACE } from "./tokens.js";
+import { C as DEFAULT_C, RADIUS, SPACE } from "./tokens.js";
 
 function parseInline(text) {
   const parts = [];
@@ -160,9 +160,10 @@ function parseBlocks(text) {
   return blocks;
 }
 
-export function MarkdownContent({ text, style }) {
+export function MarkdownContent({ text, style, palette }) {
   if (!text) return null;
 
+  const C = palette || DEFAULT_C;
   const blocks = parseBlocks(text);
 
   return (

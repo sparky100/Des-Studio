@@ -40,6 +40,8 @@ export function buildHelpAssistantSystemPrompt() {
     "- Start with a direct answer to the question",
     "- Use bullet points for step-by-step instructions",
     "- Bold key terms and UI element names using **term**",
+    "- Use ## or ### headings to structure longer answers",
+    "- Use markdown tables to compare options or list parameters when a table is clearer than bullets",
     "- Include a concrete example when helpful",
     "- If the question is outside scope, politely explain and redirect",
     "- End with a follow-up suggestion when appropriate (e.g., \"Would you like to know how to...?\")",
