@@ -2,7 +2,7 @@
 
 ![Benchmark Gate](https://github.com/sparky100/simmodlr/actions/workflows/benchmark-gate.yml/badge.svg)
 
-flow is a browser-based discrete-event simulation modelling tool built around the Three-Phase Method: Phase A clock advance, Phase B bound events, and Phase C conditional events.
+flow is a browser-based discrete-event simulation modelling tool built around the Three-Phase Method: Phase A clock advance, Phase B bound events, and Phase C conditional events. Update check
 
 The app lets simulation modellers define entity types, queues, B-Events, C-Events, distributions, experiment controls, and replications through structured editors. Models run in the browser, with Supabase used for authentication, model storage, user settings, and run history.
 
