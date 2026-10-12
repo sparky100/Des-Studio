@@ -273,8 +273,8 @@ describe('accessibility pass', () => {
     );
 
     await screen.findAllByRole('button', { name: /^run$/i });
-    // The run controls bar now exposes the setup panel via the "⚙ Edit" toggle.
-    await userEvent.setup().click(await screen.findByRole('button', { name: '⚙ Edit' }));
+    // The run controls bar now exposes the setup panel via the "⚙ Setup" toggle.
+    await userEvent.setup().click(await screen.findByRole('button', { name: '⚙ Setup' }));
     await screen.findByRole('button', { name: /hide setup/i });
     expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
@@ -317,7 +317,7 @@ describe('accessibility pass', () => {
 
     render(<ExecutePanel model={runnableModel} modelId="model-1" userId="user-1" />);
 
-    fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+    fireEvent.click(screen.getByRole('button', { name: /setup/i }));
     fireEvent.change(screen.getByLabelText(/replication count/i), { target: { value: '3' } });
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
@@ -338,7 +338,7 @@ describe('accessibility pass', () => {
 
     try {
       render(<ExecutePanel model={runnableModel} modelId="model-1" userId="user-1" />);
-      fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+      fireEvent.click(screen.getByRole('button', { name: /setup/i }));
 
       const animateToggle = await screen.findByRole('checkbox', { name: /show entity movement/i });
       expect(animateToggle).not.toBeChecked();
@@ -359,7 +359,7 @@ describe('accessibility pass', () => {
 
     try {
       render(<ExecutePanel model={runnableModel} modelId="model-1" userId="user-1" />);
-      fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+      fireEvent.click(screen.getByRole('button', { name: /setup/i }));
 
       const animateToggle = await screen.findByRole('checkbox', { name: /show entity movement/i });
       await waitFor(() => expect(animateToggle).toBeChecked());

@@ -71,7 +71,7 @@ describe("ExecutePanel — Run tab ad-hoc parameter adjustment", () => {
 
     // A single-replication Batch Run drives the engine directly rather than via
     // runReplications() — bump to 2 replications so this exercises that path.
-    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.click(screen.getByRole("button", { name: /setup/i }));
     fireEvent.change(screen.getByLabelText(/replication count/i), { target: { value: "2" } });
 
     openAdjustPanel();

@@ -59,7 +59,7 @@ const validModel = {
 
 describe('ExecutePanel', () => {
   const openSetup = () => {
-    fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+    fireEvent.click(screen.getByRole('button', { name: /setup/i }));
   };
 
   beforeEach(() => {

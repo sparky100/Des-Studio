@@ -44,7 +44,7 @@ const validModel = {
 };
 
 function openSetup() {
-  fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+  fireEvent.click(screen.getByRole("button", { name: /setup/i }));
 }
 
 describe("ExecutePanel — run readiness strip", () => {

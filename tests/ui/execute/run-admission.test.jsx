@@ -61,8 +61,8 @@ const largeAllowedModel = {
 };
 
 function openSetup() {
-  // The run toolbar's "⚙ Edit" button opens the Run Setup (ExperimentControls) panel.
-  fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+  // The run toolbar's "⚙ Setup" button opens the Run Setup (ExperimentControls) panel.
+  fireEvent.click(screen.getByRole("button", { name: /setup/i }));
 }
 
 describe("ExecutePanel run admission", () => {

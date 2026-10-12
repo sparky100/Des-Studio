@@ -54,7 +54,7 @@ import { RunStatusBanners } from "./RunStatusBanners.jsx";
 import { BatchResultsPanel } from "./BatchResultsPanel.jsx";
 
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true, studyProposalTrigger = null }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, visible = true, studyProposalTrigger = null }) => {
   const { C, FONT } = useTheme();
   const { confirm, confirmDialog } = useConfirm();
   const experimentDefaults = model?.experimentDefaults || {};
@@ -2606,7 +2606,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             View Results →
           </Btn>
         )}
-        <Btn variant={modelAssistantOpen ? "primary" : "ghost"} onClick={() => onOpenModelAssistant?.()}>Simulation Assistant</Btn>
         <div style={{ position: "relative", display: "flex", gap: 6 }}>
           {/* Unified Export ▾ popover */}
           <Btn variant="ghost" onClick={() => setShowExportPopover(v => !v)} disabled={!canExportResults}>Export ▾</Btn>
@@ -2676,7 +2675,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 fillContainer />
             </ResponsivePanel>
           </div>
-          <Btn small variant="ghost" onClick={() => setShowRunSetup(v => !v)}>{showRunSetup ? "▲ Hide" : "⚙ Edit"}</Btn>
+          <Btn small variant="ghost" onClick={() => setShowRunSetup(v => !v)}>{showRunSetup ? "▲ Hide" : "⚙ Setup"}</Btn>
         </div>
       </div>
       )}
