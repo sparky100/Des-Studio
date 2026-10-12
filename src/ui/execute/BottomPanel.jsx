@@ -1235,42 +1235,41 @@ function StateVariablesTab({ snap, model, stateChanges = [] }) {
 
   const history = [...stateChanges].reverse();
 
+  const cardGridStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+    gap: 8,
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1.2 }}>
           CURRENT VALUES
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={cardGridStyle}>
           {vars.map(sv => {
             const value = scalars[sv.name];
             const isFlashing = !!flash[sv.name];
             return (
               <div
                 key={sv.name}
+                title={sv.description || undefined}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  background: isFlashing ? C.amber + "22" : C.bg,
+                  background: isFlashing ? C.amber + "22" : C.panel,
                   border: `1px solid ${isFlashing ? C.amber : C.border}`,
                   borderRadius: 6,
-                  padding: "7px 10px",
+                  padding: "8px 10px",
+                  minWidth: 0,
                   transition: "background 0.2s, border-color 0.2s",
                 }}
               >
-                <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
-                  <span style={{ color: C.purple, fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>
-                    {sv.name}
-                  </span>
-                  {sv.description ? (
-                    <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10 }}>{sv.description}</span>
-                  ) : null}
+                <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>
+                  {sv.name.toUpperCase()}
                 </div>
-                <div style={{ flex: 1 }} />
-                <span style={{ color: isFlashing ? C.amber : C.text, fontFamily: FONT, fontSize: 15, fontWeight: 700 }}>
+                <div style={{ fontSize: 14, color: isFlashing ? C.amber : C.text, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>
                   {Number.isFinite(value) ? value : "—"}
-                </span>
+                </div>
               </div>
             );
           })}

@@ -354,11 +354,11 @@ export function deriveGraphFromModel(model = {}) {
             });
             if (bEvent.defaultQueueName) {
               const defQueueId = queueNodeByName.get(norm(bEvent.defaultQueueName));
-              if (defQueueId) edges.push({ id: edgeId(id, defQueueId, `${schedule.eventId}-${index}-default`), from: id, to: defQueueId, source: "routing", label: "fallback" });
+              if (defQueueId) edges.push({ id: edgeId(id, defQueueId, `${schedule.eventId}-${index}-default`), from: id, to: defQueueId, source: "routing", label: "fallback", bEventId: bEvent.id, branchIndex: "default" });
             } else if (bEvent.defaultQueueName === null) {
               // Explicit "exit system" default (F10.1) — mirrors the DELAY-completion path below.
               const sinkId = getExitSinkId();
-              edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}-default`), from: id, to: sinkId, source: "terminal", label: "default" });
+              edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}-default`), from: id, to: sinkId, source: "terminal", label: "default", bEventId: bEvent.id, branchIndex: "default" });
             }
 
           // Probabilistic routing table (F10.2)

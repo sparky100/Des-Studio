@@ -66,10 +66,11 @@ describe("BottomPanel State Variables tab", () => {
   test("shows current values for each declared variable", () => {
     openStateVarsTab();
     const section = currentValuesSection();
-    expect(within(section).getByText("arrivals")).toBeInTheDocument();
-    expect(within(section).getByText("hormuzOpen")).toBeInTheDocument();
+    expect(within(section).getByText("ARRIVALS")).toBeInTheDocument();
+    expect(within(section).getByText("HORMUZOPEN")).toBeInTheDocument();
     expect(within(section).getByText("7")).toBeInTheDocument();
-    expect(within(section).getByText("Total arrivals")).toBeInTheDocument();
+    const arrivalsCard = within(section).getByText("ARRIVALS").closest("div").parentElement;
+    expect(arrivalsCard.title).toBe("Total arrivals");
   });
 
   test("shows change history attributing each write to its source event and phase", () => {
@@ -95,7 +96,7 @@ describe("BottomPanel State Variables tab", () => {
     fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
     fireEvent.click(screen.getByRole("tab", { name: /state variables/i }));
 
-    const arrivalsRow = () => within(currentValuesSection()).getByText("arrivals").closest("div").parentElement;
+    const arrivalsRow = () => within(currentValuesSection()).getByText("ARRIVALS").closest("div").parentElement;
     const initialBg = arrivalsRow().style.background;
 
     const nextSnap = { ...snap, scalars: { ...snap.scalars, arrivals: 8 } };

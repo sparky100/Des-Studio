@@ -151,6 +151,31 @@ function SkillBadges({ skillBreakdown }) {
   );
 }
 
+// State-variable switch(es) that decide this activity's conditional routing —
+// e.g. "hormuzOpen OFF". Green when ON, muted when OFF, accent for a numeric
+// value. Makes the decision point visible right where the diversion happens.
+function SwitchBadges({ switchBadges }) {
+  const { C, FONT } = useTheme();
+  if (!switchBadges?.length) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 2 }}>
+      {switchBadges.map(b => (
+        <span key={b.name} style={{
+          fontSize: 8,
+          fontFamily: FONT,
+          fontWeight: 700,
+          color: b.on === true ? C.green : b.on === false ? C.muted : C.accent,
+          background: `${C.border}30`,
+          borderRadius: 3,
+          padding: "1px 5px",
+        }}>
+          {b.name} {b.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function ResourceRow({ serverName, capacity, busyCount, activityBusyCount, failedCount, skillBreakdown }) {
   const { C, FONT } = useTheme();
   const useText     = capacity > MAX_DOTS;
@@ -326,6 +351,8 @@ export function ExecuteActivityNode({ data }) {
       <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: C.text }}>
         {data.label}
       </div>
+
+      <SwitchBadges switchBadges={data.switchBadges} />
 
       {live ? (
         <>

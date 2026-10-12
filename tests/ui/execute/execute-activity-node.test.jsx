@@ -216,4 +216,29 @@ describe("ExecuteActivityNode", () => {
     );
     expect(container.firstChild).toHaveStyle({ height: "155px", overflow: "hidden" });
   });
+
+  test("renders a switch badge for the state variable that controls its routing", () => {
+    render(
+      <ExecuteActivityNode
+        data={{
+          label: "Gulf Cargo Loaded",
+          liveData: { serverTypeName: "Berth", capacity: 1, busyCount: 0, failedCount: 0, completionSignal: 0 },
+          switchBadges: [{ name: "hormuzOpen", value: 0, on: false, label: "OFF" }],
+        }}
+      />
+    );
+    expect(screen.getByText("hormuzOpen OFF")).toBeInTheDocument();
+  });
+
+  test("renders no switch badge when the activity has no routing dependency", () => {
+    render(
+      <ExecuteActivityNode
+        data={{
+          label: "Serve Customer",
+          liveData: { serverTypeName: "Clerk", capacity: 2, busyCount: 0, failedCount: 0, completionSignal: 0 },
+        }}
+      />
+    );
+    expect(screen.queryByText(/hormuzOpen/)).not.toBeInTheDocument();
+  });
 });

@@ -31,6 +31,7 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
 import { buildServerTypeIndex, deriveActivityLiveData } from "./activityLiveData.js";
 import { effectText } from "../../model/macroParser.js";
+import { computeRoutingBranchStates, computeRoutingSwitchDeps } from "../../model/predicateEvaluate.js";
 export { DEFAULT_KPI_SLOTS };
 
 // ── Canvas height (maximise-by-default, F9C.9) ───────────────────────────────
@@ -438,6 +439,54 @@ const edgeTypes = { animatedEdge: AnimatedEdge };
 
 const FLOW_NODE_TYPE = { source: "sourceNode", queue: "queueNode", activity: "activityNode", sink: "sinkNode", container: "containerNode" };
 
+// A state variable reads as an ON/OFF switch when its value is exactly 0 or 1
+// (the common flag case — e.g. hormuzOpen / closureEnabled); any other numeric
+// value is shown as-is (counters, times). `on` is null for the numeric case.
+export function classifySwitch(value) {
+  if (value === 1) return { on: true, label: "ON" };
+  if (value === 0) return { on: false, label: "OFF" };
+  return { on: null, label: value == null ? "—" : String(value) };
+}
+
+// HUD readout of every declared state variable. The pill flashes when its value
+// changes so a switch trip (e.g. hormuzOpen 1 → 0) is unmistakable.
+function SwitchStrip({ stateVariables, values, flashNames }) {
+  const { C, FONT } = useTheme();
+  if (!stateVariables?.length) return null;
+  return (
+    <div data-testid="switch-strip" style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+      <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: "0.8px", fontWeight: 600 }}>
+        SWITCHES
+      </span>
+      {stateVariables.map(sv => {
+        const { on, label } = classifySwitch(values[sv.name]);
+        const flashing = flashNames.has(sv.name);
+        const color = on === true ? C.green : on === false ? C.muted : C.accent;
+        return (
+          <div
+            key={sv.name}
+            title={sv.description || undefined}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: flashing ? `${C.amber}22` : C.panel,
+              border: `1px solid ${flashing ? C.amber : C.border}`,
+              borderRadius: 999, padding: "3px 10px",
+              transition: "background 0.3s, border-color 0.3s",
+            }}
+          >
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 0.5 }}>
+              {sv.name}
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color, fontFamily: FONT }}>
+              {label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function toFlowNode(node) {
   return {
     id: node.id,
@@ -804,6 +853,26 @@ export function ExecuteCanvas({
     }).filter(Boolean);
   }, [showSections, model.sections, layoutedNodes]);
 
+  // Current value of every declared state variable (snapshot scalar, falling
+  // back to the declared initial value before the first step).
+  const switchValues = useMemo(() => {
+    const out = {};
+    for (const sv of model.stateVariables || []) {
+      const hasScalar = snap?.scalars && Object.prototype.hasOwnProperty.call(snap.scalars, sv.name);
+      const raw = hasScalar ? snap.scalars[sv.name] : sv.initialValue;
+      const num = typeof raw === "number" ? raw : Number(raw);
+      out[sv.name] = Number.isFinite(num) ? num : raw;
+    }
+    return out;
+  }, [model.stateVariables, snap]);
+
+  // State variables that decide each activity node's conditional routing —
+  // used to badge the node with the switch(es) it responds to.
+  const switchDeps = useMemo(
+    () => computeRoutingSwitchDeps(baseGraph, model),
+    [baseGraph, model],
+  );
+
   const flowNodes = useMemo(() => {
     const entities = snap?.entities || [];
     const waiting = entities.filter(e => e.status === "waiting");
@@ -895,9 +964,13 @@ export function ExecuteCanvas({
       }
       const dimmed = (showSections && focusedSectionId != null && node.sectionId !== focusedSectionId) ||
         (matchedNodeIds.size > 0 && !matchedNodeIds.has(node.id));
+      const depNames = node.type === "activity" ? switchDeps.get(node.id) : null;
+      const switchBadges = depNames?.length
+        ? depNames.map(name => ({ name, value: switchValues[name], ...classifySwitch(switchValues[name]) }))
+        : null;
       return {
         ...toFlowNode(node),
-        data: { ...node, liveData },
+        data: { ...node, liveData, switchBadges },
         style: { opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms" },
       };
     });
@@ -923,7 +996,36 @@ export function ExecuteCanvas({
     }
 
     return mapped;
-  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels, matchedNodeIds, queuePulses]);
+  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels, matchedNodeIds, queuePulses, switchDeps, switchValues]);
+
+  // Live conditional-routing branch state (state-variable-driven diversion).
+  // Evaluated from the snapshot so the canvas can show which branch is live.
+  const branchStates = useMemo(
+    () => computeRoutingBranchStates(baseGraph, model, snap),
+    [baseGraph, model, snap],
+  );
+
+  // Flash a switch pill briefly when its value changes — the trip is the point.
+  const [flashSwitches, setFlashSwitches] = useState(() => new Set());
+  const prevSwitchValuesRef = useRef(null);
+  useEffect(() => {
+    const prev = prevSwitchValuesRef.current;
+    prevSwitchValuesRef.current = switchValues;
+    if (!prev) return;
+    const changed = Object.keys(switchValues).filter(name => prev[name] !== switchValues[name]);
+    if (!changed.length) return;
+    setFlashSwitches(current => new Set([...current, ...changed]));
+    for (const name of changed) {
+      setTimeout(() => {
+        setFlashSwitches(current => {
+          if (!current.has(name)) return current;
+          const next = new Set(current);
+          next.delete(name);
+          return next;
+        });
+      }, 700);
+    }
+  }, [switchValues]);
 
   const flowEdges = useMemo(() => baseGraph.edges.map(edge => {
     const base = {
@@ -931,6 +1033,16 @@ export function ExecuteCanvas({
       type: animationEnabled ? "animatedEdge" : undefined,
       data: animationEnabled ? { tokens: edgeTokens[edge.id] || [] } : undefined,
     };
+    const branchState = branchStates.get(edge.id);
+    if (branchState) {
+      if (branchState.active) {
+        base.style = { ...base.style, stroke: C.green, strokeWidth: 2.5, opacity: 1 };
+        base.markerEnd = { type: MarkerType.ArrowClosed, color: C.green };
+      } else if (branchState.resolvable) {
+        base.style = { ...base.style, stroke: C.muted, strokeWidth: 1.5, opacity: 0.45, strokeDasharray: "4 4" };
+        base.markerEnd = { type: MarkerType.ArrowClosed, color: C.muted };
+      }
+    }
     if (showSections && focusedSectionId != null) {
       const fromNode = nodeById.get(edge.from);
       const toNode = nodeById.get(edge.to);
@@ -939,7 +1051,7 @@ export function ExecuteCanvas({
       }
     }
     return base;
-  }), [baseGraph.edges, animationEnabled, edgeTokens, C, showSections, focusedSectionId, nodeById]);
+  }), [baseGraph.edges, animationEnabled, edgeTokens, C, showSections, focusedSectionId, nodeById, branchStates]);
 
   // No derivable nodes — caller renders VisualView fallback
   if (!baseGraph.nodes.length) return null;
@@ -981,6 +1093,12 @@ export function ExecuteCanvas({
           </div>
         </div>
       )}
+
+      <SwitchStrip
+        stateVariables={model.stateVariables}
+        values={switchValues}
+        flashNames={flashSwitches}
+      />
 
       <div
         ref={canvasWrapRef}
