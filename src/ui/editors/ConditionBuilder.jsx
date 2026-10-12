@@ -87,6 +87,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
       ];
     });
     const builtInTokens = [
+      { label:'Clock — current simulation time', value:'clock', valueType:'number' },
       { label:'Served — total who have completed service', value:'served', valueType:'number' },
       { label:'Reneged — total who abandoned the queue',  value:'reneged', valueType:'number' },
       { label:'Balked — total who left without joining a queue', value:'balked', valueType:'number' },

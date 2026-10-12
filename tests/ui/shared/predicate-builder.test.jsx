@@ -432,3 +432,84 @@ describe('ConditionBuilder — state-variable token matching (state.<name> vs ba
     expect(handleChange.mock.calls[0][0].variable).toBe('queue(MainQueue).length');
   });
 });
+
+describe('ConditionBuilder — clock token recognition (engine `clock` variable parity)', () => {
+  // The engine resolves `clock` as a condition variable (src/engine/conditions.js),
+  // and schema v2.7.0 allows state variables on the right-hand side (e.g. the World
+  // Oil Network's "Close Hormuz" condition: clock >= closureStart AND clock < closureEnd
+  // AND closureEnabled == 1 AND hormuzOpen == 1). The builder's token list must expose
+  // `clock` so a stored clock clause is recognized instead of silently falling back to
+  // the first queue token (tokens[0]) and being rewritten via onChange.
+  const mockEntityTypes = [];
+  const mockStateVariables = [
+    { id: 'sv1', name: 'closureStart',   valueType: 'number', initialValue: '0' },
+    { id: 'sv2', name: 'closureEnd',     valueType: 'number', initialValue: '0' },
+    { id: 'sv3', name: 'closureEnabled', valueType: 'number', initialValue: '0' },
+    { id: 'sv4', name: 'hormuzOpen',     valueType: 'number', initialValue: '1' },
+  ];
+  // Queue tokens are built first, so "Number waiting in MainQueue" is tokens[0] —
+  // the exact fallback the pre-fix bug substituted in for an unrecognized `clock`.
+  const mockQueues = [
+    { id: 'q1', name: 'MainQueue', discipline: 'FIFO' },
+  ];
+
+  it('exposes clock as a selectable variable in the dropdown', () => {
+    render(
+      <ConditionBuilder
+        value=""
+        onChange={() => {}}
+        entityTypes={mockEntityTypes}
+        stateVariables={mockStateVariables}
+        queues={mockQueues}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Add Clause/i }));
+    const tokenSelect = screen.getAllByRole('combobox')[0];
+    const options = Array.from(tokenSelect.querySelectorAll('option')).map(o => o.value);
+    expect(options).toContain('clock');
+  });
+
+  it('recognizes a stored clock >= closureStart clause instead of falling back to the first queue token', () => {
+    const handleChange = vi.fn();
+    render(
+      <ConditionBuilder
+        value={{ variable: 'clock', operator: '>=', value: 'closureStart' }}
+        onChange={handleChange}
+        entityTypes={mockEntityTypes}
+        stateVariables={mockStateVariables}
+        queues={mockQueues}
+      />
+    );
+
+    expect(screen.getByDisplayValue(/Clock/i)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue(/Number waiting in MainQueue/i)).not.toBeInTheDocument();
+    // Recognized token — no repair, so no spurious write-back.
+    expect(handleChange).not.toHaveBeenCalled();
+  });
+
+  it('round-trips the full Hormuz-style AND predicate without rewriting the clock clauses', () => {
+    const handleChange = vi.fn();
+    render(
+      <ConditionBuilder
+        value={{
+          operator: 'AND',
+          clauses: [
+            { variable: 'clock', operator: '>=', value: 'closureStart' },
+            { variable: 'clock', operator: '<', value: 'closureEnd' },
+            { variable: 'closureEnabled', operator: '==', value: 1 },
+            { variable: 'hormuzOpen', operator: '==', value: 1 },
+          ],
+        }}
+        onChange={handleChange}
+        entityTypes={mockEntityTypes}
+        stateVariables={mockStateVariables}
+        queues={mockQueues}
+      />
+    );
+
+    expect(screen.getAllByDisplayValue(/Clock/i)).toHaveLength(2);
+    expect(screen.getByDisplayValue(/closureStart/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue(/closureEnd/i)).toBeInTheDocument();
+    expect(handleChange).not.toHaveBeenCalled();
+  });
+});
