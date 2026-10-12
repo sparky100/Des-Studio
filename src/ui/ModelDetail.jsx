@@ -1551,17 +1551,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               onExposeRunApi={fn => { runWithPatchRef.current = fn; }}
               onRunStateChange={setExecuteRunning}
               schedulesVersion={schedulesVersion}
-              modelAssistantOpen={aiSidebarOpen}
-              onOpenModelAssistant={() => {
-                if (aiSidebarOpen) {
-                  setAiSidebarOpen(false);
-                  setAiAction(null);
-                } else {
-                  setAiSidebarOpen(true);
-                  setAiAction("explain");
-                  setAiSeq(s => s + 1);
-                }
-              }}
               visible={tab === "execute"}
             />
           </ErrorBoundary>

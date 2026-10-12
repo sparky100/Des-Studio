@@ -261,7 +261,7 @@ function ExperimentRunSettingsFields({
   );
 }
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, visible = true }) => {
   const { C, FONT } = useTheme();
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
@@ -2504,7 +2504,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             View Results →
           </Btn>
         )}
-        <Btn variant={modelAssistantOpen ? "primary" : "ghost"} onClick={() => onOpenModelAssistant?.()}>Simulation Assistant</Btn>
         <div style={{ position: "relative", display: "flex", gap: 6 }}>
           {/* Unified Export ▾ popover */}
           <Btn variant="ghost" onClick={() => setShowExportPopover(v => !v)} disabled={!canExportResults}>Export ▾</Btn>
@@ -2533,7 +2532,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
             {replications} rep{replications !== 1 ? "s" : ""} · {terminationMode === "time" ? `${maxSimTime} time units` : "condition stop"} · seed {seed}{warmupPeriod > 0 ? ` · warm-up ${warmupPeriod}` : ""}
           </span>
-          <Btn small variant="ghost" onClick={() => setShowRunSetup(v => !v)}>{showRunSetup ? "▲ Hide" : "⚙ Edit"}</Btn>
+          <Btn small variant="ghost" onClick={() => setShowRunSetup(v => !v)}>{showRunSetup ? "▲ Hide" : "⚙ Setup"}</Btn>
         </div>
       </div>
       )}

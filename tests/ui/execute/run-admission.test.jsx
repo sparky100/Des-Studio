@@ -61,8 +61,7 @@ const largeAllowedModel = {
 };
 
 function openSetup() {
-  fireEvent.click(screen.getByRole("button", { name: /^setup$/i }));
-  fireEvent.click(screen.getByRole("button", { name: /edit setup/i }));
+  fireEvent.click(screen.getByRole("button", { name: /setup/i }));
 }
 
 describe("ExecutePanel run admission", () => {
@@ -125,6 +124,8 @@ describe("ExecutePanel run admission", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /batch run/i }));
 
+    fireEvent.click(screen.getByRole("button", { name: /run without chart data/i }));
+
     await waitFor(() => expect(mockRunReplications).toHaveBeenCalledTimes(1));
     expect(mockRunReplications.mock.calls[0][0]).toEqual(
       expect.objectContaining({ collectTimeSeries: false, replications: 2 })
@@ -138,6 +139,5 @@ describe("ExecutePanel run admission", () => {
         effectiveCollectTimeSeries: false,
       })
     );
-    expect(window.confirm).toHaveBeenCalled();
   });
 });
