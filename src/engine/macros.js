@@ -1866,7 +1866,9 @@ export const MACROS = [
       const { state, clock, msgs } = ctx;
       const entity  = resolveContextEntity(ctx);
       const value   = evalEntityExpr(expr, { state, clock, entity });
+      const from    = state[varName];
       state[varName] = value;
+      ctx.recordStateChange?.(varName, from, value);
       msgs.push(`SET ${varName} = ${value}`);
     },
   },
@@ -1921,7 +1923,9 @@ export const MACROS = [
       }
       const current = Number.isFinite(state[varName]) ? state[varName] : -1;
       const next = (current + 1) % n;
+      const from = state[varName];
       state[varName] = next;
+      ctx.recordStateChange?.(varName, from, next);
       msgs.push(`ROUND_ROBIN ${varName} = ${next}`);
     },
   },
@@ -1988,17 +1992,37 @@ export const MACROS = [
  * @param {Record<string, any>} state
  * @param {number} clock
  */
-export function applyScalar(part, state, clock) {
+export function applyScalar(part, state, clock, recordChange) {
   const r1 = part.match(/^(\w+)\+\+$/);
   const r2 = part.match(/^(\w+)--$/);
   const r3 = part.match(/^(\w+)\s*\+=\s*(.+)$/);
   const r4 = part.match(/^(\w+)\s*-=\s*(.+)$/);
   const r5 = part.match(/^(\w+)\s*=\s*(.+)$/);
 
-  if (r1) { state[r1[1]] = (Number(state[r1[1]]) || 0) + 1; return true; }
-  if (r2) { state[r2[1]] = (Number(state[r2[1]]) || 0) - 1; return true; }
-  if (r3) { state[r3[1]] = (Number(state[r3[1]]) || 0) + parseFloat(r3[2]); return true; }
-  if (r4) { state[r4[1]] = (Number(state[r4[1]]) || 0) - parseFloat(r4[2]); return true; }
+  if (r1) {
+    const from = state[r1[1]];
+    state[r1[1]] = (Number(state[r1[1]]) || 0) + 1;
+    recordChange?.(r1[1], from, state[r1[1]]);
+    return true;
+  }
+  if (r2) {
+    const from = state[r2[1]];
+    state[r2[1]] = (Number(state[r2[1]]) || 0) - 1;
+    recordChange?.(r2[1], from, state[r2[1]]);
+    return true;
+  }
+  if (r3) {
+    const from = state[r3[1]];
+    state[r3[1]] = (Number(state[r3[1]]) || 0) + parseFloat(r3[2]);
+    recordChange?.(r3[1], from, state[r3[1]]);
+    return true;
+  }
+  if (r4) {
+    const from = state[r4[1]];
+    state[r4[1]] = (Number(state[r4[1]]) || 0) - parseFloat(r4[2]);
+    recordChange?.(r4[1], from, state[r4[1]]);
+    return true;
+  }
   if (r5) {
     let v = r5[2].trim();
     Object.keys(state).filter(k => !k.startsWith("__")).forEach((/** @type {string} */ k) => {
@@ -2006,7 +2030,9 @@ export function applyScalar(part, state, clock) {
         typeof state[k] === "string" ? `"${state[k]}"` : String(state[k]));
     });
     v = v.replace(/\bclock\b/g, String(clock));
+    const from = state[r5[1]];
     state[r5[1]] = safeEvalScalar(v);
+    recordChange?.(r5[1], from, state[r5[1]]);
     return true;
   }
   return false;

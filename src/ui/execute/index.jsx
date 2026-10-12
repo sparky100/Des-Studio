@@ -84,6 +84,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [liveSummary, setLiveSummary] = useState(null);
   const [liveFlags, setLiveFlags] = useState([]);
   const [liveFlagsOpen, setLiveFlagsOpen] = useState(false);
+  const [stateChanges, setStateChanges] = useState([]);
+  const stateChangesRef = useRef([]);
   const [singleRunStatus, setSingleRunStatus] = useState("idle");
   const [singleRunProgress, setSingleRunProgress] = useState(null);
   const [batchStatus, setBatchStatus] = useState("idle");
@@ -404,6 +406,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setLiveTimeSeries(null);
     setLiveSummary(null);
     setLiveFlags([]);
+    stateChangesRef.current = [];
+    setStateChanges([]);
     liveHistThrottleRef.current = 0;
     onResultsReady?.(null);
     onRunComplete?.({ results: null, replicationResults: [], warmupDetection: null, log: [] });
@@ -504,6 +508,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         wall_clock_ms: wallClockMs,
         replications: 1,
       },
+      stateChanges: stateChangesRef.current,
       log: finalLog,
     };
     fullResult.aggregateStats = summarizeReplicationResults([fullResult], CI_METRICS);
@@ -588,6 +593,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     logRef.current = nextLog;
     setLog(nextLog);
     recordTruncationResult(r);
+    if (r.stateChanges?.length) {
+      stateChangesRef.current = [...stateChangesRef.current, ...r.stateChanges];
+      setStateChanges(stateChangesRef.current);
+    }
 
     if (!r.done && engineRef.current) {
       updateLiveMetrics(r.snap);
@@ -610,11 +619,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     let completed = false;
     let finalStep = null;
     const batchLog = [];
+    const batchStateChanges = [];
     for (let i = 0; i < stepsPerTick; i++) {
       const r = engineRef.current.step({ captureSnap: false });
       recordTruncationResult(r);
       if (r.cycleLog?.length) batchLog.push(...r.cycleLog);
+      if (r.stateChanges?.length) batchStateChanges.push(...r.stateChanges);
       if (r.done) { completed = true; finalStep = r; break; }
+    }
+    if (batchStateChanges.length) {
+      stateChangesRef.current = [...stateChangesRef.current, ...batchStateChanges];
+      setStateChanges(stateChangesRef.current);
     }
     const snap = engineRef.current.getSnap();
     setCurrentSnap(snap);
@@ -713,6 +728,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setResults(null);
       setLiveSummary(null);
       setLiveTimeSeries(null);
+      stateChangesRef.current = [];
+      setStateChanges([]);
       onResultsReady?.(null);
     const batchInitLog = [{ phase: "INIT", time: 0, message: `Replication batch started  (N=${replications}, base seed: ${runSeed})` }];
     if (chartDataAutoDisabled) {
@@ -880,6 +897,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setBatchProgress(null);
     setReplicationResults([]);
     setAggregateStats({});
+    stateChangesRef.current = [];
+    setStateChanges([]);
     singleRunCancelRef.current = false;
     setSingleRunStatus("running");
     const runInitLog = [{ phase: "INIT", time: 0, message: `Run started  (seed: ${runSeed})` }];
@@ -957,6 +976,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
     setCurrentSnap(result.snap);
     setResults(result);
+    stateChangesRef.current = result.stateChanges || [];
+    setStateChanges(stateChangesRef.current);
     onResultsReady?.(result);
     logRef.current = result.log;
     setLog(result.log);
@@ -2769,6 +2790,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 onNodeSelect={setSelectedNodeLabel}
                 timeSeries={liveTimeSeries ?? results?.timeSeries}
                 waitDist={liveWaitDist ?? results?.waitDist}
+                stateChanges={stateChanges}
               />
             </>
           );

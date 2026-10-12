@@ -31,6 +31,7 @@ const TABS = [
   { id: "resources", label: "Resources" },
   { id: "charts",    label: "Charts" },
   { id: "stagekpis", label: "Live Metrics" },
+  { id: "statevars", label: "State Variables" },
   { id: "fel",       label: "Future Events" },
 ];
 
@@ -1192,9 +1193,140 @@ function FelTab({ snap, model }) {
   );
 }
 
+// ── State Variables ───────────────────────────────────────────────────────────
+
+// Live state-variable values plus a change history attributing each write to the
+// firing B/C event. Values flash briefly when they change during a run.
+function StateVariablesTab({ snap, model, stateChanges = [] }) {
+  const { C, FONT } = useTheme();
+  const vars = (model?.stateVariables || []).filter(sv => sv.name);
+  const scalars = snap?.scalars || {};
+  const prevScalarsRef = useRef(null);
+  const [flash, setFlash] = useState({});
+  const flashTimersRef = useRef({});
+
+  useEffect(() => {
+    const prev = prevScalarsRef.current;
+    prevScalarsRef.current = scalars;
+    if (!prev) return;
+    const changed = {};
+    for (const name of Object.keys(scalars)) {
+      if (prev[name] !== scalars[name]) changed[name] = true;
+    }
+    if (Object.keys(changed).length === 0) return;
+    setFlash(prevFlash => ({ ...prevFlash, ...changed }));
+    for (const name of Object.keys(changed)) {
+      clearTimeout(flashTimersRef.current[name]);
+      flashTimersRef.current[name] = setTimeout(() => {
+        setFlash(f => { const n = { ...f }; delete n[name]; return n; });
+      }, 600);
+    }
+  }, [scalars]);
+
+  useEffect(() => () => { Object.values(flashTimersRef.current).forEach(clearTimeout); }, []);
+
+  if (vars.length === 0) {
+    return (
+      <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+        No state variables defined. Add one in the Model Data tab to track a counter, gate, or value that changes during a run.
+      </div>
+    );
+  }
+
+  const history = [...stateChanges].reverse();
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1.2 }}>
+          CURRENT VALUES
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {vars.map(sv => {
+            const value = scalars[sv.name];
+            const isFlashing = !!flash[sv.name];
+            return (
+              <div
+                key={sv.name}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  background: isFlashing ? C.amber + "22" : C.bg,
+                  border: `1px solid ${isFlashing ? C.amber : C.border}`,
+                  borderRadius: 6,
+                  padding: "7px 10px",
+                  transition: "background 0.2s, border-color 0.2s",
+                }}
+              >
+                <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+                  <span style={{ color: C.purple, fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>
+                    {sv.name}
+                  </span>
+                  {sv.description ? (
+                    <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10 }}>{sv.description}</span>
+                  ) : null}
+                </div>
+                <div style={{ flex: 1 }} />
+                <span style={{ color: isFlashing ? C.amber : C.text, fontFamily: FONT, fontSize: 15, fontWeight: 700 }}>
+                  {Number.isFinite(value) ? value : "—"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1.2 }}>
+          CHANGE HISTORY
+        </div>
+        {history.length === 0 ? (
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+            No state variable changes yet — step the simulation to see each write attributed to the event that caused it.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {history.slice(0, 100).map((c, i) => (
+              <div
+                key={`${c.time}-${c.variable}-${i}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  background: C.bg,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 5,
+                  padding: "5px 10px",
+                  fontFamily: FONT,
+                  fontSize: 11,
+                }}
+              >
+                <span style={{ color: C.muted, minWidth: 56 }}>t={Number.isFinite(c.time) ? c.time : "—"}</span>
+                <span style={{ color: C.purple, fontWeight: 700, minWidth: 90 }}>{c.variable}</span>
+                <span style={{ color: C.muted }}>{c.from} → <strong style={{ color: C.text }}>{c.to}</strong></span>
+                <div style={{ flex: 1 }} />
+                <span style={{ color: c.phase === "C" ? C.cEvent : C.bEvent, fontWeight: 600 }}>
+                  {c.sourceEventName || c.sourceEventId || "—"}
+                </span>
+                <span style={{ color: C.muted, fontSize: 10 }}>{c.phase === "C" ? "C-event" : "B-event"}</span>
+              </div>
+            ))}
+            {history.length > 100 && (
+              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+                Showing the most recent 100 of {history.length} changes.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
-export function BottomPanel({ log, snap, model, hasResults = false, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries, waitDist }) {
+export function BottomPanel({ log, snap, model, hasResults = false, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries, waitDist, stateChanges = [] }) {
   const { C, FONT } = useTheme();
   const [activeTab, setActiveTab] = useState(() => {
     try { const t = localStorage.getItem("des.bottomPanel.tab"); return TABS.some(tab => tab.id === t) ? t : "log"; } catch { return "log"; }
@@ -1380,6 +1512,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
               <StageKpisTable snap={snap} model={model} sectionsOpen={stageKpiSectionsOpen} onToggleSection={toggleStageKpiSection} />
             </div>
           )}
+          {activeTab === "statevars" && <StateVariablesTab snap={snap} model={model} stateChanges={stateChanges} />}
         </div>
       )}
       {!collapsed && !maximized && (

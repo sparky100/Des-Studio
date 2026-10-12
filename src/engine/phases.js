@@ -192,12 +192,12 @@ export function applyShiftChange(ev, ctx) {
 }
 
 // ── Apply an effect string ────────────────────────────────────────────────────
-// Returns { msgs, felEntries }
+// Returns { msgs, felEntries, stateChanges }
 // lastCustId / lastSrvId are returned via the context refs object
 /**
  * @param {string} effect
  * @param {any} ctx
- * @returns {{ msgs: any[], felEntries: any[], noOp?: boolean }} — without this
+ * @returns {{ msgs: any[], felEntries: any[], noOp?: boolean, stateChanges: any[] }} — without this
  *   annotation the early-exit branch's `[]` literals infer as `never[]`, and
  *   the union with the main branch collapses `.push()`'s parameter to `never`
  *   at every call site.
@@ -211,12 +211,14 @@ export function applyEffect(effect, ctx) {
     // B-event that resolves the entity purely via a routing table.
     ctx._lastCustId = ctx._lastCustId ?? felRef?._contextCustId ?? null;
     ctx._lastSrvId  = ctx._lastSrvId  ?? felRef?._contextSrvId  ?? null;
-    return { msgs: [], felEntries: [] };
+    return { msgs: [], felEntries: [], stateChanges: [] };
   }
   /** @type {any[]} */
   const msgs       = [];
   /** @type {any[]} */
   const felEntries = [];
+  /** @type {any[]} */
+  const stateChanges = [];
   let lastCustId   = felRef?._contextCustId ?? null;
   let lastSrvId    = felRef?._contextSrvId  ?? null;
   // No-op protocol: a macro whose triggering condition can stay true across
@@ -248,6 +250,13 @@ export function applyEffect(effect, ctx) {
     scheduleEvent: (/** @type {any} */ entry) => felEntries.push(entry),
     markNoOp:      () => { noopParts++; },
     msgs,
+    // Structured state-variable change capture. SET / ROUND_ROBIN / scalar
+    // shorthand record { variable, from, to } here; fireBEvent/fireCEvent tag
+    // each with the firing event and simulation time. Observational only —
+    // never mutates state, entities, or fel.
+    recordStateChange: (/** @type {string} */ variable, /** @type {any} */ from, /** @type {any} */ to) => {
+      stateChanges.push({ variable, from, to });
+    },
   };
 
   const parts = effect.split(";").map((/** @type {string} */ s) => s.trim()).filter(Boolean);
@@ -267,7 +276,7 @@ export function applyEffect(effect, ctx) {
     // Scalar effects (VAR++, VAR--, VAR+=N, VAR=val)
     if (!handled) {
       try {
-        if (!applyScalar(part, state, clock)) {
+        if (!applyScalar(part, state, clock, (variable, from, to) => stateChanges.push({ variable, from, to }))) {
           msgs.push(`Unknown effect: ${part}`);
         }
       } catch (/** @type {any} */ e) {
@@ -281,7 +290,7 @@ export function applyEffect(effect, ctx) {
   ctx._lastSrvId  = lastSrvId;
   if (macroCtx._delayedCustIds) ctx._delayedCustIds = macroCtx._delayedCustIds;
 
-  return { msgs, felEntries, noOp: parts.length > 0 && noopParts >= parts.length };
+  return { msgs, felEntries, noOp: parts.length > 0 && noopParts >= parts.length, stateChanges };
 }
 
 // ── Phase B: fire one bound event ────────────────────────────────────────────
@@ -298,6 +307,7 @@ export function fireBEvent(ev, ctx) {
       msgs: [`RATE_CHANGE: ${ev.sourceName || ev.name || "piecewise source"} period active`],
       felEntries: [],
       skipped: false,
+      stateChanges: [],
     };
   }
 
@@ -306,6 +316,7 @@ export function fireBEvent(ev, ctx) {
       msgs: applyShiftChange(ev, ctx),
       felEntries: [],
       skipped: false,
+      stateChanges: [],
     };
   }
 
@@ -317,6 +328,7 @@ export function fireBEvent(ev, ctx) {
         msgs:       [`Skipped: "${ev.name}" — #${ev._contextCustId} already ${cust.status}`],
         felEntries: [],
         skipped:    true,
+        stateChanges: [],
       };
     }
   }
@@ -326,7 +338,16 @@ export function fireBEvent(ev, ctx) {
 
   const effectCtx = { ...ctx, felRef: ev };
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
-  const { msgs, felEntries } = applyEffect(effectStr, effectCtx);
+  const { msgs, felEntries, stateChanges } = applyEffect(effectStr, effectCtx);
+  const taggedStateChanges = (stateChanges || []).map(c => ({
+    time: clock,
+    variable: c.variable,
+    from: c.from,
+    to: c.to,
+    sourceEventId: ev.id || ev.name || null,
+    sourceEventName: ev.name || ev.id || null,
+    phase: "B",
+  }));
 
   // Shared context for queue-join checks (F11.1/F11.2/F11.3) performed outside of
   // applyEffect — conditional/probabilistic routing and the loop-guard exit both
@@ -510,7 +531,7 @@ export function fireBEvent(ev, ctx) {
     msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${sched.dist}(${delay.toFixed(3)})]`);
   }
 
-  return { msgs, felEntries, skipped: false };
+  return { msgs, felEntries, skipped: false, stateChanges: taggedStateChanges };
 }
 
 // ── Phase C: fire one conditional event ──────────────────────────────────────
@@ -522,13 +543,13 @@ export function fireCEvent(ev, ctx) {
   const { clock, model } = ctx;
   const effectCtx = { ...ctx, felRef: null, entityFilter: ev.entityFilter ?? null, ceventName: ev.name };
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
-  const { msgs, felEntries, noOp } = applyEffect(effectStr, effectCtx);
+  const { msgs, felEntries, noOp, stateChanges } = applyEffect(effectStr, effectCtx);
 
   // Every part of the effect declared itself a no-op (see applyEffect): no
   // state changed, so scheduling this event's cSchedules would be spurious —
   // report the no-op firing so Phase C can skip its restart.
   if (noOp) {
-    return { msgs, felEntries, noOp: true };
+    return { msgs, felEntries, noOp: true, stateChanges: [] };
   }
 
   // Count C-event firing — only genuine (non-no-op) fires. A JOIN re-scanned
@@ -657,6 +678,14 @@ export function fireCEvent(ev, ctx) {
     }
   }
 
-  return { msgs, felEntries };
+  return { msgs, felEntries, stateChanges: (stateChanges || []).map(c => ({
+    time: clock,
+    variable: c.variable,
+    from: c.from,
+    to: c.to,
+    sourceEventId: ev.id || ev.name || null,
+    sourceEventName: ev.name || ev.id || null,
+    phase: "C",
+  })) };
 }
 

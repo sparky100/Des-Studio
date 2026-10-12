@@ -759,6 +759,12 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let _traceSeq = 0;
   const nextSeq = () => ++_traceSeq;
 
+  // Structured state-variable change log (see phases.js recordStateChange).
+  // Observational only — records { time, variable, from, to, sourceEventId,
+  // sourceEventName, phase } for every SET / ROUND_ROBIN / scalar-shorthand
+  // write, in chronological order. Exposed on the run result and per-step.
+  const _stateChanges = [];
+
   // Core structured trace emitter. Returns a trace entry with all required
   // phase/A fields populated. Callers add phase-specific payload fields.
   const _trace = (/** @type {any} */ phase, extra = {}) => ({
@@ -1479,6 +1485,7 @@ if (fel.length === 0) {
     }
 
 const cycleLog = [];
+  const cycleStateChanges = [];
 
     // Phase A — advance clock
     const previousClock = clock;
@@ -1757,7 +1764,11 @@ const cycleLog = [];
 
       const ctx = makeCtx(ev);
       ctx.clock = clock;
-      const { msgs, felEntries, skipped } = fireBEvent(ev, ctx);
+      const { msgs, felEntries, skipped, stateChanges } = fireBEvent(ev, ctx);
+      if (stateChanges?.length) {
+        _stateChanges.push(...stateChanges);
+        cycleStateChanges.push(...stateChanges);
+      }
       if (enableFilteredPhaseC) {
         // enableFilteredPhaseC true guarantees phaseCDirty/bEventImpactTemplates
         // were both initialised (see their declarations above) — the casts are
@@ -1821,14 +1832,18 @@ const cycleLog = [];
         for (const k in _arbitration) delete _arbitration[k];
         const ctx = makeCtx(null);
         ctx.clock = clock;
-        let msgs, felEntries, effectNoOp = false;
+        let msgs, felEntries, effectNoOp = false, stateChanges;
         if (ev._isShiftWhen) {
           ev._fired = true;
           const fakeEv = { serverTypeName: ev.entityTypeName, newCapacity: ev.capacity };
           msgs = applyShiftChange(fakeEv, ctx);
           felEntries = [];
         } else {
-          ({ msgs, felEntries, noOp: effectNoOp = false } = fireCEvent(ev, ctx));
+          ({ msgs, felEntries, noOp: effectNoOp = false, stateChanges } = fireCEvent(ev, ctx));
+        }
+        if (stateChanges?.length) {
+          _stateChanges.push(...stateChanges);
+          cycleStateChanges.push(...stateChanges);
         }
         if (effectNoOp) {
           // The effect declared itself a complete no-op (e.g. JOIN over an
@@ -1935,7 +1950,7 @@ const cycleLog = [];
     // Condition-based termination check (post-step)
     {
       const endEntry = checkTermination();
-      if (endEntry) return { done: true, cycleLog: [...cycleLog, endEntry], snap: stepSnapshot(), felSize: fel.length, phaseCTruncated };
+      if (endEntry) return { done: true, cycleLog: [...cycleLog, endEntry], snap: stepSnapshot(), felSize: fel.length, phaseCTruncated, stateChanges: cycleStateChanges };
     }
 
     // Collect time-series snapshot after Phase C stabilises (F10.4a)
@@ -2096,7 +2111,7 @@ const cycleLog = [];
       if (collectTrace) {
         log.push(_trace("WARNING", { warning: { code: "CYCLE_LIMIT_REACHED", message: cycleLimitMsg }, message: cycleLimitMsg }));
       }
-      return { done: true, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated, cycleLimitReached: true };
+      return { done: true, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated, cycleLimitReached: true, stateChanges: cycleStateChanges };
     }
 
     if (maxCEventScans != null && _runtimeMetrics.cEventScans >= maxCEventScans) {
@@ -2106,10 +2121,10 @@ const cycleLog = [];
       if (collectTrace) {
         log.push(_trace("WARNING", { warning: { code: "SCAN_LIMIT_REACHED", message: scanLimitMsg }, message: scanLimitMsg }));
       }
-      return { done: true, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated, scanLimitReached: true };
+      return { done: true, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated, scanLimitReached: true, stateChanges: cycleStateChanges };
     }
 
-    return { done: false, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated };
+    return { done: false, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated, stateChanges: cycleStateChanges };
   }
 
   /** @param {Record<string, any>} [overrides] */
@@ -2153,6 +2168,7 @@ const cycleLog = [];
       log: collectTrace ? log : [],
       snap:            snap(clock),
       summary:         engineSummary,
+      stateChanges:    _stateChanges.slice(),
       runtimeMetrics:  getRuntimeMetrics(engineSummary.served),
       phaseCTruncated: _phaseCTruncated,
       cycleLimitReached: _cycleLimitReached,
