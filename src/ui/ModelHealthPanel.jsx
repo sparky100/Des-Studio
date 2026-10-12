@@ -1,17 +1,14 @@
 // ui/ModelHealthPanel.jsx — Model health summary: status badge, issue chips, action hints
 import { alpha } from "./shared/tokens.js";
-import { Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
-export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTab, latestResults, onGoToHistory }) {
+export function ModelHealthPanel({ validation, isStarterBlank, setTab }) {
   const { C, FONT } = useTheme();
   const blockers = validation.errors || [];
   const warnings = validation.warnings || [];
   const hasBlockers = blockers.length > 0;
   const hasWarnings = warnings.length > 0;
   const isGettingStarted = isStarterBlank;
-  const isExecuteTab = tab === "execute";
-  const completedRuns = Number.isFinite(model.stats?.runs) ? model.stats.runs : 0;
 
   const healthMsg = hasBlockers
     ? "This model needs a few fixes before it can run."
@@ -20,8 +17,6 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
       : hasWarnings
         ? "This model can run, but a few things are worth checking before you rely on the results."
         : "No major issues found — ready to run.";
-
-  const showActions = !isGettingStarted && !hasBlockers && !isExecuteTab;
 
   return (
     <section
@@ -64,15 +59,6 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
           </button>
         )}
       </div>
-
-      {/* Quick-action row — only shown when there's something to navigate to */}
-      {showActions && (
-        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <Btn small variant="primary" onClick={() => setTab("execute")}>Open Run</Btn>
-          {latestResults && <Btn small variant="ghost" onClick={() => setTab("results")}>Open Results</Btn>}
-          {completedRuns > 0 && <Btn small variant="ghost" onClick={() => onGoToHistory ? onGoToHistory() : setTab("results")}>Run History</Btn>}
-        </div>
-      )}
     </section>
   );
 }

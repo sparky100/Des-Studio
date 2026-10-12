@@ -120,24 +120,6 @@ describe("ModelDetail Model Health panel", () => {
     expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
   });
 
-  test("offers next-step run actions when the model has no blockers", () => {
-    renderDetail({
-      ...baseModel,
-      entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
-      queues: [{ id: "q1", name: "Customer Queue", discipline: "FIFO" }],
-      bEvents: [
-        { id: "b-arrive", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [] },
-        { id: "b-complete", name: "Depart", effect: "COMPLETE()", schedules: [] },
-      ],
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /open run/i }));
-
-    const workflow = screen.getByLabelText(/model workflow/i);
-    expect(within(workflow).getByRole("button", { name: /^run$/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /reset/i })).toBeInTheDocument();
-  });
-
   test("uses a mobile read/run/results workflow at phone width", () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 600 });
     window.dispatchEvent(new Event("resize"));

@@ -782,13 +782,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {saveError&&<div role="alert" style={{background:C.errorBg,border:`1px solid ${C.danger}`,borderRadius:6,padding:'8px 12px',color:C.error,fontFamily:FONT,fontSize:12,marginBottom:8}}>{saveError}</div>}
         {["overview","execute","results"].includes(tab)&&(
           <ModelHealthPanel
-            model={model}
             validation={healthValidation}
             isStarterBlank={isStarterBlank}
-            tab={tab}
             setTab={setTab}
-            latestResults={latestResults}
-            onGoToHistory={()=>{setTab("results");setResultsView("history");}}
           />
         )}
         <ErrorBoundary
