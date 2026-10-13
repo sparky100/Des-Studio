@@ -359,7 +359,7 @@ ModelDetail (parent)
 
 **What it must do:**
 - Allow the modeller to create, rename, and delete user-defined state variables.
-- Each variable must have: name (unique, no collision with `Resource` or `Queue` namespace), valueType (number only for user-defined vars), initialValue (number), resetOnWarmup flag (boolean, defaults true).
+- Each variable must have: name (unique, no collision with `Resource` or `Queue` namespace), valueType (number only for user-defined vars), initialValue (number), resetOnWarmup flag (boolean, defaults true), showInSwitches flag (boolean, defaults true — hides the variable from the Switches readout on the Execute canvas when false).
 - Deleting a state variable referenced in a C-Event condition must warn and invalidate the affected conditions.
 
 **Known gaps:**

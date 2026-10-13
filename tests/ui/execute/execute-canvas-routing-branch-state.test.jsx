@@ -115,16 +115,26 @@ describe("ExecuteCanvas — conditional routing branch state", () => {
     expect(within(screen.getByTestId("switch-strip")).getByText("ON")).toBeInTheDocument();
   });
 
-  test("shows a numeric state variable as its value, not ON/OFF", () => {
-    const numericModel = {
+  test("omits variables the modeller hid from the Switches panel", () => {
+    const curatedModel = {
       ...model,
-      stateVariables: [{ id: "sv-arr", name: "arrivals", initialValue: "0" }],
+      stateVariables: [
+        { id: "sv-icu", name: "icuOpen", initialValue: "1" },
+        { id: "sv-arr", name: "arrivals", initialValue: "0", showInSwitches: false },
+      ],
     };
-    render(<ExecuteCanvas model={numericModel} snap={{ ...baseSnap, scalars: { arrivals: 7 } }} animationEnabled={false} />);
+    render(<ExecuteCanvas model={curatedModel} snap={{ ...baseSnap, scalars: { icuOpen: 1, arrivals: 7 } }} animationEnabled={false} />);
     const strip = within(screen.getByTestId("switch-strip"));
-    expect(strip.getByText("arrivals")).toBeInTheDocument();
-    expect(strip.getByText("7")).toBeInTheDocument();
-    expect(strip.queryByText("ON")).not.toBeInTheDocument();
-    expect(strip.queryByText("OFF")).not.toBeInTheDocument();
+    expect(strip.getByText("icuOpen")).toBeInTheDocument();
+    expect(strip.queryByText("arrivals")).not.toBeInTheDocument();
+  });
+
+  test("renders no Switches panel when every variable is hidden", () => {
+    const hiddenModel = {
+      ...model,
+      stateVariables: [{ id: "sv-icu", name: "icuOpen", initialValue: "1", showInSwitches: false }],
+    };
+    render(<ExecuteCanvas model={hiddenModel} snap={{ ...baseSnap, scalars: { icuOpen: 1 } }} animationEnabled={false} />);
+    expect(screen.queryByTestId("switch-strip")).not.toBeInTheDocument();
   });
 });

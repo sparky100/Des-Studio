@@ -866,6 +866,14 @@ export function ExecuteCanvas({
     return out;
   }, [model.stateVariables, snap]);
 
+  // Only state variables the modeller opted into the Switches readout
+  // (State Variables editor → "Show in Switches panel"). Undefined means
+  // shown, so pre-existing models keep their full readout.
+  const switchVars = useMemo(
+    () => (model.stateVariables || []).filter(sv => sv.showInSwitches !== false),
+    [model.stateVariables],
+  );
+
   // State variables that decide each activity node's conditional routing —
   // used to badge the node with the switch(es) it responds to.
   const switchDeps = useMemo(
@@ -1095,7 +1103,7 @@ export function ExecuteCanvas({
       )}
 
       <SwitchStrip
-        stateVariables={model.stateVariables}
+        stateVariables={switchVars}
         values={switchValues}
         flashNames={flashSwitches}
       />

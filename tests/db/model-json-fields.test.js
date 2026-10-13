@@ -18,7 +18,7 @@ const FULL = {
   name: "Every field",
   description: "All model_json fields set",
   entityTypes: [{ id: "et_c", name: "Cargo", role: "customer", count: 0, attrDefs: [] }, { id: "et_s", name: "Unit", role: "server", count: 2, attrDefs: [], skillProfiles: [{ count: 2, skills: ["sour"] }] }],
-  stateVariables: [{ id: "sv1", name: "level", valueType: "number", initialValue: 3 }],
+  stateVariables: [{ id: "sv1", name: "level", valueType: "number", initialValue: 3, resetOnWarmup: false, showInSwitches: false }],
   bEvents: [{ id: "b1", name: "Arrive", scheduledTime: "0", effect: ["ARRIVE(Cargo, Q)"], schedules: [] }],
   cEvents: [{ id: "c1", name: "Serve", priority: 1, condition: { variable: "queue(Q).length", operator: ">", value: 0 }, effect: ["ASSIGN(Q, Unit, Entity.grade, SCAN)"], cSchedules: [] }],
   queues: [{ id: "q1", name: "Q", customerType: "Cargo", discipline: "FIFO" }],

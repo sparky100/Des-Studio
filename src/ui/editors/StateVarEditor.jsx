@@ -5,7 +5,7 @@ const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
 const StateVarEditor=({vars,onChange})=>{
   const { C, FONT } = useTheme();
-  const add=()=>onChange([...vars,{id:"sv"+Date.now(),name:"",initialValue:"0",description:"",resetOnWarmup:false}]);
+  const add=()=>onChange([...vars,{id:"sv"+Date.now(),name:"",initialValue:"0",description:"",resetOnWarmup:false,showInSwitches:true}]);
   const upd=(i,f,v)=>{const n=[...vars];n[i]={...n[i],[f]:v};onChange(n);};
   const rem=(i)=>onChange(vars.filter((_,idx)=>idx!==i));
   return (
@@ -43,10 +43,16 @@ const StateVarEditor=({vars,onChange})=>{
               style={{flex:1,background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px"}}/>
             <Btn small variant="danger" ariaLabel={`Remove state variable ${sv.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
           </div>
-          <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:sv.resetOnWarmup?C.amber:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
-            <input type="checkbox" checked={!!sv.resetOnWarmup} onChange={e=>upd(i,'resetOnWarmup',e.target.checked)} style={{accentColor:C.amber}}/>
-            Reset after the start-up period
-          </label>
+          <div style={{display:'flex',flexWrap:'wrap',gap:'6px 18px'}}>
+            <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:sv.resetOnWarmup?C.amber:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
+              <input type="checkbox" checked={!!sv.resetOnWarmup} onChange={e=>upd(i,'resetOnWarmup',e.target.checked)} style={{accentColor:C.amber}}/>
+              Reset after the start-up period
+            </label>
+            <label title="Show this value as a pill in the Switches readout on the run canvas" style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:(sv.showInSwitches!==false)?C.green:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
+              <input type="checkbox" checked={sv.showInSwitches!==false} onChange={e=>upd(i,'showInSwitches',e.target.checked)} style={{accentColor:C.green}}/>
+              Show in Switches panel
+            </label>
+          </div>
         </div>
       ))}
     </div>
