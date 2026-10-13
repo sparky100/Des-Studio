@@ -110,6 +110,24 @@ describe("model builder prompts", () => {
     expect(prompt).toMatch(/ARRIVE/);
   });
 
+  it("steers a weighted service-type mix to ONE arrival stream + entityFilter", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/keeps ONE arrival stream/i);
+    expect(prompt).toMatch(/entityFilter/);
+    expect(prompt).toMatch(/Entity\.serviceType/);
+  });
+
+  it("forbids one ARRIVE stream per service class", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/several ARRIVE B-events \(one per class\)/i);
+  });
+
+  it("requires non-empty Categorical options (V5)", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/non-empty/i);
+    expect(prompt).toMatch(/V5-INVALID/);
+  });
+
   // ─── buildModelBuilderUserMessage ───────────────────────────────────────────
 
   it("returns plain text containing the user request", () => {

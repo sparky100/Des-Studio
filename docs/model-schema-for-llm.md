@@ -1,11 +1,12 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 2.8.0
-**Date:** 2026-10-10
+**Version:** 2.9.0
+**Date:** 2026-10-13
 **Sprint baseline:** Sprint 88
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
+| v2.9.0 | 2026-10-13 | Weighted service-mix authoring | Added a worked example "Weighted service-type mix (single stream + per-class C-events)" (in the worked-examples area, after the acuity-splitting pattern) — a Post Office with ONE arrival stream and three service types at 40/30/30 drawn from a `Categorical` entity attribute, served by one shared clerk pool via per-class C-events that each select their class with `entityFilter`. Clarified that a `Categorical` entity attribute must have a non-empty `distParams.options` (V5 — an empty/missing array is blocking and samples every entity to `null`) and can never supply a service duration. Mirrored as model-builder FATAL ERROR #24. |
 | v2.8.0 | 2026-10-10 | Server turnaround | **`turnaroundDist` / `turnaroundDistParams` on server entity types (§2):** a resource is unavailable for a sampled time after each release (RELEASE, RELEASE_COSEIZED, COMPLETE, FINISH) — a tanker's empty return voyage, an ambulance returning to base. The entity moves on at once; the server is in `turnaround` until it ends. `perResource` gains `turnaroundTime`, `turnaroundFraction`, `busyUtilisation`, `turnaroundCount`; `utilisation` now includes turnaround. New blocking rule **V80**. **RELEASE resolution (§6.2) corrected:** with entity context it releases only a server claimed by *this* entity. **Carried claims (§6.2):** an entity can hold a server across later stages (COSEIZE → RELEASE_COSEIZED subset → ASSIGN → … → RELEASE); a failure/preemption interrupts only the failed server's own claim group, and losing a carried server no longer strands the entity. MANDATORY GENERATION PROTOCOL step 4 now points at every blocking rule in §10; the duplicate TOP LLM MISTAKES #25 (Distance) is renumbered #27; new mistake #28. |
 | v2.7.0 | 2026-10-10 | Full-scale network enablers | **State variable on the right-hand side (§6.1, §5 routing):** a RHS that is a declared state variable (bare name or `state.<name>`) now resolves dynamically — `clock >= closureStart` works; the old "RHS state variable is always a literal" rule is removed. New warning V76 for a non-numeric literal in a numeric comparison. **`ASSIGN(..., SCAN[:N])` (§6):** look past a front entity whose skill has no idle server; V77. **ASSIGN no-match is a no-op.** **`DRAIN_PARTIAL(c, amount[, shortfall])` (§5, §6, §8):** draws `min(level, amount)`, records the remainder. **`quantityAttr` (§2, §9):** volume-weighted results; V78/V79; new goal metrics `summary.servedQuantity`, `summary.quantityThrough`, `resource.quantityProcessed`. **Results (§8):** container stats exclude warm-up; batch container min/avg/max/final are means across replications with `lowestMin`/`highestMax`. Two new TOP LLM MISTAKES (#25, #26). |
 | v2.6.0 | 2026-08-26 | Business view curation field | Added the optional top-level `exposedParams` field to §1 — an **app-managed** array the model owner curates in the UI (Access tab → Business view) to choose which parameters viewer-role users may adjust. LLMs must **never generate or modify** this field: it references internal sweep-parameter paths that only the app can resolve, and the app preserves the current value across AI applies regardless of what a generation emits. Documented so LLMs reading an exported model don't treat it as unknown/invalid or strip it on round-trip. |
@@ -1762,6 +1763,76 @@ Sections are **not** needed for:
 ```
 
 **Key rule for splitting arrivals:** Base arrival rate = 1 patient per 5 min = 12/hr. High acuity = 30% = 1 per 16.667 min. Low acuity = 70% = 1 per 7.143 min. Create one ARRIVE B-event per acuity group, each with its own schedule and proportional rate. Never use `probabilisticRouting` on an ARRIVE event.
+
+---
+
+### Weighted service-type mix (single stream + per-class C-events)
+
+**Use case:** One stream of customers whose service type is drawn by proportion, where each type needs a *different* service time - e.g. a Post Office where 40% post parcels (5-10 min), 30% post letters (2-3 min), and 30% buy money orders (3-5 min), all served by the same 2 clerks.
+
+**Keep ONE arrival stream.** The class is an entity attribute sampled at arrival, not a separate arrival process.
+
+**Anti-patterns:**
+- Several `ARRIVE` B-events, one per class, with proportional inter-arrival means. That models *concurrent independent arrival processes*, not one weighted stream, and is not what a "40/30/30 mix of customers" means.
+- One `ARRIVE(Customer)` plus a class attribute with no per-class service logic - a class attribute alone never supplies a service *duration* (`Categorical` returns non-numeric values).
+
+**Correct pattern:** ONE `ARRIVE` B-event into ONE queue. Give the customer entity type a weighted class attribute (`Categorical`). Then add ONE C-event per class; each class C-event selects only its own class with `entityFilter`, shares the one server type, and carries that class's service-time distribution.
+
+```json
+{
+  "name": "Post Office - Weighted Service-Type Mix",
+  "entityTypes": [
+    { "id": "et_cust", "name": "Customer", "role": "customer", "count": 0,
+      "attrDefs": [
+        { "name": "serviceType", "valueType": "string", "defaultValue": "Parcel",
+          "dist": "Categorical",
+          "distParams": { "options": [
+            { "value": "Parcel",     "weight": 40 },
+            { "value": "Letter",     "weight": 30 },
+            { "value": "MoneyOrder", "weight": 30 }
+          ] } }
+      ] },
+    { "id": "et_clerk", "name": "Clerk", "role": "server", "count": 2, "attrDefs": [] }
+  ],
+  "queues": [
+    { "id": "q_service", "name": "Service Queue", "customerType": "Customer", "capacity": "", "discipline": "FIFO" }
+  ],
+  "bEvents": [
+    { "id": "b_arrive", "name": "Customer Arrival", "scheduledTime": "0",
+      "effect": ["ARRIVE(Customer, Service Queue)"],
+      "schedules": [{ "eventId": "b_arrive", "dist": "Exponential", "distParams": { "mean": "5" } }] },
+    { "id": "b_complete", "name": "Service Complete", "scheduledTime": "9999",
+      "effect": ["COMPLETE()"], "schedules": [] }
+  ],
+  "cEvents": [
+    { "id": "c_parcel", "name": "Parcel Service", "priority": 1,
+      "condition": "queue(Service Queue).length > 0 AND idle(Clerk).count > 0",
+      "entityFilter": { "variable": "Entity.serviceType", "operator": "==", "value": "Parcel" },
+      "effect": ["ASSIGN(Service Queue, Clerk)"],
+      "cSchedules": [{ "eventId": "b_complete", "useEntityCtx": true, "dist": "Uniform", "distParams": { "min": "5", "max": "10" } }] },
+    { "id": "c_letter", "name": "Letter Service", "priority": 2,
+      "condition": "queue(Service Queue).length > 0 AND idle(Clerk).count > 0",
+      "entityFilter": { "variable": "Entity.serviceType", "operator": "==", "value": "Letter" },
+      "effect": ["ASSIGN(Service Queue, Clerk)"],
+      "cSchedules": [{ "eventId": "b_complete", "useEntityCtx": true, "dist": "Uniform", "distParams": { "min": "2", "max": "3" } }] },
+    { "id": "c_money", "name": "Money Order Service", "priority": 3,
+      "condition": "queue(Service Queue).length > 0 AND idle(Clerk).count > 0",
+      "entityFilter": { "variable": "Entity.serviceType", "operator": "==", "value": "MoneyOrder" },
+      "effect": ["ASSIGN(Service Queue, Clerk)"],
+      "cSchedules": [{ "eventId": "b_complete", "useEntityCtx": true, "dist": "Uniform", "distParams": { "min": "3", "max": "5" } }] }
+  ],
+  "experimentDefaults": { "maxSimTime": 500, "warmupPeriod": 50, "replications": 10 }
+}
+```
+
+**Key rules:**
+
+- **One** arrival stream: a single `ARRIVE(Customer, Service Queue)` at the overall rate (Exponential mean 5 min). The 40/30/30 split lives in the `serviceType` attribute, sampled per entity at arrival - there is no second ARRIVE event.
+- The class attribute **must** use a non-empty `distParams.options` array - `[{ "value": "Parcel", "weight": 40 }, { "value": "Letter", "weight": 30 }, { "value": "MoneyOrder", "weight": 30 }]`. An empty or missing `options` array is a blocking **V5** error and samples every entity to `null`.
+- `Categorical` returns non-numeric values, so it can never be a service *duration*. Each class C-event carries its own `cSchedules` distribution (parcels 5-10, letters 2-3, money orders 3-5) - that is how the duration varies by class.
+- `entityFilter` is the selector: `{ "variable": "Entity.serviceType", "operator": "==", "value": "Parcel" }` makes `ASSIGN` pull only entities of that class out of the shared queue. All three C-events target the one `Service Queue` and the one `Clerk` server type, so the two clerks serve every class.
+- `entityFilter` only *selects*; it never blocks or spins. If no waiting entity matches its class, `ASSIGN` is a no-op and Phase C does not restart on it. (See `docs/branching-model.json` for the two-class variant.)
+- `useEntityCtx: true` is required because the completion B-event uses `COMPLETE()`.
 
 ---
 

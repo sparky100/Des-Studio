@@ -293,7 +293,36 @@ pattern, consult §10 directly.`,
     number attribute and set "quantityAttr" to its name, e.g. "quantityAttr": "volume" with
     {"name": "volume", "valueType": "number", "defaultValue": 4}; set per-entity sizes with
     SET_ATTR(volume, 2) after ARRIVE. Results then report quantities (served, in system, through each
-    queue, processed per resource) alongside counts. quantityAttr must name a number attribute (V78).`,
+    queue, processed per resource) alongside counts. quantityAttr must name a number attribute (V78).
+
+24. A weighted MIX of service types with DIFFERENT durations (e.g. "40% parcels, 30% letters,
+    30% money orders, each with its own service time") keeps ONE arrival stream of customers.
+    Give the customer entity type a class attribute sampled at arrival, then serve each class
+    with its own C-event that selects only that class via "entityFilter" - all sharing the one
+    server type. Do NOT build a separate ARRIVE stream per class.
+
+    The class attribute carries the weighting: use "Categorical" with non-empty
+    distParams.options, e.g. "distParams": { "options": [{ "value": "Parcel", "weight": 40 },
+    { "value": "Letter", "weight": 30 }, { "value": "MoneyOrder", "weight": 30 }] }. An empty
+    or missing options array is V5-INVALID and makes every entity sample to null.
+
+    ✓ CORRECT (one ARRIVE stream, 40/30/30 parcel/letter/money mix):
+      ONE ARRIVE B-event "ARRIVE(Customer, Service Queue)" with an Exponential mean for the
+      overall arrival rate (e.g. "5"); a "serviceType" Categorical attribute on Customer; ONE
+      server type "Clerk"; and ONE C-event per class, each with
+      "entityFilter": { "variable": "Entity.serviceType", "operator": "==", "value": "Parcel" },
+      condition "queue(Service Queue).length > 0 AND idle(Clerk).count > 0",
+      effect "ASSIGN(Service Queue, Clerk)", and its own cSchedules dist
+      ("Uniform" 5-10, 2-3, 3-5) with "useEntityCtx": true.
+    ✗ WRONG: several ARRIVE B-events (one per class) with proportional inter-arrival means -
+      that models concurrent independent arrival processes, not one weighted stream.
+    ✗ WRONG: one "ARRIVE(Customer)" plus a class attribute with no per-class service - a class
+      attribute alone does not vary the service time.
+
+    entityFilter only selects from the queue: if no waiting entity matches, ASSIGN is a no-op,
+    so a class C-event whose class is absent does not block or spin. Categorical returns
+    non-numeric values, so it can never be a service DURATION - vary the duration by giving
+    each class C-event its own cSchedules distribution.`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:
