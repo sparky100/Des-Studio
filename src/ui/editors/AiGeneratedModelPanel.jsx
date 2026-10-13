@@ -169,7 +169,7 @@ function normalizeDistribution(input = {}, fallback = { dist: "Fixed", distParam
   }
 
   for (const key of Object.keys(params)) {
-    if (key !== "values" && key !== "periods" && key !== "times" && key !== "jitterParams") {
+    if (key !== "values" && key !== "periods" && key !== "times" && key !== "jitterParams" && key !== "options") {
       params[key] = numericString(params[key]);
     }
   }

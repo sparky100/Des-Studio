@@ -1083,6 +1083,58 @@ describe("AiGeneratedModelPanel", () => {
     expect(sched.distParams.jitterParams).toEqual({ stddev: "3" });
   });
 
+  it("normalizes a Categorical attrDef preserving the weighted options array", async () => {
+    const handleApply = vi.fn();
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      const response = {
+        intent: "build",
+        questions: null,
+        explanation: "Built a weighted service-mix model.",
+        proposedModel: {
+          entityTypes: [{
+            id: "cust", name: "Customer", role: "customer",
+            attrDefs: [{
+              id: "svc", name: "serviceType", valueType: "string", defaultValue: "Parcel",
+              dist: "Categorical",
+              distParams: {
+                options: [
+                  { value: "Parcel", weight: 40 },
+                  { value: "Letter", weight: 50 },
+                  { value: "MoneyOrder", weight: 10 },
+                ],
+              },
+            }],
+          }],
+          stateVariables: [],
+          bEvents: [{
+            id: "arr", name: "Arrive", scheduledTime: "0", effect: "ARRIVE(Customer, Queue)",
+            schedules: [{ eventId: "arr", dist: "Exponential", distParams: { mean: "5" } }],
+          }],
+          cEvents: [],
+          queues: [{ id: "q", name: "Queue", customerType: "Customer", discipline: "FIFO" }],
+        },
+      };
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Weighted service mix" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    await screen.findByLabelText(/model proposal preview/i);
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
+
+    const applied = handleApply.mock.calls[0][0];
+    const attr = applied.entityTypes[0].attrDefs[0];
+    expect(attr.dist).toBe("Categorical");
+    expect(Array.isArray(attr.distParams.options)).toBe(true);
+    expect(attr.distParams.options).toEqual([
+      { value: "Parcel", weight: 40 },
+      { value: "Letter", weight: 50 },
+      { value: "MoneyOrder", weight: 10 },
+    ]);
+  });
+
   // Regression: the local DIST_NAMES alias map here had drifted from the
   // canonical engine/distributions.js one and was missing lognormal/
   // categorical/entityattr — now delegates to normalizeDistributionName
