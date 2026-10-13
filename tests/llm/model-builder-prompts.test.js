@@ -128,6 +128,13 @@ describe("model builder prompts", () => {
     expect(prompt).toMatch(/V5-INVALID/);
   });
 
+  it("allows one ARRIVE per class only when arrival patterns genuinely differ", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/arrival PATTERNS genuinely differ/i);
+    expect(prompt).toMatch(/one ARRIVE B-event per/i);
+    expect(prompt).toMatch(/merge\s+exactly into one stream/i);
+  });
+
   // ─── buildModelBuilderUserMessage ───────────────────────────────────────────
 
   it("returns plain text containing the user request", () => {

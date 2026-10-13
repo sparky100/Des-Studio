@@ -299,7 +299,19 @@ pattern, consult §10 directly.`,
     30% money orders, each with its own service time") keeps ONE arrival stream of customers.
     Give the customer entity type a class attribute sampled at arrival, then serve each class
     with its own C-event that selects only that class via "entityFilter" - all sharing the one
-    server type. Do NOT build a separate ARRIVE stream per class.
+    server type. Do NOT split into one ARRIVE stream per class just because the classes differ.
+
+    This single-stream rule applies when the classes share ONE arrival process and differ in
+    SERVICE. When the arrival PATTERNS genuinely differ per class, use one ARRIVE B-event per
+    class instead - that is correct, not an anti-pattern. Use separate streams when:
+      - arrival distributions differ in shape (e.g. parcels Triangular, letters Exponential);
+      - some classes arrive on a schedule/planned list while others are random;
+      - each class has its own time-varying (peak/off-peak) arrival profile;
+      - each class is triggered by a different external event.
+    Classes that differ ONLY by arrival RATE and are otherwise Exponential (Poisson) merge
+    exactly into one stream, so a single ARRIVE at the summed rate plus a weighted class
+    attribute is equivalent and preferred. Classes that differ only by service time are always
+    one stream.
 
     The class attribute carries the weighting: use "Categorical" with non-empty
     distParams.options, e.g. "distParams": { "options": [{ "value": "Parcel", "weight": 40 },
@@ -314,8 +326,8 @@ pattern, consult §10 directly.`,
       condition "queue(Service Queue).length > 0 AND idle(Clerk).count > 0",
       effect "ASSIGN(Service Queue, Clerk)", and its own cSchedules dist
       ("Uniform" 5-10, 2-3, 3-5) with "useEntityCtx": true.
-    ✗ WRONG: several ARRIVE B-events (one per class) with proportional inter-arrival means -
-      that models concurrent independent arrival processes, not one weighted stream.
+    ✗ WRONG: several ARRIVE B-events (one per class) when the classes share ONE arrival process
+      and differ only in service - that fragments one weighted stream into independent ones.
     ✗ WRONG: one "ARRIVE(Customer)" plus a class attribute with no per-class service - a class
       attribute alone does not vary the service time.
 
