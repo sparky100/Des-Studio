@@ -1135,6 +1135,69 @@ describe("AiGeneratedModelPanel", () => {
     ]);
   });
 
+  it("sends the prompt on Enter (no Shift), same as the send button", async () => {
+    const handleApply = vi.fn();
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      const response = {
+        intent: "build",
+        questions: null,
+        explanation: "Built on Enter.",
+        proposedModel: { ...model },
+      };
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
+    const input = screen.getByLabelText(/describe or refine/i);
+    fireEvent.change(input, { target: { value: "Build a simple model" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await screen.findByLabelText(/model proposal preview/i);
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
+    expect(handleApply).toHaveBeenCalled();
+  });
+
+  it("does not send on Shift+Enter (keeps newline behavior)", async () => {
+    const handleApply = vi.fn();
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      const response = {
+        intent: "build",
+        questions: null,
+        explanation: "Should not fire.",
+        proposedModel: { ...model },
+      };
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
+    const input = screen.getByLabelText(/describe or refine/i);
+    fireEvent.change(input, { target: { value: "Build a simple model" } });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    expect(screen.queryByLabelText(/model proposal preview/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /send/i })).toBeEnabled();
+  });
+
+  it("does not send on Enter when the input is empty", async () => {
+    const handleApply = vi.fn();
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      const response = {
+        intent: "build",
+        questions: null,
+        explanation: "Should not fire.",
+        proposedModel: { ...model },
+      };
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
+    const input = screen.getByLabelText(/describe or refine/i);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.queryByLabelText(/model proposal preview/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
+  });
+
   // Regression: the local DIST_NAMES alias map here had drifted from the
   // canonical engine/distributions.js one and was missing lognormal/
   // categorical/entityattr — now delegates to normalizeDistributionName

@@ -136,7 +136,7 @@ const Btn=({children,onClick,variant="ghost",small,disabled,full,style={},ariaLa
       width:full?"100%":undefined,justifyContent:full?"center":undefined,
       transition:"opacity 120ms ease",flexShrink:0,...style}}>{children}</button>;
 };
-const Field=({label,value,onChange,multiline,rows=2,placeholder="",autoFocus=false,inputStyle={}})=>{
+const Field=({label,value,onChange,multiline,rows=2,placeholder="",autoFocus=false,inputStyle={},onKeyDown})=>{
   const {C,FONT}=useTheme();
   const generatedId=useId();
   const id=`field-${generatedId}`;
@@ -146,8 +146,8 @@ const Field=({label,value,onChange,multiline,rows=2,placeholder="",autoFocus=fal
     <div style={{display:"flex",flexDirection:"column",gap:SPACE.xs+1}}>
       {label&&<label htmlFor={id} style={{...TYPO.label,color:C.muted,fontFamily:FONT,letterSpacing:"1.5px"}}>{label}</label>}
       {multiline
-        ?<textarea id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} autoFocus={autoFocus} style={{...inputBase,resize:"vertical",lineHeight:1.6,...inputStyle}}/>
-        :<input id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} style={{...inputBase,width:"100%",boxSizing:"border-box",...inputStyle}}/>}
+        ?<textarea id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} autoFocus={autoFocus} onKeyDown={onKeyDown} style={{...inputBase,resize:"vertical",lineHeight:1.6,...inputStyle}}/>
+        :<input id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} onKeyDown={onKeyDown} style={{...inputBase,width:"100%",boxSizing:"border-box",...inputStyle}}/>}
     </div>
   );
 };

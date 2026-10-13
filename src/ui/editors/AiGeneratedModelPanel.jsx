@@ -950,6 +950,12 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
             multiline
             rows={3}
             placeholder={correctionMode ? "Describe what's wrong or what needs changing" : "e.g. Add another doctor to triage, or build a post office with 2 clerks and a single queue"}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && draft.trim() && !loading && canEdit) {
+                e.preventDefault();
+                send();
+              }
+            }}
           />
           <button
             type="button"
