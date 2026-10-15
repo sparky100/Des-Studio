@@ -249,9 +249,21 @@ function periodDistValue(period){
   return{dist:"Exponential",distParams:{mean:"1"}};
 }
 
+// One-line summary of a period's distribution for its collapsed row,
+// e.g. "Exponential(mean=9)".
+function periodDistSummary(period){
+  const {dist,distParams}=periodDistValue(period);
+  const params=Object.entries(distParams||{}).filter(([,v])=>v!==""&&v!=null&&typeof v!=="object");
+  return `${dist||"?"}${params.length?`(${params.map(([k,v])=>`${k}=${v}`).join(", ")})`:""}`;
+}
+
 const PiecewiseEditor=({value,onChange,compact})=>{
   const {C,FONT}=useTheme();
   const periods=Array.isArray(value?.distParams?.periods)?value.distParams.periods:[];
+  // Periods start collapsed to a one-line summary (a day's schedule can have
+  // dozens); a lone period starts open since there is nothing to scan past.
+  const [expanded,setExpanded]=useState(()=>new Set(periods.length===1?[0]:[]));
+  const toggle=(i)=>setExpanded(prev=>{const next=new Set(prev);if(next.has(i))next.delete(i);else next.add(i);return next;});
   const upd=(i,patch)=>{
     const next=[...periods];
     const merged={...next[i],...patch};
@@ -267,15 +279,38 @@ const PiecewiseEditor=({value,onChange,compact})=>{
   const add=()=>{
     const last=periods[periods.length-1];
     const startTime=last?String((parseFloat(last.startTime||0)||0)+60):"0";
+    setExpanded(prev=>new Set(prev).add(periods.length));
     onChange({...value,dist:"Piecewise",distParams:{...(value.distParams||{}),periods:[...periods,{startTime,distribution:{dist:"Exponential",distParams:{mean:"1"}}}]}});
   };
-  const rem=(i)=>onChange({...value,dist:"Piecewise",distParams:{...(value.distParams||{}),periods:periods.filter((_,idx)=>idx!==i)}});
+  const rem=(i)=>{
+    setExpanded(prev=>new Set([...prev].filter(j=>j!==i).map(j=>j>i?j-1:j)));
+    onChange({...value,dist:"Piecewise",distParams:{...(value.distParams||{}),periods:periods.filter((_,idx)=>idx!==i)}});
+  };
   const unsorted=periods.some((p,i)=>i>0&&(parseFloat(p.startTime)||0)<(parseFloat(periods[i-1].startTime)||0));
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
-      {periods.map((period,i)=>(
+      {periods.length>1&&(
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{periods.length} periods</span>
+          <Btn small variant="ghost" onClick={()=>setExpanded(new Set(periods.map((_,i)=>i)))}>Expand all</Btn>
+          <Btn small variant="ghost" onClick={()=>setExpanded(new Set())}>Collapse all</Btn>
+        </div>
+      )}
+      {periods.map((period,i)=>!expanded.has(i)?(
+        <div key={i} style={{display:"flex",gap:8,alignItems:"center"}}>
+          <button type="button" onClick={()=>toggle(i)} aria-expanded={false} aria-label={`Show period ${i + 1}`}
+            style={{flex:1,minWidth:0,display:"flex",gap:6,alignItems:"center",background:"transparent",border:"none",padding:"2px 0",cursor:"pointer",textAlign:"left",fontFamily:FONT,fontSize:11,color:C.text}}>
+            <span style={{color:C.muted}}>▸</span>
+            <span style={{color:C.amber}}>t={period.startTime??"?"}</span>
+            <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{periodDistSummary(period)}</span>
+          </button>
+          <Btn small variant="danger" ariaLabel={`Remove piecewise period ${i + 1}`} onClick={()=>rem(i)}>x</Btn>
+        </div>
+      ):(
         <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
+          <button type="button" onClick={()=>toggle(i)} aria-expanded={true} aria-label={`Hide period ${i + 1}`}
+            style={{background:"transparent",border:"none",padding:"2px 0",cursor:"pointer",color:C.muted,fontFamily:FONT,fontSize:11}}>▾</button>
           <label style={{display:"flex",alignItems:"center",gap:4}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from t:</span>
             <input type="number" value={period.startTime??""} disabled={i===0} onChange={e=>upd(i,{startTime:e.target.value})}

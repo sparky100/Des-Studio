@@ -664,6 +664,19 @@ describe('Visual Designer shell', () => {
     expect(screen.getByDisplayValue('Customer Arrival')).toBeInTheDocument();
   });
 
+  it('the open inspector has a keyboard-resizable left edge', async () => {
+    const user = userEvent.setup();
+    render(<VisualDesignerPanel model={disconnectedSourceModel} canEdit onModelChange={vi.fn()} />);
+    expect(screen.queryByRole('separator', { name: 'Resize inspector' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /not connected/i }));
+    const handle = screen.getByRole('separator', { name: 'Resize inspector' });
+    expect(handle).toHaveAttribute('aria-valuenow', '280');
+    fireEvent.keyDown(handle, { key: 'ArrowLeft', shiftKey: true });
+    expect(handle).toHaveAttribute('aria-valuenow', '344');
+    expect(handle.parentElement.parentElement.style.width).toBe('344px');
+    localStorage.removeItem('flow.drawInspectorWidth');
+  });
+
   it('threads onGoToDefine through to the inspector so an "Edit in the X tab" pointer becomes a working jump link', async () => {
     const user = userEvent.setup();
     const onGoToDefine = vi.fn();
