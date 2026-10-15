@@ -113,8 +113,8 @@ supports the feature but no picker can write it. Group B is genuine engine limit
 - **SimPy export**: RENEGE, BATCH, RENEGE_OLDEST, MATCH, FAIL, REPAIR, PREEMPT, RELEASE_COSEIZED
   (plus FINISH since Sprint 97 and JOIN since Sprint 98)
   export as `# NOT SUPPORTED` TODO blocks (category 2); `ASSIGN … PREEMPT` (Sprint 99) exports
-  with a NOT SUPPORTED warning and waits for an idle server — documented, but worth surfacing in the UI
-  before a user builds a model around them expecting portable export.
+  as `simpy.PreemptiveResource` (category 1; MAX/MINSERVICE warned) — the stubs are documented, but
+  worth surfacing in the UI before a user builds a model around them expecting portable export.
 
 ## Recommendations (prioritised)
 

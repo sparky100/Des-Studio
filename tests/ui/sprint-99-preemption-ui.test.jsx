@@ -100,3 +100,20 @@ describe("effect picker suggestions", () => {
     expect(values).not.toContain("ASSIGN(TraumaQueue, Doctor, PREEMPT)");
   });
 });
+
+describe("trace panel", () => {
+  it("shows a preemption: victim, beneficiary, ranks, what the victim gets and why", async () => {
+    const { BottomPanel } = await import("../../src/ui/execute/BottomPanel.jsx");
+    const { fireEvent } = await import("@testing-library/react");
+    const model = edModel("ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))");
+    const result = buildEngine(model, 1, 0, 40).runAll();
+    const log = result.log.filter(e => e.arbitration?.type === "preemption");
+    expect(log).toHaveLength(1);
+    render(<BottomPanel log={log} snap={result.snap} model={model} />);
+    fireEvent.click(screen.getByRole("button", { name: /expand details/i }));
+    fireEvent.click(screen.getAllByText("▶")[0]);
+    expect(screen.getByTestId("trace-preemption").textContent).toMatch(
+      /interrupted #\d+ \(priority=3\) on server #\d+ → #\d+ \(priority=0\) · 5\.00t remaining · lowest-ranked of 1 lower-ranked in service/,
+    );
+  });
+});

@@ -2096,11 +2096,17 @@ npm run build
 | F99.4 | Preemptive-priority benchmark | ✅ | `tests/benchmarks/preemptive-priority.test.js` — two-class M/M/1 preemptive-resume, T₁ = 1.429, T₂ = 4.762, ±5%; runs both PREEMPT and `ASSIGN … PREEMPT`. Benchmark 6 stays non-preemptive. |
 | F99.5 | Preempt-and-assign | ✅ | `ASSIGN(Queue, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t])` (`src/engine/preemptAssign.js`): an idle server → plain ASSIGN; otherwise interrupts a busy server whose job ranks strictly below the queue head and hands it to the head in the same firing. Policies RESUME (default) / RESTART / RESAMPLE / DROP:Queue. |
 | F99.6 | Validation V81 | ✅ | Unknown/repeated options, a queue that doesn't rank jobs, a missing rank attribute, an unknown DROP queue, and a C-event firing plain `PREEMPT(Type)` without checking `idle(Type)`. |
-| F99.7 | UI, export, template | ✅ | ASSIGN composer option "May interrupt a lower-priority job (PREEMPT)"; SimPy export warns NOT SUPPORTED; Priority ED with Balking template uses `ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))` with no counter or gating C-event. |
+| F99.7 | UI, export, template | ✅ | ASSIGN composer option "May interrupt a lower-priority job (PREEMPT)"; SimPy export maps it to `simpy.PreemptiveResource` (Phase 3); Priority ED with Balking template uses `ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))` with no counter or gating C-event. |
 
 **Decision record:** ADR-014 (preemption deferral) is superseded.
 
-**Deferred (Phase 3):** a declarative "higher-priority arrivals interrupt service" activity setting, SimPy `PreemptiveResource` mapping, and trace-viewer preemption detail.
+**Phase 3:**
+
+| # | Feature | Status | Notes |
+|---|---|---|---|
+| F99.8 | SimPy `PreemptiveResource` mapping | ✅ | Rank-priority requests, `preempt=True` only on the preempting activity, and `simpy.Interrupt` handling per policy. Validated by running the generated script against the analytic M/M/1 (T₁ 1.432 / 1.429, T₂ 4.780 / 4.762). |
+| F99.9 | Trace-viewer preemption detail | ✅ | Victim, beneficiary, ranks, policy, remaining time and why it was chosen; B-event PREEMPTs traced too. |
+| F99.10 | Declarative activity setting | ✗ Not built | The ASSIGN composer option is the declarative surface; a second field would duplicate it. |
 
 ---
 

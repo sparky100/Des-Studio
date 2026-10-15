@@ -170,16 +170,49 @@ else:
 
 ---
 
-## ASSIGN … PREEMPT note
+## ASSIGN … PREEMPT (preemptive priority)
 
-The preempt-and-assign form `ASSIGN(Queue, ServerType, PREEMPT, …)` is **not
-translated**. It does not by itself make the script Category 2: the export adds a
-**NOT SUPPORTED** warning and the generated code treats it as a plain `ASSIGN`,
-waiting for an idle server — so a higher-priority job never interrupts one in
-service, and results will differ from DES Studio's. To reproduce preemptive
-priority, declare the resource as `simpy.PreemptiveResource`, request it with
-`request(priority=rank, preempt=True)`, catch `simpy.Interrupt` in the served
-process and re-request with the remaining service time.
+The preempt-and-assign form `ASSIGN(Queue, ServerType, PREEMPT, …)` is translated (Sprint 99) and keeps
+the script Category 1:
+
+- **The server type becomes a `simpy.PreemptiveResource`.**
+- **Every request on that resource carries the job's rank as its priority.** The rank is the queue's
+  `PRIORITY(attr)`/`PRIORITY`/`SPT`/`EDD` attribute or the `PRIORITY(attr)` criterion, via a generated
+  `_rank(entity, names)` helper; lower is more urgent, and a missing attribute ranks last.
+- **Only the preempting activity requests with `preempt=True`.** SimPy then interrupts a user only when
+  the new request ranks strictly better, exactly like DES Studio. Equal rank never interrupts.
+- **Every service on the resource catches `simpy.Interrupt`.** It records the service received so far,
+  rejoins the resource queue (that time counts as wait), then continues per the policy:
+  - `RESUME`: the remaining time;
+  - `RESTART`: the full duration again;
+  - `RESAMPLE`: a new sample from that service's own distribution;
+  - `DROP:Queue`: the job is put on that queue's store.
+
+```python
+_remaining = _exp(1)
+while True:
+    with Doctor_resource.request(priority=_rank(entity, ("priority",)), preempt=True) as _req:
+        yield _req
+        _start = env.now
+        try:
+            yield env.timeout(_remaining)
+            break
+        except simpy.Interrupt:
+            _remaining -= env.now - _start   # RESUME
+```
+
+Checked against the analytic two-class preemptive-resume M/M/1 (λ₁ 0.3, λ₂ 0.4, μ 1; 30 replications):
+- high-priority time in system 1.432 (analytic 1.429);
+- low-priority 4.780 (analytic 4.762).
+
+**Differences the export warns about:**
+- `MAX:n` and `MINSERVICE:t` are not translated.
+- `LONGEST`/`SHORTEST`: SimPy interrupts the lowest-ranked user (the latest request on a tie).
+- Waiting jobs on a preemptive resource are ordered by rank rather than by activity priority.
+- An interrupted job rejoins behind same-rank jobs already waiting; DES Studio resumes it ahead of later
+  arrivals. This doesn't change class means in the M/M/1 check above.
+- A COSEIZE on a preemptive resource doesn't handle the interruption.
+- The plain `PREEMPT(ServerType)` macro is still a Category 2 stub.
 
 ---
 
