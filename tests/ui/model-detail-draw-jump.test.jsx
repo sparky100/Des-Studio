@@ -100,7 +100,13 @@ describe("ModelDetail — Draw inspector 'Edit in the X tab' jump links", () => 
     const searchInput = await screen.findByLabelText("Search canvas nodes");
     await user.type(searchInput, "Consultant");
     const results = screen.getByLabelText("Node search results");
-    await user.click(within(results).getByRole("option", { name: /^Consultant Queue/i }));
+    // Find the result by its visible text, then click its option row. The
+    // role query (getByRole("option")) reported the listbox as inaccessible on
+    // GitHub's runners only — never reproducible locally — while the option was
+    // plainly rendered (see the failure output on #571).
+    const option = within(results).getByText("Consultant Queue").closest('[role="option"]');
+    expect(option).not.toBeNull();
+    await user.click(option);
 
     // Inspector now shows the selected queue's pointers (description/balking/
     // reneging) as links — any of them should jump to the same queue.
