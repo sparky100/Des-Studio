@@ -99,18 +99,16 @@ describe("ModelDetail — Draw inspector 'Edit in the X tab' jump links", () => 
     // VisualDesignerPanel is lazy-loaded (Suspense) — wait for it to resolve.
     const searchInput = await screen.findByLabelText("Search canvas nodes");
     await user.type(searchInput, "Consultant");
-    const results = screen.getByLabelText("Node search results");
-    // Find the result by its visible text, then click its option row. The
-    // role query (getByRole("option")) reported the listbox as inaccessible on
-    // GitHub's runners only — never reproducible locally — while the option was
-    // plainly rendered (see the failure output on #571).
-    const option = within(results).getByText("Consultant Queue").closest('[role="option"]');
-    expect(option).not.toBeNull();
-    await user.click(option);
+    // findBy*, not getBy*: the Draw panel and its inspector are lazy-loaded
+    // under Suspense, which hides the rendered tree (display: none) while a
+    // chunk loads. On slower CI runners the immediate getBy* queries saw the
+    // results list as inaccessible and the inspector links as missing.
+    const results = await screen.findByLabelText("Node search results");
+    await user.click(await within(results).findByRole("option", { name: /^Consultant Queue/i }));
 
     // Inspector now shows the selected queue's pointers (description/balking/
     // reneging) as links — any of them should jump to the same queue.
-    const queueLinks = screen.getAllByRole("button", { name: /edit in the queues tab/i });
+    const queueLinks = await screen.findAllByRole("button", { name: /edit in the queues tab/i });
     await user.click(queueLinks[0]);
 
     // Define → Queues is now the active tab…
