@@ -19,7 +19,7 @@
 // PRIORITY(cls)) alone, no counter. Before Sprint 99 the interrupted job's stale completion
 // still fired (cutting resumed service short and decrementing lowInService
 // twice), so the low class finished too early.
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { buildEngine } from "../../src/engine/index.js";
 
 const LAMBDA_HIGH = 0.3;
@@ -106,23 +106,29 @@ describe.each([
   ["ASSIGN … PREEMPT", preemptAssignModel],
 ])("Preemptive-resume priority M/M/1 (two classes) — %s", (_label, model) => {
   const sojourn = { High: [], Low: [] };
-  let lowServiceMeans = [];
+  const lowServiceMeans = [];
   let interrupted = 0;
   const finalCounters = [];
 
-  for (let i = 0; i < REPS; i++) {
-    const r = buildEngine(model(), BASE_SEED + i, WARMUP, MAX_SIM, null, 5_000_000).runAll();
-    const done = r.entitySummary.filter(e => e.status === "done" && e.arrivalTime >= WARMUP);
-    for (const type of ["High", "Low"]) {
-      sojourn[type].push(mean(done.filter(e => e.type === type).map(e => e.completionTime - e.arrivalTime)));
+  // Run in beforeAll (not the describe body) and yield between replications:
+  // minutes of synchronous simulation at collection time starve the Vitest
+  // worker's RPC heartbeat ("Timeout calling onTaskUpdate").
+  beforeAll(async () => {
+    for (let i = 0; i < REPS; i++) {
+      await new Promise(resolve => setImmediate(resolve));
+      const r = buildEngine(model(), BASE_SEED + i, WARMUP, MAX_SIM, null, 5_000_000).runAll();
+      const done = r.entitySummary.filter(e => e.status === "done" && e.arrivalTime >= WARMUP);
+      for (const type of ["High", "Low"]) {
+        sojourn[type].push(mean(done.filter(e => e.type === type).map(e => e.completionTime - e.arrivalTime)));
+      }
+      const lows = done.filter(e => e.type === "Low");
+      lowServiceMeans.push(mean(lows.map(e => e.stages.reduce((s, st) => s + st.stageService, 0))));
+      interrupted += lows.filter(e => e.stages.some(st => st.interruptions)).length;
+      finalCounters.push(r.snap.scalars.lowInService ?? 0);
     }
-    const lows = done.filter(e => e.type === "Low");
-    lowServiceMeans.push(mean(lows.map(e => e.stages.reduce((s, st) => s + st.stageService, 0))));
-    interrupted += lows.filter(e => e.stages.some(st => st.interruptions)).length;
-    finalCounters.push(r.snap.scalars.lowInService ?? 0);
-  }
+  }, 300000);
 
-  it(`high-priority time in system ≈ ${T_HIGH.toFixed(3)} (±${TOLERANCE * 100}%)`, { timeout: 120000 }, () => {
+  it(`high-priority time in system ≈ ${T_HIGH.toFixed(3)} (±${TOLERANCE * 100}%)`, () => {
     expect(Math.abs(mean(sojourn.High) - T_HIGH) / T_HIGH).toBeLessThan(TOLERANCE);
   });
 
