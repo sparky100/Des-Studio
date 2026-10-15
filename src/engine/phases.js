@@ -634,6 +634,7 @@ export function fireCEvent(ev, ctx) {
       // every distribution type, and including 0 when it was interrupted at
       // its due time (Sprint 99).
       let delay = 0;
+      const resumed = !!(ctxCust && ctxCust._remainingService != null);
       if (ctxCust && ctxCust._remainingService != null) {
         delay = Math.max(0, ctxCust._remainingService);
         delete ctxCust._remainingService;
@@ -686,6 +687,9 @@ export function fireCEvent(ev, ctx) {
         // end of the service.
         ctxCust._serviceDueAt = Math.max(dueThisFiring.get(ctxCust) ?? -Infinity, clock + delay);
         dueThisFiring.set(ctxCust, ctxCust._serviceDueAt);
+        // A fresh (not resumed) service's whole length: ASSIGN … PREEMPT, RESTART
+        // gives a displaced job this again.
+        if (!resumed) ctxCust._serviceFullDuration = ctxCust._serviceDueAt - clock;
       }
       felEntries.push({
         ...tmpl,

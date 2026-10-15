@@ -1010,3 +1010,24 @@ describe("exportToSimPy — DRAIN_PARTIAL and ASSIGN SCAN", () => {
     expect(warnings.some(w => /SCAN/.test(w))).toBe(true);
   });
 });
+
+describe("exportToSimPy — ASSIGN … PREEMPT (Sprint 99)", () => {
+  it("warns that preempt-and-assign is not auto-translated", () => {
+    const { warnings } = exportToSimPy({
+      name: "ED",
+      entityTypes: [
+        { id: "p", name: "Patient", role: "customer", attrDefs: [{ name: "priority", valueType: "number" }] },
+        { id: "d", name: "Doctor", role: "server", count: 2, attrDefs: [] },
+      ],
+      queues: [{ id: "q", name: "Waiting", discipline: "PRIORITY(priority)" }],
+      stateVariables: [],
+      bEvents: [
+        { id: "arr", name: "Arrive", scheduledTime: "0", effect: ["ARRIVE(Patient, Waiting)"], schedules: [{ eventId: "arr", dist: "Exponential", distParams: { mean: "1" } }] },
+        { id: "done", name: "Done", scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
+      ],
+      cEvents: [{ id: "c1", name: "See", priority: 1, effect: ["ASSIGN(Waiting, Doctor, PREEMPT)"], condition: "queue(Waiting).length > 0",
+        cSchedules: [{ eventId: "done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] }],
+    });
+    expect(warnings.some(w => /ASSIGN \.\.\. PREEMPT/.test(w))).toBe(true);
+  });
+});

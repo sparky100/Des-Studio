@@ -12,6 +12,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
+import { PREEMPT_ASSIGN_PATTERN, applyPreemptAssign } from "./preemptAssign.js";
 import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, noteServiceInterrupted, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim, noteServerClaim, mayHoldOtherServers, markTerminal, setServerStatus } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
@@ -427,6 +428,22 @@ export const MACROS = [
         const depth = ctx.index ? (indexBucket(ctx.index, queueName) || []).length : helpers.waitingOf(typeName).length;
         msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${queueName}, depth: ${depth}]`);
       }
+    },
+  },
+
+// ── ASSIGN(Queue, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t]) ──
+  // Preempt-and-assign (Sprint 99): an ordinary ASSIGN when a server is idle;
+  // otherwise takes a server from a strictly lower-ranked job and gives it to
+  // the head of the queue in the same firing. See preemptAssign.js.
+  {
+    name:    "ASSIGN_PREEMPT",
+    pattern: PREEMPT_ASSIGN_PATTERN,
+    apply(match, ctx) {
+      applyPreemptAssign(match, ctx, (queue, serverType) => {
+        const assign = MACROS.find(m => m.name === "ASSIGN");
+        const text = `ASSIGN(${queue}, ${serverType})`;
+        assign?.apply(/** @type {RegExpMatchArray} */ (text.match(assign.pattern)), ctx);
+      });
     },
   },
 

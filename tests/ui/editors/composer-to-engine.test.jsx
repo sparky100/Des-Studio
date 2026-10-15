@@ -496,3 +496,48 @@ describe("composer → engine: B2 SCAN and C DRAIN_PARTIAL", () => {
     expect(c.Unmet.level).toBeCloseTo(4 * 13.12 - 30, 8);
   });
 });
+
+describe("composer → engine: ASSIGN … PREEMPT (Sprint 99)", () => {
+  const drivePreempt = (extra = () => {}) => () => {
+    fireEvent.click(screen.getByRole("button", { name: "ASSIGN (any server, skill + container)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "May interrupt a lower-priority job (PREEMPT)" }));
+    extra();
+  };
+
+  it("a composed preempt-and-assign takes the doctor from the less urgent patient", () => {
+    const effect = composeEffect(
+      { matchQueues: [{ name: "Waiting", type: "Patient" }], serverTypes: ["Doctor"], numericAttrs: ["severity"] },
+      drivePreempt(() => fireEvent.change(screen.getByRole("combobox", { name: "Rank jobs by" }), { target: { value: "severity" } })),
+    );
+    expect(effect).toBe("ASSIGN(Waiting, Doctor, PREEMPT, PRIORITY(severity))");
+
+    const arrive = (id, t, severity) => ({ id, name: id, scheduledTime: String(t), effect: `ARRIVE(Patient, Waiting);SET_ATTR(severity, ${severity})`, schedules: [] });
+    const model = {
+      entityTypes: [
+        { id: "p", name: "Patient", role: "customer", attrDefs: [{ name: "severity", valueType: "number", defaultValue: 3 }] },
+        { id: "d", name: "Doctor", role: "server", count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [{ id: "q", name: "Waiting", customerType: "Patient", discipline: "FIFO" }],
+      bEvents: [arrive("minor", 0, 4), arrive("major", 3, 1),
+        { id: "done", name: "Seen", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] }],
+      cEvents: [{ id: "see", name: "See", priority: 1, effect, condition: "queue(Waiting).length > 0",
+        cSchedules: [{ eventId: "done", dist: "Fixed", distParams: { value: "10" }, useEntityCtx: true }] }],
+    };
+    const r = run(model, 40);
+    const bySev = (s) => customers(r).find(e => e.attrs?.severity === s);
+    expect(bySev(1).completionTime).toBeCloseTo(13, 6);
+    expect(bySev(4).completionTime).toBeCloseTo(20, 6); // 3 done, 7 left after 13
+  });
+
+  it("policy, drop queue and limit are composed in order", () => {
+    const effect = composeEffect(
+      { matchQueues: [{ name: "Waiting", type: "Patient" }, { name: "Rework", type: "Patient" }], serverTypes: ["Doctor"], numericAttrs: [] },
+      drivePreempt(() => {
+        fireEvent.change(screen.getByRole("combobox", { name: "What the interrupted job gets" }), { target: { value: "DROP" } });
+        fireEvent.change(screen.getByRole("textbox", { name: "Most times one job can be interrupted" }), { target: { value: "2" } });
+      }),
+    );
+    expect(effect).toBe("ASSIGN(Waiting, Doctor, PREEMPT, DROP:Rework, MAX:2)");
+  });
+});

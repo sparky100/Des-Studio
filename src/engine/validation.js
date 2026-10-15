@@ -14,6 +14,7 @@ import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRou
 import { getPatternInitialCapacity } from "./schedule-pattern.js";
 import { evaluatePredicate, isResolvableExpression } from "./conditions.js";
 import { applyEntityInheritance } from "./entity-inheritance.js";
+import { PREEMPT_ASSIGN_PATTERN, parsePreemptOptions, preemptRankAttrs } from "./preemptAssign.js";
 
 export const DEFAULT_MAX_SIM_TIME = 500;
 
@@ -1294,6 +1295,49 @@ export function validateModel(model) {
   };
   checkContainerRefs(bEvents, 'bevents');
   checkContainerRefs(cEvents, 'cevents');
+
+  // ── V81: ASSIGN(Queue, ServerType, PREEMPT, …) and plain PREEMPT (Sprint 99) ──
+  const findQueueByName = (/** @type {string} */ name) => queues.find(q => String(q.name || '').trim().toLowerCase() === String(name).trim().toLowerCase());
+  const checkPreemptAssign = (/** @type {Record<string, any>[]} */ events, /** @type {string} */ tab) => {
+    events.forEach(ev => {
+      const label = `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}'`;
+      const text = effectText(ev.effect);
+      for (const part of text.split(';').map(t => t.trim()).filter(Boolean)) {
+        const m = part.match(PREEMPT_ASSIGN_PATTERN);
+        if (!m) continue;
+        const opts = parsePreemptOptions(m[3]);
+        opts.errors.forEach(e => err('V81', `${label} ${part}: ${e}.`, tab, { eventIds: [ev.id] }));
+        if (opts.dropQueue && !findQueueByName(opts.dropQueue)) {
+          err('V81', `${label} ${part}: DROP sends interrupted jobs to queue '${opts.dropQueue}', which doesn't exist.`, tab, { eventIds: [ev.id] });
+        }
+        const q = findQueueByName(m[1]);
+        if (!q) continue;
+        const rankAttrs = preemptRankAttrs(q.discipline, opts.criterion);
+        if (!rankAttrs) {
+          warn('V81', `${label} ${part}: queue '${q.name}' (${q.discipline || 'FIFO'}) doesn't rank jobs, so this never interrupts anything. Give the queue a PRIORITY(attr) discipline or add PRIORITY(attr) after PREEMPT.`, tab, { eventIds: [ev.id] });
+          continue;
+        }
+        const usesNamedAttr = opts.criterion?.kind === 'priority' || /^PRIORITY\(/i.test(String(q.discipline || ''));
+        const et = mergedEntityTypes.find(t => String(t.name || '').trim().toLowerCase() === String(q.customerType || '').trim().toLowerCase());
+        if (usesNamedAttr && et && !(et.attrDefs || []).some((/** @type {any} */ a) => String(a.name || '').toLowerCase() === rankAttrs[0].toLowerCase())) {
+          warn('V81', `${label} ${part}: jobs are ranked by '${rankAttrs[0]}', but entity type '${et.name}' has no such attribute — every job ranks equal and none is interrupted.`, tab, { eventIds: [ev.id] });
+        }
+      }
+    });
+  };
+  checkPreemptAssign(bEvents, 'bevents');
+  checkPreemptAssign(cEvents, 'cevents');
+  // A C-event that fires PREEMPT(Type) without checking idle(Type) can
+  // interrupt a job while a server of that type stands idle.
+  cEvents.forEach(ev => {
+    const preempts = [...effectText(ev.effect).matchAll(/\bPREEMPT\(\s*([^,)]+)/gi)].map(m => m[1].trim());
+    const condition = JSON.stringify(ev.condition ?? '').toLowerCase();
+    for (const type of preempts) {
+      if (!condition.includes(`idle(${type.toLowerCase()})`)) {
+        warn('V81', `C-Event '${ev.name || ev.id}' fires PREEMPT(${type}) without checking idle(${type}) in its condition, so it can interrupt a job while a ${type} is idle. ASSIGN(Queue, ${type}, PREEMPT) uses an idle server first and only interrupts a lower-ranked job.`, 'cevents', { eventIds: [ev.id] });
+      }
+    }
+  });
 
   // ── V28: epoch must be a valid ISO 8601 datetime when set ─────────────────────
   if (model.epoch != null && model.epoch !== '') {

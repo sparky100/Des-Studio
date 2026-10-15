@@ -12,10 +12,11 @@
 // Check: the arrival-weighted mean (0.3·T₁ + 0.4·T₂)/0.7 = 3.3333 = 1/(μ − λ),
 // the plain M/M/1 value, as it must be for a work-conserving discipline.
 //
-// Built from today's tools: PREEMPT(Server) is gated on "a high job is
+// Run two ways. Hand-built: PREEMPT(Server) is gated on "a high job is
 // waiting, the server is busy, and it is serving a low job" (lowInService).
 // The preempted low job keeps its arrival time, so FIFO resumes it ahead of
-// later low arrivals. Before Sprint 99 the interrupted job's stale completion
+// later low arrivals. Preempt-and-assign: ASSIGN(High Queue, Server, PREEMPT,
+// PRIORITY(cls)) alone, no counter. Before Sprint 99 the interrupted job's stale completion
 // still fired (cutting resumed service short and decrementing lowInService
 // twice), so the low class finished too early.
 import { describe, expect, it } from "vitest";
@@ -41,7 +42,8 @@ const NEVER = "1e12";
 
 const SERVICE = { dist: "Exponential", distParams: { mean: String(1 / MU) }, useEntityCtx: true };
 
-function model() {
+// Hand-built: a counter and a gating C-event decide when to PREEMPT.
+function handBuiltModel() {
   return {
     entityTypes: [
       { id: "high", name: "High", role: "customer", count: 0, attrDefs: [] },
@@ -77,9 +79,32 @@ function model() {
   };
 }
 
+// Preempt-and-assign (Sprint 99 Phase 2): one effect, no counter or gating event.
+function preemptAssignModel() {
+  const m = handBuiltModel();
+  m.entityTypes[0].attrDefs = [{ name: "cls", valueType: "number", defaultValue: 1, mutable: false }];
+  m.entityTypes[1].attrDefs = [{ name: "cls", valueType: "number", defaultValue: 2, mutable: false }];
+  m.stateVariables = [];
+  m.bEvents[3].effect = ["COMPLETE()"];
+  m.cEvents = [
+    { id: "serve_high", name: "Serve high", priority: 0,
+      condition: "queue(High Queue).length > 0",
+      effect: ["ASSIGN(High Queue, Server, PREEMPT, PRIORITY(cls))"],
+      cSchedules: [{ eventId: "done_high", ...SERVICE }] },
+    { id: "serve_low", name: "Serve low", priority: 1,
+      condition: "queue(Low Queue).length > 0 AND idle(Server).count > 0",
+      effect: ["ASSIGN(Low Queue, Server)"],
+      cSchedules: [{ eventId: "done_low", ...SERVICE }] },
+  ];
+  return m;
+}
+
 const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-describe("Preemptive-resume priority M/M/1 (two classes)", () => {
+describe.each([
+  ["hand-built PREEMPT", handBuiltModel],
+  ["ASSIGN … PREEMPT", preemptAssignModel],
+])("Preemptive-resume priority M/M/1 (two classes) — %s", (_label, model) => {
   const sojourn = { High: [], Low: [] };
   let lowServiceMeans = [];
   let interrupted = 0;
@@ -94,7 +119,7 @@ describe("Preemptive-resume priority M/M/1 (two classes)", () => {
     const lows = done.filter(e => e.type === "Low");
     lowServiceMeans.push(mean(lows.map(e => e.stages.reduce((s, st) => s + st.stageService, 0))));
     interrupted += lows.filter(e => e.stages.some(st => st.interruptions)).length;
-    finalCounters.push(r.snap.scalars.lowInService);
+    finalCounters.push(r.snap.scalars.lowInService ?? 0);
   }
 
   it(`high-priority time in system ≈ ${T_HIGH.toFixed(3)} (±${TOLERANCE * 100}%)`, { timeout: 120000 }, () => {

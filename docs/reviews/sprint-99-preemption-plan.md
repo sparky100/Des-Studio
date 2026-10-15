@@ -3,7 +3,7 @@
 **Sprint:** 99
 **Theme:** Make interrupted service (PREEMPT, FAIL, automatic breakdowns, shift changes) correct
 and measurable, then add preemption that needs no hand-built scaffolding.
-**Status:** Phase 1 in progress
+**Status:** Phase 1 shipped (PR #571); Phase 2 implemented
 **Owner:** parkinsonsj@gmail.com
 **Supersedes:** `docs/decisions/ADR-014-preemption-and-interruption-deferral.md` (Sprint 26
 deferral). PREEMPT has since shipped (Sprints 32, 41, 97); this sprint settles the open
@@ -85,7 +85,7 @@ automatic breakdown. `EntityAttr` service resumes with its remaining time. Metri
 warm-up truncation across an interruption. The new benchmark. Reference check (World Oil
 Network) unchanged: it never interrupts service.
 
-## Phase 2 — Preempt-and-assign (next PR)
+## Phase 2 — Preempt-and-assign (implemented)
 
 `ASSIGN(Queue, ServerType, PREEMPT[, Criterion][, Policy])`:
 
@@ -97,9 +97,30 @@ Network) unchanged: it never interrupts service.
    firing, so no other C-event can take it.
 
 `Policy` decides what happens to the displaced job: `RESUME` (default), `RESTART` (same duration
-again), `RESAMPLE` (new sample) or `DROP:<Queue>` (send it elsewhere, e.g. a rework queue or
-exit). Anti-thrash controls on the server or entity type: `maxPreemptions` per job, and
-`minServiceBeforePreempt`. Validation warns when PREEMPT can fire with an idle server, and when
+again), `RESAMPLE` (new sample) or `DROP:<Queue>` (send it to another queue, e.g. rework).
+Anti-thrash controls are options on the same ASSIGN, not entity-type fields, so they sit with the
+activity that preempts and need no schema change: `MAX:n` (a job is interrupted at most n times)
+and `MINSERVICE:t` (a job with less than t of service so far is left alone; checked whenever the
+activity is next tried, i.e. after any event).
+
+**As built** (`src/engine/preemptAssign.js`):
+- **Default victim:** the lowest-ranked job in service; a tie goes to the job with the least service so far (least work lost).
+- **Default criterion:** the queue's discipline key — `PRIORITY(attr)`, `PRIORITY`, `SPT` or `EDD`. A FIFO/LIFO queue ranks nothing, so without a `PRIORITY(attr)` criterion it never interrupts; V81 warns about this.
+- **Excluded combinations:** no skill, `ANY` or container clause.
+- **Carried claims:** a server held from an earlier stage is never taken.
+
+**Validation (V81):**
+- unknown or repeated options;
+- a queue that doesn't rank jobs;
+- a rank attribute missing from the queue's entity type;
+- an unknown DROP queue;
+- a C-event firing plain `PREEMPT(Type)` without checking `idle(Type)`.
+
+**Rename propagation:** `DROP:<Queue>` follows queue renames.
+
+**Benchmark:** the preemptive-priority benchmark runs both forms against the same analytic values.
+
+**SimPy export:** warns that the form is not translated (Phase 3 maps it to `PreemptiveResource`). Validation warns when PREEMPT can fire with an idle server, and when
 a criterion's attribute doesn't exist on the queue's entity type. The ASSIGN composer gets a
 "may interrupt a lower-priority job" option. The Priority ED template is rewritten to use it,
 dropping its counter and gating C-event.

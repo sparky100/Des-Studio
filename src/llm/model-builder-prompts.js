@@ -225,16 +225,21 @@ pattern, consult §10 directly.`,
     ✗ WRONG:   "effect": ["ASSIGN(Recovery Queue, Recovery Room)"] when "Recovery Room" is not a
                real staffed/equipped resource the user described — fabricated server type
 
-16. PREEMPT(ServerType) interrupts the FIRST busy/serving server of that type it finds — it has
-    no awareness of which entity that server is currently attending to, and no way to target a
-    specific server. It always preserves the interrupted entity's remaining service time exactly
-    (the engine stores and re-applies it automatically) and re-queues that entity with skipBalk —
-    no model-side wiring is needed for either behavior. Because PREEMPT cannot exclude a server
-    already dedicated to another protected case, a model with repeated/recurring preemption needs
-    a dedicated state-variable counter (incremented/decremented via SET in the same effect as the
-    ASSIGN/RELEASE that starts/ends the protected service) so the preempt condition can skip
-    servers already committed — see rule 12 for why that counter must be compared to a literal,
-    never to a dynamic queue length.
+16. For preemptive priority ("an urgent case takes a server from a less urgent one") use
+    ASSIGN(QueueName, ServerType, PREEMPT[, PRIORITY(attr)]) as the urgent queue's ONLY effect,
+    with condition "queue(QueueName).length > 0". It uses an idle server if there is one, and
+    otherwise interrupts the busy server whose entity ranks lowest (highest attr value), but only
+    if it ranks strictly below the waiting entity — and hands that server straight to it. The
+    interrupted entity re-queues with its remaining time (RESTART / RESAMPLE / DROP:Queue change
+    that). Rank comes from the queue's PRIORITY(attr) discipline, or the PRIORITY(attr) argument
+    (required for a FIFO queue, and when the urgent and normal cases are different entity types:
+    give both types the same numeric attribute, e.g. urgent 0, normal 1–5). No state-variable
+    counter and no separate PREEMPT C-event are needed.
+    ✓ CORRECT: cEvent condition "queue(TraumaQueue).length > 0",
+               effect ["ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))"]
+    ✗ WRONG:   a priority-0 cEvent with ["PREEMPT(Doctor)"] plus a traumaInService counter —
+               PREEMPT(ServerType) interrupts the FIRST busy server it finds, even one treating
+               another urgent case, and the freed server goes to whichever activity fires next.
 
 17. FAIL(ServerType)/REPAIR(ServerType) are manual macros for explicit, scenario-triggered outages
     (e.g. a user action, an inspection finding, a one-off breakdown). For routine, statistically
