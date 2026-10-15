@@ -276,7 +276,7 @@ export function applyEffect(effect, ctx) {
     // Scalar effects (VAR++, VAR--, VAR+=N, VAR=val)
     if (!handled) {
       try {
-        if (!applyScalar(part, state, clock, (variable, from, to) => stateChanges.push({ variable, from, to }))) {
+        if (!applyScalar(part, state, clock, (/** @type {string} */ variable, /** @type {any} */ from, /** @type {any} */ to) => stateChanges.push({ variable, from, to }))) {
           msgs.push(`Unknown effect: ${part}`);
         }
       } catch (/** @type {any} */ e) {
@@ -326,6 +326,22 @@ export function fireBEvent(ev, ctx) {
     if (cust && cust.status !== "waiting") {
       return {
         msgs:       [`Skipped: "${ev.name}" — #${ev._contextCustId} already ${cust.status}`],
+        felEntries: [],
+        skipped:    true,
+        stateChanges: [],
+      };
+    }
+  }
+
+  // Interrupted-service guard (Sprint 99): this completion was scheduled for
+  // service that has since been cut short by PREEMPT, FAIL, a breakdown, a
+  // shift change or FINISH. The job either resumed (with a new completion) or
+  // finished, so none of this event's effects apply — and it isn't counted.
+  if (ev._serviceEpoch != null && ev._contextCustId != null) {
+    const cust = findEntityById(ctx.index, entities, ev._contextCustId);
+    if (cust && (cust._serviceEpoch ?? 0) !== ev._serviceEpoch) {
+      return {
+        msgs:       [`Skipped: "${ev.name}" — #${ev._contextCustId} service was interrupted after this was scheduled`],
         felEntries: [],
         skipped:    true,
         stateChanges: [],
@@ -592,6 +608,8 @@ export function fireCEvent(ev, ctx) {
   }
 
   // Process structured cSchedules
+  /** @type {Map<any, number>} */
+  const dueThisFiring = new Map();
   for (const cs of resolvedSchedules) {
     const tmpl = (model.bEvents || []).find((/** @type {any} */ b) => b.id === cs.eventId);
     if (!tmpl) { msgs.push(`cSchedule: B-event "${cs.eventId}" not found`); continue; }
@@ -610,9 +628,17 @@ export function fireCEvent(ev, ctx) {
       : [cs.useEntityCtx ? effectCtx._lastCustId : undefined];
 
     for (const perCustId of batchIds) {
-      // Resolve delay
+      const ctxCust = perCustId != null ? findEntityById(ctx.index, ctx.entities, perCustId) : null;
+      // Resolve delay. A job resuming after an interruption (PREEMPT, FAIL, a
+      // breakdown or a shift change) gets exactly its remaining time — for
+      // every distribution type, and including 0 when it was interrupted at
+      // its due time (Sprint 99).
       let delay = 0;
-      if (cs.dist === "ServerAttr") {
+      if (ctxCust && ctxCust._remainingService != null) {
+        delay = Math.max(0, ctxCust._remainingService);
+        delete ctxCust._remainingService;
+        msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [remaining service]`);
+      } else if (cs.dist === "ServerAttr") {
         const srvId    = effectCtx._lastSrvId;
         const srv      = findEntityById(ctx.index, ctx.entities, srvId);
         const attrName = cs.distParams?.attr || "serviceTime";
@@ -646,21 +672,21 @@ export function fireCEvent(ev, ctx) {
         delay = (pair && Number.isFinite(speedVal) && speedVal > 0) ? pair.distance / speedVal : 0;
         msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [Distance(${from}→${to})=${delay.toFixed(3)}]`);
       } else {
-        // Check if the customer has remaining service from preemption/failure
-        const cust = perCustId ? findEntityById(ctx.index, ctx.entities, perCustId) : null;
-        if (cust && cust._remainingService != null && cust._remainingService > 0) {
-          delay = cust._remainingService;
-          delete cust._remainingService;
-          msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [remaining service]`);
-        } else {
-          const resolvedCParams = ctx.registry
-            ? ctx.registry.resolve(cs.distParams || {}, cs.paramSource)
-            : (cs.distParams || {});
-          delay = Math.max(0, sample(cs.dist || "Fixed", resolvedCParams, ctx.rng, null, { clock, streamName: `service:${ev.id}`, streamRegistry: ctx.streamRegistry }));
-          msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${cs.dist}(${delay.toFixed(3)})]`);
-        }
+        const resolvedCParams = ctx.registry
+          ? ctx.registry.resolve(cs.distParams || {}, cs.paramSource)
+          : (cs.distParams || {});
+        delay = Math.max(0, sample(cs.dist || "Fixed", resolvedCParams, ctx.rng, null, { clock, streamName: `service:${ev.id}`, streamRegistry: ctx.streamRegistry }));
+        msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${cs.dist}(${delay.toFixed(3)})]`);
       }
 
+      const bound = cs.useEntityCtx && ctxCust;
+      if (bound) {
+        // When the service is due, so an interruption knows exactly how much
+        // is left. Several entries in one firing: the last one due is the
+        // end of the service.
+        ctxCust._serviceDueAt = Math.max(dueThisFiring.get(ctxCust) ?? -Infinity, clock + delay);
+        dueThisFiring.set(ctxCust, ctxCust._serviceDueAt);
+      }
       felEntries.push({
         ...tmpl,
         scheduledTime:       clock + delay,
@@ -668,6 +694,10 @@ export function fireCEvent(ev, ctx) {
         _contextCustId:      cs.useEntityCtx ? perCustId : undefined,
         _contextSrvId:       cs.useEntityCtx ? effectCtx._lastSrvId  : undefined,
         _requiresCtxEntity:  cs.useEntityCtx ? true : undefined,
+        // Service epoch at scheduling time: an interruption bumps the entity's
+        // epoch, and fireBEvent skips a completion whose stamp no longer
+        // matches — it belongs to service that was cut short.
+        _serviceEpoch:       bound ? (ctxCust._serviceEpoch ?? 0) : undefined,
       });
 
       // Store scheduled duration on server for preemption/failure remaining-service calculation

@@ -763,6 +763,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // Observational only — records { time, variable, from, to, sourceEventId,
   // sourceEventName, phase } for every SET / ROUND_ROBIN / scalar-shorthand
   // write, in chronological order. Exposed on the run result and per-step.
+  /** @type {any[]} */
   const _stateChanges = [];
 
   // Core structured trace emitter. Returns a trace entry with all required
@@ -1138,7 +1139,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
           const qName = stage.queueName;
           if (!qName) continue;
           if (!recentWaits[qName]) recentWaits[qName] = { sum: 0, n: 0 };
-          recentWaits[qName].sum += truncateInterval(stage.waitStartedAt, stage.serviceStartedAt);
+          recentWaits[qName].sum += stageWaitAfterWarmup(stage);
           recentWaits[qName].n++;
         }
       }
@@ -1171,7 +1172,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       const qName = record.queueName;
       if (!qName) continue;
       if (!_gridWaits[qName]) _gridWaits[qName] = { sum: 0, n: 0 };
-      _gridWaits[qName].sum += truncateInterval(record.waitStartedAt, record.serviceStartedAt);
+      _gridWaits[qName].sum += stageWaitAfterWarmup(record);
       _gridWaits[qName].n++;
     }
     _gridNewStages = [];
@@ -1832,7 +1833,9 @@ const cycleLog = [];
         for (const k in _arbitration) delete _arbitration[k];
         const ctx = makeCtx(null);
         ctx.clock = clock;
-        let msgs, felEntries, effectNoOp = false, stateChanges;
+        /** @type {any[]|undefined} */
+        let stateChanges;
+        let msgs, felEntries, effectNoOp = false;
         if (ev._isShiftWhen) {
           ev._fired = true;
           const fakeEv = { serverTypeName: ev.entityTypeName, newCapacity: ev.capacity };
@@ -2257,12 +2260,27 @@ const cycleLog = [];
     return Math.max(0, end - Math.max(start, _statsResetTime));
   }
 
+  // A stage's wait and service after warm-up. Service delivered before an
+  // interruption (stage.serviceSegments, Sprint 99) lies inside
+  // [waitStartedAt, serviceStartedAt]: it is moved from wait to service, each
+  // segment truncated at the warm-up boundary on its own.
+  function stageSegmentsAfterWarmup(/** @type {any} */ segments) {
+    if (!Array.isArray(segments) || !segments.length) return 0;
+    return segments.reduce((/** @type {number} */ sum, /** @type {any} */ seg) => sum + truncateInterval(seg.serviceStartedAt, seg.serviceEndedAt), 0);
+  }
+  function stageWaitAfterWarmup(/** @type {any} */ stage) {
+    return Math.max(0, truncateInterval(stage.waitStartedAt, stage.serviceStartedAt) - stageSegmentsAfterWarmup(stage.serviceSegments));
+  }
+  function stageServiceAfterWarmup(/** @type {any} */ stage) {
+    return truncateInterval(stage.serviceStartedAt, stage.serviceEndedAt) + stageSegmentsAfterWarmup(stage.serviceSegments);
+  }
+
   function entityWaitAfterWarmup(/** @type {any} */ entity) {
     if (!entity?.stages?.length) {
       if (entity?.serviceStart == null) return 0;
       return truncateInterval(entity.arrivalTime, entity.serviceStart);
     }
-    return entity.stages.reduce((/** @type {any} */ sum, /** @type {any} */ stage) => sum + truncateInterval(stage.waitStartedAt, stage.serviceStartedAt), 0);
+    return entity.stages.reduce((/** @type {any} */ sum, /** @type {any} */ stage) => sum + stageWaitAfterWarmup(stage), 0);
   }
 
   function entityServiceAfterWarmup(/** @type {any} */ entity) {
@@ -2275,7 +2293,7 @@ const cycleLog = [];
     // it's accounted for separately (sojourn-only), not folded into avgSvc.
     return entity.stages
       .filter((/** @type {any} */ stage) => stage.serverType !== "delay")
-      .reduce((/** @type {any} */ sum, /** @type {any} */ stage) => sum + truncateInterval(stage.serviceStartedAt, stage.serviceEndedAt), 0);
+      .reduce((/** @type {any} */ sum, /** @type {any} */ stage) => sum + stageServiceAfterWarmup(stage), 0);
   }
 
   function entitySojournAfterWarmup(/** @type {any} */ entity) {
@@ -2297,7 +2315,7 @@ const cycleLog = [];
       for (const stage of e.stages) {
         const qName = stage.queueName || e.lastQueue || e.queue;
         if (!qName) continue;
-        const wait = truncateInterval(stage.waitStartedAt, stage.serviceStartedAt);
+        const wait = stageWaitAfterWarmup(stage);
         if (!byQueue[qName]) byQueue[qName] = [];
         byQueue[qName].push(wait);
       }
@@ -2354,9 +2372,11 @@ const cycleLog = [];
       .filter(w => w > 0);
     const inProgressWaits = waitingAtEnd.map(e => {
       const completed = e.stages?.length
-        ? e.stages.reduce((/** @type {any} */ sum, /** @type {any} */ st) => sum + truncateInterval(st.waitStartedAt, st.serviceStartedAt), 0)
+        ? e.stages.reduce((/** @type {any} */ sum, /** @type {any} */ st) => sum + stageWaitAfterWarmup(st), 0)
         : 0;
-      const partial = truncateInterval(e.lastStageStart ?? e.arrivalTime, clock);
+      // Waiting again after an interruption: the service it already received
+      // on this stage isn't wait.
+      const partial = Math.max(0, truncateInterval(e.lastStageStart ?? e.arrivalTime, clock) - stageSegmentsAfterWarmup(e._serviceSegments));
       return Math.max(0, completed + partial);
     }).filter(w => w > 0);
 

@@ -1,0 +1,113 @@
+# Sprint 99 — Preemption: Correct Interrupted Service, Then Preempt-and-Assign
+
+**Sprint:** 99
+**Theme:** Make interrupted service (PREEMPT, FAIL, automatic breakdowns, shift changes) correct
+and measurable, then add preemption that needs no hand-built scaffolding.
+**Status:** Phase 1 in progress
+**Owner:** parkinsonsj@gmail.com
+**Supersedes:** `docs/decisions/ADR-014-preemption-and-interruption-deferral.md` (Sprint 26
+deferral). PREEMPT has since shipped (Sprints 32, 41, 97); this sprint settles the open
+questions ADR-014 listed: scheduled-completion invalidation, metric treatment, and fairness/ordering.
+
+---
+
+## Where PREEMPT stands
+
+`PREEMPT(ServerType[, Criterion])` is a macro fired from an event's effect. It:
+
+1. picks a busy server of the type. With no criterion it takes the first; otherwise
+   `PRIORITY(attr)` (lowest value) or `LONGEST`/`SHORTEST` elapsed service (Sprint 97);
+2. records the job's remaining time (`_remainingService`), frees the server and any co-seized
+   servers, and re-queues the job without balking (`preemptCustomer`, `entities.js`). A server
+   carried from an earlier stage is just dropped and the job's current stage continues;
+3. when the job is next served, the remaining time replaces a fresh sample (preemptive-resume).
+
+FAIL, automatic MTBF/MTTR breakdowns and shift-close capacity retirement all use the same
+`preemptCustomer` path. FIFO orders by original arrival time, so an interrupted job resumes
+ahead of later arrivals, which is the standard preemptive-resume convention.
+
+## Problems found (reproduced on the engine, 2026-10)
+
+One server. A low-priority job needing 10 units starts at t=0. A high-priority job needing
+2 units arrives at t=5 and preempts it.
+
+| t | What happens |
+|---|---|
+| 0 | low job starts; completion scheduled for t=10 |
+| 5 | low job preempted, 5 remaining; high job served until t=7 |
+| 7 | low job resumes; completion scheduled for t=12 |
+| **10** | **the stale t=10 completion ends the low job** (8 units of service, not 10) |
+| 12 | the correct completion is skipped |
+
+1. **Stale completions.** Nothing cancels the interrupted job's pending completion. The only
+   guard is "is the job serving?", which is true again by t=10. The rest of that completion
+   event (`SET(counter, counter-1)`, `COST(…)`) also runs on a stale firing, so counters that
+   track work in progress drift. The Priority ED template's `traumaInService` is one.
+2. **Wait and service metrics.** The stage record measures wait as `serviceStart − stage start`
+   and service as `end − serviceStart`. After an interruption `serviceStart` is the resume time,
+   so service delivered before the interruption is counted as wait. In the run above the low
+   job's wait reads 7 (it queued for 2) and its service 3 (it received 10).
+3. **Remaining time silently lost.** The remaining time is only known when the completion was
+   scheduled with `useEntityCtx: true`, and it's only honoured for sampled distributions.
+   `EntityAttr`, `ServerAttr`, `Distance` and missing-context cases resume with a fresh full
+   duration instead.
+4. **No conditional or atomic preemption.** PREEMPT interrupts even when a server is idle, or
+   when the job in service outranks the one that triggered it. The freed server goes to
+   whichever C-event fires next, not necessarily the job that caused the preemption. Templates
+   need a counter, a gating C-event at priority 0 and careful C-event ordering to avoid
+   thrashing (the same job bumped repeatedly).
+5. **Over-stated validation.** The capability register lists "Preemptive priority ✓ —
+   Benchmark 6", but Benchmark 6 never uses PREEMPT; it is a non-preemptive priority queue.
+   There is no analytic check of preemptive priority.
+
+## Decisions
+
+- **Correctness fixes apply to every model.** Wait/service figures for models that preempt,
+  fail servers or close shifts mid-service will change to the correct values; stale completions
+  stop firing. Called out in the release notes.
+- **Preempt-and-assign is an option on ASSIGN** (`ASSIGN(Q, Server, PREEMPT[, Criterion])`),
+  not a new macro: it is "seize a server for this queue", with the extra power to take one.
+- **The new form only interrupts a job that ranks below the one waiting.** Plain `PREEMPT(...)`
+  keeps its current unconditional behaviour, so existing models are unchanged.
+
+## Phase 1 — Correct interrupted service (this PR)
+
+| # | Change | Where |
+|---|---|---|
+| 1a | **Service epoch.** Each interruption (`preemptCustomer`, non-carried) and FINISH bumps `cust._serviceEpoch`. Service completions scheduled from a C-event are stamped with the epoch at scheduling time. A B-event whose stamp no longer matches is skipped whole (no effects, not counted as an activity firing), like the existing renege guard. | `entities.js`, `macros.js`, `phases.js` |
+| 1b | **Interval-correct metrics.** On interruption the service delivered so far is kept as a segment (`cust._serviceSegments`). The stage record carries `serviceSegments` and `interruptions`; `stageWait`/`stageService` move those segments from wait to service. Summary statistics read stages through shared `stageWaitAfterWarmup` / `stageServiceAfterWarmup` helpers (warm-up truncation still applies per interval). | `macros.js` (`buildStageRecord`), `index.js`, `SweepViews.jsx` |
+| 1c | **Remaining time always known.** When a C-event schedules a service completion for an entity, its due time is recorded (`cust._serviceDueAt`). Remaining time is `due − now`, and the next service uses it for every distribution type, including 0 when the interruption fell exactly at the due time. | `phases.js`, `entities.js` |
+| 1d | **Analytic benchmark.** Two-class M/M/1 with preemptive-resume priority (λ₁ = 0.3, λ₂ = 0.4, μ = 1): expected time in system T₁ = 1/(1−ρ₁) = 1.429 and T₂ = 1/(1−ρ₁) + (λ₁+λ₂)/μ² / ((1−ρ₁)(1−ρ)) = 4.762. Their arrival-weighted mean is 3.333 = 1/(1−ρ), as it must be. Soak tier, ±5%. Relabel Benchmark 6 as non-preemptive; correct the capability register; mark ADR-014 superseded; refresh the Priority ED template's out-of-date limitations. | `tests/benchmarks/`, docs |
+
+**Tests.** The t=0/5/7/10/12 scenario above (low job gets exactly 10 units, finishes at 12,
+wait 2, service 10, one interruption, counter decremented once). The same for FAIL and an
+automatic breakdown. `EntityAttr` service resumes with its remaining time. Metrics with
+warm-up truncation across an interruption. The new benchmark. Reference check (World Oil
+Network) unchanged: it never interrupts service.
+
+## Phase 2 — Preempt-and-assign (next PR)
+
+`ASSIGN(Queue, ServerType, PREEMPT[, Criterion][, Policy])`:
+
+1. If a server of the type is idle, behave exactly like `ASSIGN(Queue, ServerType)`.
+2. Otherwise choose a victim among busy servers by `Criterion` (default: the waiting job's
+   queue discipline attribute, i.e. `PRIORITY(attr)` for a PRIORITY queue, else `SHORTEST`).
+3. Only interrupt when the victim ranks strictly below the head of `Queue` under that criterion.
+4. Interrupt it (Phase 1 semantics) and give **that** server to the head of `Queue` in the same
+   firing, so no other C-event can take it.
+
+`Policy` decides what happens to the displaced job: `RESUME` (default), `RESTART` (same duration
+again), `RESAMPLE` (new sample) or `DROP:<Queue>` (send it elsewhere, e.g. a rework queue or
+exit). Anti-thrash controls on the server or entity type: `maxPreemptions` per job, and
+`minServiceBeforePreempt`. Validation warns when PREEMPT can fire with an idle server, and when
+a criterion's attribute doesn't exist on the queue's entity type. The ASSIGN composer gets a
+"may interrupt a lower-priority job" option. The Priority ED template is rewritten to use it,
+dropping its counter and gating C-event.
+
+## Phase 3 — Declarative preemptive priority (later)
+
+An activity setting, "Higher-priority arrivals interrupt service", with policy and limits,
+compiled to a Phase 2 ASSIGN. SimPy export maps it to `simpy.PreemptiveResource` (`preempt=True`,
+handling `simpy.Interrupt` with the remaining time) instead of the current NOT SUPPORTED stub.
+The trace viewer shows each preemption (victim, why chosen, remaining time), closing the
+Sprint 97 backlog item.

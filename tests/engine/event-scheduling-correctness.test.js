@@ -449,7 +449,10 @@ describe('H6 — RELEASE does not misapply a stale event to a different customer
     // mutated by an event that was never bound to it having "completed".
     expect(repairJob.status).toBe('waiting');
 
-    const skipLog = result.log.filter(e => e.message?.includes('RELEASE(Server) skipped'));
+    // Since Sprint 99 the stale completion is stopped before any of its
+    // effects run (the preemption invalidated it), rather than by RELEASE's
+    // own claim guard.
+    const skipLog = result.log.filter(e => e.message?.includes('"Stage 1 Release"') && e.message?.includes('service was interrupted'));
     expect(skipLog.length).toBeGreaterThan(0);
 
     // The bug's signature log line must never appear for OtherJob.
