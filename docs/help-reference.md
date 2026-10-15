@@ -80,7 +80,7 @@ State-triggered events. Fire when condition becomes true. Defined in `cEvents[]`
 
 **What the right-hand side of a condition can be:** Each clause compares a left side with a right side — no arithmetic on either side. The right-hand side is read **dynamically** (its current value at the moment the condition is checked) when it is:
 - one of the function-call tokens `queue(Q).length`, `idle(T).count`, `busy(T).count`, `container(C).level|capacity|min|max`, `attr(T, a)` — e.g. shortest-queue routing `queue(A).length < queue(B).length`;
-- a **state variable**, written as its bare name or as `state.<name>` — e.g. `clock >= closureStart`, `queue(TraumaQueue).length > traumaInService`.
+- a **state variable**, written as its bare name or as `state.<name>` — e.g. `clock >= closureStart`, `queue(Waiting).length > maxQueueLength`.
 
 Anything else is a **literal**: a number (`3`), or text (`"sour"`) — e.g. `Entity.grade == "sour"`. A bare word is read as a state variable only if a state variable of exactly that name exists; otherwise it stays literal text. `Entity.<attr>` on the right-hand side is not resolved — it is literal text.
 
@@ -158,6 +158,7 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | ASSIGN (any type) | `ASSIGN(QueueName, ANY, "Skill")` | Seizes an idle server of **any** server type that has the named skill, instead of one fixed type | Pools candidates across every server type; still prefers higher `skillProfiles[].priority` when multiple match | Omitting the skill argument (ANY has no meaning without a skill filter); naming a real server type `ANY` (reserved word, V62) |
 | ASSIGN (scan ahead) | `ASSIGN(QueueName, ServerType, Entity.attrName, SCAN)` or `ASSIGN(QueueName, ANY, "Skill", SCAN:N)` | Without SCAN only the **front** entity is tried — if no idle server has its skill, nothing is assigned even when entities behind it could be served. With SCAN the queue is walked in discipline order and the first entity whose skill has an idle server is assigned (FIFO order is kept among entities of the same skill). `SCAN:N` limits the look-ahead to the first N entities. Lets one queue per hub hold several grades/skills instead of one queue per grade | Same as skilled ASSIGN once an entity is chosen; the step log notes how many entities were passed | Using SCAN without a skill argument (V77); N must be a positive whole number (V77) |
 | ASSIGN (consumable-gated) | `ASSIGN(QueueName, ServerType, ContainerId:amount)` | Gates the assignment on a declared container having level ≥ `amount`; server claim and container deduction commit atomically together | Deducts `amount` from the container level (same clamping/logging as DRAIN); no-op (both server and container untouched) if either check fails | Referencing an undeclared container (V27); combine with a skill by putting the container clause last: `ASSIGN(Queue, Server, "Skill", ContainerId:amount)` |
+| ASSIGN (preempt) | `ASSIGN(QueueName, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t])` | Serves the front entity, taking a server if none is idle. An idle server → exactly a plain ASSIGN. Otherwise a busy server whose entity ranks **strictly below** the front entity is interrupted and handed to it in the same firing (no other activity can take it). Rank is the queue's discipline key (`PRIORITY(attr)`, `PRIORITY`, `SPT`, `EDD`; lower value = more urgent) or `PRIORITY(attr)` given as the Criterion; equal rank never interrupts. The victim is the lowest-ranked entity in service (ties: least service so far); `LONGEST`/`SHORTEST` pick by service so far instead. Policy for the interrupted entity: `RESUME` (default, its remaining time), `RESTART` (its full time again), `RESAMPLE` (a new sample) or `DROP:Queue` (joins that queue instead). `MAX:n` — an entity is interrupted at most n times; `MINSERVICE:t` — only an entity with at least t of service so far is interrupted (checked when the activity is next tried, i.e. after any event). Needs no counter or gating activity: a condition of `queue(Q).length > 0` is enough | Interrupted entity re-queues as with PREEMPT (its pending completion never fires) | A FIFO/LIFO queue with no `PRIORITY(attr)` criterion never interrupts anything (V81); unknown options, a missing rank attribute or an unknown DROP queue (V81). Not with a skill, ANY or container clause |
 | RENEGE | `RENEGE(ctx)` | Removes context entity from queue (abandonment) | Increments reneged count | Using entity type name instead of ctx |
 | RENEGE_OLDEST | `RENEGE_OLDEST(EntityType)` | Removes oldest entity of specified type from queue | Increments reneged count; used for max-queue policies | Confusing with RENEGE(ctx) |
 | CANCEL | `CANCEL(EventName)` | Removes a pending scheduled event for the current context entity only | Deletes the matching FEL entry so it never fires | Expecting it to cancel every entity's instance of that event — it is entity-scoped only, not global |
@@ -166,7 +167,7 @@ All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 | Macro | Syntax | Purpose | Side Effects | Common Mistakes |
 |-------|--------|---------|--------------|-----------------|
-| PREEMPT | `PREEMPT(ServerType[, Criterion])` | Interrupts an in-service entity of a busy server, replaces with a higher-priority entity. Optional Criterion selects which busy server to interrupt when more than one is busy: `PRIORITY(attrName)` (lowest value targeted), `LONGEST`/`SHORTEST` (by elapsed service time). Omitted or unrecognized criterion picks the first busy server (today's behavior). | Displaced entity re-queues with remaining service preserved; if the entity was co-seized (COSEIZE), any other claimed servers are released too | Using without priority queue discipline |
+| PREEMPT | `PREEMPT(ServerType[, Criterion])` | Interrupts an in-service entity of a busy server, replaces with a higher-priority entity. Optional Criterion selects which busy server to interrupt when more than one is busy: `PRIORITY(attrName)` (lowest value targeted), `LONGEST`/`SHORTEST` (by elapsed service time). Omitted or unrecognized criterion picks the first busy server (today's behavior). | Displaced entity re-queues with remaining service preserved (any service distribution) and its original completion is cancelled — it never fires, nor do its other effects; results count the service already received as service, not wait. If the entity was co-seized (COSEIZE), any other claimed servers are released too | Using without priority queue discipline; firing it from an activity that doesn't check `idle(ServerType)` can interrupt a job while a server is idle (V81) — prefer ASSIGN … PREEMPT |
 | FAIL | `FAIL(ServerType[, N])` | Places up to N servers into failed (unavailable) state; interrupts any in-progress service on servers that must be preempted. Omitted or non-positive N means "all" (unchanged behavior). Prefers idle servers first — busy/serving ones are only touched once idle capacity runs out. | Sets server(s) to failed; in-progress entity re-queues with remaining service time; if the entity was co-seized (COSEIZE), any other claimed servers are released too | For pool scope, all servers fail at once; prefer unit scope for realistic modelling; requesting more than N are available fails all available and notes the shortfall |
 | REPAIR | `REPAIR(ServerType[, N])` | Restores up to N failed servers to idle, oldest-failure-first. Omitted or non-positive N means "all" (unchanged behavior). | Sets server(s) to idle; triggers C-scan | Repairing non-failed server (no effect); requesting more than N are failed repairs all failed and notes the shortfall |
 | FINISH | `FINISH(ServerType[, Criterion])` | Ends the in-progress service of the entity a busy server of ServerType is currently serving — right now, not at a scheduled time. Optional Criterion (same vocabulary as PREEMPT: `PRIORITY(attrName)`, `LONGEST`, `SHORTEST`) selects which busy server to target when more than one is busy; omitted or unrecognized criterion picks the first busy server (today's behavior). | Marks the entity done, releases the server, records the stage — same outcome as COMPLETE() but triggered by a condition instead of a delay | Use for "activity of unknown duration" (service ends when a condition becomes true); no busy server of that type → logs and no-ops |
@@ -236,6 +237,16 @@ An entity can keep one resource while it passes through later stages — a tanke
 
 - A failure or preemption of one resource interrupts only the stage it belongs to (resources seized together by one ASSIGN/COSEIZE): if the lane fails, the transit is re-queued and the tanker keeps its VLCC.
 - If the carried resource itself fails or is preempted, the entity loses it but continues its current stage; the later RELEASE of it simply routes the entity onward.
+
+### Preemptive Priority
+
+To let an urgent case take a resource from a less urgent one, give its Conditional event the effect `ASSIGN(UrgentQueue, Doctor, PREEMPT, PRIORITY(priority))` and the condition `queue(UrgentQueue).length > 0`. In the effect builder: ASSIGN → tick **May interrupt a lower-priority job (PREEMPT)**.
+
+- An idle resource is used first. Otherwise the resource serving the lowest-ranked entity is interrupted, but only if that entity ranks strictly below the waiting one, and it goes straight to the waiting entity.
+- Rank: lower value = more urgent. It comes from the queue's PRIORITY discipline, or the **Rank by** attribute. Every entity type that can hold the resource needs that numeric attribute (e.g. trauma 0, patients 1–5). Equal rank never interrupts.
+- The interrupted entity re-queues and, by default, resumes with its remaining time. **Interrupted job** can instead restart its full time, get a new sampled time, or go to another queue (`DROP:Queue`). `MAX:n` limits how often one entity can be interrupted; `MINSERVICE:t` leaves an entity that has had less than t of service alone.
+- No counter state variable or separate PREEMPT event is needed. Plain `PREEMPT(Type)` still works, but it interrupts whichever busy resource it finds first.
+- See the **Priority ED with Balking** template.
 
 ### Turnaround After Release
 
@@ -442,8 +453,8 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 
 | Metric | Meaning | Interpret High | Interpret Low |
 |--------|---------|----------------|---------------|
-| avgWait | Mean waiting time across all queues (post-warmup) | Congestion, insufficient capacity | Adequate capacity or low utilisation |
-| avgSvc | Mean service time | Complex service or slow servers | Fast service or simple tasks |
+| avgWait | Mean waiting time across all queues (post-warmup). Service received before an interruption counts as service, not wait | Congestion, insufficient capacity | Adequate capacity or low utilisation |
+| avgSvc | Mean service time (all service intervals when service was interrupted) | Complex service or slow servers | Fast service or simple tasks |
 | avgSojourn | Mean end-to-end time (wait + service, served + reneged only) | System-wide delays | Efficient flow |
 | avgTimeInSystem | Weighted mean time in system (all entities, incl. in-progress at 0.5 weight) | System-wide delays including unfinished work | Efficient flow |
 | servedRatio | Service completion rate (served / total, 0–1) | Most entities complete service | Many entities still in system or reneging |
@@ -527,7 +538,7 @@ Each container reports **min, avg, max and final** level over the post-warm-up p
 
 ### Interruptions
 
-Per-resource count of preemption events (PREEMPT/FAIL macro firings that cut off in-progress service). A high count alongside a low `scheduleAdherence` or high `starvationPct` usually points to a failure/MTBF-MTTR model or a higher-priority job repeatedly bumping lower-priority work — see Server Failure Model above.
+Per-resource count of preemption events (PREEMPT, `ASSIGN … PREEMPT`, FAIL, breakdowns and shift closes that cut off in-progress service). Each entity's stage record also carries `interruptions` and `serviceSegments` (the service intervals before each interruption). An interrupted entity's original completion never fires, and it resumes with exactly its remaining time. A high count alongside a low `scheduleAdherence` or high `starvationPct` usually points to a failure/MTBF-MTTR model or a higher-priority job repeatedly bumping lower-priority work — see Server Failure Model above.
 
 ### Queue Rejections
 
@@ -632,6 +643,7 @@ Gaps in the numbering (e.g. no V7) are intentional — codes were retired or ren
 | V-SKILL-2 (ANY variant) | `ASSIGN(Q, ANY, "Skill")` references a skill no registered server type actually has | The cross-type pool is guaranteed empty — add the skill to a server type, or correct the skill name |
 | V76 | A condition compares a numeric value with non-numeric text that is not a state variable or dynamic reference (e.g. `clock >= closureStrat`) | The clause is always false — fix the spelling, or declare the name as a state variable |
 | V79 | A `quantityAttr` attribute has no default value and no distribution | Every entity's quantity is 0 unless an effect sets it |
+| V81 | `ASSIGN(…, PREEMPT, …)` with an unknown option, a queue that doesn't rank entities (FIFO/LIFO, no `PRIORITY(attr)`), a rank attribute the entity type lacks, or a `DROP:` queue that doesn't exist; or a Conditional event that fires `PREEMPT(Type)` without checking `idle(Type)` | The preemption never happens, or it interrupts a job while a resource is idle |
 | W-CAP-01 | Two or more Conditional events SEIZE/ASSIGN the same server type | Results may be sensitive to Conditional event priority ordering |
 | W-CAP-02 | Bound event schedule has an Exponential mean interval < 0.001 | simmodlr models discrete entities — consider SD Studio for continuous flow |
 

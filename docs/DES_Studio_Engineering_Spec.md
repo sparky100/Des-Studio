@@ -99,6 +99,7 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 | `phases.js` | Phase A (clock advance), Phase B (B-Event fire), Phase C (C-scan with restart rule) |
 | `macros.js` | 24 effect macros: ARRIVE, ASSIGN, BATCH, CANCEL, COMPLETE, COSEIZE, COST, DELAY, DRAIN, FAIL, FILL, FINISH, MATCH, PREEMPT, RELEASE, RELEASE_COSEIZED, RENEGE, RENEGE_OLDEST, REPAIR, ROUND_ROBIN, SET, SET_ATTR, SPLIT, UNBATCH |
 | `entities.js` | Entity lifecycle, queue discipline sort functions, server pool management, `_busyStart`/`_busyTime` utilisation tracking. `attemptQueueJoin(entity, queueName, clock, ctx, opts)` is the single centralized join function — called from every queue-join site (ARRIVE, RELEASE, BATCH/UNBATCH/SPLIT, conditional/probabilistic routing, loop-guard exit, preemption re-queue) and enforces balking (F11.2), capacity/overflow (F11.1/F11.3, recursing through `overflowDestination` chains with a `visitedQueues` cycle guard), and queue-level auto-reneging (`renegeDist`) uniformly regardless of how the entity reaches the queue. |
+| `preemptAssign.js` | `ASSIGN(Queue, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t])` preempt-and-assign (Sprint 99): option parser (`parsePreemptOptions`, shared with V81), rank/victim selection, interrupt + hand-over in one firing. See §3.1.0b |
 | `distributions.js` | Sampler registry, seeded RNG (mulberry32), all 14 distribution types |
 | `conditions.js` | Safe predicate evaluator — no `eval`, no `new Function` |
 | `validation.js` | V1–V70 (V7 unused); 79 distinct rules including named V-SKILL-*/V-CAL-*/V-SLOT-* rules, pre-run gate |
@@ -166,6 +167,7 @@ while (fel.length > 0 && !terminationMet(state)) {
 | All sampling uses `state.rng` (mulberry32), never `Math.random()` | `distributions.js` sampler registry |
 | Predicates are evaluated by a safe parser, not `eval` | `conditions.js:evaluateCondition()` |
 | V38: RELEASE before COMPLETE in same B-Event → warning | `validation.js:checkV38()` |
+| A completion scheduled for service that was later interrupted never fires (service epoch, Sprint 99) | `entities.js:noteServiceInterrupted()`, `phases.js:fireBEvent()` |
 
 ---
 
@@ -530,6 +532,16 @@ The returned `Engine` object exposes:
 
 `makeFailureEvents(model, rng, streamRegistry)` (`index.js:326-387`) is a genuine engine-automatic feature, not a model-authoring pattern built from B-events. For every server entityType with `mtbfDist`/`mtbfDistParams` (alias: `failureDist`/`failureDistParams`) and `mttrDist`/`mttrDistParams` (alias: `repairDist`/`repairDistParams`) set, the engine internally generates FAILURE/REPAIR pseudo-events with zero B-event/C-event authoring required by the model author. `failureScope` selects the blast radius: `"unit"` (default) fails one server instance per failure event; `"pool"` fails every server of that type simultaneously. The manual `FAIL`/`REPAIR` macros remain available for explicit, scenario-triggered outages (e.g. conditional on something the auto-schedule can't express) but are a separate mechanism layered on top, not a prerequisite for MTBF/MTTR behaviour.
 
+#### 3.1.0b Interrupted service and preempt-and-assign (Sprint 99)
+
+Every interruption of service — `PREEMPT`, `FAIL`, an automatic MTBF/MTTR breakdown, shift-close capacity retirement — goes through `noteServiceInterrupted()` (`entities.js`):
+
+- **Service epoch.** The entity's `_serviceEpoch` is bumped. Bound completions carry the epoch they were scheduled under; `fireBEvent()` skips an event whose epoch no longer matches. The skipped event's other effects don't run and it is not counted as a firing.
+- **Stage records.** Service delivered before the interruption is kept as a segment. `buildStageRecord()` emits `serviceSegments` and `interruptions` and counts segment time as service, not wait. Warm-up truncation applies per interval.
+- **Remaining time.** On resume the entity is served for its remaining time, for every service distribution (including EntityAttr, ServerAttr and Distance).
+
+`ASSIGN(Queue, ServerType, PREEMPT, …)` (`preemptAssign.js`): an idle server → exactly a plain ASSIGN. Otherwise, among busy servers whose job ranks strictly below the head of Queue, a victim is interrupted and that server is handed to the head in the same firing, so no other C-event can take it. Rank is the queue discipline key (`PRIORITY(attr)`, `PRIORITY`, `SPT`, `EDD`; lower = more urgent) or a `PRIORITY(attr)` criterion; equal rank never interrupts. Default victim: lowest-ranked, ties to least service so far; `LONGEST`/`SHORTEST` pick by service so far. Policy `RESUME` (default) / `RESTART` / `RESAMPLE` / `DROP:<Queue>`; `MAX:n` caps interruptions per job, `MINSERVICE:t` protects jobs with less than t of service. Not combined with skill, `ANY` or container clauses; a carried claim is never taken. Validated by V81. Analytic check: `tests/benchmarks/preemptive-priority.test.js` (two-class M/M/1 preemptive-resume, ±5%).
+
 #### 3.1.1 Wait time computation (Sprint 83)
 
 The engine's `getSummary()` computes `avgWait` as a weighted average across three entity pools:
@@ -762,7 +774,9 @@ function exportToSimPy(model: ModelJson): {
 | 1 | No macro in `TODO_MACRO_SET` detected in any effect field | Script is complete and runs as-is after `pip install simpy` |
 | 2 | One or more macros from `TODO_MACRO_SET` found | Each unsupported macro is replaced with an annotated `# TODO` stub; the rest of the script is complete |
 
-`TODO_MACRO_SET = { RENEGE, BATCH, RENEGE_OLDEST, MATCH, FAIL, REPAIR, PREEMPT }`
+`TODO_MACRO_SET = { RENEGE, BATCH, RENEGE_OLDEST, MATCH, FAIL, REPAIR, PREEMPT, FINISH, RELEASE_COSEIZED, JOIN }`
+
+`ASSIGN(Queue, ServerType, PREEMPT, …)` is not translated: the export emits a NOT SUPPORTED warning and the generated code waits for an idle server.
 
 Note: all macros in `TODO_MACRO_SET` are fully implemented in the JS Three-Phase engine. They appear as stubs only because their Python translation is non-trivial to auto-generate.
 

@@ -84,7 +84,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing | N/A Not applicable
 | Server utilisation tracking | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ per-type utilisation | — |
 | Shift schedules (capacity change) | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ SHIFT_CHANGE B-event | — |
 | Dynamic capacity increase/decrease | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ retireIdleExcessServers | — |
-| Resource preemption | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ PREEMPT | — |
+| Resource preemption | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ PREEMPT; preemptive priority via `ASSIGN … PREEMPT` (Sprint 99) | — |
 | Breakdowns / failures | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ FAIL; MTBF auto-scheduling | — |
 | Repair / MTTR | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ REPAIR; MTTR auto-scheduling | — |
 | Multiple resource types per task | ⚠️ | ⚠️ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ COSEIZE | — |
@@ -305,7 +305,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing | N/A Not applicable
 | Core DES engine (Three-Phase) | ✅ Competitive | Unique implementation of Pidd's Three-Phase method; none of the comparators use this approach. |
 | Entity lifecycle (create → route → dispose) | ✅ Competitive | 19 macros cover the complete vocabulary. |
 | Queue disciplines (FIFO/LIFO/PRIORITY/SPT/EDD) | ✅ Competitive | Exceeds most open-source tools; matches professional tools. |
-| Resource management (pool, shift, preempt, fail) | ✅ Competitive | PREEMPT, FAIL, REPAIR, SHIFT_CHANGE all implemented. |
+| Resource management (pool, shift, preempt, fail) | ✅ Competitive | PREEMPT, FAIL, REPAIR, SHIFT_CHANGE all implemented; Sprint 99 added preempt-and-assign (`ASSIGN … PREEMPT`) and made every interruption cancel the stale completion. |
 | Statistical output (CI, replication, sweep) | ✅ Competitive | One of the strongest statistical output layers among all comparators. |
 | Distribution fitting | ✅ Competitive | fitDistribution() in Sprint 20; competes with Arena Input Analyzer. |
 | Visual Designer canvas | ✅ Competitive | @xyflow/react-based with Dagre layout (Sprint 77); competitive for a browser tool. |

@@ -100,6 +100,10 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
         skills.forEach(skill=>{
           opts.push({label:`Start ${cName} with ${s} (${skill}) and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`, value:`ASSIGN(${q.name}, ${s}, "${skill}")`});
         });
+        // Sprint 99 — preempt-and-assign, offered when the queue ranks its entities.
+        if (/^(PRIORITY(\(\w+\))?|SPT|EDD)$/i.test(String(q.discipline||'').trim())) {
+          opts.push({label:`Start ${cName} with ${s} and ${q.customerType||'entity'} from ${queueDisplayName(q.name)} — if no ${s} is free, take one from lower-priority work`, value:`ASSIGN(${q.name}, ${s}, PREEMPT)`});
+        }
         // Entity-driven skill: use entity's string attributes as skill source
         const custTypeForQueue = (entityTypes||[]).find(e => e.role === 'customer' &&
           (!q.customerType || normTypeName(q.customerType) === normTypeName(e.name)));
@@ -460,6 +464,12 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   // B2 — SCAN look-ahead for skill-matched ASSIGN ('' = front entity only).
   const [assignScan, setAssignScan] = useState(false);
   const [assignScanLimit, setAssignScanLimit] = useState('');
+  // Sprint 99 — ASSIGN(Q, Server, PREEMPT[, PRIORITY(attr)][, Policy][, MAX:n]).
+  const [assignPreempt, setAssignPreempt] = useState(false);
+  const [assignPreemptRank, setAssignPreemptRank] = useState(''); // '' = the queue's own discipline
+  const [assignPreemptPolicy, setAssignPreemptPolicy] = useState('RESUME'); // RESUME | RESTART | RESAMPLE | DROP
+  const [assignPreemptDrop, setAssignPreemptDrop] = useState('');
+  const [assignPreemptMax, setAssignPreemptMax] = useState('');
   // C — DRAIN_PARTIAL's optional shortfall container ('' = none).
   const [partialShortfall, setPartialShortfall] = useState('');
   const [assignAmount, setAssignAmount] = useState('1');
@@ -576,6 +586,18 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
     }
     if (exprMacro === 'ASSIGN') {
       if (!assignSource || !assignServer) return;
+      // Preempt-and-assign: plain queue + one server type only (no skill, no container).
+      if (assignPreempt && !assignSkill && !assignContainer && assignServer !== 'ANY') {
+        const max = assignPreemptMax.trim();
+        if (max && !/^[1-9]\d*$/.test(max)) return;
+        const opts = [];
+        if (assignPreemptRank) opts.push(`PRIORITY(${assignPreemptRank})`);
+        if (assignPreemptPolicy === 'DROP') opts.push(`DROP:${assignPreemptDrop || matchQueues.find(q => q.name !== assignSource)?.name || assignSource}`);
+        else if (assignPreemptPolicy !== 'RESUME') opts.push(assignPreemptPolicy);
+        if (max) opts.push(`MAX:${max}`);
+        add(`ASSIGN(${assignSource}, ${assignServer}, PREEMPT${opts.map(o => `, ${o}`).join('')})`);
+        return;
+      }
       const skillClause = assignSkill.startsWith('lit:') ? `, "${assignSkill.slice(4)}"`
         : assignSkill.startsWith('attr:') ? `, Entity.${assignSkill.slice(5)}` : '';
       // SCAN only makes sense with a skill; N (optional) must be a positive whole number.
@@ -980,6 +1002,42 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                     )}
                   </div>
                 )}
+                {!assignSkill&&!assignContainer&&assignServer!=='ANY'&&(
+                  <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                    <label style={{display:'flex',gap:5,alignItems:'center',fontSize:10,color:C.muted,fontFamily:FONT,cursor:'pointer'}}>
+                      <input type="checkbox" checked={assignPreempt} onChange={e=>setAssignPreempt(e.target.checked)} aria-label="May interrupt a lower-priority job (PREEMPT)" />
+                      May interrupt a lower-priority job (PREEMPT) — when no server is idle, take one from a job that ranks below the front of the queue
+                    </label>
+                    {assignPreempt&&(
+                      <>
+                        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Rank by:</span>
+                        <select value={assignPreemptRank} onChange={e=>setAssignPreemptRank(e.target.value)} aria-label="Rank jobs by"
+                          style={{background:C.bg,border:`1px solid ${C.green}55`,borderRadius:4,color:C.green,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
+                          <option value="">the queue's priority discipline</option>
+                          {numericAttrs.map(a=><option key={a} value={a}>Entity.{a} (lower = more urgent)</option>)}
+                        </select>
+                        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Interrupted job:</span>
+                        <select value={assignPreemptPolicy} onChange={e=>setAssignPreemptPolicy(e.target.value)} aria-label="What the interrupted job gets"
+                          style={{background:C.bg,border:`1px solid ${C.green}55`,borderRadius:4,color:C.green,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
+                          <option value="RESUME">resumes with its remaining time</option>
+                          <option value="RESTART">restarts its full time</option>
+                          <option value="RESAMPLE">gets a new sampled time</option>
+                          <option value="DROP">goes to another queue</option>
+                        </select>
+                        {assignPreemptPolicy==='DROP'&&(
+                          <select value={assignPreemptDrop||matchQueues.find(q=>q.name!==assignSource)?.name||''} onChange={e=>setAssignPreemptDrop(e.target.value)} aria-label="Queue for interrupted jobs"
+                            style={{background:C.bg,border:`1px solid ${C.green}55`,borderRadius:4,color:C.green,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}>
+                            {matchQueues.map(q=><option key={q.name} value={q.name}>{q.name}</option>)}
+                          </select>
+                        )}
+                        <input value={assignPreemptMax} onChange={e=>setAssignPreemptMax(e.target.value)}
+                          placeholder="max per job (optional)" aria-label="Most times one job can be interrupted"
+                          style={{width:150,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px'}}
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
                 {containerNames.length>0&&(
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Container gate (optional):</span>
@@ -1001,7 +1059,7 @@ const EffectPicker = ({effects, options, onChange, expressionContext}) => {
                 )}
                 <div>
                   <Btn small variant="ghost" onClick={addExpr}
-                    disabled={!assignSource||!assignServer||(assignContainer&&!(isPositiveNumber(assignAmount.trim())||isValidAmountExpr(assignAmount.trim(),stateVars)))||(assignSkill&&assignScan&&assignScanLimit.trim()!==''&&!/^[1-9]\d*$/.test(assignScanLimit.trim()))}>Add</Btn>
+                    disabled={!assignSource||!assignServer||(assignContainer&&!(isPositiveNumber(assignAmount.trim())||isValidAmountExpr(assignAmount.trim(),stateVars)))||(assignSkill&&assignScan&&assignScanLimit.trim()!==''&&!/^[1-9]\d*$/.test(assignScanLimit.trim()))||(assignPreempt&&assignPreemptMax.trim()!==''&&!/^[1-9]\d*$/.test(assignPreemptMax.trim()))}>Add</Btn>
                 </div>
               </div>
             )}

@@ -856,6 +856,26 @@ export function consumeLostClaim(cust, serverType) {
 }
 
 /**
+ * Service on this entity's current stage stopped before it was due (PREEMPT,
+ * FAIL, a breakdown, a shift change or FINISH). Keeps the service delivered so
+ * far as a segment of the stage, so the stage record counts it as service
+ * rather than wait (buildStageRecord), and bumps the service epoch so the
+ * completion scheduled for the interrupted service never fires (fireBEvent).
+ * @param {Record<string, any>} cust
+ * @param {number} clock
+ * @param {{ countInterruption?: boolean }} [opts]
+ */
+export function noteServiceInterrupted(cust, clock, { countInterruption = true } = {}) {
+  if (!cust) return;
+  cust._serviceEpoch = (cust._serviceEpoch ?? 0) + 1;
+  if (!countInterruption) return;
+  if (cust.status === "serving" && cust.serviceStart != null && clock > cust.serviceStart) {
+    (cust._serviceSegments || (cust._serviceSegments = [])).push({ serviceStartedAt: cust.serviceStart, serviceEndedAt: clock });
+  }
+  cust._interruptions = (cust._interruptions ?? 0) + 1;
+}
+
+/**
  * @param {Record<string, any>} cust
  * @param {Record<string, any>} srv
  * @param {number} clock
@@ -869,9 +889,15 @@ export function preemptCustomer(cust, srv, clock, ctx, reason = "PREEMPT") {
     dropCarriedClaim(cust, srv, clock, ctx, reason);
     return 0;
   }
-  const scheduledDuration = srv._scheduledDuration || 0;
-  const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
+  // Remaining time: from the completion's due time when it was recorded
+  // (every entity-bound service since Sprint 99), else from the server's
+  // scheduled duration.
+  const remainingService = cust._serviceDueAt != null
+    ? Math.max(0, cust._serviceDueAt - clock)
+    : Math.max(0, (srv._scheduledDuration || 0) - (clock - (cust.serviceStart ?? clock)));
   cust._remainingService  = remainingService;
+  delete cust._serviceDueAt;
+  noteServiceInterrupted(cust, clock);
   // Count the interruption by the customer's entity type (F-request: "how many times
   // was a RepairJob preempted?") with a reason breakdown, mirroring the __balked/
   // __reneged state-counter convention and the endedBy BALK/BLOCK split from balked

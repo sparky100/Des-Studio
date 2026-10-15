@@ -24,14 +24,15 @@ export function effectText(effect) {
 }
 
 // Splits an argument list at top-level commas only — commas inside a
-// RELEASE_COSEIZED-style bracketed list ("[Nurse, Doctor]") stay together.
+// RELEASE_COSEIZED-style bracketed list ("[Nurse, Doctor]") or a nested call
+// ("PRIORITY(sev)", "min(a, b)") stay together.
 function splitTopLevelArgs(raw) {
   const args = [];
   let depth = 0;
   let current = "";
   for (const ch of raw) {
-    if (ch === "[") { depth++; current += ch; }
-    else if (ch === "]") { depth = Math.max(0, depth - 1); current += ch; }
+    if (ch === "[" || ch === "(") { depth++; current += ch; }
+    else if (ch === "]" || ch === ")") { depth = Math.max(0, depth - 1); current += ch; }
     else if (ch === "," && depth === 0) { args.push(current.trim()); current = ""; }
     else current += ch;
   }
@@ -52,9 +53,11 @@ function tokenizeCalls(text) {
     let i = argsStart;
     for (; i < text.length; i++) {
       const ch = text[i];
-      if (ch === "[") depth++;
+      // Nested calls — ASSIGN(Q, S, PREEMPT, PRIORITY(sev)), SET(x, min(a, b)) —
+      // belong to the outer call's arguments.
+      if (ch === "[" || ch === "(") depth++;
       else if (ch === "]") depth = Math.max(0, depth - 1);
-      else if (ch === ")" && depth === 0) break;
+      else if (ch === ")") { if (depth === 0) break; depth--; }
     }
     if (i >= text.length) break; // unbalanced call — stop rather than guess
     calls.push({

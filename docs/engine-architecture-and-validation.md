@@ -44,7 +44,10 @@ approach (`src/engine/phases.js`, `src/engine/index.js`):
 - **Phase B** — fire every *bound* (time-triggered) event due at `T_now`
   (within `1e-9` tolerance), in deterministic order, applying each
   Bound Event's macro sequence (`ARRIVE`, `ASSIGN`, `COMPLETE`, `RELEASE`, …)
-  and rescheduling any follow-on events.
+  and rescheduling any follow-on events. A completion scheduled for
+  service that has since been interrupted (`PREEMPT`, `FAIL`, a breakdown,
+  a shift close) carries a stale service epoch and is skipped whole — its
+  effects don't run and it isn't counted as a firing (Sprint 99).
 - **Phase C** — scan all *conditional* events in ascending priority order;
   evaluate each one's predicate against current state; if any fires,
   **restart the scan from priority 1** rather than continuing where it
@@ -96,7 +99,10 @@ not re-implemented per call site.
 (`ARRIVE`, `ASSIGN`, `COMPLETE`, `RELEASE`, `RENEGE`, `PREEMPT`, `FAIL`,
 `REPAIR`, `BATCH`, `UNBATCH`, `MATCH`, `COSEIZE`, `SPLIT`, `SET`,
 `SET_ATTR`, `COST`, …) — see `docs/engine-api-reference.md` for the full
-table. Conditions are evaluated by a **safe predicate parser**
+table. Preemptive priority is a form of `ASSIGN`:
+`ASSIGN(Queue, ServerType, PREEMPT, …)` uses an idle server if there is
+one, otherwise takes the server of a strictly lower-ranked job in the same
+firing (`preemptAssign.js`, Sprint 99). Conditions are evaluated by a **safe predicate parser**
 (`conditions.js`), not `eval`/`new Function` — a real security property,
 not just a style choice, since model JSON can come from user-authored or
 imported sources.
@@ -211,6 +217,12 @@ numbers, not just that it runs:
 | Warmup removal correctness | post-warmup error < pre-warmup error | confirmed | directional |
 | Seeded reproducibility | bit-identical repeat runs | confirmed | exact |
 
+A further soak benchmark, `tests/benchmarks/preemptive-priority.test.js`
+(Sprint 99), checks two-class M/M/1 **preemptive-resume** priority against
+the analytic times in system (T₁ = 1.429, T₂ = 4.762, ±5%), for both a
+hand-built `PREEMPT` model and `ASSIGN … PREEMPT`. The priority benchmarks
+in the table above are non-preemptive.
+
 All 10 tests across both benchmark files (`benchmarks.test.js`,
 `performance.test.js`) pass — see `docs/performance-envelope.md` for the
 full register including per-benchmark replication counts and seeds.
@@ -248,7 +260,12 @@ sources/sinks, dangling queue references, non-numeric scheduled times,
 unbalanced server counts, invalid balk probabilities, and macro-ordering
 hazards (e.g. V38: `RELEASE` before `COMPLETE` in the same Bound Event). This
 is itself a form of testing — a static correctness gate run on every model
-before simulation, analogous to a type-checker for the model DSL.
+before simulation, analogous to a type-checker for the model DSL. Later
+sprints extended the set; for example V81 (Sprint 99) checks
+`ASSIGN … PREEMPT` options (unknown/repeated options, an unknown DROP
+queue, a queue that doesn't rank jobs, a missing rank attribute) and warns
+when a Conditional Event fires plain `PREEMPT(Type)` without checking
+`idle(Type)`.
 
 ---
 

@@ -778,6 +778,8 @@ export function buildEntityJourneys(entitySummary) {
             wait: Number.isFinite(stage.stageWait) ? stage.stageWait : null,
             server: stage.serverType ?? null,
             service: Number.isFinite(stage.stageService) ? stage.stageService : null,
+            // Service cut short by PREEMPT/FAIL/a breakdown/a shift close (Sprint 99).
+            ...(stage.interruptions ? { interruptions: stage.interruptions } : {}),
           }))
         : [],
       outcome: entity.outcome

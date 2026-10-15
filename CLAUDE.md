@@ -9,7 +9,8 @@ This project uses **OpenCode**, not Claude Code. See the following files for aut
 | `.opencode/skills/` | Reusable skill workflows (run-tests, commit-push, build-verify) |
 | `docs/archived/code-quality-plan.md` | Prioritized code improvement plan (archived) |
 | `docs/DES_Studio_Build_Plan.md` | Sprint-by-sprint build roadmap |
-| `docs/reviews/sprint-89-probabilistic-routing-canvas-edit-plan.md` | Current sprint plan — Sprint 89: Visual Designer inline probabilistic-branch editing (latest shipped) |
+| `docs/reviews/sprint-99-preemption-plan.md` | Current sprint plan — Sprint 99: preemption correctness (service epoch, interruption-aware stage records, remaining time for every distribution) and preempt-and-assign `ASSIGN(Queue, ServerType, PREEMPT, …)` (latest shipped; PR #571) |
+| `docs/reviews/sprint-89-probabilistic-routing-canvas-edit-plan.md` | Sprint 89 — Visual Designer inline probabilistic-branch editing (shipped) |
 | `docs/reviews/sprint-88-plan.md` | Sprint 88 — Export Consolidation & Data Portability (shipped; see also `sprint-88-closure-report.md`) |
 | `docs/addition1_entity_model.md` | Entity model, action vocabulary, distribution specs |
 | `reference-models/README.md` | Opt-in reference models and `npm run test:reference` (not part of `npm test` or push/PR CI) |

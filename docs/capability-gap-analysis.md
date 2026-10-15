@@ -38,6 +38,7 @@
 | v2.5 | 2026-05-18 | Sprint 66 | **Visual Designer UX:** `when`/`feed` discoverability badges on nodes, Export popover consolidation, chart formatting. New E row added. |
 | v2.6 | 2026-05-19 | Sprint 67 | **Plain-English UX:** plain-English-first labelling across all surfaces formalised in AGENTS.md. Results workspace restructured around user questions. New Section 8: Usability Assessment added. |
 | v3.0 | 2026-05-21 | Sprint 68 | **Model versioning + G21 closure:** Closed G21 (Container/level resource) — FILL/DRAIN macros confirmed in engine; containerTypes schema. Model versioning (G29) closed. New G category matrix. Coverage recalculated: 91% (111✅ 7⚠️ 8❌ of 126 assessed features). Template count updated to 20. |
+| v3.1 | 2026-10 | Sprint 99 | G01 extended: preemption correctness (stale completions never fire, interruption-aware stage records, remaining time for every distribution) and preempt-and-assign `ASSIGN … PREEMPT`. |
 
 ---
 
@@ -75,7 +76,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | Server utilisation tracking | ⚠️ manual | ✅ | ✅ | ✅ per-type utilisation | — |
 | Shift schedules (capacity change) | ❌ | ✅ | ✅ | ✅ SHIFT_CHANGE B-event | — |
 | Dynamic capacity increase/decrease | ❌ | ✅ | ✅ | ✅ retireIdleExcessServers | — |
-| Resource preemption | ✅ PreemptiveResource | ✅ | ✅ priority maintenance | ✅ PREEMPT macro | — |
+| Resource preemption | ✅ PreemptiveResource | ✅ | ✅ priority maintenance | ✅ PREEMPT macro; `ASSIGN … PREEMPT` preemptive priority (Sprint 99) | — |
 | Resource breakdowns / failures | ❌ | ✅ | ✅ Maintenance block | ✅ FAIL macro; MTBF auto-scheduling | — |
 | Resource repair / MTTR | ❌ | ✅ | ✅ | ✅ REPAIR macro; MTTR auto-scheduling | — |
 | Multiple resource types per task | ⚠️ manual | ✅ | ✅ SeizeSet | ✅ COSEIZE macro | — |
@@ -215,7 +216,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 
 | # | Feature | Category | Priority | Status | Notes |
 |---|---|---|---|---|---|
-| G01 | **Resource preemption** | B | **High** | ✅ Complete | `PREEMPT(ServerType)` macro; interrupted entity re-queues with `_remainingService`; trace entry emitted. Sprint 32. **Test coverage (Sprint 86):** direct `apply()` unit tests in `src/engine/__tests__/macros.test.js` (no-busy-server no-op, remaining-service precision, repeated preempt/resume) plus integration coverage in `tests/engine/sprint-32-preemption.test.js`; `priority-ed-balking` template demonstrates a worked example. |
+| G01 | **Resource preemption** | B | **High** | ✅ Complete | `PREEMPT(ServerType)` macro; interrupted entity re-queues with `_remainingService`; trace entry emitted. Sprint 32. **Test coverage (Sprint 86):** direct `apply()` unit tests in `src/engine/__tests__/macros.test.js` (no-busy-server no-op, remaining-service precision, repeated preempt/resume) plus integration coverage in `tests/engine/sprint-32-preemption.test.js`; `priority-ed-balking` template demonstrates a worked example. **Sprint 99:** the interrupted job's original completion never fires; stage records count service before the interruption as service (`serviceSegments`, `interruptions`); remaining time is honoured for every service distribution; preempt-and-assign `ASSIGN(Queue, ServerType, PREEMPT[, …])` with RESUME/RESTART/RESAMPLE/DROP policies (V81); analytic benchmark `tests/benchmarks/preemptive-priority.test.js`. |
 | G02 | **General-purpose scripting / custom process logic** | F | **High** | ⚠️ Partial | Sprint 34: `SET` and `SET_ATTR` macros close attribute mutation, state arithmetic, computed routing. Multi-step coroutine-style logic remains architecturally impossible in Pidd's three-phase model. |
 | G03 | ~~**Probabilistic / conditional routing**~~ | A | ~~High~~ | ✅ Resolved | Both conditional and probabilistic routing implemented in `fireBEvent()`. Sprint 31. |
 | G04 | **Resource breakdowns / failures** | B | **High** | ✅ Complete | `FAIL` and `REPAIR` macros for explicit/conditional outages; `mtbfDist`/`mttrDist` on a server entityType is a genuine engine-automatic feature (`makeFailureEvents()`, `src/engine/index.js`) — the engine internally generates FAILURE/REPAIR pseudo-events from those declarative fields with zero B-event/C-event authoring required. Sprint 32. **Test coverage (Sprint 86):** direct `apply()` unit tests in `src/engine/__tests__/macros.test.js` (downtime accounting precision, starvation-interval flushing, repair-of-non-failed-server no-op, pool vs. unit scope) plus integration coverage in `tests/engine/per-server-failure.test.js`; Machine Shop with Failures template demonstrates the MTBF/MTTR pattern. |

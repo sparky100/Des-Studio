@@ -834,6 +834,15 @@ function EntityInspector({ entity, snap, onClose }) {
                   <div style={{ fontSize: 10, color: C.amber, fontWeight: 700 }}>{s.stageWait != null ? `${Number(s.stageWait).toFixed(1)}t` : "—"}</div>
                   <div style={{ fontSize: 10, color: C.muted }}>Service</div>
                   <div style={{ fontSize: 10, color: C.accent, fontWeight: 700 }}>{s.stageService != null ? `${Number(s.stageService).toFixed(1)}t` : "—"}</div>
+                  {s.interruptions > 0 && (
+                    <>
+                      <div style={{ fontSize: 10, color: C.muted }}>Interrupted</div>
+                      <div style={{ fontSize: 10, color: C.amber, fontWeight: 700 }}
+                        title={(s.serviceSegments || []).map(seg => `served ${Number(seg.serviceStartedAt).toFixed(1)}–${Number(seg.serviceEndedAt).toFixed(1)}t`).join(", ")}>
+                        {s.interruptions}×
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

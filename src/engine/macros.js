@@ -12,7 +12,8 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim, noteServerClaim, mayHoldOtherServers, markTerminal, setServerStatus } from "./entities.js";
+import { PREEMPT_ASSIGN_PATTERN, applyPreemptAssign } from "./preemptAssign.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, noteServiceInterrupted, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim, noteServerClaim, mayHoldOtherServers, markTerminal, setServerStatus } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
 // per-macro usages below for the (large, and macro-specific) set of fields
@@ -268,6 +269,11 @@ export function buildStageRecord(cust, srvOrServers, clock) {
   const svc = serviceStartedAt != null
     ? Math.max(0, clock - serviceStartedAt)
     : 0;
+  // Service delivered before an interruption (PREEMPT, FAIL, a breakdown, a
+  // shift change) lies between waitStartedAt and serviceStartedAt; it is
+  // service, not wait (Sprint 99). See noteServiceInterrupted.
+  const segments = Array.isArray(cust._serviceSegments) ? cust._serviceSegments : [];
+  const segmentTime = segments.reduce((sum, seg) => sum + Math.max(0, seg.serviceEndedAt - seg.serviceStartedAt), 0);
   const record = {
     serverType: servers[0]?.type || (cust._isDelay ? "delay" : "unknown"),
     ...(servers.length > 1 ? { serverTypes: servers.map(s => s.type) } : {}),
@@ -275,9 +281,13 @@ export function buildStageRecord(cust, srvOrServers, clock) {
     waitStartedAt,
     serviceStartedAt: serviceStartedAt ?? clock,
     serviceEndedAt: clock,
-    stageWait:  +wait.toFixed(4),
-    stageService: +svc.toFixed(4),
+    stageWait:  +Math.max(0, wait - segmentTime).toFixed(4),
+    stageService: +(svc + segmentTime).toFixed(4),
+    ...(segments.length ? { serviceSegments: segments.map(seg => ({ ...seg })) } : {}),
+    ...(cust._interruptions ? { interruptions: cust._interruptions } : {}),
   };
+  delete cust._serviceSegments;
+  delete cust._interruptions;
   _stageRecordSink?.(cust, record);
   return record;
 }
@@ -418,6 +428,22 @@ export const MACROS = [
         const depth = ctx.index ? (indexBucket(ctx.index, queueName) || []).length : helpers.waitingOf(typeName).length;
         msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${queueName}, depth: ${depth}]`);
       }
+    },
+  },
+
+// ── ASSIGN(Queue, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t]) ──
+  // Preempt-and-assign (Sprint 99): an ordinary ASSIGN when a server is idle;
+  // otherwise takes a server from a strictly lower-ranked job and gives it to
+  // the head of the queue in the same firing. See preemptAssign.js.
+  {
+    name:    "ASSIGN_PREEMPT",
+    pattern: PREEMPT_ASSIGN_PATTERN,
+    apply(match, ctx) {
+      applyPreemptAssign(match, ctx, (queue, serverType) => {
+        const assign = MACROS.find(m => m.name === "ASSIGN");
+        const text = `ASSIGN(${queue}, ${serverType})`;
+        assign?.apply(/** @type {RegExpMatchArray} */ (text.match(assign.pattern)), ctx);
+      });
     },
   },
 
@@ -743,6 +769,8 @@ export const MACROS = [
         return;
       }
 
+      // The completion scheduled for this service is now stale (Sprint 99).
+      noteServiceInterrupted(cust, ctx.clock, { countInterruption: false });
       finishServiceForPair(cust, srv, ctx, { endedBy: "FINISH" });
       setLastCustId(cust.id);
       setLastSrvId(srv.id);
@@ -1991,6 +2019,7 @@ export const MACROS = [
  * @param {string} part
  * @param {Record<string, any>} state
  * @param {number} clock
+ * @param {(variable: string, from: any, to: any) => void} [recordChange]
  */
 export function applyScalar(part, state, clock, recordChange) {
   const r1 = part.match(/^(\w+)\+\+$/);

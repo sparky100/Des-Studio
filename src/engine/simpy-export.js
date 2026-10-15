@@ -857,6 +857,9 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
   if (/\bDRAIN_PARTIAL\s*\(/i.test(allEffectText)) {
     warnings.push('NOT SUPPORTED: DRAIN_PARTIAL (draw what is available and record the shortfall) is not auto-translated — use min(level, amount) with Container.get() and add the remainder to the shortfall container by hand.');
   }
+  if (/\bASSIGN\s*\([^,)]+,[^,)]+,\s*PREEMPT\b/i.test(allEffectText)) {
+    warnings.push('NOT SUPPORTED: ASSIGN ... PREEMPT (take a server from a lower-ranked job) is not auto-translated — the generated code waits for an idle server. Use simpy.PreemptiveResource with request(priority=rank, preempt=True) and resume the interrupted job with its remaining time.');
+  }
   if (/\bASSIGN\s*\([^)]*,\s*SCAN\b/i.test(allEffectText)) {
     warnings.push('NOT SUPPORTED: ASSIGN ... SCAN (look past entities whose skill has no idle server) is not auto-translated — the generated code serves the queue in order.');
   }

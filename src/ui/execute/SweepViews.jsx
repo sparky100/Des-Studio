@@ -869,13 +869,16 @@ export function EntitySummaryTable({ entitySummary, meanWait }) {
   const outcomes = useMemo(() => [...new Set(customers.map(e => e.status).filter(Boolean))], [customers]);
 
   const computeWait = e => {
-    if (e.stages?.length) return e.stages.reduce((s, st) => s + ((st.serviceStartedAt ?? st.serviceStart ?? 0) - (st.waitStartedAt ?? st.arrivalTime ?? 0)), 0);
+    // stageWait / stageService already count service delivered before an
+    // interruption as service, not wait (Sprint 99); older records fall back
+    // to the intervals.
+    if (e.stages?.length) return e.stages.reduce((s, st) => s + (st.stageWait ?? ((st.serviceStartedAt ?? st.serviceStart ?? 0) - (st.waitStartedAt ?? st.arrivalTime ?? 0))), 0);
     if (e.serviceStart != null && e.arrivalTime != null) return Math.max(0, e.serviceStart - e.arrivalTime);
     return null;
   };
 
   const computeSvc = e => {
-    if (e.stages?.length) return e.stages.reduce((s, st) => s + ((st.serviceEndedAt ?? st.completionTime ?? 0) - (st.serviceStartedAt ?? st.serviceStart ?? 0)), 0);
+    if (e.stages?.length) return e.stages.reduce((s, st) => s + (st.stageService ?? ((st.serviceEndedAt ?? st.completionTime ?? 0) - (st.serviceStartedAt ?? st.serviceStart ?? 0))), 0);
     if (e.serviceStart != null && e.completionTime != null) return Math.max(0, e.completionTime - e.serviceStart);
     return null;
   };

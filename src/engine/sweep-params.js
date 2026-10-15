@@ -475,7 +475,7 @@ export function generate2DSweepValues(rangeA, rangeB, replicationsPerPoint = 1) 
  * Deterministic from baseSeed: derives its own PRNG stream (via
  * deriveSubSeed) so it never shares state with, or is correlated with, the
  * per-replication seeds (baseSeed + i) the same Study run also uses. No
- * Math.random() anywhere — mulberry32 only, per AGENTS.md's seeded-RNG rule.
+ * the global unseeded RNG anywhere — mulberry32 only, per AGENTS.md's seeded-RNG rule.
  *
  * @param {Array<{ path: string, label?: string, type?: string, range?: { min: number, max: number } }>} parameters
  * @param {{ points?: number, baseSeed?: number }} [options]
@@ -504,7 +504,7 @@ export function sampleLatinHypercube(parameters, { points, baseSeed = 0 } = {}) 
   // permutation would introduce.
   const perDimensionValues = parameters.map(param => {
     const permutation = Array.from({ length: n }, (_, i) => i);
-    // Fisher-Yates shuffle using the seeded RNG — no Math.random().
+    // Fisher-Yates shuffle using the seeded RNG — never the global unseeded RNG.
     for (let i = permutation.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
       [permutation[i], permutation[j]] = [permutation[j], permutation[i]];

@@ -48,10 +48,11 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 import { useConfirm } from "../shared/useConfirm.jsx";
 import { ExportPopover } from "../shared/ExportPopover.jsx";
 import { ResponsivePanel } from "../shared/ResponsivePanel.jsx";
-import { resolveLiveDataModel, numberDefault, scheduleRowCount, intDefault, nowPerf, doCloudSave, yieldToBrowser } from "./runHelpers.js";
+import { resolveLiveDataModel, numberDefault, intDefault, nowPerf, doCloudSave, yieldToBrowser } from "./runHelpers.js";
 import { RunReadinessPanel } from "./RunReadinessPanel.jsx";
 import { RunStatusBanners } from "./RunStatusBanners.jsx";
 import { BatchResultsPanel } from "./BatchResultsPanel.jsx";
+import { RunningToolbar, ScheduleSelector, SpeedControl, runSettingsText } from "./RunToolbars.jsx";
 
 
 const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, visible = true, studyProposalTrigger = null }) => {
@@ -83,7 +84,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [liveTimeSeries, setLiveTimeSeries] = useState(null);
   const [liveSummary, setLiveSummary] = useState(null);
   const [liveFlags, setLiveFlags] = useState([]);
-  const [liveFlagsOpen, setLiveFlagsOpen] = useState(false);
   const [stateChanges, setStateChanges] = useState([]);
   const stateChangesRef = useRef([]);
   const [singleRunStatus, setSingleRunStatus] = useState("idle");
@@ -103,6 +103,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [terminationCondition, setTerminationCondition] = useState(() => experimentDefaults.terminationCondition || null);
   const [purgePeriodEnabled, setPurgePeriodEnabled] = useState(() => !!experimentDefaults.purgePeriod?.enabled);
   const [replications, setReplications] = useState(() => intDefault(experimentDefaults.replications, 1));
+  const runSettings = { replications, terminationMode, maxSimTime, seed, warmupPeriod };
   const [runLabel, setRunLabel] = useState("");
   const [executeSection, setExecuteSection] = useState("run");
   const [hideRunReadiness, setHideRunReadiness] = useState(false);
@@ -183,9 +184,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [runOverridesPickerOpen, setRunOverridesPickerOpen] = useState(false);
   const [showRunOverridesPanel, setShowRunOverridesPanel] = useState(false);
   const runOverridesAnchorRef = useRef(null);
-  const liveFlagsAnchorRef = useRef(null);
   const closeRunOverridesPanel = useCallback(() => { setShowRunOverridesPanel(false); setRunOverridesPickerOpen(false); }, []);
-  const closeLiveFlags = useCallback(() => setLiveFlagsOpen(false), []);
   const [reportGenerating, setReportGenerating] = useState(false); // still used for report progress indicator in status banner
   const [modelCheckerIssues, setModelCheckerIssues] = useState(null);
   const [modelCheckerOpen, setModelCheckerOpen] = useState(false);
@@ -2537,23 +2536,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       </div>
       )}
 
-      {/* ADR-016: Schedule selector — shown when model has more than one schedule */}
       {modelSchedules.length > 1 && !isRunning && (
-        <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>Timetable:</span>
-          <select
-            value={selectedScheduleId ?? ""}
-            onChange={e => setSelectedScheduleId(e.target.value || null)}
-            style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 12, background: C.surface, color: C.text, cursor: "pointer" }}
-          >
-            {modelSchedules.map(s => (
-              <option key={s.id} value={s.id}>
-                {s.isDefault ? "★ " : ""}{s.name} ({scheduleRowCount(s).toLocaleString()} rows)
-              </option>
-            ))}
-          </select>
-          {schedulesLoading && <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Loading…</span>}
-        </div>
+        <ScheduleSelector modelSchedules={modelSchedules} selectedScheduleId={selectedScheduleId}
+          setSelectedScheduleId={setSelectedScheduleId} schedulesLoading={schedulesLoading} />
       )}
 
 
@@ -2584,19 +2569,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         <Btn variant="primary" onClick={initEngine} disabled={hasValidationErrors || runBusy} title="Reset simulation to initial state">⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasValidationErrors || runBusy}> Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || runBusy}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
-            {speedMultiplier >= 10 ? "Turbo" : `${speedMultiplier.toFixed(1)}×`}
-          </span>
-          <input
-            aria-label="Animation speed multiplier"
-            type="range"
-            min={0.5} max={10} step={0.5}
-            value={speedMultiplier}
-            onChange={e => setSpeedMultiplier(parseFloat(e.target.value))}
-            style={{ width: 72, accentColor: C.accent, cursor: "pointer" }}
-          />
-        </div>
+        <SpeedControl speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier} />
         <Btn variant="ghost" onClick={doRunAll} disabled={hasAdmissionErrors || runBusy || saveStatus?.state === 'saving' || saveInProgressRef.current}
           title="Runs all replications at full speed without canvas animation — use Auto Run to watch entities move">
           {hasAdmissionErrors ? `✕ ${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length !== 1 ? "s" : ""}` : "⚡ Batch Run"}
@@ -2632,7 +2605,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0, maxWidth: "100%" }}>
           <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, overflowWrap: "anywhere", minWidth: 0 }}>
-            {replications} rep{replications !== 1 ? "s" : ""} · {terminationMode === "time" ? `${maxSimTime} time units` : "condition stop"} · seed {seed}{warmupPeriod > 0 ? ` · warm-up ${warmupPeriod}` : ""}
+            {runSettingsText(runSettings)}
           </span>
           <div ref={runOverridesAnchorRef} style={{ position: "relative" }}>
             <Btn small variant={effectiveOverrides.length ? "primary" : "ghost"}
@@ -2681,62 +2654,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       )}
 
       {executeSection === "run" && isRunning && (
-      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <Btn variant="success" onClick={doStep} disabled={mode === "done" || runBusy}> Step</Btn>
-        <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || runBusy}>{autoRunning ? "⏹ Stop Auto" : "Auto Run"}</Btn>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
-            {speedMultiplier >= 10 ? "Turbo" : `${speedMultiplier.toFixed(1)}×`}
-          </span>
-          <input
-            aria-label="Animation speed multiplier"
-            type="range"
-            min={0.5} max={10} step={0.5}
-            value={speedMultiplier}
-            onChange={e => setSpeedMultiplier(parseFloat(e.target.value))}
-            style={{ width: 72, accentColor: C.accent, cursor: "pointer" }}
-          />
-        </div>
-        {liveFlags.length > 0 ? (
-          <div ref={liveFlagsAnchorRef} style={{ position: "relative" }}>
-            <button type="button" onClick={() => setLiveFlagsOpen(v => !v)} style={{
-              background: liveFlags.some(f => f.severity === "critical") ? C.red + "22" : C.amber + "22",
-              border: `1px solid ${liveFlags.some(f => f.severity === "critical") ? C.red + "44" : C.amber + "44"}`,
-              borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 700,
-              color: liveFlags.some(f => f.severity === "critical") ? C.red : C.amber,
-              fontFamily: FONT, cursor: "pointer", whiteSpace: "nowrap", lineHeight: 1.5,
-            }}>{"\u26A0"} {liveFlags.length}</button>
-            <ResponsivePanel open={liveFlagsOpen} onClose={closeLiveFlags} anchorRef={liveFlagsAnchorRef}
-              title="Live warnings" width={360} testId="live-flags-panel">
-              {liveFlags.map((f, i) => {
-                const isCritical = f.severity === "critical";
-                return (
-                  <div key={i} style={{
-                    borderLeft: `2px solid ${isCritical ? C.red : C.amber}`,
-                    paddingLeft: 8, fontSize: 10, fontFamily: FONT,
-                    color: isCritical ? C.red : C.amber, lineHeight: 1.4, overflowWrap: "anywhere",
-                  }}>
-                    {f.resource && <span style={{ color: C.muted }}>{f.resource}: </span>}
-                    {f.message}
-                  </div>
-                );
-              })}
-            </ResponsivePanel>
-          </div>
-        ) : null}
-        <Btn variant="danger" onClick={() => {
-          stopAuto();
-          if (batchActive) cancelBatch();
-          if (singleRunActive) cancelSingleRun();
-          setMode("idle");
-          setLiveFlags([]);
-        }}>✕ Cancel</Btn>
-        {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
-        {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
-        <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap", marginLeft: "auto" }}>
-          {replications} rep{replications !== 1 ? "s" : ""} · {terminationMode === "time" ? `${maxSimTime} time units` : "condition stop"} · seed {seed}{warmupPeriod > 0 ? ` · warm-up ${warmupPeriod}` : ""}
-        </span>
-      </div>
+        <RunningToolbar doStep={doStep} mode={mode} runBusy={runBusy} autoRunning={autoRunning} toggleAuto={toggleAuto}
+          hasValidationErrors={hasValidationErrors} speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}
+          liveFlags={liveFlags} batchActive={batchActive} cancelBatch={cancelBatch} batchStatus={batchStatus}
+          singleRunActive={singleRunActive} cancelSingleRun={cancelSingleRun} singleRunStatus={singleRunStatus} settings={runSettings}
+          onCancel={() => {
+            stopAuto();
+            if (batchActive) cancelBatch();
+            if (singleRunActive) cancelSingleRun();
+            setMode("idle");
+            setLiveFlags([]);
+          }} />
       )}
 
       {executeSection === "run" && (

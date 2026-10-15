@@ -186,6 +186,11 @@ function renameInEffectString(effect, kind, oldName, newName) {
         }
       }
       if (kind === "state" && (EXPRESSION_ARGS[macro] || []).includes(idx)) return renameIdentifier(arg, oldName, newName);
+      // ASSIGN(Q, Server, PREEMPT, DROP:Rework) sends interrupted jobs to a queue.
+      if (kind === "queue" && macro === "ASSIGN") {
+        const drop = arg.trim().match(/^(DROP\s*:\s*)(.+)$/i);
+        if (drop && norm(drop[2]) === norm(oldName)) return `${drop[1]}${newName}`;
+      }
       return arg;
     });
     if (args.some((a, i) => a !== call.args[i])) {

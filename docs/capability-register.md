@@ -21,7 +21,7 @@ Benchmark Register (docs/performance-envelope.md).
 | M/G/1 general service | ✓ Supported | Benchmark 3 | Pollaczek-Khinchine ±3% |
 | Finite queues with loss (M/M/1/K) | ✓ Supported | Benchmark 4 | Loss probability ±3% |
 | Priority queuing (non-preemptive) | ✓ Supported | Benchmark 5 | Directional |
-| Preemptive priority | ✓ Supported | Benchmark 6 | Directional |
+| Preemptive priority (resume) | ✓ Supported | `tests/benchmarks/preemptive-priority.test.js` | Two-class M/M/1, analytic time in system ±5%, run both with hand-built PREEMPT and with `ASSIGN … PREEMPT` (Sprint 99). Benchmark 6 is a *non*-preemptive check. |
 | Warmup period removal | ✓ Supported | Benchmark 7 | Accuracy improvement confirmed |
 | Seeded reproducibility | ✓ Supported | Benchmark 8 | Bit-identical |
 | Server failures and repair | ✓ Supported | Functional test | FAIL/REPAIR macros |
@@ -30,7 +30,7 @@ Benchmark Register (docs/performance-envelope.md).
 | Batching and assembly | ✓ Supported | Functional test | BATCH/UNBATCH/MATCH macros |
 | Cost tracking | ✓ Supported | Functional test | COST() macro |
 | Containers (level resources) | ✓ Supported | Functional test | FILL/DRAIN macros |
-| Preemption | ✓ Supported | Functional test | PREEMPT macro |
+| Preemption | ✓ Supported | Functional tests + preemptive-priority benchmark | `ASSIGN(Q, Server, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t])` (preempt-and-assign: only a lower-ranked job, server handed over atomically; RESUME/RESTART/RESAMPLE/DROP) and the PREEMPT macro. Interrupted service resumes with its remaining time; its original completion is cancelled; wait and service are counted per interval (Sprint 99). |
 | Probabilistic routing | ✓ Supported | Functional test | ProbBranch config |
 | Conditional routing | ✓ Supported | Functional test | RoutingBranch config |
 | Multi-class resource contention | ~ Partial — Workaround required | See User Guide | Complex contention patterns require careful C-event priority ordering. See User Guide Section 12. |

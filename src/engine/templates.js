@@ -756,31 +756,26 @@ const MACHINE_SHOP_FAILURES = {
 
 const PRIORITY_ED_BALKING = {
   name: "Priority ED with Balking",
-  description: "Emergency department with priority triage (severity 1–5). High-severity patients jump the queue. Patients balk at a 10% rate when the department is busy. Resuscitation-level arrivals (trauma codes) PREEMPT a doctor mid-consultation when none are free — the bumped patient resumes with their remaining consultation time preserved, not a fresh one. Use the PRIORITY discipline and goal-aware sweep to find minimum doctor count.",
+  description: "Emergency department with priority triage (severity 1–5). High-severity patients jump the queue. Patients balk at a 10% rate when the department is busy. Resuscitation-level arrivals (trauma codes) take a doctor from the least urgent patient in consultation when none are free — the bumped patient resumes with their remaining consultation time preserved, not a fresh one. Use the PRIORITY discipline and goal-aware sweep to find minimum doctor count.",
   domain: "Healthcare",
   templateMeta: {
-    scenarioType: "Priority queue with balking, attribute-based ordering, and server preemption",
-    keyMacros: ["ARRIVE", "ASSIGN", "PREEMPT", "COMPLETE"],
-    paramGuide: "Arrival mean 4 min. Severity Uniform(1,5). Consultation Triangular(15,25,40) min. 3 doctors. Balk probability 10%. Trauma codes arrive mean 30 min and preempt a doctor when all are busy.",
-    limitations: "No triage pre-assessment stage. Severity assigned once at arrival. Preemption always interrupts whichever doctor happens to be busy first — it does not target the lowest-severity patient specifically (the engine has no condition-language way to inspect the attributes of the patient a busy doctor is currently treating), so the model tracks a traumaInService counter to stop preemption from re-targeting a doctor already dedicated to a trauma case.",
+    scenarioType: "Priority queue with balking, attribute-based ordering, and preempt-and-assign",
+    keyMacros: ["ARRIVE", "ASSIGN", "COMPLETE"],
+    paramGuide: "Arrival mean 4 min. Severity Uniform(1,5). Consultation Triangular(15,25,40) min. 3 doctors. Balk probability 10%. Trauma codes arrive mean 30 min and take a doctor when all are busy.",
+    limitations: "No triage pre-assessment stage. Severity assigned once at arrival. A trauma code only ever interrupts a regular patient (priority 0 outranks 1–5), never another trauma case. The bumped patient resumes with exactly their remaining consultation time.",
   },
   entityTypes: [
     { id: "et_patient", name: "Patient", role: "customer", count: 0, attrDefs: [
       { id: "a_pri", name: "priority", valueType: "number", defaultValue: 3, mutable: false,
         dist: "Uniform", distParams: { min: "1", max: "5" } },
     ]},
-    { id: "et_trauma", name: "TraumaCode", role: "customer", count: 0, attrDefs: [] },
+    // Trauma codes rank above every patient: lower priority = more urgent.
+    { id: "et_trauma", name: "TraumaCode", role: "customer", count: 0, attrDefs: [
+      { id: "a_trauma_pri", name: "priority", valueType: "number", defaultValue: 0, mutable: false },
+    ]},
     { id: "et_doctor", name: "Doctor", role: "server", count: 3, attrDefs: [] },
   ],
-  // traumaInService tracks how many doctors are currently dedicated to a trauma
-  // case. The preempt condition below gates on "more trauma waiting than already
-  // in service", not just "a doctor is busy" — without this, PREEMPT(Doctor)'s
-  // first-busy-server selection (src/engine/macros.js) has no way to avoid
-  // re-targeting a doctor that's already treating a trauma patient, which can
-  // otherwise thrash: bump that patient, reassign them via FIFO (their original
-  // arrival time still wins), bump them again, forever, never reaching the new
-  // arrival the preemption was meant to make room for.
-  stateVariables: [{ name: "traumaInService", initialValue: "0" }],
+  stateVariables: [],
   goals: [
     { metric: "avgWait", operator: "<",  target: "20", label: "avgWait < 20 min" },
     // The Waiting queue only configures balkProbability (no renegeDist — see
@@ -795,30 +790,19 @@ const PRIORITY_ED_BALKING = {
     { id: "b_trauma",   name: "Trauma Code Arrives",  scheduledTime: "0",    effect: ["ARRIVE(TraumaCode, TraumaQueue)"],
       schedules: [{ eventId: "b_trauma", dist: "Exponential", distParams: { mean: "30" } }] },
     { id: "b_complete", name: "Consultation Done",   scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
-    { id: "b_trauma_done", name: "Trauma Consult Done", scheduledTime: "9999",
-      effect: ["COMPLETE()", "SET(traumaInService, traumaInService-1)"], schedules: [] },
+    { id: "b_trauma_done", name: "Trauma Consult Done", scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
   ],
   cEvents: [
-    // Highest priority: only preempt when a trauma code is waiting, no doctor
-    // is idle, AND no doctor is already dedicated to a trauma case. The last
-    // clause is required because the condition language only supports
-    // variable-vs-literal comparisons (no variable-vs-variable, e.g.
-    // "queue(...).length > traumaInService" silently evaluates to false —
-    // migrateLegacyCondition treats the right-hand side as a literal token) —
-    // so traumaInService must be checked against the constant 0, not against
-    // the queue length. PREEMPT picks the first busy server it finds and
-    // re-queues that patient with remaining consultation time preserved (not
-    // reset) — see entities.js preemptCustomer.
-    { id: "c_preempt", name: "Preempt for Trauma", priority: 0,
-      condition: "queue(TraumaQueue).length > 0 AND idle(Doctor).count == 0 AND traumaInService == 0",
-      effect: ["PREEMPT(Doctor)"], cSchedules: [] },
-    // Trauma codes claim the now-free (or already-idle) doctor ahead of any
-    // waiting regular patient.
-    { id: "c_consult_trauma", name: "Consult Trauma", priority: 1,
-      condition: "queue(TraumaQueue).length > 0 AND idle(Doctor).count > 0",
-      effect: ["ASSIGN(TraumaQueue, Doctor)", "SET(traumaInService, traumaInService+1)"],
+    // Preempt-and-assign (Sprint 99): an idle doctor if there is one; otherwise
+    // the doctor seeing the least urgent patient (highest priority number) is
+    // interrupted and goes straight to the trauma code. The patient re-queues
+    // with their remaining consultation time. A doctor already treating a
+    // trauma code (priority 0, equal rank) is never taken.
+    { id: "c_consult_trauma", name: "Consult Trauma", priority: 0,
+      condition: "queue(TraumaQueue).length > 0",
+      effect: ["ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))"],
       cSchedules: [{ eventId: "b_trauma_done", dist: "Triangular", distParams: { min: "10", mode: "18", max: "30" }, useEntityCtx: true }] },
-    { id: "c_consult", name: "Consult", priority: 2,
+    { id: "c_consult", name: "Consult", priority: 1,
       condition: "queue(Waiting).length > 0 AND idle(Doctor).count > 0",
       effect: ["ASSIGN(Waiting, Doctor)"],
       cSchedules: [{ eventId: "b_complete", dist: "Triangular", distParams: { min: "15", mode: "25", max: "40" }, useEntityCtx: true }] },

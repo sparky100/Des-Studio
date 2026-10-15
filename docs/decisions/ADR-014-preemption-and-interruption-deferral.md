@@ -1,7 +1,7 @@
 # ADR-014: Defer First-Class Preemption and Interruption Beyond Sprint 26
 
 **Date:** 2026-05-12  
-**Status:** Accepted  
+**Status:** Superseded by `docs/reviews/sprint-99-preemption-plan.md` (PREEMPT shipped in later sprints; Sprint 99 settles completion invalidation, metric treatment and ordering)  
 **Sprint:** Sprint 26
 
 ## Context
