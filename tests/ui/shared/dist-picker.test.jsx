@@ -358,6 +358,7 @@ describe('DistPicker — piecewise periods stored in the flat shape', () => {
         onChange={vi.fn()}
       />
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all' }));
     const meanInputs = screen.getAllByRole('spinbutton', { name: 'mean' });
     expect(meanInputs.map(i => i.value)).toEqual(['33', '20']);
   });
@@ -532,5 +533,57 @@ describe('DistPicker — SchedulePattern arrival-rate distribution', () => {
     );
     fireEvent.click(screen.getByText('Clear All'));
     expect(handleChange.mock.calls[0][0].distParams.schedulePattern.periods).toEqual([]);
+  });
+});
+
+describe('DistPicker — piecewise periods collapse by default', () => {
+  const threePeriods = {
+    dist: 'Piecewise',
+    distParams: {
+      periods: [
+        { startTime: '0', distribution: { dist: 'Exponential', distParams: { mean: '20' } } },
+        { startTime: '480', dist: 'Exponential', distParams: { mean: '9' } },
+        { startTime: '960', distribution: { dist: 'Fixed', distParams: { value: '30' } } },
+      ],
+    },
+  };
+
+  it('shows each period as a one-line summary with no inputs until expanded', () => {
+    render(<DistPicker value={threePeriods} onChange={vi.fn()} />);
+    expect(screen.queryByRole('spinbutton', { name: 'mean' })).not.toBeInTheDocument();
+    expect(screen.getByText('3 periods')).toBeInTheDocument();
+    const second = screen.getByRole('button', { name: 'Show period 2' });
+    expect(second).toHaveAttribute('aria-expanded', 'false');
+    expect(second.textContent).toContain('t=480');
+    expect(second.textContent).toContain('Exponential(mean=9)');
+    expect(screen.getByRole('button', { name: 'Show period 3' }).textContent).toContain('Fixed(value=30)');
+    // Removing still works from the collapsed row.
+    expect(screen.getByRole('button', { name: 'Remove piecewise period 2' })).toBeInTheDocument();
+  });
+
+  it('expands one period on click and collapses it again', () => {
+    render(<DistPicker value={threePeriods} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show period 2' }));
+    expect(screen.getAllByRole('spinbutton', { name: 'mean' }).map(i => i.value)).toEqual(['9']);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide period 2' }));
+    expect(screen.queryByRole('spinbutton', { name: 'mean' })).not.toBeInTheDocument();
+  });
+
+  it('Expand all / Collapse all toggle every period', () => {
+    render(<DistPicker value={threePeriods} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all' }));
+    expect(screen.getAllByRole('button', { name: /^Hide period/ })).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all' }));
+    expect(screen.getAllByRole('button', { name: /^Show period/ })).toHaveLength(3);
+  });
+
+  it('a lone period starts open, and a newly added period opens for editing', () => {
+    const one = { dist: 'Piecewise', distParams: { periods: [threePeriods.distParams.periods[0]] } };
+    const handleChange = vi.fn();
+    const { rerender } = render(<DistPicker value={one} onChange={handleChange} />);
+    expect(screen.getByRole('spinbutton', { name: 'mean' })).toHaveValue(20);
+    fireEvent.click(screen.getByText('+ Add Period'));
+    rerender(<DistPicker value={handleChange.mock.calls[0][0]} onChange={handleChange} />);
+    expect(screen.getByRole('button', { name: 'Hide period 2' })).toBeInTheDocument();
   });
 });
