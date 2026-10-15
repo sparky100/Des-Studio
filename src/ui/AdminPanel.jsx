@@ -21,8 +21,12 @@ const LLM_PROVIDERS = [
   { value: "zen",          label: "Zen" },
 ];
 
+// Anthropic models: current generation (5.5) first, then the previous models
+// still selectable so a saved choice never disappears from the list. The 5.5
+// models need the shared llm-proxy's newer-model support (drops `temperature`,
+// adds reasoning headroom) — keep this list in sync across Flow, Lens and Loop.
 const LLM_MODELS = {
-  anthropic:   ["claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4-20250514", "claude-haiku-4-5", "claude-opus-4-5"],
+  anthropic:   ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-4-5", "claude-sonnet-4-6"],
   openai:      ["gpt-5.1-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max"],
   "opencode-go": ["opencode-go/deepseek-v4-pro", "opencode-go/deepseek-v4-flash"],
   zen: ["deepseek-v4-flash", "claude-sonnet-4-6", "gpt-5.4-mini", "qwen3.6-plus", "minimax-m2.7"],

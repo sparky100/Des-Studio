@@ -13,7 +13,10 @@
 // harness this repo doesn't have for llm-proxy yet.
 
 import { assertEquals, assertThrows } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { mapDeepgramResponseToTranscript, loadTranscriptionKeys, isBlockedHostname, extractReadableContent } from "./index.ts";
+import {
+  mapDeepgramResponseToTranscript, loadTranscriptionKeys, isBlockedHostname, extractReadableContent,
+  anthropicModelTraits, buildAnthropicRequest, REASONING_MIN_MAX_TOKENS,
+} from "./index.ts";
 
 function withMockedFetch<T>(handler: (url: string) => Response, fn: () => Promise<T>): Promise<T> {
   const originalFetch = globalThis.fetch;
@@ -229,4 +232,109 @@ Deno.test("extractReadableContent throws a clear error when no readable content 
     Error,
     "Could not find readable article content",
   );
+});
+
+// ── Anthropic model rules (newer-model support) ─────────────────────────────
+// Every app shares one configured model, so these pin two things: today's
+// models get byte-identical requests, and newer models get only fields they
+// accept (a stray `temperature` is a 400 on every 5.x model).
+
+function req(overrides: Record<string, unknown> = {}) {
+  return {
+    version: "2026-05-05", kind: "narrative", stream: true, responseFormat: "text" as const,
+    maxTokens: 450,
+    messages: [{ role: "system", content: "You are helpful." }, { role: "user", content: "Hi" }],
+    ...overrides,
+  };
+}
+function cfg(model: string, overrides: Record<string, unknown> = {}) {
+  return { provider: "anthropic", model, apiKey: "sk-test", temperature: 0.3, ...overrides };
+}
+
+Deno.test("anthropicModelTraits: today's models keep temperature and get no new fields", () => {
+  for (const model of ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-sonnet-4-6", "claude-opus-4-5", "claude-opus-4-6", "claude-3-5-haiku", "claude-sonnet-4-20250514"]) {
+    const t = anthropicModelTraits(model);
+    assertEquals(t.acceptsTemperature, true, model);
+    assertEquals(t.reasonsByDefault, false, model);
+    assertEquals(t.serverFallback, false, model);
+  }
+});
+
+Deno.test("anthropicModelTraits: Opus 4.7/4.8 and 5.x reject temperature; 5.x reason by default", () => {
+  for (const model of ["claude-opus-4-7", "claude-opus-4-8"]) {
+    assertEquals(anthropicModelTraits(model).acceptsTemperature, false, model);
+    assertEquals(anthropicModelTraits(model).reasonsByDefault, false, model);
+  }
+  for (const model of ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-sonnet-5", "claude-opus-5", "claude-opus-5-5", "claude-fable-5-1"]) {
+    const t = anthropicModelTraits(model);
+    assertEquals(t.acceptsTemperature, false, model);
+    assertEquals(t.reasonsByDefault, true, model);
+    assertEquals(t.supportsEffort, true, model);
+  }
+});
+
+Deno.test("anthropicModelTraits: effort only from 4.6; server fallback only where it exists", () => {
+  assertEquals(anthropicModelTraits("claude-haiku-4-5").supportsEffort, false);
+  assertEquals(anthropicModelTraits("claude-sonnet-4-5").supportsEffort, false);
+  assertEquals(anthropicModelTraits("claude-sonnet-4-6").supportsEffort, true);
+  for (const model of ["claude-opus-5", "claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"]) {
+    assertEquals(anthropicModelTraits(model).serverFallback, true, model);
+  }
+  for (const model of ["claude-haiku-5-5", "claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"]) {
+    assertEquals(anthropicModelTraits(model).serverFallback, false, model);
+  }
+});
+
+Deno.test("anthropicModelTraits: an unrecognised id sends only universally-accepted fields", () => {
+  const t = anthropicModelTraits("claude-something-new");
+  assertEquals(t.acceptsTemperature, false);
+  assertEquals(t.supportsEffort, false);
+  assertEquals(t.serverFallback, false);
+});
+
+Deno.test("buildAnthropicRequest: claude-haiku-4-5 (live today) is unchanged", () => {
+  const { headers, body } = buildAnthropicRequest(req(), cfg("claude-haiku-4-5"));
+  assertEquals(body, {
+    model: "claude-haiku-4-5", system: "You are helpful.",
+    messages: [{ role: "user", content: "Hi" }],
+    max_tokens: 450, stream: true, temperature: 0.3,
+  });
+  assertEquals(headers, { "Content-Type": "application/json", "x-api-key": "sk-test", "anthropic-version": "2023-06-01" });
+});
+
+Deno.test("buildAnthropicRequest: a request-level effort reaches a 4.6 model, which keeps its temperature", () => {
+  const { body } = buildAnthropicRequest(req({ effort: "high" }), cfg("claude-sonnet-4-6"));
+  assertEquals(body.temperature, 0.3);
+  assertEquals(body.output_config, { effort: "high" });
+  assertEquals(body.max_tokens, 450);
+  // xhigh doesn't exist before 4.7 — clamped rather than sent as a 400.
+  assertEquals(buildAnthropicRequest(req({ effort: "xhigh" }), cfg("claude-opus-4-6")).body.output_config, { effort: "high" });
+});
+
+Deno.test("buildAnthropicRequest: claude-haiku-5-5 drops temperature, defaults to low effort, adds reasoning headroom, no fallback", () => {
+  const { headers, body } = buildAnthropicRequest(req({ maxTokens: 200 }), cfg("claude-haiku-5-5"));
+  assertEquals("temperature" in body, false);
+  assertEquals(body.output_config, { effort: "low" });
+  assertEquals(body.max_tokens, REASONING_MIN_MAX_TOKENS);
+  assertEquals("fallbacks" in body, false);
+  assertEquals(headers["anthropic-beta"], undefined);
+});
+
+Deno.test("buildAnthropicRequest: a large request keeps its own max_tokens; an explicit effort wins over the default", () => {
+  const { body } = buildAnthropicRequest(req({ maxTokens: 8000, effort: "high" }), cfg("claude-opus-5-5"));
+  assertEquals(body.max_tokens, 8000);
+  assertEquals(body.output_config, { effort: "high" });
+});
+
+Deno.test("buildAnthropicRequest: claude-opus-5-5 opts into the server-side refusal fallback", () => {
+  const { headers, body } = buildAnthropicRequest(req(), cfg("claude-opus-5-5"));
+  assertEquals(body.fallbacks, "default");
+  assertEquals(headers["anthropic-beta"], "server-side-fallback-2026-07-01");
+});
+
+Deno.test("buildAnthropicRequest: Opus 4.8 drops temperature but gets no effort unless asked", () => {
+  const { body } = buildAnthropicRequest(req(), cfg("claude-opus-4-8"));
+  assertEquals("temperature" in body, false);
+  assertEquals("output_config" in body, false);
+  assertEquals(body.max_tokens, 450);
 });

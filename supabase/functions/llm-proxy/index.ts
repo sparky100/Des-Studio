@@ -16,7 +16,13 @@ type LlmMessage = { role?: string; content?: string };
 type LlmProxyRequest = {
   version: string; kind: string; messages: LlmMessage[];
   maxTokens: number; stream: boolean; responseFormat: "text" | "json";
+  // Optional per-request reasoning effort (see anthropicModelTraits). Absent
+  // for every app's request today; the proxy then picks a default only for
+  // models that reason by default.
+  effort?: Effort;
 };
+type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+const VALID_EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 type LlmProviderConfig = {
   provider: string; model: string; apiKey: string;
   temperature?: number; rateLimitPerHour?: number; maxTokensPerRun?: number;
@@ -70,6 +76,7 @@ function normalizeRequest(body: Record<string, unknown>, config: LlmProviderConf
     maxTokens: Math.min(Number(body.maxTokens) || Number(body.max_tokens) || 450, config.maxTokensPerRun || 16000),
     stream: body.stream !== false,
     responseFormat: body.responseFormat === "json" ? "json" : "text",
+    effort: VALID_EFFORTS.includes(body.effort as Effort) ? body.effort as Effort : undefined,
   };
 }
 
@@ -86,22 +93,105 @@ function splitSystemMessages(messages: LlmMessage[]) {
   return { systemText, userMessages };
 }
 
-async function callAnthropic(request: LlmProxyRequest, config: LlmProviderConfig) {
+// ── Anthropic model rules ────────────────────────────────────────────────────
+// Every app on this proxy (Flow/DES Studio, Lens, Loop/SD Studio, Compass)
+// shares ONE configured model, so newer models must work for all of them with
+// no app-side change, while older models (e.g. today's claude-haiku-4-5) must
+// keep receiving exactly the request they always have. These rules are the
+// single place that knows which request fields a given model accepts.
+//
+//  - acceptsTemperature: Claude 4.6 and earlier accept any temperature.
+//    Opus 4.7/4.8 and every 5.x / Fable / Mythos model reject a non-default
+//    temperature with a 400, so it is omitted for them (and for unrecognised
+//    models — leaving it out is always valid).
+//  - reasonsByDefault: 5.x / Fable / Mythos models think before answering
+//    even when the request doesn't ask, and that thinking counts toward
+//    max_tokens. The apps size max_tokens for the answer alone (Lens sends
+//    200-token JSON calls), so those models get REASONING_MIN_MAX_TOKENS of
+//    headroom. max_tokens is a ceiling, not a target: unused headroom costs
+//    nothing.
+//  - supportsEffort: output_config.effort exists on 4.6+ (xhigh from 4.7);
+//    Haiku 4.5 and Sonnet 4.5 reject it.
+//  - serverFallback: models with a server-side refusal fallback
+//    (`fallbacks: "default"`). Haiku 5.5 has none, and sending it is pointless
+//    there, so it is gated per model.
+export type AnthropicModelTraits = {
+  acceptsTemperature: boolean;
+  reasonsByDefault: boolean;
+  supportsEffort: boolean;
+  serverFallback: boolean;
+};
+
+export const REASONING_MIN_MAX_TOKENS = 4096;
+// When a request names no effort, reasoning-by-default models run at "low":
+// every current caller is a short, interactive task, and low keeps them fast
+// and cheap. A caller can ask for more per request.
+export const DEFAULT_REASONING_EFFORT: Effort = "low";
+const SERVER_FALLBACK_MODELS = new Set(["claude-opus-5", "claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"]);
+const FALLBACK_BETA = "server-side-fallback-2026-07-01";
+
+export function anthropicModelTraits(model: string): AnthropicModelTraits {
+  const id = String(model || "").trim().toLowerCase();
+  if (/^claude-(fable|mythos)-/.test(id)) {
+    return { acceptsTemperature: false, reasonsByDefault: true, supportsEffort: true, serverFallback: SERVER_FALLBACK_MODELS.has(id) };
+  }
+  // Legacy naming: claude-3-5-haiku, claude-3-7-sonnet-20250219, ...
+  if (/^claude-[123]-/.test(id)) {
+    return { acceptsTemperature: true, reasonsByDefault: false, supportsEffort: false, serverFallback: false };
+  }
+  const m = id.match(/^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/);
+  if (!m) {
+    // Unrecognised id: send only what every model accepts.
+    return { acceptsTemperature: false, reasonsByDefault: true, supportsEffort: false, serverFallback: false };
+  }
+  const version = Number(m[2]) + Number(m[3] || 0) / 10;
+  return {
+    acceptsTemperature: version <= 4.6,
+    reasonsByDefault: version >= 5,
+    supportsEffort: version >= 4.6,
+    serverFallback: SERVER_FALLBACK_MODELS.has(id),
+  };
+}
+
+// xhigh arrived with 4.7; on 4.6 the nearest supported level is high.
+function effortFor(traits: AnthropicModelTraits, model: string, requested: Effort | undefined): Effort | undefined {
+  if (!traits.supportsEffort) return undefined;
+  const effort = requested ?? (traits.reasonsByDefault ? DEFAULT_REASONING_EFFORT : undefined);
+  if (!effort) return undefined;
+  if (effort === "xhigh" && /-4-6$/.test(model)) return "high";
+  return effort;
+}
+
+// Builds the Anthropic Messages request (headers + body) for the configured
+// model. Pure, so the per-model rules are unit-testable without a network.
+export function buildAnthropicRequest(request: LlmProxyRequest, config: LlmProviderConfig) {
   const { systemText, userMessages } = splitSystemMessages(request.messages);
-  const system = systemText || undefined;
-  return fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": config.apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: config.model, system, messages: userMessages,
-      max_tokens: request.maxTokens, stream: request.stream,
-      temperature: config.temperature ?? 0.3,
-    }),
-  });
+  const traits = anthropicModelTraits(config.model);
+  const body: Record<string, unknown> = {
+    model: config.model,
+    system: systemText || undefined,
+    messages: userMessages,
+    max_tokens: traits.reasonsByDefault ? Math.max(request.maxTokens, REASONING_MIN_MAX_TOKENS) : request.maxTokens,
+    stream: request.stream,
+  };
+  if (traits.acceptsTemperature) body.temperature = config.temperature ?? 0.3;
+  const effort = effortFor(traits, config.model, request.effort);
+  if (effort) body.output_config = { effort };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-api-key": config.apiKey,
+    "anthropic-version": "2023-06-01",
+  };
+  if (traits.serverFallback) {
+    body.fallbacks = "default";
+    headers["anthropic-beta"] = FALLBACK_BETA;
+  }
+  return { headers, body };
+}
+
+async function callAnthropic(request: LlmProxyRequest, config: LlmProviderConfig) {
+  const { headers, body } = buildAnthropicRequest(request, config);
+  return fetch(ANTHROPIC_API_URL, { method: "POST", headers, body: JSON.stringify(body) });
 }
 
 async function callOpenAI(request: LlmProxyRequest, config: LlmProviderConfig) {
@@ -165,7 +255,9 @@ async function callZen(request: LlmProxyRequest, config: LlmProviderConfig) {
         messages: userMessages,
         max_tokens: request.maxTokens,
         stream: request.stream,
-        temperature: config.temperature ?? 0.3,
+        // Same rule as the direct Anthropic path (anthropicModelTraits):
+        // Opus 4.7/4.8 reject a non-default temperature.
+        ...(anthropicModelTraits(config.model).acceptsTemperature ? { temperature: config.temperature ?? 0.3 } : {}),
       }),
     });
   }
