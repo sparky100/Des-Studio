@@ -12,13 +12,13 @@
 // Check: the arrival-weighted mean (0.3·T₁ + 0.4·T₂)/0.7 = 3.3333 = 1/(μ − λ),
 // the plain M/M/1 value, as it must be for a work-conserving discipline.
 //
-// Run two ways. Hand-built: PREEMPT(Server) is gated on "a high job is
-// waiting, the server is busy, and it is serving a low job" (lowInService).
-// The preempted low job keeps its arrival time, so FIFO resumes it ahead of
-// later low arrivals. Preempt-and-assign: ASSIGN(High Queue, Server, PREEMPT,
-// PRIORITY(cls)) alone, no counter. Before Sprint 99 the interrupted job's stale completion
-// still fired (cutting resumed service short and decrementing lowInService
-// twice), so the low class finished too early.
+// The analytic check runs the preempt-and-assign model: ASSIGN(High Queue,
+// Server, PREEMPT, PRIORITY(cls)), no counter. The hand-built form (PREEMPT
+// gated on "a high job is waiting, the server is busy, and it is serving a low
+// job", lowInService) must reproduce it job for job. A preempted low job keeps
+// its arrival time, so FIFO resumes it ahead of later low arrivals. Before
+// Sprint 99 the interrupted job's stale completion still fired (cutting
+// resumed service short and decrementing lowInService twice).
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildEngine } from "../../src/engine/index.js";
 
@@ -101,14 +101,11 @@ function preemptAssignModel() {
 
 const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-describe.each([
-  ["hand-built PREEMPT", handBuiltModel],
-  ["ASSIGN … PREEMPT", preemptAssignModel],
-])("Preemptive-resume priority M/M/1 (two classes) — %s", (_label, model) => {
+// Analytic check on the preempt-and-assign model.
+describe("Preemptive-resume priority M/M/1 (two classes) — ASSIGN … PREEMPT", () => {
   const sojourn = { High: [], Low: [] };
   const lowServiceMeans = [];
   let interrupted = 0;
-  const finalCounters = [];
 
   // Run in beforeAll (not the describe body) and yield between replications:
   // minutes of synchronous simulation at collection time starve the Vitest
@@ -116,7 +113,7 @@ describe.each([
   beforeAll(async () => {
     for (let i = 0; i < REPS; i++) {
       await new Promise(resolve => setImmediate(resolve));
-      const r = buildEngine(model(), BASE_SEED + i, WARMUP, MAX_SIM, null, 5_000_000).runAll();
+      const r = buildEngine(preemptAssignModel(), BASE_SEED + i, WARMUP, MAX_SIM, null, 5_000_000).runAll();
       const done = r.entitySummary.filter(e => e.status === "done" && e.arrivalTime >= WARMUP);
       for (const type of ["High", "Low"]) {
         sojourn[type].push(mean(done.filter(e => e.type === type).map(e => e.completionTime - e.arrivalTime)));
@@ -124,7 +121,6 @@ describe.each([
       const lows = done.filter(e => e.type === "Low");
       lowServiceMeans.push(mean(lows.map(e => e.stages.reduce((s, st) => s + st.stageService, 0))));
       interrupted += lows.filter(e => e.stages.some(st => st.interruptions)).length;
-      finalCounters.push(r.snap.scalars.lowInService ?? 0);
     }
   }, 300000);
 
@@ -137,9 +133,25 @@ describe.each([
   });
 
   it("preemption actually happens, and an interrupted job still receives its full service (mean ≈ 1/μ)", () => {
-    // The in-service counter balances: no stale completion decremented it.
-    expect(finalCounters.every(v => v === 0 || v === 1)).toBe(true);
     expect(interrupted).toBeGreaterThan(1000);
     expect(Math.abs(mean(lowServiceMeans) - 1 / MU) / (1 / MU)).toBeLessThan(TOLERANCE);
   });
+});
+
+// The hand-built form (PREEMPT gated on a counter) draws the same random
+// numbers in the same order, so it must reproduce the preempt-and-assign run
+// job for job — a stronger check than a second analytic run, at a fraction
+// of the cost (soak-tier time matters: see the beforeAll note above).
+describe("Hand-built PREEMPT reproduces ASSIGN … PREEMPT exactly", () => {
+  it("same completion time for every job, and the in-service counter balances", async () => {
+    for (let i = 0; i < 2; i++) {
+      await new Promise(resolve => setImmediate(resolve));
+      const a = buildEngine(preemptAssignModel(), BASE_SEED + i, WARMUP, MAX_SIM, null, 5_000_000).runAll();
+      await new Promise(resolve => setImmediate(resolve));
+      const h = buildEngine(handBuiltModel(), BASE_SEED + i, WARMUP, MAX_SIM, null, 5_000_000).runAll();
+      const times = r => r.entitySummary.filter(e => e.status === "done").map(e => `${e.type}:${e.arrivalTime.toFixed(6)}:${e.completionTime.toFixed(6)}`).sort();
+      expect(times(h)).toEqual(times(a));
+      expect([0, 1]).toContain(h.snap.scalars.lowInService);
+    }
+  }, 300000);
 });
