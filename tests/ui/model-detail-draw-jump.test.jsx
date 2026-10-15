@@ -1,6 +1,7 @@
 // Integration coverage for "Edit in the X tab" jump links: clicking a
 // DefinePointer in Draw's inspector switches ModelDetail to the right Define
 // tab AND lands on that exact entity's card, expanded — not just the tab.
+import { isInaccessible } from "@testing-library/dom";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -104,6 +105,19 @@ describe("ModelDetail — Draw inspector 'Edit in the X tab' jump links", () => 
     // chunk loads. On slower CI runners the immediate getBy* queries saw the
     // results list as inaccessible and the inspector links as missing.
     const results = await screen.findByLabelText("Node search results");
+    // Diagnostic for a CI-only failure (GitHub runners report this option as
+    // inaccessible; it never reproduces locally): name the ancestor that hides it.
+    const optionEl = within(results).getByText("Consultant Queue").closest('[role="option"]');
+    if (optionEl && isInaccessible(optionEl)) {
+      const chain = [];
+      for (let el = optionEl; el && el !== document.documentElement; el = el.parentElement) {
+        const cs = window.getComputedStyle(el);
+        if (el.hidden || el.getAttribute("aria-hidden") === "true" || cs.display === "none" || cs.visibility === "hidden") {
+          chain.push(`<${el.tagName.toLowerCase()} ${[...el.attributes].map(a => `${a.name}="${a.value.slice(0, 80)}"`).join(" ")}> display=${cs.display} visibility=${cs.visibility}`);
+        }
+      }
+      console.error("draw-jump: option inaccessible; hiding ancestors:\n" + chain.join("\n"));
+    }
     await user.click(await within(results).findByRole("option", { name: /^Consultant Queue/i }));
 
     // Inspector now shows the selected queue's pointers (description/balking/
