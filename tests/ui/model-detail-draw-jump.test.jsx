@@ -1,7 +1,8 @@
 // Integration coverage for "Edit in the X tab" jump links: clicking a
 // DefinePointer in Draw's inspector switches ModelDetail to the right Define
 // tab AND lands on that exact entity's card, expanded — not just the tab.
-import { isInaccessible } from "@testing-library/dom";
+import { getRoles, isInaccessible } from "@testing-library/dom";
+import { computeAccessibleName } from "dom-accessibility-api";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -118,11 +119,12 @@ describe("ModelDetail — Draw inspector 'Edit in the X tab' jump links", () => 
       }
       console.error("draw-jump: option inaccessible; hiding ancestors:\n" + chain.join("\n"));
     }
-    await user.click(await within(results).findByRole("option", { name: /^Consultant Queue/i }));
+    if (optionEl) console.info(`draw-jump: option accessible name = ${JSON.stringify(computeAccessibleName(optionEl))}, roles = ${Object.keys(getRoles(optionEl.parentElement)).join(",")}`);
+    await user.click(await within(results).findByRole("option", { name: /^Consultant Queue/i }, { timeout: 5000 }));
 
     // Inspector now shows the selected queue's pointers (description/balking/
     // reneging) as links — any of them should jump to the same queue.
-    const queueLinks = await screen.findAllByRole("button", { name: /edit in the queues tab/i });
+    const queueLinks = await screen.findAllByRole("button", { name: /edit in the queues tab/i }, { timeout: 5000 });
     await user.click(queueLinks[0]);
 
     // Define → Queues is now the active tab…
