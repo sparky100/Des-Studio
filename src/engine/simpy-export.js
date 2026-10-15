@@ -246,7 +246,7 @@ function collectPreemptiveServers(model, warnings) {
   const fieldNames = (model.entityTypes || [])
     .filter((/** @type {any} */ e) => e.role !== 'server')
     .flatMap((/** @type {any} */ e) => (e.attrDefs || []).map((/** @type {any} */ a) => String(a.name || '')));
-  const toField = (/** @type {string} */ attr) => safeId(fieldNames.find(n => n.toLowerCase() === attr.toLowerCase()) || attr);
+  const toField = (/** @type {string} */ attr) => safeId(fieldNames.find((/** @type {string} */ n) => n.toLowerCase() === attr.toLowerCase()) || attr);
   for (const c of (model.cEvents || [])) {
     for (const part of effectText(c.effect).split(';').map((/** @type {string} */ t) => t.trim())) {
       const m = part.match(PREEMPT_ASSIGN_PATTERN);
