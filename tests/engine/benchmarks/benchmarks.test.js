@@ -231,7 +231,9 @@ describe('Benchmark 5 — Priority queue ordering (HP.avgWait < LP.avgWait)', ()
   });
 });
 
-// ── Benchmark 6 — PREEMPT correctness: LP wait exceeds M/M/1 baseline ───────
+// ── Benchmark 6 — Non-preemptive priority: LP wait exceeds M/M/1 baseline ───
+// (Despite its old name this never used PREEMPT. Preemptive priority has an
+// analytic check in tests/benchmarks/preemptive-priority.test.js.)
 // Non-preemptive PRIORITY queue with HP (priority=1) and LP (priority=2).
 // Combined rate λ=0.9 (HP=0.45, LP=0.45), μ=1.0, ρ=0.9.
 // Expected LP wait (Kleinrock 2-class non-preemptive priority):
@@ -240,7 +242,7 @@ describe('Benchmark 5 — Priority queue ordering (HP.avgWait < LP.avgWait)', ()
 // Assert: LP mean wait > 9.0 (directional — HP priority starves LP).
 // 15 replications, warmupPeriod=0, maxSimTime=20000.
 
-describe('Benchmark 6 — PREEMPT correctness: LP avgWait > M/M/1 baseline (9.0)', () => {
+describe('Benchmark 6 — Non-preemptive priority: LP avgWait > M/M/1 baseline (9.0)', () => {
   const BASELINE = 9.0;
   const REPS = 15;
   const BASE_SEED = 700;

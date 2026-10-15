@@ -762,7 +762,7 @@ const PRIORITY_ED_BALKING = {
     scenarioType: "Priority queue with balking, attribute-based ordering, and server preemption",
     keyMacros: ["ARRIVE", "ASSIGN", "PREEMPT", "COMPLETE"],
     paramGuide: "Arrival mean 4 min. Severity Uniform(1,5). Consultation Triangular(15,25,40) min. 3 doctors. Balk probability 10%. Trauma codes arrive mean 30 min and preempt a doctor when all are busy.",
-    limitations: "No triage pre-assessment stage. Severity assigned once at arrival. Preemption always interrupts whichever doctor happens to be busy first — it does not target the lowest-severity patient specifically (the engine has no condition-language way to inspect the attributes of the patient a busy doctor is currently treating), so the model tracks a traumaInService counter to stop preemption from re-targeting a doctor already dedicated to a trauma case.",
+    limitations: "No triage pre-assessment stage. Severity assigned once at arrival. Preemption is built by hand: a traumaInService counter and a gating Preempt for Trauma event stop PREEMPT(Doctor) from re-targeting a doctor already dedicated to a trauma case, and the freed doctor is claimed by the next-priority Consult Trauma event. The bumped patient resumes with exactly their remaining consultation time.",
   },
   entityTypes: [
     { id: "et_patient", name: "Patient", role: "customer", count: 0, attrDefs: [
