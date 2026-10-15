@@ -34,6 +34,15 @@ describe.each(Object.entries(sources))("%s", (_name, build) => {
     expect(text).toContain("V76");
   });
 
+  it("documents ASSIGN ... PREEMPT (Sprint 99)", () => {
+    expect(text).toMatch(/ASSIGN\(\w+, \w+, PREEMPT, PRIORITY\(priority\)\)/);
+    expect(text).toContain("V81");
+  });
+
+  it("no longer recommends a counter + gating PREEMPT event for preemptive priority", () => {
+    expect(text).not.toMatch(/needs\s+a dedicated state-variable counter/);
+  });
+
   it("no longer claims a right-hand-side state variable is always a literal", () => {
     expect(text).not.toMatch(/state-variable right side\s+silently evaluates to false forever/);
     expect(text).not.toMatch(/never for a bare state-variable name/);

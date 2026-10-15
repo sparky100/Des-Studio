@@ -313,5 +313,8 @@ export function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
     // flashing transiently, since it fires occasionally and the flash is
     // easy to miss.
     isPreempt: isPreemptEffect(ce?.effect),
+    // ASSIGN(Q, Server, PREEMPT, …): servers this activity took from
+    // lower-ranked work so far (Sprint 99).
+    preemptTakes: snap.preemptTakes?.[refId] || 0,
   };
 }

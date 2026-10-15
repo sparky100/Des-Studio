@@ -172,7 +172,7 @@ pattern, consult §10 directly.`,
     Entity.<attr> — is a literal. There is no arithmetic on either side.
 
     ✓ CORRECT: "condition": "queue(TraumaQueue).length > idle(Doctor).count"
-    ✓ CORRECT: "condition": "queue(TraumaQueue).length > traumaInService"  — traumaInService is a
+    ✓ CORRECT: "condition": "queue(Waiting).length > maxQueueLength"  — maxQueueLength is a
                declared state variable, read live
     ✓ CORRECT: "condition": "clock >= closureStart AND clock < closureEnd AND closureEnabled == 1"
                — a timed gate needs no repeating "status check" B-event

@@ -120,7 +120,29 @@ activity is next tried, i.e. after any event).
 
 **Benchmark:** the preemptive-priority benchmark runs both forms against the same analytic values.
 
-**SimPy export:** warns that the form is not translated (Phase 3 maps it to `PreemptiveResource`). Validation warns when PREEMPT can fire with an idle server, and when
+**SimPy export:** warns that the form is not translated (Phase 3 maps it to `PreemptiveResource`).
+
+**UI:**
+- **Effect builder:**
+  - the ASSIGN composer's "May interrupt a lower-priority job" option, with **Rank by**, **Interrupted job** and max-per-job controls;
+  - a ready-made suggestion for queues whose discipline ranks jobs.
+- **Visual Designer:**
+  - a `preempts` badge on the activity;
+  - an inspector "Preemption" summary (rank, policy, limits);
+  - the activity sublabel names only the server; it used to list every ASSIGN argument;
+  - priority 0 is shown as 0, not 1.
+- **Run canvas:** a "↯ N taken" count on the preempting activity's card, from the new `snap.preemptTakes`.
+- **Results:** the entity detail's stage cards show "Interrupted N×"; entity journeys export `interruptions`.
+- **Shared macro parser:** keeps nested calls (`PRIORITY(sev)`, `min(a, b)`) inside their argument. Before, a nested call ended the outer call early.
+
+**AI prompt pack:** the schema doc (v2.10.0) gains:
+- the preempt-and-assign row;
+- a worked "Preemptive priority" pattern;
+- TOP LLM MISTAKES #29;
+- V81;
+- corrected avgWait/avgSvc wording.
+
+The model-builder rule 16 and the results-analysis prompt are updated, and `docs-reflect-engine.test.js` guards all three sources. Validation warns when PREEMPT can fire with an idle server, and when
 a criterion's attribute doesn't exist on the queue's entity type. The ASSIGN composer gets a
 "may interrupt a lower-priority job" option. The Priority ED template is rewritten to use it,
 dropping its counter and gating C-event.

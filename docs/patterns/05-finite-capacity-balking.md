@@ -21,7 +21,7 @@ Queues:
                balkCondition={ variable: "Queue.WaitingArea.length", operator: ">=", value: 18 }
 ```
 
-When the queue is at capacity, or the balk check rejects the entity, the join is refused — if `overflowDestination` is set the entity is rerouted there (recursively re-checked against that queue's own capacity/balk rules), otherwise it exits the system. This check is enforced **uniformly, no matter how the entity reaches the queue** — `ARRIVE`, `RELEASE`, conditional/probabilistic routing, batch/split, and preemption re-queue are all checked the same way, not just the initial arrival.
+When the queue is at capacity, or the balk check rejects the entity, the join is refused — if `overflowDestination` is set the entity is rerouted there (recursively re-checked against that queue's own capacity/balk rules), otherwise it exits the system. This check is enforced **uniformly, no matter how the entity reaches the queue** — `ARRIVE`, `RELEASE`, conditional/probabilistic routing and batch/split are all checked the same way, not just the initial arrival. A job re-queued after preemption or a failure (including `ASSIGN … PREEMPT` with `DROP:Queue`) skips the balk check — an interrupted job doesn't walk away — but capacity/overflow still applies.
 
 ## Key fields
 | Field (on the Queue) | Role |

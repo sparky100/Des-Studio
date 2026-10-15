@@ -22,6 +22,7 @@ also have knowledge-base entries).
 |---|---|---|
 | ARRIVE | B-event picker (enumerated, per queue incl. legacy default-queue form) | ✅ full |
 | ASSIGN | C-event picker (enumerated) + canvas activity nodes | ✅ (depth gaps below) |
+| ASSIGN … PREEMPT | ASSIGN composer checkbox "May interrupt a lower-priority job (PREEMPT)" with Rank by / Interrupted job / max-per-job controls; Visual Designer inspector "Preemption" row (Sprint 99) | ✅ (`MINSERVICE:t` and `LONGEST`/`SHORTEST` victim choice are effect-text only) |
 | DELAY | C-event dedicated delay-mode toggle (queue + optional slot capacity) + canvas | ✅ full |
 | COMPLETE | B-event picker | ✅ full |
 | FINISH | C-event picker (per server type) | ✅ full |
@@ -86,7 +87,10 @@ supports the feature but no picker can write it. Group B is genuine engine limit
   `docs/reviews/sprint-97-preempt-finish-victim-selection-plan.md`. `PREEMPT(Type, Criterion)` /
   `FINISH(Type, Criterion)` accept `PRIORITY(attrName)` (lowest value targeted), `LONGEST`, or
   `SHORTEST` (by elapsed service time). Omitted or unrecognized criterion keeps today's
-  first-busy-server behavior.
+  first-busy-server behavior. **Sprint 99** added preempt-and-assign,
+  `ASSIGN(Q, Type, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t])`, which interrupts
+  only a job ranked strictly below the queue head and hands the server over in the same firing —
+  see `docs/reviews/sprint-99-preemption-plan.md`.
 - ~~**FAIL / REPAIR are all-or-nothing per server type** — no partial `FAIL(Type, N)` for modelling a
   single machine of a bank breaking down.~~ **Closed by Sprint 96** — see
   `docs/reviews/sprint-96-fail-repair-quantities-plan.md`. `FAIL(Type, N)` fails up to N servers
@@ -108,7 +112,8 @@ supports the feature but no picker can write it. Group B is genuine engine limit
   instead of deadlocking it.
 - **SimPy export**: RENEGE, BATCH, RENEGE_OLDEST, MATCH, FAIL, REPAIR, PREEMPT, RELEASE_COSEIZED
   (plus FINISH since Sprint 97 and JOIN since Sprint 98)
-  export as `# NOT SUPPORTED` TODO blocks (category 2) — documented, but worth surfacing in the UI
+  export as `# NOT SUPPORTED` TODO blocks (category 2); `ASSIGN … PREEMPT` (Sprint 99) exports
+  with a NOT SUPPORTED warning and waits for an idle server — documented, but worth surfacing in the UI
   before a user builds a model around them expecting portable export.
 
 ## Recommendations (prioritised)
@@ -125,7 +130,7 @@ supports the feature but no picker can write it. Group B is genuine engine limit
    optional container + amount) instead of enumerating only pairwise combinations. Removes gaps
    2, 3 and shrinks the enumerated dropdown.
 5. **Engine backlog candidates** (Group B): JOIN(Q, splitFamily) fork-join; FAIL(Type, N) partial
-   failure; PREEMPT victim selection by discipline. Each needs schema-contract round-trip tests per
+   failure; PREEMPT victim selection by discipline (all since closed — Sprints 98, 96, 97/99). Each needs schema-contract round-trip tests per
    CLAUDE.md if fields are added.
 
 No code changes were made in this audit; it is a findings register for sprint planning.

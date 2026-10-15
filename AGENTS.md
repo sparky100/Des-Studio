@@ -234,6 +234,7 @@ while (fel.length > 0 && !terminationConditionMet()) {
 |---|---|---|---|
 | `ARRIVE` | B-Event | `ARRIVE(EntityType[, QueueName])` | Creates entity, places in queue (defaults to `TypeName+"Queue"`), schedules next arrival |
 | `ASSIGN` | C-Event | `ASSIGN(QueueName, ServerType)` | Removes entity from named queue, binds to a free server, schedules cSchedule B-events |
+| `ASSIGN … PREEMPT` | C-Event | `ASSIGN(QueueName, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t])` | Preempt-and-assign (Sprint 99, `src/engine/preemptAssign.js`): idle server → plain ASSIGN; otherwise interrupts a busy server whose job ranks strictly below the queue head (queue discipline key or `PRIORITY(attr)`; equal rank never interrupts) and hands it to the head in the same firing. Policy `RESUME` (default) / `RESTART` / `RESAMPLE` / `DROP:Queue`. Validated by V81 |
 | `COMPLETE` | B-Event | `COMPLETE()` | Marks entity as served, records stats, removes from active service |
 | `RELEASE` | B-Event | `RELEASE(ServerType[, TargetQueue])` | Frees server, optionally routes entity to a target queue |
 | `RENEGE` | B-Event | `RENEGE(ctx)` | Removes entity from queue after patience timeout; always use `ctx` |
@@ -242,7 +243,7 @@ while (fel.length > 0 && !terminationConditionMet()) {
 | `UNBATCH` | B-Event | `UNBATCH(QueueName)` | Restores batch children to the named queue |
 | `FILL` | B or C | `FILL(ContainerName, amount)` | Adds amount to a named container (clamped to capacity) |
 | `DRAIN` | C-Event | `DRAIN(ContainerName, amount)` | Removes amount from container; no-op if level < amount |
-| `PREEMPT` | B or C | `PREEMPT(ServerType)` | Interrupts in-progress service; displaced entity re-queues with remaining service time |
+| `PREEMPT` | B or C | `PREEMPT(ServerType[, Criterion])` | Interrupts in-progress service; displaced entity re-queues with remaining service time (any distribution); its original completion B-event never fires (service epoch). V81 warns if a C-event fires it without checking `idle(ServerType)` — prefer `ASSIGN … PREEMPT` |
 | `FAIL` | B-Event | `FAIL(ServerType)` | Places server into failed state; interrupts in-progress service |
 | `REPAIR` | B-Event | `REPAIR(ServerType)` | Restores failed server to idle |
 | `SPLIT` | B or C | `SPLIT(EntityType, N, TargetQueue)` | Creates N−1 clones of the current entity, places them in TargetQueue |
@@ -1554,6 +1555,7 @@ See `docs/simmodlr_Build_Plan.md` for the full sprint-by-sprint roadmap. Latest 
 | Sprint 84 | ✅ Complete | 2026-06-09 | Engine Fidelity — PRNG stream isolation per process (arrival/service/renege/mtbf/mttr), shift-change behavior toggle (delay/preempt/suspend), purge period option, starvation duration tracking per resource |
 | Sprint 86 | ✅ Complete | 2026-06-29 | Calendar-Aware Resource Scheduling — weekly schedule patterns with 24×7 grid editor, per-shift utilisation chart, schedule adherence badge, V50–V56 validation rules, LLM bundle schedule columns, UI tests, documentation |
 | Sprint 87 | ✅ Complete | 2026-06-30 | Parameterised Weekly Schedule Patterns — multiplier mode (0–100% of base capacity), `resolveSchedulePattern()` pure function, V57–V60 validation rules, WeeklyPatternEditor mode toggle, baseCapacity input, sweep variable support, LLM prompt updates, documentation |
+| Sprint 99 | ✅ Complete (PR #571) | 2026-10 | Preemption — Phase 1 correctness for all interruptions (PREEMPT, FAIL, MTBF/MTTR, shift close): stale completion never fires, stage records gain `serviceSegments`/`interruptions`, remaining time honoured for every distribution, preemptive-priority analytic benchmark. Phase 2: `ASSIGN(Queue, ServerType, PREEMPT, …)` preempt-and-assign, V81, ASSIGN composer option, Priority ED template rewritten |
 | Sprint 88 | ✅ Complete | 2026-06-30 | Export Consolidation & Data Portability — unified "Export ▾" popover replaces scattered buttons, "Download all chart data" in ResultsWorkspace, entity journey data in JSON export, schema reference modal |
 
 ---

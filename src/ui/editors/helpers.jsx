@@ -100,6 +100,10 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
         skills.forEach(skill=>{
           opts.push({label:`Start ${cName} with ${s} (${skill}) and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`, value:`ASSIGN(${q.name}, ${s}, "${skill}")`});
         });
+        // Sprint 99 — preempt-and-assign, offered when the queue ranks its entities.
+        if (/^(PRIORITY(\(\w+\))?|SPT|EDD)$/i.test(String(q.discipline||'').trim())) {
+          opts.push({label:`Start ${cName} with ${s} and ${q.customerType||'entity'} from ${queueDisplayName(q.name)} — if no ${s} is free, take one from lower-priority work`, value:`ASSIGN(${q.name}, ${s}, PREEMPT)`});
+        }
         // Entity-driven skill: use entity's string attributes as skill source
         const custTypeForQueue = (entityTypes||[]).find(e => e.role === 'customer' &&
           (!q.customerType || normTypeName(q.customerType) === normTypeName(e.name)));

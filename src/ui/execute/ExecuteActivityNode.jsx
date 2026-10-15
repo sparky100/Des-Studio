@@ -110,6 +110,20 @@ function InterruptedNote({ count }) {
   );
 }
 
+// A service activity using ASSIGN(Q, Server, PREEMPT, …): how many times it
+// took a server from lower-ranked work. Supplementary, hidden at zero.
+function PreemptTakesNote({ count }) {
+  const { C, FONT } = useTheme();
+  if (!count) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 1 }}>
+      <span title="Servers this activity took from lower-priority work" style={{ fontSize: 11, color: C.amber, fontFamily: FONT, fontWeight: 600 }}>
+        ↯ {count} taken
+      </span>
+    </div>
+  );
+}
+
 // Persistent running total for a PREEMPT activity — this card's own fire
 // count (startSignal) is its primary metric, so shown continuously rather
 // than only via the transient start-flash pulse, which is easy to miss for
@@ -411,6 +425,7 @@ export function ExecuteActivityNode({ data }) {
             single-resource shape above — applies to any ASSIGN/COSEIZE
             activity. Not shown on a Preempt card itself (handled above). */}
         {!live.isPreempt && <InterruptedNote count={interruptedCount} />}
+        {!live.isPreempt && !live.isDelay && <PreemptTakesNote count={live.preemptTakes} />}
         </>
       ) : (
         <div style={{ fontSize: 9, color: C.muted }}>—</div>

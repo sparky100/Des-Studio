@@ -31,7 +31,7 @@ The project has completed **89 sprints** covering the full DES modelling lifecyc
 | Shareable results dashboard + QR codes | Complete |
 | CSV import bridge with distribution fitting | Complete |
 | Community gallery and template library (26 templates) | Complete |
-| Resource preemption, breakdowns, MTBF/MTTR | Complete |
+| Resource preemption (incl. preemptive priority via `ASSIGN … PREEMPT`), breakdowns, MTBF/MTTR | Complete |
 | Advanced scheduling (SPLIT, COSEIZE, MATCH, dynamic BATCH) | Complete |
 | Queue disciplines (FIFO, LIFO, PRIORITY, SPT, EDD, PRIORITY(attr)) | Complete |
 | Histograms and ANOVA with Tukey HSD | Complete |
@@ -135,14 +135,14 @@ flow supports 24 macros across B-Events and C-Events (the `MACROS` array in `src
 | Macro | Phase | Purpose |
 |---|---|---|
 | `ARRIVE` | B-Event | Creates entity, places in queue, schedules next arrival |
-| `ASSIGN` | C-Event | Seizes resource for entity, schedules completion |
+| `ASSIGN` | C-Event | Seizes resource for entity, schedules completion. `ASSIGN(Queue, ServerType, PREEMPT[, …])` also takes a server from a lower-ranked job when none is idle (preemptive priority) |
 | `COMPLETE` | B-Event | Releases resource, records stats, entity departs |
 | `RELEASE` | B-Event | Frees resource and routes entity to another queue |
 | `RENEGE` | B-Event | Removes waiting entity from queue on timeout (abandonment) |
 | `RENEGE_OLDEST` | B-Event | Removes the oldest waiting entity of a given type from queue |
 | `BATCH` | C-Event | Accumulates N entities into one batch |
 | `UNBATCH` | B-Event | Restores children from parent batch |
-| `PREEMPT` | C-Event | Interrupts busy server; re-queues entity with remaining service |
+| `PREEMPT` | C-Event | Interrupts busy server; re-queues entity with remaining service (its original completion never fires) |
 | `FAIL` | B-Event | Sets matching servers to failed status |
 | `REPAIR` | B-Event | Restores failed servers to idle |
 | `SPLIT` | B/C-Event | Creates N-1 clones of context entity |

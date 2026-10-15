@@ -1069,6 +1069,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       byQueue,
       nextArrivals,
       eventCounts: { ..._eventCounts },
+      // ASSIGN … PREEMPT: servers each activity took from lower-ranked work.
+      preemptTakes: state.__preemptTakes ? { ...state.__preemptTakes } : undefined,
       containers:  Object.keys(containers).length ? containers : undefined,
       felPreview:  fel.slice(0, 100).map(e => ({
         scheduledTime:   e.scheduledTime,

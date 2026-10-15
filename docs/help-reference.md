@@ -80,7 +80,7 @@ State-triggered events. Fire when condition becomes true. Defined in `cEvents[]`
 
 **What the right-hand side of a condition can be:** Each clause compares a left side with a right side — no arithmetic on either side. The right-hand side is read **dynamically** (its current value at the moment the condition is checked) when it is:
 - one of the function-call tokens `queue(Q).length`, `idle(T).count`, `busy(T).count`, `container(C).level|capacity|min|max`, `attr(T, a)` — e.g. shortest-queue routing `queue(A).length < queue(B).length`;
-- a **state variable**, written as its bare name or as `state.<name>` — e.g. `clock >= closureStart`, `queue(TraumaQueue).length > traumaInService`.
+- a **state variable**, written as its bare name or as `state.<name>` — e.g. `clock >= closureStart`, `queue(Waiting).length > maxQueueLength`.
 
 Anything else is a **literal**: a number (`3`), or text (`"sour"`) — e.g. `Entity.grade == "sour"`. A bare word is read as a state variable only if a state variable of exactly that name exists; otherwise it stays literal text. `Entity.<attr>` on the right-hand side is not resolved — it is literal text.
 
@@ -237,6 +237,16 @@ An entity can keep one resource while it passes through later stages — a tanke
 
 - A failure or preemption of one resource interrupts only the stage it belongs to (resources seized together by one ASSIGN/COSEIZE): if the lane fails, the transit is re-queued and the tanker keeps its VLCC.
 - If the carried resource itself fails or is preempted, the entity loses it but continues its current stage; the later RELEASE of it simply routes the entity onward.
+
+### Preemptive Priority
+
+To let an urgent case take a resource from a less urgent one, give its Conditional event the effect `ASSIGN(UrgentQueue, Doctor, PREEMPT, PRIORITY(priority))` and the condition `queue(UrgentQueue).length > 0`. In the effect builder: ASSIGN → tick **May interrupt a lower-priority job (PREEMPT)**.
+
+- An idle resource is used first. Otherwise the resource serving the lowest-ranked entity is interrupted, but only if that entity ranks strictly below the waiting one, and it goes straight to the waiting entity.
+- Rank: lower value = more urgent. It comes from the queue's PRIORITY discipline, or the **Rank by** attribute. Every entity type that can hold the resource needs that numeric attribute (e.g. trauma 0, patients 1–5). Equal rank never interrupts.
+- The interrupted entity re-queues and, by default, resumes with its remaining time. **Interrupted job** can instead restart its full time, get a new sampled time, or go to another queue (`DROP:Queue`). `MAX:n` limits how often one entity can be interrupted; `MINSERVICE:t` leaves an entity that has had less than t of service alone.
+- No counter state variable or separate PREEMPT event is needed. Plain `PREEMPT(Type)` still works, but it interrupts whichever busy resource it finds first.
+- See the **Priority ED with Balking** template.
 
 ### Turnaround After Release
 
@@ -443,8 +453,8 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 
 | Metric | Meaning | Interpret High | Interpret Low |
 |--------|---------|----------------|---------------|
-| avgWait | Mean waiting time across all queues (post-warmup) | Congestion, insufficient capacity | Adequate capacity or low utilisation |
-| avgSvc | Mean service time | Complex service or slow servers | Fast service or simple tasks |
+| avgWait | Mean waiting time across all queues (post-warmup). Service received before an interruption counts as service, not wait | Congestion, insufficient capacity | Adequate capacity or low utilisation |
+| avgSvc | Mean service time (all service intervals when service was interrupted) | Complex service or slow servers | Fast service or simple tasks |
 | avgSojourn | Mean end-to-end time (wait + service, served + reneged only) | System-wide delays | Efficient flow |
 | avgTimeInSystem | Weighted mean time in system (all entities, incl. in-progress at 0.5 weight) | System-wide delays including unfinished work | Efficient flow |
 | servedRatio | Service completion rate (served / total, 0–1) | Most entities complete service | Many entities still in system or reneging |
@@ -528,7 +538,7 @@ Each container reports **min, avg, max and final** level over the post-warm-up p
 
 ### Interruptions
 
-Per-resource count of preemption events (PREEMPT/FAIL macro firings that cut off in-progress service). A high count alongside a low `scheduleAdherence` or high `starvationPct` usually points to a failure/MTBF-MTTR model or a higher-priority job repeatedly bumping lower-priority work — see Server Failure Model above.
+Per-resource count of preemption events (PREEMPT, `ASSIGN … PREEMPT`, FAIL, breakdowns and shift closes that cut off in-progress service). Each entity's stage record also carries `interruptions` and `serviceSegments` (the service intervals before each interruption). An interrupted entity's original completion never fires, and it resumes with exactly its remaining time. A high count alongside a low `scheduleAdherence` or high `starvationPct` usually points to a failure/MTBF-MTTR model or a higher-priority job repeatedly bumping lower-priority work — see Server Failure Model above.
 
 ### Queue Rejections
 
@@ -633,6 +643,7 @@ Gaps in the numbering (e.g. no V7) are intentional — codes were retired or ren
 | V-SKILL-2 (ANY variant) | `ASSIGN(Q, ANY, "Skill")` references a skill no registered server type actually has | The cross-type pool is guaranteed empty — add the skill to a server type, or correct the skill name |
 | V76 | A condition compares a numeric value with non-numeric text that is not a state variable or dynamic reference (e.g. `clock >= closureStrat`) | The clause is always false — fix the spelling, or declare the name as a state variable |
 | V79 | A `quantityAttr` attribute has no default value and no distribution | Every entity's quantity is 0 unless an effect sets it |
+| V81 | `ASSIGN(…, PREEMPT, …)` with an unknown option, a queue that doesn't rank entities (FIFO/LIFO, no `PRIORITY(attr)`), a rank attribute the entity type lacks, or a `DROP:` queue that doesn't exist; or a Conditional event that fires `PREEMPT(Type)` without checking `idle(Type)` | The preemption never happens, or it interrupts a job while a resource is idle |
 | W-CAP-01 | Two or more Conditional events SEIZE/ASSIGN the same server type | Results may be sensitive to Conditional event priority ordering |
 | W-CAP-02 | Bound event schedule has an Exponential mean interval < 0.001 | simmodlr models discrete entities — consider SD Studio for continuous flow |
 

@@ -804,6 +804,7 @@ The following must be added to `CLAUDE.md` before Sprint 1 begins. Copy this sec
 ### Action Vocabulary — Open Set (as of Sprint 33+)
 - The currently implemented macros are: ARRIVE, SEIZE/ASSIGN, COMPLETE, DELAY, RENEGE, BATCH, UNBATCH, RENEGE_OLDEST, FILL, DRAIN, SET, SET_ATTR, COST, PREEMPT, FAIL, REPAIR, SPLIT, JOIN, COSEIZE, RELEASE_COSEIZED, MATCH
 - SEIZE and ASSIGN are engine synonyms for the resource-claiming action (C-Event phase)
+- ASSIGN(Queue, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t]) is the preempt-and-assign form (Sprint 99): idle server → plain ASSIGN; otherwise takes a server from a strictly lower-ranked job in service. Validated by V81
 - BATCH is a C-Event only macro; UNBATCH is a B-Event only macro
 - FILL and DRAIN operate on container levels; containers must be declared in containerTypes
 - SET modifies state variables; SET_ATTR modifies entity attributes; both use safe expression evaluator
@@ -884,7 +885,7 @@ The following were valid future extensions at the time of writing but have since
 
 - ~~**Conditional routing**~~ — ✅ Implemented in Sprint 10 (RELEASE routing table with conditions and probabilistic routing)
 - ~~**Resource pooling**~~ — ✅ Implemented in Sprint 10 (multi-server resources with capacity > 1)
-- ~~**Pre-emption**~~ — ✅ Implemented in Sprint 32 (PREEMPT macro with remaining service time preservation)
+- ~~**Pre-emption**~~ — ✅ Implemented in Sprint 32 (PREEMPT macro with remaining service time preservation); Sprint 99 made interruption correct for all service distributions and added preempt-and-assign (`ASSIGN … PREEMPT`)
 - ~~**Entity splitting**~~ — ✅ Implemented in Sprint 33 (SPLIT macro creating N-1 clones)
 
 The following remain **out of scope**:
@@ -907,12 +908,13 @@ The complete macro set implemented in the engine. This is the authoritative list
 |---|---|---|---|
 | ARRIVE | B-Event | 1 | Creates entity, places in queue, schedules next arrival |
 | SEIZE / ASSIGN | C-Event | 1 | Matches waiting entity to idle server; schedules COMPLETE |
+| ASSIGN … PREEMPT | C-Event | 99 | `ASSIGN(Queue, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t])` — idle server → plain ASSIGN; otherwise interrupts a busy server whose job ranks strictly below the head of Queue and hands it to the head in the same firing. Rank: queue discipline key (`PRIORITY(attr)`, `PRIORITY`, `SPT`, `EDD`; lower = more urgent) or a `PRIORITY(attr)` criterion; equal rank never interrupts. Victim: lowest-ranked (ties: least service so far); `LONGEST`/`SHORTEST` pick by service so far. Policy `RESUME` (default) / `RESTART` / `RESAMPLE` / `DROP:Queue`; `MAX:n` per job; `MINSERVICE:t`. Not with skill, ANY or container clauses. V81 |
 | COMPLETE | B-Event | 1 | Releases server, records stats, routes entity to next node |
 | RELEASE | B-Event | 1 | Frees server and routes entity to another queue |
 | RENEGE | B-Event | 1 | Removes entity from queue after patience timeout; routes to Sink |
 | BATCH | C-Event | 12 | Accumulates N entities per queue discipline into a parent batch entity |
 | UNBATCH | B-Event | 12 | Restores children from a parent batch to a target queue |
-| PREEMPT | B-Event | 32 | `PREEMPT(ServerType[, Criterion])` — interrupts a busy server; re-queues displaced entity with remaining service time. Criterion (`PRIORITY(attr)`/`LONGEST`/`SHORTEST`) selects which busy server when more than one qualifies (default: first busy server) |
+| PREEMPT | B-Event | 32 | `PREEMPT(ServerType[, Criterion])` — interrupts a busy server; re-queues displaced entity with remaining service time. Criterion (`PRIORITY(attr)`/`LONGEST`/`SHORTEST`) selects which busy server when more than one qualifies (default: first busy server). The displaced entity's original completion never fires (Sprint 99) and its service so far counts as service, not wait. V81 warns if a C-event fires it without checking `idle(ServerType)` |
 | FAIL | B-Event | 32 | `FAIL(ServerType[, N])` — sets up to N matching servers to failed status, idle-preferred (default: all) |
 | REPAIR | B-Event | 32 | `REPAIR(ServerType[, N])` — restores up to N failed servers to idle, oldest-failure-first (default: all) |
 | SPLIT | C/B-Event | 33 | `SPLIT(EntityType, N, Queue)` — exactly 3 args. Creates N-1 clones of the context entity and routes them to Queue; records `_splitParent`/`_splitChildren` — the lineage JOIN (Sprint 98) consumes for fork/join. Trigger from a one-shot context only (e.g. a cSchedule-fired B-event) — a recurring C-event condition on the same entity/queue will refire unboundedly since SPLIT doesn't change the context entity's status. |

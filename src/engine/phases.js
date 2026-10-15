@@ -237,6 +237,7 @@ export function applyEffect(effect, ctx) {
     rng:    ctx.rng,
     entityFilter: ctx.entityFilter ?? null,
     ceventName: ctx.ceventName ?? null,
+    ceventId: ctx.ceventId ?? null,
     incQueueMetric: ctx.incQueueMetric ?? null,
     noteEntityCreated: ctx.noteEntityCreated ?? null,
     noteQueueDepth: ctx.noteQueueDepth ?? null,
@@ -557,7 +558,7 @@ export function fireBEvent(ev, ctx) {
  */
 export function fireCEvent(ev, ctx) {
   const { clock, model } = ctx;
-  const effectCtx = { ...ctx, felRef: null, entityFilter: ev.entityFilter ?? null, ceventName: ev.name };
+  const effectCtx = { ...ctx, felRef: null, entityFilter: ev.entityFilter ?? null, ceventName: ev.name, ceventId: ev.id };
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
   const { msgs, felEntries, noOp, stateChanges } = applyEffect(effectStr, effectCtx);
 

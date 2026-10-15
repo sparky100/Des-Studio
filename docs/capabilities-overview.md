@@ -38,7 +38,7 @@ The engine vocabulary covers all standard DES patterns without free-text scripti
 | **Core lifecycle** | ARRIVE, SEIZE, COMPLETE, RELEASE, RENEGE |
 | **Assembly & grouping** | BATCH, UNBATCH, MATCH, SPLIT |
 | **Multi-resource** | COSEIZE |
-| **Reliability** | FAIL, REPAIR, PREEMPT |
+| **Reliability** | FAIL, REPAIR, PREEMPT (plus preemptive priority via `ASSIGN(Queue, ServerType, PREEMPT, …)`) |
 | **State management** | SET, SET_ATTR, ASSIGN, COST |
 | **Inventory / tanks** | FILL, DRAIN |
 | **Queue management** | RENEGE_OLDEST |

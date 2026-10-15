@@ -16,6 +16,7 @@ Each template teaches a different modelling concept — from a single queue thro
 | v1.3 | Sprints 62-66 | Appointment Clinic added: showcases Schedule distribution with per-arrival `rows[]` attributes, real-world clock (epoch/timeUnit), attribute-conditional routing at RELEASE, and `cSchedule.when` service-time branching. |
 | v1.4 | Sprint 33 / later | Four new templates added: Surgical Suite (COSEIZE multi-resource seize), Order Fulfillment (MATCH entity sync, EDD discipline), London Underground Live TfL (real-time schedule injection from TfL API), Airport Arrivals Live OpenSky (real-time inter-arrival calibration from OpenSky Network). |
 | v1.5 | 2026-10 | World Oil Network — Hormuz Closure added (Logistics, advanced reference model): built from `reference-models/world-oil-network/`, the same model `npm run test:reference` checks. Its documentation is copied into the model's Notes (Overview tab). |
+| v1.6 | Sprint 99 | Priority ED with Balking documented: trauma codes now use preempt-and-assign `ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))` — no `traumaInService` counter or gating "Preempt for Trauma" event. |
 
 ---
 
@@ -241,29 +242,24 @@ Vessels arrive every 8 hours and queue for one of 3 berths. Unloading takes 4–
 
 ## 15. Machine Shop with Failures (NEW — v1.2)
 
-**Concept:** Equipment failures, repair cycles, and server downtime analysis using `FAIL` and `REPAIR` macros with MTBF/MTTR parameters.
+**Concept:** Equipment failures, repair cycles and server downtime, using the automatic MTBF/MTTR failure model on the Machine entity type (no FAIL/REPAIR events to write).
 
-A machine shop processes machining jobs on 4 CNC machines. Jobs arrive exponentially (mean 3 min). Machining time is triangular (4–8–14 min). Machines do not run indefinitely — each machine has a mean time between failures (MTBF) of 120 min and a mean time to repair (MTTR) of 20 min. When a machine fails, the `FAIL` macro fires as a Bound Event: it sets the machine's status to `failed` and re-queues any job that was mid-service (with its remaining service time preserved). A repair technician (1 Technician resource) then begins the repair cycle. When repair completes, the `REPAIR` macro restores the machine to `idle` status and it re-enters the pool.
+A machine shop processes jobs on 3 CNC machines. Jobs arrive exponentially (mean 5 min) and queue FIFO in `JobQueue`. Machining time is Triangular(10, 15, 25) min. Each machine fails after an Exponential time (mean 120 min, MTBF) and is repaired after an Exponential time (mean 20 min, MTTR). The engine schedules failures and repairs itself. When a machine fails mid-job, the job re-queues and later resumes with exactly its remaining machining time; the completion scheduled before the failure never fires, and the time already spent machining counts as service, not wait (Sprint 99).
 
-The model also uses `PREEMPT` to allow urgent jobs (flagged with `urgent = 1`) to interrupt a running machine and push the displaced job back to the front of the Machining queue with remaining service time intact.
+**What to watch:** Per-resource downtime and failure counts, the **Interruptions** count, and how the queue builds while machines are down. With MTBF 120 and MTTR 20, each machine is available about 86% of the time, so the effective capacity is about 2.6 machines, not 3. Downtime has a nonlinear effect on wait: small reductions in MTTR give large wait improvements.
 
-**What to watch:** Track `machineDowntime` (sum of time all 4 machines spend in `failed` status) and `avgWaitDuringFailure` (queue length spike when machines are down). With MTBF 120 and MTTR 20, each machine is available roughly 85% of the time — so the effective capacity is 3.4 machines, not 4. Downtime has a nonlinear effect on queue wait; small reductions in MTTR produce large wait-time improvements.
-
-**Entity types:** Job (arriving, with `urgent` attribute), Machine (4), Technician (1)
+**Entity types:** Job (customer), Machine (server, 3, with `mtbfDist`/`mttrDist`)
 
 **Macros used:**
-- `ARRIVE(Job)` — exponential inter-arrival, mean 3 min
-- `ASSIGN(Machining, Machine)` — seizes a machine, schedules completion
-- `FAIL(Machine)` — Bound Event fires at MTBF interval; sets machine status to `failed`, re-queues interrupted job
-- `REPAIR(Machine)` — Bound Event fires after MTTR; restores machine to `idle`
-- `PREEMPT(Machine)` — Bound Event for urgent jobs; interrupts current job, records remaining service time
+- `ARRIVE(Job, JobQueue)` — exponential inter-arrival, mean 5 min
+- `ASSIGN(JobQueue, Machine)` — seizes a working machine, schedules completion
 - `COMPLETE()` — job departs, machine freed
 
-**Entity type fields:** `mtbf = 120`, `mttr = 20` on the Machine entity type (Sprint 42 fields)
+**Entity type fields:** `mtbfDist: "Exponential"`, `mtbfDistParams: { mean: "120" }`, `mttrDist: "Exponential"`, `mttrDistParams: { mean: "20" }` on Machine
 
-**State variables:** `machineDowntime`, `repairCount`, `preemptedJobs`
+**Goals:** `served >= 40`, `avgWait < 15 min`
 
-**Key metric:** Effective throughput capacity = server count × availability = 4 × (MTBF / (MTBF + MTTR)). Vary MTTR from 10 to 40 to see downtime impact on average wait.
+**Key metric:** Effective capacity = server count × availability = 3 × (MTBF / (MTBF + MTTR)). Vary MTTR from 10 to 40 to see the impact of downtime on average wait.
 
 ---
 
@@ -484,6 +480,28 @@ Crude cargoes from three regions load onto four tanker fleets, sail through or a
 
 ---
 
+## 24. Priority ED with Balking
+
+**Concept:** PRIORITY queue discipline, balking, and preemptive priority with preempt-and-assign (`ASSIGN … PREEMPT`).
+
+Patients arrive every 4 minutes (exponential) with a `priority` attribute drawn from Uniform(1, 5) — lower = more urgent — and wait in a PRIORITY queue (`Waiting`, capacity 30, 10% balk probability) for one of 3 doctors. Consultation is Triangular(15, 25, 40) min. Trauma codes arrive every 30 minutes (exponential) into `TraumaQueue`; the TraumaCode entity type has `priority = 0`, so it outranks every patient.
+
+**Preemption:** the *Consult Trauma* Conditional event (priority 0, condition `queue(TraumaQueue).length > 0`) runs `ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))`. An idle doctor is used if there is one; otherwise the doctor seeing the least urgent patient (highest `priority` number) is interrupted and goes straight to the trauma code. The bumped patient re-queues and later resumes with exactly their remaining consultation time; their original completion is cancelled. A doctor already treating a trauma code (equal rank) is never taken. No state-variable counter or separate "preempt" event is needed.
+
+**What to watch:** avgWait against the `avgWait < 20` goal and balked count against `balked < 10`; per-resource interruption counts for Doctor.
+
+**Entity types:** Patient (arriving, `priority` Uniform(1, 5)), TraumaCode (arriving, `priority` 0), Doctor (3)
+
+**Macros used:**
+- `ARRIVE(Patient, Waiting)`, `ARRIVE(TraumaCode, TraumaQueue)`
+- `ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))` — trauma consult, Triangular(10, 18, 30) min
+- `ASSIGN(Waiting, Doctor)` — regular consult, when a doctor is idle
+- `COMPLETE()`
+
+**Key metric:** use the goal-aware sweep on Doctor count to find the minimum staffing that meets both goals.
+
+---
+
 ## Using Templates with AI Insights
 
 Every template is designed to work immediately with simmodlr's AI Insights panel. Here is the recommended workflow:
@@ -536,6 +554,7 @@ When you open a template, simmodlr saves a **private copy** to your account. The
 | `COMPLETE()` | Bound Event | Frees the resource, records statistics, entity departs |
 | `RELEASE(Resource, TargetQueue)` | Bound Event | Frees the resource and routes the entity to another queue |
 | `ASSIGN(QueueName, ResourceType)` | Conditional Event | Seizes a resource for an entity, schedules completion |
+| `ASSIGN(QueueName, ResourceType, PREEMPT[, …])` | Conditional Event | As ASSIGN, but with no idle resource takes one from a strictly lower-ranked job in service (preemptive priority); the interrupted job resumes with its remaining time by default |
 | `RENEGE(EntityType)` | Bound Event | Removes the oldest waiting entity from queue (abandonment) |
 | `RENEGE_OLDEST(EntityType)` | Bound Event | Removes the oldest waiting entity of a given type from queue |
 | `BATCH(QueueName, Count)` | Conditional Event | Accumulates N entities into one batch |
@@ -570,6 +589,6 @@ Each template's **Step Log** shows every event in order with clock timestamps. T
 - **Ward Bed Admission** — bed-blocking rate (patients waiting for beds)
 - **Bank Branch** — priority queue behaviour (premium customers served first)
 - **Port Berth Operations** — congestion at high utilisation (83%)
-- **Machine Shop with Failures** — downtime analysis; MTBF/MTTR sensitivity; preemption impact
+- **Machine Shop with Failures** — downtime analysis; MTBF/MTTR sensitivity; interrupted-job impact
 - **Priority ED with Triage Escalation** — mid-flight attribute update via SET_ATTR; Loop Guard recirculation cap; dynamic priority reordering
 - **Cost-Optimised Call Centre** — cost goal with Parametric Sweep feasibility; minimum-cost staffing configuration

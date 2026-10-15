@@ -72,7 +72,7 @@
 | Skill-filtered conditions | ✅ | `idle(Server, "Skill").count` / `busy(Server, "Skill").count` |
 | Per-skill utilisation analytics | ✅ | `skillUtil` in results summary |
 | Server failure / repair | ✅ | MTBF/MTTR with FAIL/REPAIR macros |
-| Preemption | ✅ | `PREEMPT(ServerType)` |
+| Preemption | ✅ | `PREEMPT(ServerType[, Criterion])`; preemptive priority via `ASSIGN(Queue, ServerType, PREEMPT[, …])` (Sprint 99) |
 | Cross-type skill pooling | ❌ | Must specify server TYPE in ASSIGN. Cannot "seize any resource with Skill X" across types |
 | Skill-based preference / priority | ❌ | Servers matched FIFO by idle time. No "prefer specialist over generalist" |
 | Skill proficiency levels | Partial | `ServerAttr` can read proficiency from server attrs, but ASSIGN filter treats all servers with matching skill equally |
@@ -102,7 +102,7 @@
 | Inspection / yield with re-work | ✅ | Probabilistic routing with loop-back and `loopConfig` guard |
 | Disassembly (1 → many) | Partial | `SPLIT` creates N-1 clones but doesn't consume the original. `UNBATCH` requires a pre-created batch. |
 | Transport time (separate from service) | Partial | `DELAY` can model a transport hold. No distance/speed/location model. |
-| Interruption with resume | ✅ | `PREEMPT` preserves remaining service time |
+| Interruption with resume | ✅ | `PREEMPT`, `FAIL`, breakdowns and shift close preserve remaining service time for every distribution; the original completion never fires (Sprint 99). `ASSIGN … PREEMPT` also offers RESTART, RESAMPLE and DROP:Queue |
 | Recipe-based assembly (BOM) | ❌ | `BATCH(N)` accumulates equal-N. `MATCH` pairs 1:1. No "3A + 2B + 1C → widget" assembly. |
 | Service sequence enforcement | ❌ | No built-in "entity must pass through A then B then C in order" guard. Modeller enforces this via routing. |
 

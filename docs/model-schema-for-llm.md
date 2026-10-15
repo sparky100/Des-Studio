@@ -2,10 +2,11 @@
 
 **Version:** 2.9.0
 **Date:** 2026-10-13
-**Sprint baseline:** Sprint 88
+**Sprint baseline:** Sprint 99
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
+| v2.10.0 | 2026-10-15 | Preemption (Sprint 99) | **Interrupted service is correct for every model:** when PREEMPT, FAIL, an MTBF breakdown or a shift close interrupts service, the entity's original completion B-event never fires (none of its effects run, it is not counted as a firing); the entity resumes with exactly its remaining time for every service distribution; service received before the interruption counts as service, not wait. **New `ASSIGN(QueueName, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t])` (§6):** preempt-and-assign — the preferred way to model preemptive priority; no counter or gating C-event. New worked pattern "Preemptive priority" (§12). New warning **V81**. New TOP LLM MISTAKES #29. |
 | v2.9.0 | 2026-10-13 | Weighted service-mix authoring | Added a worked example "Weighted service-type mix (single stream + per-class C-events)" (in the worked-examples area, after the acuity-splitting pattern) — a Post Office with ONE arrival stream and three service types at 40/30/30 drawn from a `Categorical` entity attribute, served by one shared clerk pool via per-class C-events that each select their class with `entityFilter`. Clarified that a `Categorical` entity attribute must have a non-empty `distParams.options` (V5 — an empty/missing array is blocking and samples every entity to `null`) and can never supply a service duration. Clarifies that one `ARRIVE` stream per class is correct only when the arrival *patterns* themselves differ per class (different distribution shape, scheduled vs random, time-varying, or externally triggered); classes that differ only by Poisson rate merge into one stream. Mirrored as model-builder FATAL ERROR #24. |
 | v2.8.0 | 2026-10-10 | Server turnaround | **`turnaroundDist` / `turnaroundDistParams` on server entity types (§2):** a resource is unavailable for a sampled time after each release (RELEASE, RELEASE_COSEIZED, COMPLETE, FINISH) — a tanker's empty return voyage, an ambulance returning to base. The entity moves on at once; the server is in `turnaround` until it ends. `perResource` gains `turnaroundTime`, `turnaroundFraction`, `busyUtilisation`, `turnaroundCount`; `utilisation` now includes turnaround. New blocking rule **V80**. **RELEASE resolution (§6.2) corrected:** with entity context it releases only a server claimed by *this* entity. **Carried claims (§6.2):** an entity can hold a server across later stages (COSEIZE → RELEASE_COSEIZED subset → ASSIGN → … → RELEASE); a failure/preemption interrupts only the failed server's own claim group, and losing a carried server no longer strands the entity. MANDATORY GENERATION PROTOCOL step 4 now points at every blocking rule in §10; the duplicate TOP LLM MISTAKES #25 (Distance) is renumbered #27; new mistake #28. |
 | v2.7.0 | 2026-10-10 | Full-scale network enablers | **State variable on the right-hand side (§6.1, §5 routing):** a RHS that is a declared state variable (bare name or `state.<name>`) now resolves dynamically — `clock >= closureStart` works; the old "RHS state variable is always a literal" rule is removed. New warning V76 for a non-numeric literal in a numeric comparison. **`ASSIGN(..., SCAN[:N])` (§6):** look past a front entity whose skill has no idle server; V77. **ASSIGN no-match is a no-op.** **`DRAIN_PARTIAL(c, amount[, shortfall])` (§5, §6, §8):** draws `min(level, amount)`, records the remainder. **`quantityAttr` (§2, §9):** volume-weighted results; V78/V79; new goal metrics `summary.servedQuantity`, `summary.quantityThrough`, `resource.quantityProcessed`. **Results (§8):** container stats exclude warm-up; batch container min/avg/max/final are means across replications with `lowestMin`/`highestMax`. Two new TOP LLM MISTAKES (#25, #26). |
@@ -106,6 +107,7 @@ Read this before writing any model JSON.
 | 26 | One queue + one C-event per skill/grade at the same station (e.g. `Asia Sour Crude Queue` and `Asia Sweet Crude Queue`) only to stop one grade blocking another | Use one queue per station and `ASSIGN(Queue, UnitType, Entity.grade, SCAN)` — SCAN assigns the first waiting entity whose skill has an idle unit, so a sour lot at the front no longer blocks sweet lots behind it. Give the unit type per-instance `skillProfiles` for its mix of skills. Fewer queues and C-events means fewer C-event scans per event. See §6. |
 | 27 | Putting a `Distance`-typed schedule on a B-event's own self-rescheduling `schedules[]` instead of a C-event's `cSchedules` | `Distance` reads a speed attribute from the matched server or arriving entity at the moment a service starts — that pairing only exists after a C-event's `ASSIGN` (or similar) has resolved a customer/server context for the current `cSchedules` entry. A B-event's `schedules[]` (used for e.g. `b_arrive` scheduling its own next arrival) has no such context, so `speedSource` has nothing to read and the leg silently falls back to a duration of 0. Use `Distance` only inside a C-event's `cSchedules`, immediately after the `ASSIGN` that starts the leg. |
 | 28 | SPLITting a clone entity to carry a resource's empty return leg (e.g. a tanker sailing back after discharge) so the server stays busy — inflates served counts and needs the clone's quantity zeroed | Set `turnaroundDist`/`turnaroundDistParams` on the server entity type (§2 "Turnaround After Release"). The entity completes or moves on at release; the server stays unavailable for the turnaround. |
+| 29 | Preemptive priority built from a priority-0 C-event firing `PREEMPT(ServerType)` plus a state-variable counter (e.g. `traumaInService`) and a separate serve C-event | `PREEMPT(ServerType)` interrupts the first busy server it finds — even one already serving an urgent case — and the freed server goes to whichever C-event fires next. Use ONE C-event: condition `queue(UrgentQueue).length > 0`, effect `["ASSIGN(UrgentQueue, ServerType, PREEMPT, PRIORITY(attr))"]`. It uses an idle server first and only interrupts an entity that ranks strictly below (higher `attr` value) — give every entity type that can hold the server the same numeric attribute (urgent 0, normal 1–5). See §12 "Preemptive priority". Warned by V81. |
 
 ---
 
@@ -705,7 +707,7 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch entity, sends each member to `QueueName`. `QueueName` must reference a defined queue (V23). Every UNBATCH should be paired with a corresponding BATCH that created the batch entity being unbatched. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id`. `amount` may be a numeric literal, a state variable name, or an arithmetic expression (e.g. `RefillRate * 2`) — same evaluator as `SET`. |
 | `DRAIN_PARTIAL` | `DRAIN_PARTIAL(containerId, amount)` or `DRAIN_PARTIAL(containerId, amount, shortfallContainerId)` | Removes `min(level, amount)` — unlike `DRAIN`, it draws what is there instead of doing nothing. When a shortfall container is named, the part that could not be drawn is added to it (clamped to its capacity). Use for **lost-sales demand**: one daily `DRAIN_PARTIAL(ct_products, 13.12, ct_unmet)` on the demand B-event records exactly the unmet volume, with no lot-size remainder and no separate supply C-event. Both containers must be declared and different, and a literal `amount` must be > 0 (V27). |
-| `PREEMPT` | `PREEMPT(ServerType[, Criterion])` | Interrupts in-progress service; displaced entity re-queues with remaining service time. Optional Criterion selects which busy server to interrupt when more than one is busy: `PRIORITY(attrName)` (lowest value targeted), `LONGEST`/`SHORTEST` (by elapsed service time). Omitted or unrecognized criterion picks the first busy server (today's behavior). The displaced entity's original completion is cancelled (it never fires, nor do its other effects), it resumes with exactly its remaining time whatever the service distribution, and results count the service it already received as service, not wait. |
+| `PREEMPT` | `PREEMPT(ServerType[, Criterion])` | **For "an urgent case takes a server" use `ASSIGN(Queue, ServerType, PREEMPT, …)` in a C-event instead (§6) — it never interrupts while a server is idle or interrupts an equal/higher-ranked case, and hands the server straight over.** Interrupts in-progress service; displaced entity re-queues with remaining service time. Optional Criterion selects which busy server to interrupt when more than one is busy: `PRIORITY(attrName)` (lowest value targeted), `LONGEST`/`SHORTEST` (by elapsed service time). Omitted or unrecognized criterion picks the first busy server (today's behavior). The displaced entity's original completion is cancelled (it never fires, nor do its other effects), it resumes with exactly its remaining time whatever the service distribution, and results count the service it already received as service, not wait. |
 | `FAIL` | `FAIL(ServerType[, N])` | Marks up to N servers of this type as failed; interrupts in-progress service on any that must be preempted. Prefers idle servers first — busy ones are only touched once idle capacity runs out. Omitted or non-positive N means "all" servers of the type. Pair with a scheduled `REPAIR` B-event. |
 | `REPAIR` | `REPAIR(ServerType[, N])` | Restores up to N failed servers of this type to idle, oldest-failure-first; triggers a C-scan for waiting entities. Omitted or non-positive N means "all". |
 | `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2; `QueueName` must reference a defined queue.Records the family lineage `JOIN` later consumes — for a fork/join, route the parent to the rendezvous queue in the same effect array (see the SPLIT → JOIN pattern in §12.1). |
@@ -1220,7 +1222,7 @@ model is saved — nothing further to do.
 > - one of the function-call tokens `queue(...)`, `idle(...)`, `busy(...)`, `container(...)`,
 >   `attr(...)` (e.g. `"queue(A).length < queue(B).length"` — shortest-queue routing); or
 > - a **state variable**: `state.<name>`, or a bare name that exactly matches a declared
->   `stateVariables[].name` (e.g. `"clock >= closureStart"`, `"queue(TraumaQueue).length > traumaInService"`).
+>   `stateVariables[].name` (e.g. `"clock >= closureStart"`, `"queue(Waiting).length > maxQueueLength"`).
 >
 > Anything else is a literal: a number, a quoted string (`Entity.grade == "sour"`), or
 > `Entity.<attr>` / `Other.<attr>` outside `MATCH`'s compatibility predicate. A bare word that
@@ -1235,7 +1237,7 @@ model is saved — nothing further to do.
 >
 > ✓ `"clock >= closureStart AND clock < closureEnd AND closureEnabled == 1"` — state variables on the RHS, resolved live
 > ✓ `"queue(TraumaQueue).length > idle(Doctor).count"` — both sides function-call tokens
-> ✓ `"queue(TraumaQueue).length > traumaInService"` — RHS is a declared state variable
+> ✓ `"queue(Waiting).length > maxQueueLength"` — RHS is a declared state variable
 > ✗ `"clock >= closureStart + 30"` — no arithmetic; use a `closureEnd` state variable
 > ✗ `"clock >= closureStrat"` — not a declared variable, read as text, always false (V76)
 >
@@ -1373,8 +1375,8 @@ Container-scoped goals target a specific container. `scope` is **required** for 
 
 | `metric` key | Meaning | Scopable |
 |---|---|---|
-| `summary.avgWait` | Weighted mean wait across served + reneged + in-progress entities. In-progress waits are half-weighted. | Queue |
-| `summary.avgSvc` | Mean service time (served entities only — excludes reneged) | — |
+| `summary.avgWait` | Weighted mean wait across served + reneged + in-progress entities. In-progress waits are half-weighted. Time spent in service before an interruption (PREEMPT/FAIL/breakdown/shift close) is service, not wait. | Queue |
+| `summary.avgSvc` | Mean service time (served entities only — excludes reneged). Sums every service interval when service was interrupted. | — |
 | `summary.avgSojourn` | Mean total time in system (served + reneged entities only) | — |
 | `summary.avgTimeInSystem` | Weighted mean time in system across ALL entities (served + reneged + in-progress). In-progress partial sojourns are half-weighted. | — |
 | `summary.avgWIP` | Average work-in-progress (mean entities in system, Little's Law) | Queue |
@@ -1551,6 +1553,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V-SKILL-2 | (ANY variant) `ASSIGN(Q, ANY, "Skill")` references a skill that no registered server type actually has (neither type-level `skills[]` nor any `skillProfiles[].skills`, across every server type). The cross-type pool is guaranteed empty and the effect will never match. Emitted with the same code as the blocking V-SKILL-2 rule above — severity is distinguished by which list it appears in. |
 | V76 | A condition (C-event or `routing[]`) compares a numeric left side, or uses an ordering operator, against text on the right that is not a number, a declared state variable, or a dynamic reference — e.g. `clock >= closureStrat`. The clause is always false. Usually a misspelt variable. |
 | V79 | A `quantityAttr` attribute has no `defaultValue` and no `dist` — every entity's quantity is 0 unless an effect sets it. |
+| V81 | `ASSIGN(…, PREEMPT, …)`: an unknown or repeated option; a queue whose discipline doesn't rank entities (FIFO/LIFO) and no `PRIORITY(attr)` criterion — it can never interrupt anything; a rank attribute missing from the queue's entity type; a `DROP:Queue` naming no queue. Also a C-event that fires plain `PREEMPT(Type)` without checking `idle(Type)` in its condition — it can interrupt a job while a server is idle. |
 | V62 | A server entity type is literally named `ANY` (case-insensitive) — this collides with the reserved `ASSIGN(..., ANY, ...)` cross-type-pooling sentinel and makes any `ANY`-based ASSIGN in the model ambiguous. Rename the server type. |
 | V68 | An entity type's `requiredSequence` has a routing edge (traced through ASSIGN/DELAY/COSEIZE/BATCH/JOIN/MATCH sources and RELEASE/routing-table/ARRIVE/MATCH/SPLIT/JOIN destinations, including C-event → scheduled B-event links via `cSchedules`) whose destination queue is an **earlier** stage than its source queue. Likely a routing-table typo or a copy-paste mistake — but also matches an intentional rework/retry loop, so this is a warning, not a blocking error, and can be ignored when the backward routing is deliberate. |
 | V70 | A `Distance`-typed schedule references a `(from, to)` pair not present in `distances[]` (falls back to a duration of 0 at run time), or a `speedAttr` not declared as a numeric attribute on any entity type matching `speedSource` (always falls back to 0). Both are warnings, not blocking errors, since the model may still be under construction. |
@@ -1838,6 +1841,43 @@ Sections are **not** needed for:
 - `useEntityCtx: true` is required because the completion B-event uses `COMPLETE()`.
 
 ---
+
+### Preemptive priority (`ASSIGN … PREEMPT`)
+
+An urgent case takes a server from a less urgent one when none is idle; the interrupted entity
+re-queues and later resumes with its remaining time. One C-event per urgent queue — no state
+variable counter, no separate PREEMPT C-event, no `idle(...)` check in the urgent condition:
+
+```json
+"entityTypes": [
+  { "id": "et_patient", "name": "Patient", "role": "customer", "count": 0,
+    "attrDefs": [{ "id": "a_pri", "name": "priority", "valueType": "number", "dist": "Uniform", "distParams": { "min": "1", "max": "5" } }] },
+  { "id": "et_trauma", "name": "TraumaCode", "role": "customer", "count": 0,
+    "attrDefs": [{ "id": "a_tpri", "name": "priority", "valueType": "number", "defaultValue": 0 }] },
+  { "id": "et_doctor", "name": "Doctor", "role": "server", "count": 3, "attrDefs": [] }
+],
+"cEvents": [
+  { "id": "c_trauma", "name": "Consult Trauma", "priority": 0,
+    "condition": "queue(TraumaQueue).length > 0",
+    "effect": ["ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))"],
+    "cSchedules": [{ "eventId": "b_trauma_done", "dist": "Triangular", "distParams": { "min": "10", "mode": "18", "max": "30" }, "useEntityCtx": true }] },
+  { "id": "c_consult", "name": "Consult", "priority": 1,
+    "condition": "queue(Waiting).length > 0 AND idle(Doctor).count > 0",
+    "effect": ["ASSIGN(Waiting, Doctor)"],
+    "cSchedules": [{ "eventId": "b_complete", "dist": "Triangular", "distParams": { "min": "15", "mode": "25", "max": "40" }, "useEntityCtx": true }] }
+]
+```
+
+- Rank: lower value = more urgent. Every entity type that can hold the server needs the same
+  numeric attribute (here `priority`); an entity without it ranks last. Equal rank never interrupts,
+  so a trauma case is never bumped by another.
+- When both cases share one `PRIORITY(attr)` queue, `ASSIGN(Queue, ServerType, PREEMPT)` needs no
+  criterion — the queue's discipline is the rank.
+- Options: `RESTART` / `RESAMPLE` / `DROP:Rework Queue` change what the interrupted entity gets;
+  `MAX:2` caps interruptions per entity; `MINSERVICE:5` leaves an entity with under 5 time units of
+  service alone.
+- Completion B-events stay ordinary (`COMPLETE()` or a `RELEASE`); the interrupted entity's
+  pending completion is cancelled automatically.
 
 ### Two-stage pipeline (RELEASE pattern)
 

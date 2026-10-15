@@ -5,6 +5,7 @@ import { ConditionBuilder, EntityFilterBuilder } from "../editors/index.jsx";
 import { reorderCEventByPriority } from "../editors/helpers.jsx";
 import { VISUAL_NODE_TYPES, conditionLabel } from "./graph.js";
 import { classifyActivityEffect, macroCalls } from "../../model/macroParser.js";
+import { parsePreemptOptions } from "../../engine/preemptAssign.js";
 import { describeBalking, describeReneging, hasBalking, hasReneging } from "../../model/balkRenegeFormat.js";
 import { summarizeBEventEffect } from "../../model/effectSummary.js";
 import { summarizePattern } from "../../engine/schedule-pattern.js";
@@ -454,6 +455,24 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
                     status={`${ss.length} period${ss.length !== 1 ? "s" : ""}`}
                     summary={`Pool size varies: ${range} across ${ss.length} shift${ss.length !== 1 ? "s" : ""}.`}
                     tab="Entity Types" onGoTo={goTo(onGoToDefine, "Entity Types", selServer.id)} />
+                );
+              })()}
+              {(() => {
+                // ASSIGN(Q, Server, PREEMPT, …) — Sprint 99 preempt-and-assign.
+                if (!activityAssignCall || !activityAssignCall.args.slice(2).some(a => /^PREEMPT$/i.test(a.trim()))) return null;
+                const opts = parsePreemptOptions(activityAssignCall.args.slice(3).join(", "));
+                const rank = opts.criterion?.kind === "priority" ? `Entity.${opts.criterion.attr}` : "the queue's priority discipline";
+                const pick = opts.criterion?.kind === "longest" ? " (the one with the most service so far)"
+                  : opts.criterion?.kind === "shortest" ? " (the one with the least service so far)" : "";
+                const policy = opts.policy === "RESTART" ? "restarts its full time"
+                  : opts.policy === "RESAMPLE" ? "gets a new sampled time"
+                    : opts.policy === "DROP" ? `goes to ${opts.dropQueue}`
+                      : "resumes with its remaining time";
+                const limits = [opts.maxPreemptions != null ? `at most ${opts.maxPreemptions}× per job` : "", opts.minService != null ? `not before ${opts.minService} of service` : ""].filter(Boolean).join(", ");
+                return (
+                  <DefinePointer label="Preemption" color={C.amber} status="on"
+                    summary={`With no idle ${activityServer}, takes one from a lower-ranked job${pick}, ranked by ${rank}; the interrupted job ${policy}${limits ? ` (${limits})` : ""}.`}
+                    tab="Conditional Events" onGoTo={goTo(onGoToDefine, "Conditional Events", cEvent.id)} />
                 );
               })()}
               {(() => {

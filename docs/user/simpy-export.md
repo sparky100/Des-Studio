@@ -66,7 +66,7 @@ is replaced with commented `# TODO` stubs you must complete manually.
 | `MATCH` | Pair entities from two stores |
 | `FAIL` | Reduce `resource._capacity` by N (or set to 0 for "all" — no N given) to simulate breakdown |
 | `REPAIR` | Restore capacity by N (or to original for "all" — no N given) after a FAIL |
-| `PREEMPT` | Switch resource to `simpy.PreemptiveResource` |
+| `PREEMPT` | Switch resource to `simpy.PreemptiveResource` and `request(priority=…, preempt=True)`; resume the interrupted job with its remaining time |
 | `RELEASE_COSEIZED` | Release each co-seized resource's `simpy.Request` individually |
 
 Each stub includes a **Pattern** comment showing the idiomatic SimPy approach.
@@ -167,6 +167,19 @@ if container.level >= amount:
 else:
     pass  # fail-fast: amount unavailable
 ```
+
+---
+
+## ASSIGN … PREEMPT note
+
+The preempt-and-assign form `ASSIGN(Queue, ServerType, PREEMPT, …)` is **not
+translated**. It does not by itself make the script Category 2: the export adds a
+**NOT SUPPORTED** warning and the generated code treats it as a plain `ASSIGN`,
+waiting for an idle server — so a higher-priority job never interrupts one in
+service, and results will differ from DES Studio's. To reproduce preemptive
+priority, declare the resource as `simpy.PreemptiveResource`, request it with
+`request(priority=rank, preempt=True)`, catch `simpy.Interrupt` in the served
+process and re-request with the remaining service time.
 
 ---
 

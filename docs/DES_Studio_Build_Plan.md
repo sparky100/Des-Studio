@@ -137,6 +137,7 @@ flowchart LR
 | Calendar-aware recurring resource scheduling | ✅ Complete | Sprint 86: weekly repeating capacity patterns (`schedulePattern` on server entity types), engine expansion into `SHIFT_CHANGE` events, visual 24×7 grid editor, exception date overrides, per-shift utilisation tracking, schedule adherence metric, V50–V56 validation rules, LLM prompt updates, ADR-018. |
 | Parameterised weekly schedule patterns | ✅ Complete | Sprint 87: multiplier mode (0–100% of base capacity), `resolveSchedulePattern()`, V57–V60, sweep variable support. See `docs/reviews/sprint-87-plan.md`. |
 | Export consolidation & data portability | ✅ Complete | Sprint 88: single "Export ▾" popover, "Download all chart data", entity journey data in JSON, schema reference modal. F66.3 absorbed. See `docs/reviews/sprint-88-plan.md`. |
+| Preemption correctness & preemptive priority | ✅ Complete (PR #571) | Sprint 99: interrupted service's original completion never fires (service epoch); stage records gain `serviceSegments`/`interruptions`; remaining time honoured for every service distribution; two-class M/M/1 preemptive-resume benchmark. `ASSIGN(Queue, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t])` preempt-and-assign, V81, ASSIGN composer option. See `docs/reviews/sprint-99-preemption-plan.md`. |
 
 ### Key Issues and Watchpoints
 
@@ -220,6 +221,7 @@ flowchart LR
 | 1.87 | 2026-06-29 | Sprint 86 planned. Calendar-aware recurring weekly resource scheduling — `schedulePattern` schema, engine expansion into SHIFT_CHANGE events, visual 24×7 grid editor, per-shift utilisation tracking, exception date overrides, LLM prompt updates, ADR-018. See `docs/reviews/sprint-86-plan.md`. |
 | 1.88 | 2026-06-30 | Sprint 87 completed. Parameterised weekly schedule patterns — multiplier mode (0–100% of base capacity), `resolveSchedulePattern()` pure function, V57–V60 validation rules, WeeklyPatternEditor mode toggle, baseCapacity input, sweep variable support, LLM prompt updates. |
 | 1.89 | 2026-06-30 | Sprint 88 completed. Export consolidation — single "Export ▾" popover replaces 4+ scattered buttons, "Download all chart data" in ResultsWorkspace, entity journey data in JSON export, schema reference modal. F66.3 absorbed. |
+| 1.90 | 2026-10 | Sprint 99 completed (PR #571). Preemption Phase 1 (correctness for PREEMPT, FAIL, MTBF/MTTR and shift-close interruptions) and Phase 2 (`ASSIGN … PREEMPT` preempt-and-assign, V81, composer option, Priority ED template rewrite). ADR-014 superseded. |
 
 ---
 
@@ -317,6 +319,7 @@ flowchart LR
 | Sprint 73 | ✅ Complete | 2026-05-27 | ADR-016: Separate timetable schedule data from core model JSON — `model_schedules` Supabase table, `resolveInlineSchedules(model, schedulesMap)` engine function, ScheduleManager UI (list/detail/CSV export), Execute panel schedule selector dropdown, model export re-inlines rows, `includeModelSnapshot` explicit flag, save-timeout feedback banners. | 45 new tests (14+22+9) | N/A | N/A |
 | Sprint 75 | ✅ Complete | 2026-05-29 | Persistent AI Sidebar: `✦ AI` toggle button in tab bar, flex-row sidebar layout, `AiAssistantPanel` sidebar/overlay modes, context-aware view (results analysis vs model Q&A), `buildModelQueryPrompt` for design-context questions, Explain overlay retired. | 26/26 pass | N/A | N/A |
 | Sprint 76 | ✅ Complete | 2026-05-29 | Report Amendments: entity name substitution, integer counts, per-stage service breakdown, angled chart labels, wrapped resource labels, Scope & Methodology section, results intro paragraph, goal status in executive summary, model image wired. | 13/13 pass | N/A | N/A |
+| Sprint 99 | ✅ Complete | 2026-10 | Preemption: correctness and preempt-and-assign (PR #571). | Focused + preemptive-priority soak benchmark | N/A | Success | Service epoch (stale completions never fire), `serviceSegments`/`interruptions` on stage records, remaining time for every distribution; `ASSIGN(Queue, ServerType, PREEMPT, …)`, V81, ASSIGN composer option, Priority ED template rewritten. |
 
 ---
 
@@ -501,7 +504,7 @@ The existing Forms/Tabs editor remains the stable manual authoring mode througho
 | Clock token in conditions | ✅ `clock` variable available in Condition Builder for time-based logic | Sprint 31 |
 | WIP time-average metric | ✅ `avgWIP` exposed in summary; Little's Law validation (avgWIP ≈ λ × avgSojourn) | Sprint 31 |
 | Live queue-depth time-plot | ✅ QueueDepthTimePlot component in Execute canvas Charts tab; one line per queue, colour-coded | Sprint 31 |
-| Resource preemption | ✅ PREEMPT(ServerType) macro; interrupted entities re-queued with `_remainingService` preserved | Sprint 32 |
+| Resource preemption | ✅ PREEMPT(ServerType) macro; interrupted entities re-queued with `_remainingService` preserved. Sprint 99: stale completions never fire; `ASSIGN … PREEMPT` preempt-and-assign | Sprint 32 / 99 |
 | Resource breakdowns and repair | ✅ FAIL/REPAIR macros; `failed` server status; MTBF/MTTR scheduling via server entity type distributions | Sprint 32 |
 | Remaining service time preservation | ✅ `_scheduledDuration` stored on server; remaining service calculated and used on re-seize after preemption/failure | Sprint 32 |
 | SPLIT macro | ✅ Creates N-1 clones of context entity; tracks parent-child relationships via `_splitParent`/`_splitChildren`/`_splitFrom`/`_splitIndex` | Sprint 33 |
@@ -1697,7 +1700,7 @@ npm run build
 | ADR-011 | Conditional routing schema | Sprint 10 | ✅ Accepted — routing table on RELEASE (Option A). |
 | ADR-012 | Recirculation and batching design | Sprint 12 | ✅ Accepted — back-edge loop:true flag; BATCH queue-accumulation (Option A); UNBATCH restore originals. |
 | ADR-013 | Resource claim and waiting ownership | Sprint 26 | ✅ Accepted — explicit waiting/resource ownership contracts, mirrored active claims. |
-| ADR-014 | Preemption and interruption deferral | Sprint 26 | ✅ Accepted — preemption boundary documented; out of scope for Three-Phase method (later implemented in Sprint 32). |
+| ADR-014 | Preemption and interruption deferral | Sprint 26 | Superseded — preemption implemented in Sprint 32; correctness and preempt-and-assign in Sprint 99. |
 
 ---
 
@@ -2076,6 +2079,28 @@ npm run build
 | F80.6 | Templates tab unchanged | ✅ | Existing domain filter + search on Templates tab is untouched. |
 
 **Active-tags semantics:** selecting multiple tag chips returns models matching *any* selected tag (OR). This was chosen over AND logic because it better matches the discovery use case — narrowing by AND would too aggressively prune small libraries.
+
+---
+
+### Sprint 99 — Preemption: Correctness and Preempt-and-Assign ✅
+
+**Goal:** Make every interruption of service correct, and give modellers a single-action form for preemptive priority.
+
+**Status:** ✅ Complete — PR #571. Plan and as-built notes: `docs/reviews/sprint-99-preemption-plan.md`.
+
+| ID | Feature | Status | Deliverable |
+|---|---|---|---|
+| F99.1 | Service epoch | ✅ | When service is interrupted (PREEMPT, FAIL, automatic MTBF/MTTR breakdown, shift-close capacity retirement), the job's originally scheduled completion B-event never fires: it is skipped whole, its other effects don't run, and it is not counted as a firing. |
+| F99.2 | Interruption-aware stage records | ✅ | Stage records gain `serviceSegments` and `interruptions`; service received before an interruption counts as service, not wait; warm-up truncation applies per interval. |
+| F99.3 | Remaining time for every distribution | ✅ | The remaining time is honoured on resume for every service distribution, including EntityAttr, ServerAttr and Distance. |
+| F99.4 | Preemptive-priority benchmark | ✅ | `tests/benchmarks/preemptive-priority.test.js` — two-class M/M/1 preemptive-resume, T₁ = 1.429, T₂ = 4.762, ±5%; runs both PREEMPT and `ASSIGN … PREEMPT`. Benchmark 6 stays non-preemptive. |
+| F99.5 | Preempt-and-assign | ✅ | `ASSIGN(Queue, ServerType, PREEMPT[, Criterion][, Policy][, MAX:n][, MINSERVICE:t])` (`src/engine/preemptAssign.js`): an idle server → plain ASSIGN; otherwise interrupts a busy server whose job ranks strictly below the queue head and hands it to the head in the same firing. Policies RESUME (default) / RESTART / RESAMPLE / DROP:Queue. |
+| F99.6 | Validation V81 | ✅ | Unknown/repeated options, a queue that doesn't rank jobs, a missing rank attribute, an unknown DROP queue, and a C-event firing plain `PREEMPT(Type)` without checking `idle(Type)`. |
+| F99.7 | UI, export, template | ✅ | ASSIGN composer option "May interrupt a lower-priority job (PREEMPT)"; SimPy export warns NOT SUPPORTED; Priority ED with Balking template uses `ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))` with no counter or gating C-event. |
+
+**Decision record:** ADR-014 (preemption deferral) is superseded.
+
+**Deferred (Phase 3):** a declarative "higher-priority arrivals interrupt service" activity setting, SimPy `PreemptiveResource` mapping, and trace-viewer preemption detail.
 
 ---
 

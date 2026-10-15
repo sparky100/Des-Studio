@@ -199,6 +199,11 @@ export function applyPreemptAssign(match, ctx, plainAssign) {
   if (opts.policy === "DROP") victim.lastQueue = opts.dropQueue;
   const remaining = preemptCustomer(victim, srv, clock, ctx, "PREEMPT");
   victim._preemptCount = (victim._preemptCount ?? 0) + 1;
+  // Per-activity count of servers taken, for the Run canvas card.
+  if (ctx.state && ctx.ceventId) {
+    const takes = ctx.state.__preemptTakes || (ctx.state.__preemptTakes = {});
+    takes[ctx.ceventId] = (takes[ctx.ceventId] || 0) + 1;
+  }
   if (opts.policy === "RESTART" && fullDuration != null) victim._remainingService = fullDuration;
   else if (opts.policy === "RESAMPLE" || opts.policy === "DROP") delete victim._remainingService;
 
