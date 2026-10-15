@@ -776,7 +776,7 @@ function exportToSimPy(model: ModelJson): {
 
 `TODO_MACRO_SET = { RENEGE, BATCH, RENEGE_OLDEST, MATCH, FAIL, REPAIR, PREEMPT, FINISH, RELEASE_COSEIZED, JOIN }`
 
-`ASSIGN(Queue, ServerType, PREEMPT, …)` is not translated: the export emits a NOT SUPPORTED warning and the generated code waits for an idle server.
+`ASSIGN(Queue, ServerType, PREEMPT, …)` is translated (Sprint 99 Phase 3): the server type becomes `simpy.PreemptiveResource`, every request on it carries the job's rank (`_rank`), only the preempting activity requests with `preempt=True`, and each service on it catches `simpy.Interrupt` and continues per policy (RESUME/RESTART/RESAMPLE/DROP). MAX/MINSERVICE and LONGEST/SHORTEST are not translated (warned).
 
 Note: all macros in `TODO_MACRO_SET` are fully implemented in the JS Three-Phase engine. They appear as stubs only because their Python translation is non-trivial to auto-generate.
 

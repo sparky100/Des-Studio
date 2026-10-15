@@ -10,6 +10,9 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 import { ActivityDetail } from "./NodeDetailSidebar.jsx";
 import { CollapsibleSection } from "../shared/CollapsibleSection.jsx";
 
+// Preemption trace: rank values as typed, Infinity (attribute missing) as "none".
+const fmtRank = (/** @type {number} */ v) => (Number.isFinite(v) ? String(+Number(v).toFixed(3)) : "none");
+
 // Live Metrics section collapse/expand state, persisted the same way Results'
 // own sections are (see ResultsWorkspace.jsx's SECTION_DEFAULTS/sectionsOpen) —
 // a localStorage-backed { id: boolean } map, all expanded by default so existing
@@ -635,7 +638,22 @@ function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeS
                         {r.arbitration.queueName && ` queue=${r.arbitration.queueName}`}
                         {r.arbitration.discipline && ` [${r.arbitration.discipline}]`}
                       </span>
-                      {r.arbitration.noMatch ? (
+                      {r.arbitration.type === "preemption" ? (
+                        // PREEMPT / ASSIGN … PREEMPT (Sprint 99): who was interrupted, why, and what it gets.
+                        <span style={{ color: C.amber, marginLeft: 8 }} data-testid="trace-preemption">
+                          interrupted #{r.arbitration.preemptedEntity}
+                          {r.arbitration.rankedBy && r.arbitration.preemptedRank != null && ` (${r.arbitration.rankedBy}=${fmtRank(r.arbitration.preemptedRank)})`}
+                          {` on server #${r.arbitration.serverId}`}
+                          {r.arbitration.assignedEntity != null && ` → #${r.arbitration.assignedEntity}${r.arbitration.rankedBy && r.arbitration.assignedRank != null ? ` (${r.arbitration.rankedBy}=${fmtRank(r.arbitration.assignedRank)})` : ""}`}
+                          {r.arbitration.carried
+                            ? " · lost a server held from an earlier stage"
+                            : r.arbitration.policy === "DROP" ? ` · sent to ${r.arbitration.dropQueue}`
+                              : r.arbitration.policy === "RESTART" ? " · restarts in full"
+                                : r.arbitration.policy === "RESAMPLE" ? " · new duration on resume"
+                                  : ` · ${Number(r.arbitration.remainingService ?? 0).toFixed(2)}t remaining`}
+                          {r.arbitration.reason && <span style={{ color: C.muted }}>{` · ${r.arbitration.reason}`}</span>}
+                        </span>
+                      ) : r.arbitration.noMatch ? (
                         <span style={{ color: C.amber, marginLeft: 8 }}>
                           no match — {r.arbitration.candidateCount ?? 0} waiting, {r.arbitration.idleServerCount ?? 0} idle servers
                         </span>

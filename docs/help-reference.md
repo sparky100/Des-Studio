@@ -538,7 +538,7 @@ Each container reports **min, avg, max and final** level over the post-warm-up p
 
 ### Interruptions
 
-Per-resource count of preemption events (PREEMPT, `ASSIGN … PREEMPT`, FAIL, breakdowns and shift closes that cut off in-progress service). Each entity's stage record also carries `interruptions` and `serviceSegments` (the service intervals before each interruption). An interrupted entity's original completion never fires, and it resumes with exactly its remaining time. A high count alongside a low `scheduleAdherence` or high `starvationPct` usually points to a failure/MTBF-MTTR model or a higher-priority job repeatedly bumping lower-priority work — see Server Failure Model above.
+Per-resource count of preemption events (PREEMPT, `ASSIGN … PREEMPT`, FAIL, breakdowns and shift closes that cut off in-progress service). Each entity's stage record also carries `interruptions` and `serviceSegments` (the service intervals before each interruption). An interrupted entity's original completion never fires, and it resumes with exactly its remaining time. In the Run tab's trace (Log, expand details), each preemption shows who was interrupted and for whom, their ranks, what the interrupted entity gets (remaining time, restart, new duration or another queue) and why it was chosen. A high count alongside a low `scheduleAdherence` or high `starvationPct` usually points to a failure/MTBF-MTTR model or a higher-priority job repeatedly bumping lower-priority work — see Server Failure Model above.
 
 ### Queue Rejections
 
@@ -1247,6 +1247,8 @@ Exports any model as a runnable Python SimPy script, or runs it directly in the 
 | Category 2 — Partial | Contains macros with complex Python patterns; replaced with annotated `# TODO` stubs | No — complete TODO sections in an IDE first, then run locally |
 
 **Category 1 supported macros:** `ARRIVE`, `ASSIGN`, `COSEIZE`, `COMPLETE`, `RELEASE`, `FILL`, `DRAIN`, `SPLIT`, `SET`, `SET_ATTR`, `COST`, `UNBATCH`.
+
+**Preempt-and-assign:** `ASSIGN(Queue, ServerType, PREEMPT, …)` is translated to `simpy.PreemptiveResource` (Category 1); see the SimPy export guide for what differs.
 
 **Category 2 macros (stubs generated):** `RENEGE`, `BATCH`, `RENEGE_OLDEST`, `MATCH`, `FAIL`, `REPAIR`, `PREEMPT`, `FINISH`, `RELEASE_COSEIZED`, `JOIN`. Note: all of these are fully implemented in the JS Three-Phase engine — they appear as stubs only because their Python translation is non-trivial to auto-generate.
 

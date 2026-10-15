@@ -218,3 +218,31 @@ describe("ASSIGN … PREEMPT — renames and plain PREEMPT", () => {
     expect(validateModel(m).warnings.some(w => w.code === "V81")).toBe(false);
   });
 });
+
+describe("Preemption in the trace (Phase 3)", () => {
+  it("ASSIGN … PREEMPT records who was interrupted, for whom, why and what it gets", () => {
+    const r = run(model());
+    const entry = r.log.find(e => e.arbitration?.type === "preemption");
+    expect(entry).toBeDefined();
+    expect(entry.arbitration).toMatchObject({
+      serverType: "Server", rankedBy: "prio", preemptedRank: 2, assignedRank: 1,
+      policy: "RESUME", remainingService: 5, reason: "lowest-ranked of 1 lower-ranked in service",
+    });
+    expect(entry.arbitration.preemptedEntity).toBe(job(r, "low").id);
+    expect(entry.arbitration.assignedEntity).toBe(job(r, "high").id);
+  });
+
+  it("notes jobs protected by MAX", () => {
+    const r = run(model({ arrivals: [[0, 2, 10, "low"], [2, 1, 2, "h1"], [6, 1, 2, "h2"]], effect: "ASSIGN(Q, Server, PREEMPT, MAX:1)" }));
+    expect(r.log.filter(e => e.arbitration?.type === "preemption")).toHaveLength(1);
+  });
+
+  it("a plain PREEMPT fired from a B-event is traced too", () => {
+    const r = run(model({
+      arrivals: [[0, 2, 10, "low"]],
+      extraBEvents: [{ id: "bump", name: "Bump", scheduledTime: "5", effect: ["PREEMPT(Server)"], schedules: [] }],
+    }));
+    const entry = r.log.find(e => e.phase === "B" && e.arbitration?.type === "preemption");
+    expect(entry.arbitration).toMatchObject({ serverType: "Server", remainingService: 5, reason: "first of 1 busy (no criterion)" });
+  });
+});

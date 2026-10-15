@@ -228,7 +228,9 @@ export function applyPreemptAssign(match, ctx, plainAssign) {
       preemptedRank: victimRank,
       assignedRank: headRank,
       policy: opts.policy,
+      ...(opts.dropQueue ? { dropQueue: opts.dropQueue } : {}),
       remainingService: +remaining.toFixed(4),
+      reason: `${kind === "longest" ? "most service so far" : kind === "shortest" ? "least service so far" : "lowest-ranked"} of ${eligible.length} lower-ranked in service${protectedCount ? `, ${protectedCount} protected by MAX/MINSERVICE` : ""}`,
     });
   }
   const policyNote = opts.policy === "RESUME" ? `remaining ${remaining.toFixed(3)} t`

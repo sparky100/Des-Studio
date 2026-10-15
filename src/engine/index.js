@@ -1765,6 +1765,8 @@ const cycleLog = [];
         continue;
       }
 
+      // A B-event can PREEMPT too; start its arbitration record clean.
+      for (const k in _arbitration) delete _arbitration[k];
       const ctx = makeCtx(ev);
       ctx.clock = clock;
       const { msgs, felEntries, skipped, stateChanges } = fireBEvent(ev, ctx);
@@ -1792,7 +1794,8 @@ const cycleLog = [];
       if (collectTrace) {
         const { msg, entityIds, newEvents } = buildFelEventLog("B", ev, msgs, ctx, felEntries);
         cycleLog.push({ phase: "B", time: clock, message: msg, skipped, event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents } });
-        log.push(_trace("B", { event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents }, message: msg, skipped }));
+        const bArbitration = ctx._arbitration && Object.keys(ctx._arbitration).length ? { ...ctx._arbitration } : undefined;
+        log.push(_trace("B", { event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents }, message: msg, skipped, arbitration: bArbitration }));
       }
     }
 

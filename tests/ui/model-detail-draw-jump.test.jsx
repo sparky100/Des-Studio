@@ -97,9 +97,14 @@ describe("ModelDetail — Draw inspector 'Edit in the X tab' jump links", () => 
     // Use Draw's own node search to select the balking queue's node — the
     // real UI path a modeller uses, not a synthetic canvas click.
     // VisualDesignerPanel is lazy-loaded (Suspense) — wait for it to resolve.
-    const searchInput = await screen.findByLabelText("Search canvas nodes");
+    // The Run tab stays mounted (display: none) while Design is open, and its
+    // canvas has a node search with the same label. Whichever lazy chunk loads
+    // first decides which one a label query finds — on GitHub's runners it was
+    // the hidden Run one. A role query skips hidden elements, so it gets the
+    // Draw search box; the results list is the one beside it.
+    const searchInput = await screen.findByRole("searchbox", { name: "Search canvas nodes" });
     await user.type(searchInput, "Consultant");
-    const results = screen.getByLabelText("Node search results");
+    const results = within(searchInput.parentElement).getByRole("listbox", { name: "Node search results" });
     await user.click(within(results).getByRole("option", { name: /^Consultant Queue/i }));
 
     // Inspector now shows the selected queue's pointers (description/balking/

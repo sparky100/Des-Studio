@@ -3,7 +3,7 @@
 **Sprint:** 99
 **Theme:** Make interrupted service (PREEMPT, FAIL, automatic breakdowns, shift changes) correct
 and measurable, then add preemption that needs no hand-built scaffolding.
-**Status:** Phase 1 shipped (PR #571); Phase 2 implemented
+**Status:** Phase 1 and 2 shipped (PR #571); Phase 3 implemented
 **Owner:** parkinsonsj@gmail.com
 **Supersedes:** `docs/decisions/ADR-014-preemption-and-interruption-deferral.md` (Sprint 26
 deferral). PREEMPT has since shipped (Sprints 32, 41, 97); this sprint settles the open
@@ -120,7 +120,7 @@ activity is next tried, i.e. after any event).
 
 **Benchmark:** the preemptive-priority benchmark runs both forms against the same analytic values.
 
-**SimPy export:** warns that the form is not translated (Phase 3 maps it to `PreemptiveResource`).
+**SimPy export:** warned that the form was not translated; Phase 3 maps it to `PreemptiveResource`.
 
 **UI:**
 - **Effect builder:**
@@ -147,10 +147,12 @@ a criterion's attribute doesn't exist on the queue's entity type. The ASSIGN com
 "may interrupt a lower-priority job" option. The Priority ED template is rewritten to use it,
 dropping its counter and gating C-event.
 
-## Phase 3 — Declarative preemptive priority (later)
+## Phase 3 — SimPy, trace and the declarative setting (implemented)
 
-An activity setting, "Higher-priority arrivals interrupt service", with policy and limits,
-compiled to a Phase 2 ASSIGN. SimPy export maps it to `simpy.PreemptiveResource` (`preempt=True`,
-handling `simpy.Interrupt` with the remaining time) instead of the current NOT SUPPORTED stub.
-The trace viewer shows each preemption (victim, why chosen, remaining time), closing the
-Sprint 97 backlog item.
+| Item | Outcome |
+|---|---|
+| **SimPy export** | `ASSIGN … PREEMPT` → `simpy.PreemptiveResource`. Every request on it carries the job's rank (`_rank` over the rank attribute), and only the preempting activity requests with `preempt=True`, so SimPy interrupts a strictly lower-ranked user, as the engine does. Each service on the resource catches `simpy.Interrupt` and continues per policy (RESUME / RESTART / RESAMPLE / DROP). Validated by running the generated script under SimPy 4.1 against the analytic two-class M/M/1: T₁ 1.432 (1.429), T₂ 4.780 (4.762) over 30 replications. Warns about MAX/MINSERVICE, LONGEST/SHORTEST, COSEIZE on a preemptive resource, and re-queue ordering. Plain `PREEMPT(Type)` stays a stub. |
+| **Trace** | Preemption arbitration records carry: victim, beneficiary, ranks, policy (and drop queue), remaining time, and *why*. Examples of why: "lowest-ranked of 2 lower-ranked in service, 1 protected by MAX/MINSERVICE"; for plain PREEMPT, "chosen by PRIORITY(x) among 3 busy". B-events now record arbitration too, so a PREEMPT fired from a B-event is traced. The Run tab's log shows a dedicated preemption line. Closes the Sprint 97 backlog item. |
+| **Declarative activity setting** | **Not built.** The ASSIGN composer's "May interrupt a lower-priority job" option already is the declarative surface: it writes `ASSIGN(…, PREEMPT, …)`, and the Visual Designer shows it as a `preempts` badge and an inspector summary. A separate activity field compiled to the same ASSIGN would be a second source of truth for one behaviour and a new model_json field to keep in sync. |
+
+Also in this round: the CI-only failure of `tests/ui/model-detail-draw-jump.test.jsx`. The Draw panel is lazy-loaded under Suspense, which hides the rendered tree while a chunk loads, so the test now waits with `findBy*`.

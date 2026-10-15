@@ -1342,6 +1342,8 @@ export const MACROS = [
           serverId: srv.id,
           preemptedEntity: cust.id,
           remainingService: +remainingService.toFixed(4),
+          reason: criterion ? `chosen by ${criterion} among ${busyServers.length} busy` : `first of ${busyServers.length} busy (no criterion)`,
+          ...(carried ? { carried: true } : {}),
         });
       }
 
