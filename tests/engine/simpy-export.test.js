@@ -1011,23 +1011,68 @@ describe("exportToSimPy — DRAIN_PARTIAL and ASSIGN SCAN", () => {
   });
 });
 
-describe("exportToSimPy — ASSIGN … PREEMPT (Sprint 99)", () => {
-  it("warns that preempt-and-assign is not auto-translated", () => {
-    const { warnings } = exportToSimPy({
-      name: "ED",
-      entityTypes: [
-        { id: "p", name: "Patient", role: "customer", attrDefs: [{ name: "priority", valueType: "number" }] },
-        { id: "d", name: "Doctor", role: "server", count: 2, attrDefs: [] },
-      ],
-      queues: [{ id: "q", name: "Waiting", discipline: "PRIORITY(priority)" }],
-      stateVariables: [],
-      bEvents: [
-        { id: "arr", name: "Arrive", scheduledTime: "0", effect: ["ARRIVE(Patient, Waiting)"], schedules: [{ eventId: "arr", dist: "Exponential", distParams: { mean: "1" } }] },
-        { id: "done", name: "Done", scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
-      ],
-      cEvents: [{ id: "c1", name: "See", priority: 1, effect: ["ASSIGN(Waiting, Doctor, PREEMPT)"], condition: "queue(Waiting).length > 0",
-        cSchedules: [{ eventId: "done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] }],
-    });
-    expect(warnings.some(w => /ASSIGN \.\.\. PREEMPT/.test(w))).toBe(true);
+describe("exportToSimPy — ASSIGN … PREEMPT (Sprint 99 Phase 3)", () => {
+  const model = (effect, extra = {}) => ({
+    name: "ED",
+    entityTypes: [
+      { id: "p", name: "Patient", role: "customer", attrDefs: [{ name: "Severity", valueType: "number", defaultValue: 3 }] },
+      { id: "d", name: "Doctor", role: "server", count: 2, attrDefs: [] },
+      { id: "n", name: "Nurse", role: "server", count: 1, attrDefs: [] },
+    ],
+    queues: [
+      { id: "q", name: "Waiting", discipline: "PRIORITY(severity)" },
+      { id: "r", name: "Rework", discipline: "FIFO" },
+    ],
+    stateVariables: [],
+    bEvents: [
+      { id: "arr", name: "Arrive", scheduledTime: "0", effect: ["ARRIVE(Patient, Waiting)"], schedules: [{ eventId: "arr", dist: "Exponential", distParams: { mean: "1" } }] },
+      { id: "done", name: "Done", scheduledTime: "9999", effect: ["COMPLETE()"], schedules: [] },
+    ],
+    cEvents: [
+      { id: "c1", name: "See", priority: 1, effect: [effect], condition: "queue(Waiting).length > 0",
+        cSchedules: [{ eventId: "done", dist: "Fixed", distParams: { value: "4" }, useEntityCtx: true }] },
+      { id: "c2", name: "Recheck", priority: 2, effect: ["ASSIGN(Rework, Doctor)"], condition: "queue(Rework).length > 0 AND idle(Doctor).count > 0",
+        cSchedules: [{ eventId: "done", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }] },
+    ],
+    ...extra,
+  });
+
+  it("makes the server a PreemptiveResource and ranks every request on it by the job's attribute", () => {
+    const { script, warnings, category } = exportToSimPy(model("ASSIGN(Waiting, Doctor, PREEMPT)"));
+    expect(category).toBe(1);
+    expect(script).toContain("Doctor_resource = simpy.PreemptiveResource(env, capacity=2)");
+    expect(script).toContain("Nurse_resource = simpy.PriorityResource(env, capacity=1)");
+    expect(script).toContain("def _rank(entity, names):");
+    // The preempting activity asks with preempt=True; another service on the same server doesn't,
+    // but still carries its rank so it can be interrupted correctly. Attribute matched case-insensitively.
+    expect(script).toMatch(/def See_serve[\s\S]*request\(priority=_rank\(entity, \("Severity",\)\), preempt=True\)/);
+    expect(script).toMatch(/def Recheck_serve[\s\S]*request\(priority=_rank\(entity, \("Severity",\)\), preempt=False\)/);
+    expect(script).toContain("except simpy.Interrupt:");
+    expect(script).toContain("_remaining -= _svc_t  # RESUME");
+    expect(warnings.some(w => /exported as simpy\.PreemptiveResource/.test(w))).toBe(true);
+    expect(warnings.some(w => /NOT SUPPORTED: ASSIGN \.\.\. PREEMPT/.test(w))).toBe(false);
+  });
+
+  it("translates RESTART, RESAMPLE and DROP:<Queue>", () => {
+    expect(exportToSimPy(model("ASSIGN(Waiting, Doctor, PREEMPT, RESTART)")).script).toContain("# RESTART: the full duration again");
+    expect(exportToSimPy(model("ASSIGN(Waiting, Doctor, PREEMPT, RESAMPLE)")).script).toContain("_remaining = _fixed(4)  # RESAMPLE");
+    const drop = exportToSimPy(model("ASSIGN(Waiting, Doctor, PREEMPT, DROP:Rework)")).script;
+    expect(drop).toContain("yield Rework_store.put(entity)  # DROP:Rework");
+    expect(drop).toMatch(/def See_serve\(env, entity, Doctor_resource, Rework_store, stats\)/);
+  });
+
+  it("passes the activity's own store to its serve process when DROP sends jobs back to it", () => {
+    const { script } = exportToSimPy(model("ASSIGN(Waiting, Doctor, PREEMPT, DROP:Waiting)"));
+    expect(script).toMatch(/def See_serve\(env, entity, Doctor_resource, Waiting_store, stats\)/);
+    expect(script).toContain("env.process(See_serve(env, entity, Doctor_resource, Waiting_store, stats))");
+  });
+
+  it("warns about what it can't translate", () => {
+    const w = exportToSimPy(model("ASSIGN(Waiting, Doctor, PREEMPT, LONGEST, MAX:2)")).warnings;
+    expect(w.some(x => /MAX:n \/ MINSERVICE:t are not translated/.test(x))).toBe(true);
+    expect(w.some(x => /LONGEST is not translated/.test(x))).toBe(true);
+    const fifo = exportToSimPy(model("ASSIGN(Rework, Nurse, PREEMPT)"));
+    expect(fifo.script).not.toContain("PreemptiveResource");
+    expect(fifo.warnings.some(x => /doesn't rank jobs/.test(x))).toBe(true);
   });
 });

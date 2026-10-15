@@ -9,6 +9,8 @@
 //                DRAIN semantics, untranslatable routing conditions (branch always
 //                taken), and TODO_MACRO_SET macros (no code generated at all)
 
+import { PREEMPT_ASSIGN_PATTERN, parsePreemptOptions, preemptRankAttrs } from './preemptAssign.js';
+
 // Macros whose SimPy translation requires manual completion
 const TODO_MACRO_SET = new Set([
   'RENEGE', 'BATCH', 'RENEGE_OLDEST', 'MATCH', 'FAIL', 'REPAIR', 'PREEMPT', 'FINISH', 'RELEASE_COSEIZED', 'JOIN',
@@ -231,6 +233,55 @@ function findMacroCall(effectStr, macroName) {
   return parseMacroCalls(effectStr).find(c => c.name === macroName) || null;
 }
 
+// ASSIGN(Queue, ServerType, PREEMPT, …) (Sprint 99) → the server type becomes a
+// simpy.PreemptiveResource. Returns serverType → { rankNames (dataclass field
+// names, matched case-insensitively), policy, dropQueue, preemptingCEvents }.
+/**
+ * @param {Record<string, any>} model
+ * @param {string[]} warnings
+ */
+function collectPreemptiveServers(model, warnings) {
+  /** @type {Map<string, any>} */
+  const out = new Map();
+  const fieldNames = (model.entityTypes || [])
+    .filter((/** @type {any} */ e) => e.role !== 'server')
+    .flatMap((/** @type {any} */ e) => (e.attrDefs || []).map((/** @type {any} */ a) => String(a.name || '')));
+  const toField = (/** @type {string} */ attr) => safeId(fieldNames.find(n => n.toLowerCase() === attr.toLowerCase()) || attr);
+  for (const c of (model.cEvents || [])) {
+    for (const part of effectText(c.effect).split(';').map((/** @type {string} */ t) => t.trim())) {
+      const m = part.match(PREEMPT_ASSIGN_PATTERN);
+      if (!m) continue;
+      const queue = (model.queues || []).find((/** @type {any} */ q) => String(q.name).trim().toLowerCase() === m[1].trim().toLowerCase());
+      const opts = parsePreemptOptions(m[3]);
+      const rankAttrs = preemptRankAttrs(queue?.discipline, opts.criterion);
+      const label = `${c.name || 'activity'}: ${part}`;
+      if (!rankAttrs) {
+        warnings.push(`${label} — the queue doesn't rank jobs, so it never preempts; exported as a plain ASSIGN.`);
+        continue;
+      }
+      const type = m[2].trim();
+      const prev = out.get(type);
+      if (prev && (prev.policy !== opts.policy || prev.dropQueue !== opts.dropQueue || prev.rankNames.join() !== rankAttrs.map(toField).join())) {
+        warnings.push(`${label} — another activity already preempts ${type} with a different rank or policy; the export uses the first one's for every job on ${type}.`);
+      }
+      if (opts.maxPreemptions != null || opts.minService != null) {
+        warnings.push(`NOT SUPPORTED: ${label} — MAX:n / MINSERVICE:t are not translated; in the SimPy script any strictly lower-ranked job can be interrupted any number of times.`);
+      }
+      if (opts.criterion && opts.criterion.kind !== 'priority') {
+        warnings.push(`${label} — ${opts.criterion.kind.toUpperCase()} is not translated; SimPy interrupts the lowest-ranked job (latest request on a tie).`);
+      }
+      if (prev) { prev.preemptingCEvents.add(c.id ?? c.name); continue; }
+      out.set(type, {
+        rankNames: rankAttrs.map(toField),
+        policy: opts.policy,
+        dropQueue: opts.dropQueue,
+        preemptingCEvents: new Set([c.id ?? c.name]),
+      });
+    }
+  }
+  return out;
+}
+
 // Find the B-event that is the "completion" event for a C-event (via cSchedules[0].eventId)
 /**
  * @param {Record<string, any>} cEvent
@@ -424,6 +475,7 @@ function buildScript(model, todoSet, warnings = []) {
   const warmupPeriod = +(expDef.warmupPeriod ?? model.warmupPeriod ?? 0);
   const replications = +(expDef.replications ?? model.replications ?? 1);
   const timeUnit     = model.timeUnit || 'minutes';
+  const preemptive   = collectPreemptiveServers(model, warnings);
 
   const servers   = entityTypes.filter((/** @type {any} */ e) => e.role === 'server');
   const customers = entityTypes.filter((/** @type {any} */ e) => e.role !== 'server');
@@ -664,6 +716,19 @@ class Stats:
   const cEventRoutingStores = new Map();
   if (assignCEvents.length > 0) {
     const svcParts = ['# ── Service processes ───────────────────────────────────────────────────────'];
+    if (preemptive.size) {
+      svcParts.push(`def _rank(entity, names):
+    \"\"\"Preemption rank: the first of the named attributes the job has (lower = more urgent).\"\"\"
+    for _n in names:
+        _v = getattr(entity, _n, None)
+        if _v is not None and _v != "":
+            try:
+                return float(_v)
+            except (TypeError, ValueError):
+                return math.inf
+    return math.inf
+`);
+    }
     for (const c of assignCEvents) {
       const effT = effectText(c.effect);
       const assignCall = findMacroCall(effT, 'ASSIGN') || findMacroCall(effT, 'COSEIZE');
@@ -675,6 +740,9 @@ class Stats:
       const coseizeDefs = isCoseize ? args.slice(1).map(parseCoseizeArg) : null;
       const serverTypes = isCoseize ? coseizeDefs.map((/** @type {any} */ d) => d.type) : [args[1]];
       const storeId = safeId(queueName) + '_store';
+      if (isCoseize && serverTypes.some((/** @type {string} */ t) => preemptive.has(t))) {
+        warnings.push(`NOT SUPPORTED: ${c.name || 'service'} co-seizes a preemptive resource — an interruption of this COSEIZE is not handled in the SimPy script.`);
+      }
 
       const { dist: svcDist, distParams: svcParams, placeholder } = getServiceDist(c);
       const svcExpr = distToExpr(svcDist, svcParams);
@@ -736,6 +804,43 @@ ${svcBusyLines}
         for _req in [${reqVars.join(', ')}]:
             try: _req.resource.release(_req)
             except: pass`;
+      } else if (preemptive.has(serverTypes[0])) {
+        // ASSIGN … PREEMPT: request with the job's rank; the preempting activity
+        // asks with preempt=True. An interrupted job goes back to the resource
+        // queue (that time counts as wait) and retries per the policy.
+        const pre = preemptive.get(serverTypes[0]);
+        const isPreempting = pre.preemptingCEvents.has(c.id ?? c.name);
+        const rankNames = `(${pre.rankNames.map((/** @type {string} */ n) => JSON.stringify(n)).join(', ')},)`;
+        const busy = `stats.resource_busy["${serverTypes[0]}"] = stats.resource_busy.get("${serverTypes[0]}", 0.0) + _svc_t`;
+        const onInterrupt = pre.policy === 'RESTART' ? `                pass  # RESTART: the full duration again`
+          : pre.policy === 'RESAMPLE' ? `                _remaining = ${svcExpr}  # RESAMPLE: a new duration`
+            : pre.policy === 'DROP' ? `                entity.queue_join_time = env.now\n                yield ${safeId(pre.dropQueue)}_store.put(entity)  # DROP:${pre.dropQueue}\n                return`
+              : `                _remaining -= _svc_t  # RESUME: the remaining time`;
+        const svcNoteLine = svcNote ? `    ${svcNote}\n` : '';
+        seizeBlock =
+`${svcNoteLine}    _remaining = ${svcExpr}  # service: ${svcLabel}${placeholder ? '  # NOT SUPPORTED: set service distribution' : ''}
+    _first = True
+    while True:
+        with ${resVars[0]}.request(priority=_rank(entity, ${rankNames}), preempt=${isPreempting ? 'True' : 'False'}) as _req:
+            yield _req
+            if _first:
+                entity.service_start_time = env.now
+                _first = False
+            entity.wait_time_acc += env.now - entity.queue_join_time
+            _start = env.now
+            try:
+                yield env.timeout(_remaining)
+                _svc_t = env.now - _start
+                entity.svc_time_acc += _svc_t
+                ${busy}
+                break
+            except simpy.Interrupt:
+                # Preempted by a higher-ranked job (Sprint 99 preempt-and-assign).
+                _svc_t = env.now - _start
+                entity.svc_time_acc += _svc_t
+                ${busy}
+                entity.queue_join_time = env.now
+${onInterrupt}`;
       } else {
         const svcNoteLine = svcNote ? `        ${svcNote}\n` : '';
         seizeBlock =
@@ -755,10 +860,13 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const completionCode = routingCode(completionBEvent, queues, warnings);
 
       // Routing code may reference stores local to run_replication() — pass them explicitly.
-      const routingStoreVarNames = [...new Set((completionCode.match(/\b\w+_store\b/g) || []))]
+      const routingStoreVarNames = [...new Set(((seizeBlock + completionCode).match(/\b\w+_store\b/g) || []))]
         .filter(v => v !== storeId);
       cEventRoutingStores.set(c.name, routingStoreVarNames);
       const rStoreComma = routingStoreVarNames.length > 0 ? ', ' + routingStoreVarNames.join(', ') : '';
+      // ASSIGN … PREEMPT, DROP:<its own queue> — the serve process puts the
+      // interrupted job back on the store its monitor reads from.
+      const ownStoreComma = new RegExp(`\\b${storeId}\\b`).test(seizeBlock) ? `, ${storeId}` : '';
 
       // Rebuild qty-annotated arg text for the docstring only (the resource
       // variable lists above are already qty-agnostic, one per distinct type).
@@ -769,9 +877,9 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       monBody += `    """C-event "${c.name}": ${assignCall.name}(${queueName}, ${argsLabel})"""\n`;
       monBody += `    while True:\n`;
       monBody += `        entity = yield ${storeId}.get()\n`;
-      monBody += `        env.process(${svcFn}(env, entity, ${resArgs}${rStoreComma}, stats))\n`;
+      monBody += `        env.process(${svcFn}(env, entity, ${resArgs}${rStoreComma}${ownStoreComma}, stats))\n`;
 
-      let svcBody = `def ${svcFn}(env, entity, ${resArgs}${rStoreComma}, stats):\n`;
+      let svcBody = `def ${svcFn}(env, entity, ${resArgs}${rStoreComma}${ownStoreComma}, stats):\n`;
       if (todoNote) svcBody += todoNote + '\n';
       svcBody += `${seizeBlock}\n`;
       svcBody += `    entity.sojourn_time = env.now - entity.arrival_time\n`;
@@ -857,8 +965,8 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
   if (/\bDRAIN_PARTIAL\s*\(/i.test(allEffectText)) {
     warnings.push('NOT SUPPORTED: DRAIN_PARTIAL (draw what is available and record the shortfall) is not auto-translated — use min(level, amount) with Container.get() and add the remainder to the shortfall container by hand.');
   }
-  if (/\bASSIGN\s*\([^,)]+,[^,)]+,\s*PREEMPT\b/i.test(allEffectText)) {
-    warnings.push('NOT SUPPORTED: ASSIGN ... PREEMPT (take a server from a lower-ranked job) is not auto-translated — the generated code waits for an idle server. Use simpy.PreemptiveResource with request(priority=rank, preempt=True) and resume the interrupted job with its remaining time.');
+  if (preemptive.size) {
+    warnings.push(`ASSIGN ... PREEMPT: ${[...preemptive.keys()].join(', ')} exported as simpy.PreemptiveResource — every request on it carries the job's rank as its priority (lower = more urgent), only the preempting activity requests with preempt=True, and an interrupted job retries per its policy. Waiting jobs on that resource are ordered by rank rather than by activity priority, and an interrupted job rejoins behind same-rank jobs already waiting (the engine resumes it ahead of later arrivals).`);
   }
   if (/\bASSIGN\s*\([^)]*,\s*SCAN\b/i.test(allEffectText)) {
     warnings.push('NOT SUPPORTED: ASSIGN ... SCAN (look past entities whose skill has no idle server) is not auto-translated — the generated code serves the queue in order.');
@@ -981,7 +1089,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
         const c = s.count != null && s.count !== '' ? parseInt(String(s.count), 10) : 1;
         return Number.isFinite(c) && c >= 1 ? c : 1;
       })();
-      runLines.push(`    ${resId} = simpy.PriorityResource(env, capacity=${cap})`);
+      runLines.push(`    ${resId} = simpy.${preemptive.has(s.name) ? 'PreemptiveResource' : 'PriorityResource'}(env, capacity=${cap})`);
     }
     runLines.push(``);
   }
