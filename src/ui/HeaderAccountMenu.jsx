@@ -1,7 +1,8 @@
 // ui/HeaderAccountMenu.jsx — Collapsed "•••" overflow menu for header support/account actions
 //
 // Implements the shared HeaderAccountMenu spec (two tiers: Support / Account,
-// divider between). Settings/theme is intentionally excluded — it stays on
+// divider between). Help is not in this menu — it is a visible header button
+// (AppNavBar.jsx), per the shared header pattern. Settings/theme is intentionally excluded — it stays on
 // its own gear icon in the header, per spec ("this menu is navigation-only,
 // not app-state").
 //
@@ -31,16 +32,6 @@ function InfoIcon() {
   );
 }
 
-function HelpIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
-
 function KeyboardIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -64,7 +55,6 @@ const MENU_RADIUS = 12;      // --menu-radius
  *   isAdmin: boolean,
  *   onFeedback: () => void,
  *   onAbout: () => void,
- *   onHelp: () => void,
  *   onShortcuts: () => void,
  *   onAdminPanel?: () => void,
  *   onSignOut: () => void,
@@ -75,7 +65,6 @@ export function HeaderAccountMenu({
   isAdmin,
   onFeedback,
   onAbout,
-  onHelp,
   onShortcuts,
   onAdminPanel,
   onSignOut,
@@ -164,26 +153,28 @@ export function HeaderAccountMenu({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="More options"
-        title="More options"
+        aria-label="More"
+        title="More"
         onClick={() => setOpen((o) => !o)}
-        // Sized to match its header siblings (the settings gear's navBtnStyle
-        // recipe and the 28px avatar) — it previously stood out at 40x40.
+        // 40px circle — same as the Help and Settings buttons beside it
+        // (shared header pattern, see AppNavBar.jsx).
         style={{
-          height: 28,
+          width: 40,
+          height: 40,
+          minWidth: 40,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: C.surfaceHover,
+          background: open ? C.surfaceHover : "none",
           border: `1px solid ${open ? C.accent : C.border}`,
-          borderRadius: 5,
+          borderRadius: "50%",
           color: open ? C.accent : C.muted,
           cursor: "pointer",
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 700,
           letterSpacing: 1,
           lineHeight: 1,
-          padding: "5px 10px",
+          padding: 0,
           fontFamily: FONT,
         }}
       >
@@ -218,9 +209,6 @@ export function HeaderAccountMenu({
           </button>
           <button role="menuitem" type="button" style={supportItemStyle} onClick={closeThen(onAbout)}>
             <InfoIcon /> About {appName}
-          </button>
-          <button role="menuitem" type="button" style={supportItemStyle} onClick={closeThen(onHelp)}>
-            <HelpIcon /> Help
           </button>
           <button role="menuitem" type="button" style={supportItemStyle} onClick={closeThen(onShortcuts)}>
             <KeyboardIcon /> Keyboard shortcuts
