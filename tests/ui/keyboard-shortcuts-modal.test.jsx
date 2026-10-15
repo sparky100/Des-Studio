@@ -22,7 +22,7 @@ describe('KeyboardShortcutsModal reachability (Sprint 93.1)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     // Open the ••• account menu.
-    fireEvent.click(screen.getByRole('button', { name: /more options/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^more$/i }));
 
     const menu = screen.getByRole('menu', { name: /account menu/i });
     const shortcutsItem = within(menu).getByRole('menuitem', { name: /keyboard shortcuts/i });
