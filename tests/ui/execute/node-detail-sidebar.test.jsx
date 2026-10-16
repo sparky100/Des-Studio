@@ -266,7 +266,7 @@ describe("NodeDetailSidebar", () => {
     expect(screen.getByText("#10")).toBeInTheDocument();
   });
 
-  test("shows idle server with starvation time", () => {
+  test("shows idle server with its idle time", () => {
     const snap = makeActivitySnap({
       servers: [
         { type: "Server", status: "idle", busyTime: 4.0, starvationTime: 3.0 },
@@ -283,7 +283,7 @@ describe("NodeDetailSidebar", () => {
     );
     expect(screen.getByText("Server #1")).toBeInTheDocument();
     expect(screen.getByText("idle")).toBeInTheDocument();
-    expect(screen.getByText("Starvation: t=3.0")).toBeInTheDocument();
+    expect(screen.getByText("Idle for t=3.0")).toBeInTheDocument();
   });
 
   test("shows suspended servers in separate section with shift change label", () => {
