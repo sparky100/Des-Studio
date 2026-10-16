@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { StateVarEditor } from '../../../src/ui/editors/StateVarEditor.jsx';
 
 describe('StateVarEditor', () => {
-  it('defaults a newly added variable to shown in the Switches panel', () => {
+  it('defaults a newly added variable to shown in the State variables readout', () => {
     const onChange = vi.fn();
     render(<StateVarEditor vars={[]} onChange={onChange} />);
 
@@ -15,11 +15,11 @@ describe('StateVarEditor', () => {
     expect(next[0]).toMatchObject({ showInSwitches: true, resetOnWarmup: false });
   });
 
-  it('lets the modeller hide a variable from the Switches panel', () => {
+  it('lets the modeller hide a variable from the State variables readout', () => {
     const onChange = vi.fn();
     render(<StateVarEditor vars={[{ id: 'sv1', name: 'arrivals', initialValue: '0' }]} onChange={onChange} />);
 
-    const toggle = screen.getByLabelText(/show in switches panel/i);
+    const toggle = screen.getByLabelText(/show on run canvas/i);
     expect(toggle.checked).toBe(true);
 
     fireEvent.click(toggle);
@@ -37,6 +37,6 @@ describe('StateVarEditor', () => {
       />,
     );
 
-    expect(screen.getByLabelText(/show in switches panel/i).checked).toBe(false);
+    expect(screen.getByLabelText(/show on run canvas/i).checked).toBe(false);
   });
 });

@@ -167,7 +167,7 @@ The modeller may define additional numeric counters in the State Variable Editor
 | `valueType` | enum | Yes | `number` only. User-defined state variables are always numeric. |
 | `initialValue` | number | Yes | Value at simulation start. Reset to this value at warm-up end if warm-up is defined. |
 | `resetOnWarmup` | boolean | No | If `true`, variable resets to `initialValue` when warm-up period ends. Defaults to `true`. |
-| `showInSwitches` | boolean | No | If `false`, the variable is hidden from the Switches readout on the Execute canvas. Defaults to `true` (shown). Purely presentational — does not affect engine behaviour. |
+| `showInSwitches` | boolean | No | If `false`, the variable is hidden from the State variables readout on the Execute canvas. Defaults to `true` (shown). Purely presentational — does not affect engine behaviour. |
 
 ### 3.4 Variable Reference Syntax in the Predicate Builder
 

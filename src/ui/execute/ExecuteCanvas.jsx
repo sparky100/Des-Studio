@@ -28,6 +28,7 @@ import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_CARD_HEIGHT, computeCanvasFillHeight } from "./executeLayout.js";
 import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { formatReadout } from "../shared/utils.js";
 import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
 import { buildServerTypeIndex, deriveActivityLiveData } from "./activityLiveData.js";
 import { effectText } from "../../model/macroParser.js";
@@ -441,11 +442,12 @@ const FLOW_NODE_TYPE = { source: "sourceNode", queue: "queueNode", activity: "ac
 
 // A state variable reads as an ON/OFF switch when its value is exactly 0 or 1
 // (the common flag case — e.g. hormuzOpen / closureEnabled); any other numeric
-// value is shown as-is (counters, times). `on` is null for the numeric case.
+// value is shown with magnitude-based precision (formatReadout). `on` is null
+// for the numeric case.
 export function classifySwitch(value) {
   if (value === 1) return { on: true, label: "ON" };
   if (value === 0) return { on: false, label: "OFF" };
-  return { on: null, label: value == null ? "—" : String(value) };
+  return { on: null, label: formatReadout(value) };
 }
 
 // HUD readout of every declared state variable. The pill flashes when its value
@@ -456,7 +458,7 @@ function SwitchStrip({ stateVariables, values, flashNames }) {
   return (
     <div data-testid="switch-strip" style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
       <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: "0.8px", fontWeight: 600 }}>
-        SWITCHES
+        STATE VARIABLES
       </span>
       {stateVariables.map(sv => {
         const { on, label } = classifySwitch(values[sv.name]);
@@ -866,8 +868,8 @@ export function ExecuteCanvas({
     return out;
   }, [model.stateVariables, snap]);
 
-  // Only state variables the modeller opted into the Switches readout
-  // (State Variables editor → "Show in Switches panel"). Undefined means
+  // Only state variables the modeller opted into the State variables readout
+  // (State Variables editor → "Show on run canvas"; stored as showInSwitches). Undefined means
   // shown, so pre-existing models keep their full readout.
   const switchVars = useMemo(
     () => (model.stateVariables || []).filter(sv => sv.showInSwitches !== false),

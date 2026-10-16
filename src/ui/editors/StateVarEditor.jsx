@@ -48,9 +48,9 @@ const StateVarEditor=({vars,onChange})=>{
               <input type="checkbox" checked={!!sv.resetOnWarmup} onChange={e=>upd(i,'resetOnWarmup',e.target.checked)} style={{accentColor:C.amber}}/>
               Reset after the start-up period
             </label>
-            <label title="Show this value as a pill in the Switches readout on the run canvas" style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:(sv.showInSwitches!==false)?C.green:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
+            <label title="Show this value as a pill in the State variables readout on the run canvas" style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:(sv.showInSwitches!==false)?C.green:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
               <input type="checkbox" checked={sv.showInSwitches!==false} onChange={e=>upd(i,'showInSwitches',e.target.checked)} style={{accentColor:C.green}}/>
-              Show in Switches panel
+              Show on run canvas
             </label>
           </div>
         </div>

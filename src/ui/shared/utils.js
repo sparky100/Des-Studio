@@ -141,3 +141,15 @@ export function fullDate(isoDate) {
   if (!isoDate) return "";
   return new Date(isoDate).toLocaleString();
 }
+
+// Precision follows magnitude, so live readouts stay short: below 1 keeps two
+// decimals (0.37), 1–10 keeps one (4.2), 10 and above is a whole number with
+// thousands separators (20,387,362). Trailing zeros are dropped (0.50 → 0.5).
+export function formatReadout(value) {
+  if (value == null || value === "") return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  const abs = Math.abs(n);
+  if (abs >= 10) return Math.round(n).toLocaleString("en-GB");
+  return String(Number(n.toFixed(abs < 1 ? 2 : 1)));
+}
