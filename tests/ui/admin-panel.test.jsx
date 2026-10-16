@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AdminPanel } from '../../src/ui/AdminPanel.jsx';
+import { AdminPanel, buildLlmConfigValue } from '../../src/ui/AdminPanel.jsx';
+import { getPlatformConfig, setPlatformConfig } from '../../src/db/models.js';
 
 // vi.hoisted ensures these values are available when vi.mock factory is called
 // (vi.mock is hoisted before variable declarations; vi.hoisted is hoisted before vi.mock)
@@ -129,5 +130,29 @@ describe('AdminPanel', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Feedback/i }));
     expect(screen.getByText('reply@example.com')).toBeInTheDocument();
     expect(screen.getByText('alice@example.com')).toBeInTheDocument();
+  });
+});
+
+describe('LLM settings — model for building models', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('buildLlmConfigValue keeps stored fields the form does not edit and clears an unset build model', () => {
+    const fields = { provider: 'anthropic', model: 'claude-haiku-5-5', temperature: 0.3, maxTokensPerRun: 8192, rateLimitPerHour: 25 };
+    expect(buildLlmConfigValue({ otherAppSetting: 1, buildModel: 'claude-sonnet-5-5' }, { ...fields, buildModel: '' }))
+      .toEqual({ ...fields, otherAppSetting: 1 });
+    expect(buildLlmConfigValue(null, { ...fields, buildModel: 'claude-sonnet-5-5' }).buildModel).toBe('claude-sonnet-5-5');
+  });
+
+  it('shows the stored build model and keeps it (and other stored fields) when saving', async () => {
+    getPlatformConfig.mockImplementation(async key => (key === 'llm'
+      ? { provider: 'anthropic', model: 'claude-haiku-5-5', buildModel: 'claude-sonnet-5-5', otherAppSetting: 'keep' }
+      : null));
+    render(<AdminPanel {...defaultProps} />);
+    const select = await screen.findByLabelText('Model for building models');
+    expect(select.value).toBe('claude-sonnet-5-5');
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    await waitFor(() => expect(setPlatformConfig).toHaveBeenCalled());
+    const [, value] = setPlatformConfig.mock.calls[0];
+    expect(value).toMatchObject({ model: 'claude-haiku-5-5', buildModel: 'claude-sonnet-5-5', otherAppSetting: 'keep' });
   });
 });

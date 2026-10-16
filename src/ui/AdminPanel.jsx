@@ -25,6 +25,17 @@ const LLM_PROVIDERS = [
 // still selectable so a saved choice never disappears from the list. The 5.5
 // models need the shared llm-proxy's newer-model support (drops `temperature`,
 // adds reasoning headroom) — keep this list in sync across Flow, Lens and Loop.
+// The platform_config 'llm' value to save: the stored row with this form's
+// fields laid over it, so fields the form doesn't edit (a setting another
+// app's admin panel added, such as buildModel) survive a save. An empty
+// buildModel removes the field, so build requests fall back to `model`.
+export function buildLlmConfigValue(stored, { provider, model, temperature, maxTokensPerRun, rateLimitPerHour, buildModel, apiKey }) {
+  const value = { ...(stored || {}), provider, model, temperature, maxTokensPerRun, rateLimitPerHour };
+  if (buildModel) value.buildModel = buildModel; else delete value.buildModel;
+  if (apiKey) value.apiKey = apiKey;
+  return value;
+}
+
 const LLM_MODELS = {
   anthropic:   ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-4-5", "claude-sonnet-4-6"],
   openai:      ["gpt-5.1-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max"],
@@ -256,6 +267,9 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const [temperature, setTemperature] = useState(0.3);
   const [maxTokens, setMaxTokens] = useState(450);
   const [rateLimit, setRateLimit] = useState(25);
+  // Optional stronger model for whole-model generation — the shared proxy
+  // sends requests of kind "model_builder" to it. "" = use `model`.
+  const [buildModel, setBuildModel] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -286,6 +300,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
         setTemperature(llmCfg.temperature ?? 0.3);
         setMaxTokens(llmCfg.maxTokensPerRun ?? 450);
         setRateLimit(llmCfg.rateLimitPerHour ?? 25);
+        setBuildModel(llmCfg.buildModel || "");
       }
     } catch (err) {
       setSaveStatus({ state: "error", message: err.message });
@@ -302,9 +317,9 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const handleSaveLlm = async () => {
     setSaving(true); setSaveStatus(null);
     try {
-      const value = { provider, model, temperature, maxTokensPerRun: maxTokens, rateLimitPerHour: rateLimit };
-      if (apiKey) value.apiKey = apiKey;
+      const value = buildLlmConfigValue(llmConfig, { provider, model, temperature, maxTokensPerRun: maxTokens, rateLimitPerHour: rateLimit, buildModel, apiKey });
       await setPlatformConfig("llm", value, userId);
+      setLlmConfig(value);
       await logAdminAction("update_config", null, "llm");
       setSaveStatus({ state: "success", message: "LLM configuration saved." });
     } catch (err) {
@@ -492,7 +507,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
               </InfoBox>
               <div style={{ display: "grid", gridTemplateColumns: narrowLayout ? "1fr" : "180px 1fr", gap: narrowLayout ? 8 : 12, alignItems: narrowLayout ? "stretch" : "center" }}>
                 <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Provider</span>
-                <select value={provider} onChange={e => { setProvider(e.target.value); setModel(LLM_MODELS[e.target.value]?.[0] || ""); }}
+                <select value={provider} onChange={e => { setProvider(e.target.value); setModel(LLM_MODELS[e.target.value]?.[0] || ""); setBuildModel(""); }}
                   style={{ ...inp({ color: C.accent }), width: 240 }}>
                   {LLM_PROVIDERS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
@@ -502,6 +517,18 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                   style={{ ...inp({ color: C.accent }), width: 300 }}>
                   {(LLM_MODELS[provider] || []).map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
+
+                <label htmlFor="ai-build-model" style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Model for building models</label>
+                <div>
+                  <select id="ai-build-model" value={buildModel} onChange={e => setBuildModel(e.target.value)}
+                    style={{ ...inp({ color: C.accent }), width: 300 }}>
+                    <option value="">Same as above</option>
+                    {(LLM_MODELS[provider] || []).map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 4, maxWidth: 420 }}>
+                    Used only when an app generates or edits a whole model in one go (e.g. Loop’s Describe tab). Everything else keeps the model above.
+                  </div>
+                </div>
 
                 <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>API Key</span>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
