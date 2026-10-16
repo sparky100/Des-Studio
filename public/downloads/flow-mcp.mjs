@@ -22171,6 +22171,76 @@ function buildTraceFromLog(log, model, engineSummary) {
   };
 }
 
+// ../src/model/macroParser.js
+function clean(value = "") {
+  return String(value || "").trim();
+}
+function effectText(effect) {
+  if (Array.isArray(effect)) return effect.map(effectText).filter(Boolean).join(";");
+  if (effect && typeof effect === "object") {
+    if (typeof effect.effect === "string") return effect.effect;
+    const macro = clean(effect.macro || effect.type || effect.name).toUpperCase();
+    if (!macro) return "";
+    const args = Array.isArray(effect.args) ? effect.args : [
+      effect.entityType || effect.customerType || effect.queue || effect.resourceType || effect.serverType,
+      effect.serverType || effect.resourceType
+    ].filter(Boolean);
+    return `${macro}(${args.join(", ")})`;
+  }
+  return clean(effect);
+}
+function splitTopLevelArgs(raw) {
+  const args = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of raw) {
+    if (ch === "[" || ch === "(") {
+      depth++;
+      current += ch;
+    } else if (ch === "]" || ch === ")") {
+      depth = Math.max(0, depth - 1);
+      current += ch;
+    } else if (ch === "," && depth === 0) {
+      args.push(current.trim());
+      current = "";
+    } else current += ch;
+  }
+  if (current.trim()) args.push(current.trim());
+  return args.filter(Boolean);
+}
+function tokenizeCalls(text2) {
+  const calls = [];
+  const opener = /\b([A-Z_]+)\s*\(/gi;
+  let match;
+  while (match = opener.exec(text2)) {
+    const argsStart = match.index + match[0].length;
+    let depth = 0;
+    let i = argsStart;
+    for (; i < text2.length; i++) {
+      const ch = text2[i];
+      if (ch === "[" || ch === "(") depth++;
+      else if (ch === "]") depth = Math.max(0, depth - 1);
+      else if (ch === ")") {
+        if (depth === 0) break;
+        depth--;
+      }
+    }
+    if (i >= text2.length) break;
+    calls.push({
+      macro: match[1].trim().toUpperCase(),
+      args: splitTopLevelArgs(text2.slice(argsStart, i)),
+      start: match.index,
+      end: i + 1,
+      raw: text2.slice(match.index, i + 1)
+    });
+    opener.lastIndex = i + 1;
+  }
+  return calls;
+}
+function macroCalls(effect) {
+  return tokenizeCalls(effectText(effect)).map(({ macro, args }) => ({ macro, args }));
+}
+
 // ../src/model/conditionFormat.js
 function parseScalarValue(raw) {
   const text2 = String(raw ?? "").trim();
@@ -23017,6 +23087,7 @@ function claimServerForEntity(customer, server2, clock, index = null, ctx = null
   if (ctx?.state?.__currentShiftLabel?.[server2.type]) {
     server2._shiftLabel = ctx.state.__currentShiftLabel[server2.type];
   }
+  server2._shiftSegStart = clock;
   if (server2._starvationStart != null) {
     server2._starvationTime = (server2._starvationTime || 0) + Math.max(0, clock - server2._starvationStart);
     delete server2._starvationStart;
@@ -23044,11 +23115,13 @@ function releaseServerClaim(customer, server2, clock) {
           server2._skillBusyTime[prevSkill] = (server2._skillBusyTime[prevSkill] || 0) + delta;
         }
         if (prevShiftLabel) {
+          const segStart = Math.max(server2._shiftSegStart ?? server2._busyStart, server2._busyStart);
           if (!server2._shiftBusyTime) server2._shiftBusyTime = {};
-          server2._shiftBusyTime[prevShiftLabel] = (server2._shiftBusyTime[prevShiftLabel] || 0) + delta;
+          server2._shiftBusyTime[prevShiftLabel] = (server2._shiftBusyTime[prevShiftLabel] || 0) + Math.max(0, clock - segStart);
         }
       }
       delete server2._busyStart;
+      delete server2._shiftSegStart;
       setServerStatus(server2, "idle");
       server2._starvationStart = clock;
     }
@@ -23176,6 +23249,28 @@ function flushRetiredServerStats(srv, state) {
       acc.perShiftBusyTimeSum[label] = (acc.perShiftBusyTimeSum[label] || 0) + bt;
     }
   }
+  if (srv._shiftCompletions) {
+    acc.perShiftCompletions = acc.perShiftCompletions || {};
+    for (const [label, n] of Object.entries(srv._shiftCompletions)) {
+      acc.perShiftCompletions[label] = (acc.perShiftCompletions[label] || 0) + n;
+    }
+  }
+}
+function splitShiftBusyTime(srv, clock, newLabel) {
+  if (srv.status === "busy" && srv._busyStart != null) {
+    if (srv._shiftLabel) {
+      const segStart = Math.max(srv._shiftSegStart ?? srv._busyStart, srv._busyStart);
+      if (!srv._shiftBusyTime) srv._shiftBusyTime = {};
+      srv._shiftBusyTime[srv._shiftLabel] = (srv._shiftBusyTime[srv._shiftLabel] || 0) + Math.max(0, clock - segStart);
+    }
+    srv._shiftSegStart = clock;
+  }
+  srv._shiftLabel = newLabel;
+}
+function noteShiftCompletion(srv) {
+  if (!srv?._shiftLabel) return;
+  if (!srv._shiftCompletions) srv._shiftCompletions = {};
+  srv._shiftCompletions[srv._shiftLabel] = (srv._shiftCompletions[srv._shiftLabel] || 0) + 1;
 }
 function turnaroundSpecFor(model, serverType) {
   const key = norm(serverType);
@@ -23919,6 +24014,7 @@ function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLE
     msgs.push(`#${cust.id} done [sojourn ${cust.sojournTime.toFixed(2)} t, ${cust.stages.length} stage(s)]`);
   }
   if (srv) {
+    noteShiftCompletion(srv);
     releaseServerClaim(cust, srv, clock);
     if (!beginTurnaround(srv, ctx)) msgs.push(`Server #${srv.id} \u2192 idle`);
     const retired = retireIdleExcessServers(ctx, srv.type);
@@ -24314,6 +24410,7 @@ var MACROS = [
         cust.lastStageStart = clock;
         const destQueue = targetQueue || cust.lastQueue || cust.queue;
         delete cust.serviceStart;
+        noteShiftCompletion(srv);
         releaseServerClaim(cust, srv, clock);
         const inTurnaround = beginTurnaround(srv, ctx) > 0;
         const joined = attemptQueueJoin(cust, destQueue, clock, ctx);
@@ -24390,6 +24487,7 @@ var MACROS = [
       delete cust.serviceStart;
       let retired = 0;
       for (const srv of claimedServers) {
+        noteShiftCompletion(srv);
         releaseServerClaim(cust, srv, clock);
         beginTurnaround(srv, ctx);
         retired += retireIdleExcessServers(ctx, srv.type);
@@ -25071,6 +25169,8 @@ var MACROS = [
         }
         setServerStatus(srv, "busy");
         srv._busyStart = clock;
+        if (ctx.state?.__currentShiftLabel?.[srv.type]) srv._shiftLabel = ctx.state.__currentShiftLabel[srv.type];
+        srv._shiftSegStart = clock;
         srv._currentSkill = skill;
         srv.currentCustId = cust.id;
         srv._claimGroup = primary.srv._claimGroup;
@@ -25404,8 +25504,10 @@ function applyShiftChange(ev, ctx) {
   }
   timeline.push({ startTime: ctx.clock, endTime: null, capacity: target, elapsed: 0 });
   ctx.state.__currentShiftLabel = ctx.state.__currentShiftLabel || {};
-  ctx.state.__currentShiftLabel[serverTypeName] = `shift_${ctx.clock}_cap${target}`;
+  const newShiftLabel = `shift_${ctx.clock}_cap${target}`;
+  ctx.state.__currentShiftLabel[serverTypeName] = newShiftLabel;
   const servers = ctx.entities.filter((e) => e.role === "server" && match(e.type, serverTypeName));
+  for (const srv of servers) splitShiftBusyTime(srv, ctx.clock, newShiftLabel);
   const current = servers.length;
   const entityType = (ctx.model?.entityTypes || []).find((et) => et.role === "server" && match(et.name, serverTypeName));
   const behavior = entityType?.shiftBehavior || "delay";
@@ -26817,9 +26919,58 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
   const _utilStreaks = {};
   for (const srv of entities) {
     if (srv.role === "server" && !_utilStreaks[srv.type]) {
-      _utilStreaks[srv.type] = { highStart: null, highEnd: null, maxHigh: 0, zeroStart: null, zeroEnd: null, maxZero: 0 };
+      _utilStreaks[srv.type] = { highStart: null, maxHigh: 0, zeroStart: null, maxZero: 0 };
     }
   }
+  const _starveQueues = /* @__PURE__ */ new Map();
+  {
+    const norm2 = (v) => String(v ?? "").trim().toLowerCase();
+    const queues = runtimeModel.queues || [];
+    for (const ce of runtimeModel.cEvents || []) {
+      for (const { macro, args } of macroCalls(ce.effect)) {
+        if (String(macro).toUpperCase() !== "ASSIGN" || args.length < 2) continue;
+        const extra = args.slice(2).map((a) => String(a).trim());
+        if (extra.some((a) => /^"|^Entity\./i.test(a) || /^(SCAN|PREEMPT)\b/i.test(a))) continue;
+        const sType = norm2(args[1]);
+        if (!sType || sType === "any") continue;
+        const target = norm2(args[0]);
+        const byName = queues.filter((q) => norm2(q.name) === target);
+        const served = byName.length ? byName : queues.filter((q) => norm2(q.customerType) === target);
+        if (!served.length) continue;
+        const list = _starveQueues.get(sType) || [];
+        for (const q of served) if (!list.includes(q.name)) list.push(q.name);
+        _starveQueues.set(sType, list);
+      }
+    }
+  }
+  const _starvation = new Map([..._starveQueues.keys()].map((t) => [t, { serverTime: 0, since: null, maxStretch: 0 }]));
+  const accountStarvation = (from, to) => {
+    if (!_starvation.size || !(to > from)) return;
+    for (const [sType, acc] of _starvation) {
+      const idle = serverCountsOfType(queueIndex, sType).idle;
+      let starving = false;
+      if (idle > 0) {
+        for (
+          const qName of
+          /** @type {string[]} */
+          _starveQueues.get(sType)
+        ) {
+          const bucket = indexBucket(queueIndex, qName);
+          if (bucket && bucket.length > 0) {
+            starving = true;
+            break;
+          }
+        }
+      }
+      if (starving) {
+        acc.serverTime += idle * (to - from);
+        if (acc.since == null) acc.since = from;
+      } else if (acc.since != null) {
+        acc.maxStretch = Math.max(acc.maxStretch, from - acc.since);
+        acc.since = null;
+      }
+    }
+  };
   const helpers = () => makeHelpers(entities, runtimeModel, queueIndex);
   const createServerEntity = (serverTypeName, arrivalTime = clock) => {
     const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
@@ -27276,12 +27427,14 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
     while (dueCount < fel.length && Math.abs(fel[dueCount].scheduledTime - nextTime) < 1e-9) dueCount++;
     const due = fel.slice(0, dueCount);
     if (maxSimTime !== null && nextTime > maxSimTime) {
+      accountStarvation(clock, maxSimTime);
       clock = maxSimTime;
       _terminationConditionMet = true;
       const msg = `Run limit reached (t=${maxSimTime.toFixed(3)}) \u2014 simulation complete`;
       log.push(_trace("END", { message: msg }));
       return { done: true, cycleLog: [_trace("END", { message: msg })], snap: stepSnapshot() };
     }
+    accountStarvation(clock, nextTime);
     clock = nextTime;
     {
       const endEntry = checkTermination();
@@ -27301,6 +27454,17 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
       if (ev.type === "WARMUP" && !_warmupComplete) {
         _warmupComplete = true;
         _statsResetTime = clock;
+        for (const acc of _starvation.values()) {
+          acc.serverTime = 0;
+          acc.maxStretch = 0;
+          if (acc.since != null) acc.since = clock;
+        }
+        for (const streak of Object.values(_utilStreaks)) {
+          if (streak.highStart != null) streak.highStart = clock;
+          if (streak.zeroStart != null) streak.zeroStart = clock;
+          streak.maxHigh = 0;
+          streak.maxZero = 0;
+        }
         _wipIntegral = 0;
         _lastWipSnapTime = clock;
         for (const ct of runtimeModel.containerTypes || []) {
@@ -27322,12 +27486,15 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
           srv._turnaroundCount = 0;
           if (srv.status === "turnaround") srv._turnaroundStart = clock;
           srv._shiftBusyTime = {};
+          srv._shiftCompletions = {};
           srv._skillBusyTime = {};
           srv._totalDowntime = 0;
           srv._failureCount = 0;
           srv._starvationTime = 0;
-          if (srv.status === "busy") srv._busyStart = clock;
-          else delete srv._busyStart;
+          if (srv.status === "busy") {
+            srv._busyStart = clock;
+            srv._shiftSegStart = clock;
+          } else delete srv._busyStart;
           if (srv.status === "failed") srv._failedAt = clock;
           if (srv._starvationStart != null) srv._starvationStart = clock;
         }
@@ -27736,21 +27903,17 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
           const util2 = bt.busy / bt.total;
           if (util2 >= 0.9) {
             if (streak.highStart == null) streak.highStart = clock;
-            streak.highEnd = clock;
           } else if (streak.highStart != null) {
-            const dur = streak.highEnd - streak.highStart;
+            const dur = clock - streak.highStart;
             if (dur > streak.maxHigh) streak.maxHigh = dur;
             streak.highStart = null;
-            streak.highEnd = null;
           }
           if (util2 === 0) {
             if (streak.zeroStart == null) streak.zeroStart = clock;
-            streak.zeroEnd = clock;
           } else if (streak.zeroStart != null) {
-            const dur = streak.zeroEnd - streak.zeroStart;
+            const dur = clock - streak.zeroStart;
             if (dur > streak.maxZero) streak.maxZero = dur;
             streak.zeroStart = null;
-            streak.zeroEnd = null;
           }
         }
       }
@@ -28078,8 +28241,8 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
     const elapsed = clock - _statsResetTime;
     const avgWip = elapsed > 0 ? +(_wipIntegral / elapsed).toFixed(4) : 0;
     const arrivalRate = elapsed > 0 ? served.length / elapsed : 0;
-    const avgWaitByLittle = arrivalRate > 0 ? +(avgWip / arrivalRate).toFixed(4) : null;
-    const waitDiscrepancy = avgWait != null && avgWaitByLittle != null && avgWaitByLittle > 0 ? Math.round(Math.abs(avgWait - avgWaitByLittle) / avgWaitByLittle * 100) : null;
+    const avgTimeInSystemByLittle = arrivalRate > 0 ? +(avgWip / arrivalRate).toFixed(4) : null;
+    const waitDiscrepancy = avgSojourn != null && avgTimeInSystemByLittle != null && avgTimeInSystemByLittle > 0 ? Math.round(Math.abs(avgSojourn - avgTimeInSystemByLittle) / avgTimeInSystemByLittle * 100) : null;
     const perResource = {};
     const perShiftBuckets = {};
     for (const et of runtimeModel.entityTypes || []) {
@@ -28102,15 +28265,18 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
           perResource[srv.type].skillBusyTimeSum[skill] = (perResource[srv.type].skillBusyTimeSum[skill] || 0) + bt;
         }
       }
-      const addToBucket = (label, amount) => {
-        if (!label || !amount) return;
+      const addToBucket = (label, amount, completions = 0) => {
+        if (!label || !amount && !completions) return;
         if (!perShiftBuckets[srv.type]) perShiftBuckets[srv.type] = {};
         if (!perShiftBuckets[srv.type][label]) perShiftBuckets[srv.type][label] = { busyTimeSum: 0, completions: 0 };
         perShiftBuckets[srv.type][label].busyTimeSum += amount;
+        perShiftBuckets[srv.type][label].completions += completions;
       };
       for (const [label, bt] of Object.entries(srv._shiftBusyTime || {})) addToBucket(label, bt);
+      for (const [label, n] of Object.entries(srv._shiftCompletions || {})) addToBucket(label, 0, n);
       if (srv.status === "busy" && srv._busyStart != null) {
-        addToBucket(srv._shiftLabel, Math.max(0, clock - srv._busyStart));
+        const segStart = Math.max(srv._shiftSegStart ?? srv._busyStart, srv._busyStart);
+        addToBucket(srv._shiftLabel, Math.max(0, clock - segStart));
       }
       if (srv._starvationStart != null && srv.status === "idle") {
         const starvTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
@@ -28146,6 +28312,11 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
           perShiftBuckets[type][label].busyTimeSum += bt;
         }
       }
+      for (const [label, n] of Object.entries(acc.perShiftCompletions || {})) {
+        if (!perShiftBuckets[type]) perShiftBuckets[type] = {};
+        if (!perShiftBuckets[type][label]) perShiftBuckets[type][label] = { busyTimeSum: 0, completions: 0 };
+        perShiftBuckets[type][label].completions += n;
+      }
     }
     for (const type of Object.keys(perResource)) {
       const r = perResource[type];
@@ -28161,16 +28332,25 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
       r.skillUtil = r.skillBusyTimeSum ? Object.fromEntries(
         Object.entries(r.skillBusyTimeSum).map(([skill, bt]) => [skill, denominator > 0 ? +(bt / denominator).toFixed(4) : 0])
       ) : void 0;
-      r.starvationTime = denominator > 0 ? +(r.starvationTimeSum / r.total).toFixed(4) : 0;
-      r.starvationPct = denominator > 0 ? +(r.starvationTimeSum / denominator).toFixed(4) : 0;
-      r.maxStarvationDuration = r.maxContStarvDur > 0 ? +r.maxContStarvDur.toFixed(4) : null;
+      const starve = _starvation.get(String(type).trim().toLowerCase());
+      if (starve) {
+        const openStretch = starve.since != null ? clock - starve.since : 0;
+        const longest = Math.max(starve.maxStretch, openStretch);
+        r.starvationTime = r.total > 0 ? +(starve.serverTime / r.total).toFixed(4) : 0;
+        r.starvationPct = denominator > 0 ? +(starve.serverTime / denominator).toFixed(4) : 0;
+        r.maxStarvationDuration = longest > 0 ? +longest.toFixed(4) : null;
+      } else {
+        r.starvationTime = null;
+        r.starvationPct = null;
+        r.maxStarvationDuration = null;
+      }
       r.totalDowntime = +r.downtimeSum.toFixed(4);
       r.availability = denominator > 0 ? +(1 - r.downtimeSum / denominator).toFixed(4) : 1;
       r.meanDowntimePerFailure = r.failureCount > 0 ? +(r.downtimeSum / r.failureCount).toFixed(4) : null;
       const timeline = state.__shiftTimeline?.[type] || [];
       const buckets = perShiftBuckets[type] || {};
       if (timeline.length > 0) {
-        r.perShiftUtil = timeline.map((period) => {
+        r.perShiftUtil = timeline.filter((period) => (period.endTime ?? clock) > _statsResetTime).map((period) => {
           const label = `shift_${period.startTime}_cap${period.capacity}`;
           const bucket = buckets[label] || { busyTimeSum: 0 };
           const periodStart = Math.max(period.startTime, _statsResetTime);
@@ -28192,6 +28372,7 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
         const denomSum = r.perShiftUtil.reduce((s, p) => s + p.elapsed * p.plannedCapacity, 0);
         r.calendarUtilisation = denomSum > 0 ? +(busySum / denomSum).toFixed(4) : 0;
         r.utilisation = r.calendarUtilisation;
+        if (starve && denomSum > 0) r.starvationPct = +(starve.serverTime / denomSum).toFixed(4);
       }
       const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
       const et = (runtimeModel.entityTypes || []).find((et2) => et2.role === "server" && match(et2.name, type));
@@ -28210,11 +28391,11 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
     for (const [type, streak] of Object.entries(_utilStreaks)) {
       if (!perResource[type]) continue;
       if (streak.highStart != null) {
-        const dur = streak.highEnd - streak.highStart;
+        const dur = clock - streak.highStart;
         if (dur > streak.maxHigh) streak.maxHigh = dur;
       }
       if (streak.zeroStart != null) {
-        const dur = streak.zeroEnd - streak.zeroStart;
+        const dur = clock - streak.zeroStart;
         if (dur > streak.maxZero) streak.maxZero = dur;
       }
       perResource[type].maxSustainedHighUtil = streak.maxHigh > 0 ? +streak.maxHigh.toFixed(4) : null;
@@ -28336,7 +28517,7 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
       reneged: reneged.length,
       balked: balked.length,
       avgWait: avgWait != null ? +avgWait.toFixed(4) : null,
-      avgWaitByLittle,
+      avgTimeInSystemByLittle,
       waitDiscrepancy,
       waitSamplesBreakdown: {
         served: servedWaits.length,
@@ -28447,8 +28628,8 @@ function validateModel(model) {
   const bEvents = model.bEvents || [];
   const cEvents = model.cEvents || [];
   const queues = model.queues || [];
-  const effectText2 = (effect) => {
-    if (Array.isArray(effect)) return effect.map(effectText2).filter(Boolean).join(";");
+  const effectText3 = (effect) => {
+    if (Array.isArray(effect)) return effect.map(effectText3).filter(Boolean).join(";");
     if (effect && typeof effect === "object") {
       if (typeof effect.effect === "string") return effect.effect;
       const macro = String(effect.macro || effect.type || effect.name || "").trim();
@@ -29032,10 +29213,10 @@ function validateModel(model) {
       }
     });
   });
-  const hasArrive = bEvents.some((b) => /ARRIVE\s*\(/i.test(effectText2(b.effect)));
+  const hasArrive = bEvents.some((b) => /ARRIVE\s*\(/i.test(effectText3(b.effect)));
   const hasNullRoutingExit = (bEvent) => [...bEvent.routing || [], ...bEvent.probabilisticRouting || []].some((branch) => !branch.queueName);
   const hasSinkMacro = bEvents.some((b) => {
-    const text2 = effectText2(b.effect);
+    const text2 = effectText3(b.effect);
     return /COMPLETE\s*\(/i.test(text2) || /RENEGE\s*\(/i.test(text2) || hasNullRoutingExit(b);
   });
   if (!hasArrive && !hasSinkMacro) {
@@ -29059,7 +29240,7 @@ function validateModel(model) {
     );
   }
   bEvents.forEach((b) => {
-    const text2 = effectText2(b.effect);
+    const text2 = effectText3(b.effect);
     const parts = text2.split(";").map((s) => s.trim()).filter(Boolean);
     for (let i = 0; i < parts.length - 1; i++) {
       if (/^RELEASE\s*\(/i.test(parts[i]) && /^COMPLETE\s*\(\s*\)/i.test(parts[i + 1])) {
@@ -29074,7 +29255,7 @@ function validateModel(model) {
     }
   });
   bEvents.forEach((b) => {
-    const text2 = effectText2(b.effect);
+    const text2 = effectText3(b.effect);
     const parts = text2.split(";").map((s) => s.trim()).filter(Boolean);
     for (let i = 0; i < parts.length - 1; i++) {
       if (/^COMPLETE\s*\(\s*\)/i.test(parts[i]) && /^RELEASE\s*\(/i.test(parts[i + 1])) {
@@ -29090,7 +29271,7 @@ function validateModel(model) {
   });
   const coseizeTypesByBEventId = /* @__PURE__ */ new Map();
   cEvents.forEach((c) => {
-    const cText = effectText2(c.effect);
+    const cText = effectText3(c.effect);
     const m = cText.match(/COSEIZE\s*\(([^)]+)\)/i);
     if (!m) return;
     const types = m[1].split(",").map((s) => s.trim()).filter(Boolean).slice(1).map((s) => s.replace(/\[[^\]]*\]/, "").replace(/:\s*\d+$/, "").trim()).filter(Boolean);
@@ -29121,7 +29302,7 @@ function validateModel(model) {
     const coseizeTypes = coseizeTypesByBEventId.get(b.id);
     if (!coseizeTypes || coseizeTypes.size < 2) return;
     const bLabel = `B-Event '${b.name || b.id}'`;
-    const text2 = effectText2(b.effect);
+    const text2 = effectText3(b.effect);
     const parts = text2.split(";").map((s) => s.trim()).filter(Boolean);
     const releasedSingleTypes = (
       /** @type {RegExpMatchArray[]} */
@@ -29197,7 +29378,7 @@ function validateModel(model) {
     const hasConditionalRouting = routingBranches.length > 0;
     if (!hasConditionalRouting) return;
     const bLabel = `B-Event '${b.name || b.id}'`;
-    const effectStr = effectText2(b.effect);
+    const effectStr = effectText3(b.effect);
     const releaseHasQueue = hasReleaseTargetQueue(effectStr);
     if (releaseHasQueue) {
       err(
@@ -29258,7 +29439,7 @@ function validateModel(model) {
     const hasProbabilisticRouting = Array.isArray(b.probabilisticRouting) && b.probabilisticRouting.length > 0;
     if (hasConditionalRouting || hasProbabilisticRouting) return;
     const bLabel = `B-Event '${b.name || b.id}'`;
-    const effectStr = effectText2(b.effect);
+    const effectStr = effectText3(b.effect);
     const resolvesEntity = hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr) || hasReleaseTargetQueue(effectStr);
     if (!resolvesEntity) {
       err(
@@ -29302,7 +29483,7 @@ function validateModel(model) {
         { eventIds: [b.id] }
       );
     }
-    const effectStr = effectText2(b.effect);
+    const effectStr = effectText3(b.effect);
     if (hasReleaseTargetQueue(effectStr)) {
       err(
         "V18",
@@ -29410,7 +29591,7 @@ function validateModel(model) {
   const batchRefs = [];
   const unbatchRefs = [];
   bEvents.forEach((b) => {
-    const text2 = effectText2(b.effect);
+    const text2 = effectText3(b.effect);
     const bMatch = text2.match(/BATCH\s*\(\s*([^,)]+)\s*,\s*(\d+)\s*\)/i);
     if (bMatch) {
       const qName = bMatch[1].trim();
@@ -29448,7 +29629,7 @@ function validateModel(model) {
     }
   });
   cEvents.forEach((c) => {
-    const text2 = effectText2(c.effect);
+    const text2 = effectText3(c.effect);
     const bMatch = text2.match(/BATCH\s*\(\s*([^,)]+)\s*,\s*(\d+)\s*\)/i);
     if (bMatch) {
       const qName = bMatch[1].trim();
@@ -29473,7 +29654,7 @@ function validateModel(model) {
     }
   });
   cEvents.forEach((c) => {
-    const text2 = effectText2(c.effect);
+    const text2 = effectText3(c.effect);
     const delayHits = [...text2.matchAll(/DELAY\s*\(\s*([^,)]+)(?:\s*,\s*(\d+))?\s*\)/gi)];
     delayHits.forEach((m) => {
       const qName = m[1].trim();
@@ -29514,7 +29695,7 @@ function validateModel(model) {
           );
         }
         const targetB = bEvents.find((b) => b.id === cs.eventId);
-        const targetText = targetB ? effectText2(targetB.effect) : "";
+        const targetText = targetB ? effectText3(targetB.effect) : "";
         const targetResolvesContextEntity = hasCompleteEffect(targetText) || hasExactRenegeCtxEffect(targetText) || hasReleaseEffect(targetText) || Array.isArray(targetB?.routing) && targetB.routing.length > 0 || Array.isArray(targetB?.probabilisticRouting) && targetB.probabilisticRouting.length > 0;
         if (targetB && /ARRIVE\s*\(/i.test(targetText) && !targetResolvesContextEntity) {
           err(
@@ -29559,7 +29740,7 @@ function validateModel(model) {
     );
   }
   bEvents.forEach((b) => {
-    const text2 = effectText2(b.effect);
+    const text2 = effectText3(b.effect);
     const m = text2.match(/\bRENEGE\(\s*([^)]+)\s*\)/i);
     if (m) {
       const arg = m[1].trim();
@@ -29574,7 +29755,7 @@ function validateModel(model) {
     }
   });
   cEvents.forEach((c) => {
-    const text2 = effectText2(c.effect);
+    const text2 = effectText3(c.effect);
     const m = text2.match(/\bRENEGE\(\s*([^)]+)\s*\)/i);
     if (m) {
       const arg = m[1].trim();
@@ -29617,7 +29798,7 @@ function validateModel(model) {
   const stateVarNamesLower = new Set((model.stateVariables || []).map((sv) => String(sv.name || "").trim().toLowerCase()).filter(Boolean));
   const checkContainerRefs = (events, tab) => {
     events.forEach((ev) => {
-      const text2 = effectText2(ev.effect);
+      const text2 = effectText3(ev.effect);
       const hits = text2.match(/\b(FILL|DRAIN)\([^)]+\)/gi) || [];
       hits.forEach((hit) => {
         const inner = hit.match(/\b(FILL|DRAIN)\(([^,)]+)\s*,\s*([^)]+)\)/i);
@@ -29755,7 +29936,7 @@ function validateModel(model) {
   const checkPreemptAssign = (events, tab) => {
     events.forEach((ev) => {
       const label = `${tab === "bevents" ? "B" : "C"}-Event '${ev.name || ev.id}'`;
-      const text2 = effectText2(ev.effect);
+      const text2 = effectText3(ev.effect);
       for (const part of text2.split(";").map((t) => t.trim()).filter(Boolean)) {
         const m = part.match(PREEMPT_ASSIGN_PATTERN);
         if (!m) continue;
@@ -29782,7 +29963,7 @@ function validateModel(model) {
   checkPreemptAssign(bEvents, "bevents");
   checkPreemptAssign(cEvents, "cevents");
   cEvents.forEach((ev) => {
-    const preempts = [...effectText2(ev.effect).matchAll(/\bPREEMPT\(\s*([^,)]+)/gi)].map((m) => m[1].trim());
+    const preempts = [...effectText3(ev.effect).matchAll(/\bPREEMPT\(\s*([^,)]+)/gi)].map((m) => m[1].trim());
     const condition = JSON.stringify(ev.condition ?? "").toLowerCase();
     for (const type of preempts) {
       if (!condition.includes(`idle(${type.toLowerCase()})`)) {
@@ -29809,7 +29990,7 @@ function validateModel(model) {
   }
   const serverTypesSeizedByCEvent = /* @__PURE__ */ new Map();
   cEvents.forEach((c) => {
-    const text2 = effectText2(c.effect);
+    const text2 = effectText3(c.effect);
     const seizes = [...text2.matchAll(/(?:SEIZE|ASSIGN)\s*\(\s*[^,)]+\s*,\s*([^)]+)\)/gi)];
     seizes.forEach((m) => {
       const serverType = m[1].trim();
@@ -29861,7 +30042,7 @@ function validateModel(model) {
     );
     const checkEffects = (events, tab, externalCtxIds) => {
       events.forEach((ev) => {
-        const text2 = effectText2(ev.effect);
+        const text2 = effectText3(ev.effect);
         if (!text2) return;
         const parts = text2.split(";").map((s) => s.trim()).filter(Boolean);
         let hasCtx = externalCtxIds.has(ev.id);
@@ -29953,7 +30134,7 @@ function validateModel(model) {
       for (const m of text2.matchAll(JOIN_QUEUE_G)) reachableNames.add(m[1].trim().toLowerCase());
     };
     bEvents.forEach((b) => {
-      collectFromEffect(effectText2(b.effect));
+      collectFromEffect(effectText3(b.effect));
       if (b.defaultQueueName)
         reachableNames.add(b.defaultQueueName.toLowerCase());
       (b.routing || []).forEach((r) => r.queueName && reachableNames.add(r.queueName.toLowerCase()));
@@ -29962,7 +30143,7 @@ function validateModel(model) {
         reachableNames.add(b.loopConfig.exitQueueName.toLowerCase());
     });
     cEvents.forEach((c) => {
-      collectFromEffect(effectText2(c.effect));
+      collectFromEffect(effectText3(c.effect));
     });
     queues.forEach((q) => {
       if (q.overflowDestination) reachableNames.add(q.overflowDestination.toLowerCase());
@@ -29992,7 +30173,7 @@ function validateModel(model) {
     const JOIN_QUEUE_G2 = /JOIN\s*\([^,)]+,\s*([^)]+)\)/gi;
     const extractSources = (ev) => {
       const names = /* @__PURE__ */ new Set();
-      const text2 = effectText2(ev.effect);
+      const text2 = effectText3(ev.effect);
       for (const m of text2.matchAll(SOURCE_QUEUE_G)) names.add(m[1].trim().toLowerCase());
       for (const m of text2.matchAll(MATCH_SOURCES_G)) {
         names.add(m[1].trim().toLowerCase());
@@ -30004,7 +30185,7 @@ function validateModel(model) {
     };
     const extractDestinations = (ev) => {
       const names = /* @__PURE__ */ new Set();
-      const text2 = effectText2(ev.effect);
+      const text2 = effectText3(ev.effect);
       for (const m of text2.matchAll(ARRIVE_QUEUE_G2)) names.add(m[1].trim().toLowerCase());
       for (const m of text2.matchAll(RELEASE_QUEUE_G2)) names.add(m[1].trim().toLowerCase());
       for (const m of text2.matchAll(RELEASE_COSEIZED_QUEUE_G2)) names.add(m[1].trim().toLowerCase());
@@ -30233,7 +30414,7 @@ function validateModel(model) {
     });
   });
   [...bEvents, ...cEvents].forEach((ev) => {
-    const text2 = effectText2(ev.effect);
+    const text2 = effectText3(ev.effect);
     const assignMatch = text2.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*"([^"]+)"\s*\)/gi);
     if (assignMatch) {
       assignMatch.forEach((m) => {
@@ -30294,7 +30475,7 @@ function validateModel(model) {
     });
   });
   cEvents.forEach((ev) => {
-    const text2 = effectText2(ev.effect);
+    const text2 = effectText3(ev.effect);
     const entitySkillAssign = text2.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*Entity\.(\w+)\s*\)/gi);
     if (entitySkillAssign) {
       entitySkillAssign.forEach((m) => {
@@ -30379,7 +30560,7 @@ function validateModel(model) {
     }
   });
   cEvents.forEach((ev) => {
-    const text2 = effectText2(ev.effect);
+    const text2 = effectText3(ev.effect);
     const entitySkillAssign = text2.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*Entity\.(\w+)\s*\)/gi);
     if (!entitySkillAssign) return;
     entitySkillAssign.forEach((m) => {
@@ -30422,7 +30603,7 @@ function validateModel(model) {
     });
   });
   [...bEvents, ...cEvents].forEach((ev) => {
-    const text2 = effectText2(ev.effect);
+    const text2 = effectText3(ev.effect);
     const anyAssignMatch = text2.match(/ASSIGN\s*\(\s*([^,)]+)\s*,\s*ANY\s*,\s*"([^"]+)"\s*\)/gi);
     if (anyAssignMatch) {
       anyAssignMatch.forEach((m) => {
@@ -30455,7 +30636,7 @@ function validateModel(model) {
   });
   const knownEventNames = new Set([...bEvents, ...cEvents].map((e) => (e.name || "").trim()).filter(Boolean));
   [...bEvents, ...cEvents].forEach((ev) => {
-    const text2 = effectText2(ev.effect);
+    const text2 = effectText3(ev.effect);
     const cancelMatches = text2.match(/CANCEL\s*\(\s*(\w+)\s*\)/gi);
     if (cancelMatches) {
       cancelMatches.forEach((m) => {
@@ -30474,7 +30655,7 @@ function validateModel(model) {
     }
   });
   [...bEvents, ...cEvents].forEach((ev) => {
-    const text2 = effectText2(ev.effect);
+    const text2 = effectText3(ev.effect);
     const rrMatches = text2.match(/ROUND_ROBIN\s*\(\s*\w+\s*,\s*(-?\d+)\s*\)/gi);
     if (rrMatches) {
       rrMatches.forEach((m) => {
@@ -30505,7 +30686,7 @@ function validateModel(model) {
     });
   });
   [...bEvents, ...cEvents].forEach((ev) => {
-    const text2 = effectText2(ev.effect);
+    const text2 = effectText3(ev.effect);
     const matchCalls = text2.match(/MATCH\s*\([^)]*\)/gi);
     if (!matchCalls) return;
     matchCalls.forEach((m) => {
@@ -30750,12 +30931,12 @@ var FILTERED_PHASE_C_MIN_CEVENTS = 8;
 var DEFAULT_FILTERED_SCAN_FRACTION = 1;
 var DEFAULT_UNFILTERED_PASSES = 1.5;
 var SERVICE_MACROS = /* @__PURE__ */ new Set(["ASSIGN", "COSEIZE"]);
-function effectText(effect) {
+function effectText2(effect) {
   if (Array.isArray(effect)) return effect.filter(Boolean).join(";");
   return String(effect || "");
 }
 function parseCalls(effect) {
-  const text2 = effectText(effect);
+  const text2 = effectText2(effect);
   const calls = [];
   for (const match of text2.matchAll(/([A-Z_]+)\s*\(([^)]*)\)/g)) {
     const macro = String(match[1] || "").trim().toUpperCase();
