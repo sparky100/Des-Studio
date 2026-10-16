@@ -1,0 +1,49 @@
+name: Flow MCP downloads
+
+# The local MCP server (mcp/) bundles copies of the engine and the schema
+# reference into public/downloads/, which the app serves from its "Connect AI
+# app" dialog. When any bundled source changes, check the published files
+# were rebuilt (cd mcp && npm run pack) and that the server still works.
+on:
+  push:
+    paths:
+      - "mcp/**"
+      - "public/downloads/**"
+      - "docs/model-schema-for-llm.md"
+      - "src/engine/**"
+      - "src/llm/**"
+      - "src/model/**"
+      - "src/contracts/**"
+      - "src/simulation/**"
+      - ".github/workflows/mcp-bundle.yml"
+  pull_request:
+    paths:
+      - "mcp/**"
+      - "public/downloads/**"
+      - "docs/model-schema-for-llm.md"
+      - "src/engine/**"
+      - "src/llm/**"
+      - "src/model/**"
+      - "src/contracts/**"
+      - "src/simulation/**"
+      - ".github/workflows/mcp-bundle.yml"
+
+jobs:
+  mcp:
+    name: MCP downloads up to date
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: mcp/package-lock.json
+      - run: npm ci
+      - name: Published downloads match a fresh build
+        run: npm run check
+      - name: Server works end to end (MCP over stdio)
+        run: npm test
