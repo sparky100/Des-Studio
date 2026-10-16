@@ -112,6 +112,28 @@ describe('WeeklyPatternEditor', () => {
     }));
   });
 
+  it('re-applying a new capacity to filled cells replaces it rather than adding an overlapping period', () => {
+    const handleChange = vi.fn();
+    const pattern = {
+      type: 'weekly', defaultCapacity: 2,
+      periods: [1, 2].map(d => ({ dayOfWeek: d, start: '09:00', end: '17:00', capacity: 2 })),
+      exceptions: [],
+    };
+    const { container } = render(<WeeklyPatternEditor pattern={pattern} onChange={handleChange} />);
+    const rows = container.querySelectorAll('tbody tr');
+    // Select Mon+Tue 09:00–17:00 (each mousedown toggles one cell).
+    for (let h = 9; h < 17; h++) {
+      fireEvent.mouseDown(rows[h].children[1]);
+      fireEvent.mouseDown(rows[h].children[2]);
+    }
+    fireEvent.mouseUp(rows[16].children[2]);
+    fireEvent.click(screen.getByText('Apply'));
+    expect(handleChange.mock.calls.at(-1)[0].periods).toEqual([
+      { dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 3 },
+      { dayOfWeek: 2, start: '09:00', end: '17:00', capacity: 3 },
+    ]);
+  });
+
   it('Clear selection resets display after Invert Selection', async () => {
     const user = userEvent.setup();
     render(<WeeklyPatternEditor pattern={emptyPattern} onChange={vi.fn()} />);
@@ -164,6 +186,35 @@ describe('mergePeriods', () => {
     expect(result).toHaveLength(1);
     expect(result[0].start).toBe('09:00');
     expect(result[0].end).toBe('16:00');
+  });
+
+  it('a later period replaces the hours it covers instead of overlapping (V51)', () => {
+    // Re-applying capacity 3 over a 09:00–17:00 block that had capacity 2.
+    expect(mergePeriods([
+      { dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 2 },
+      { dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 3 },
+    ])).toEqual([{ dayOfWeek: 1, start: '09:00', end: '17:00', capacity: 3 }]);
+  });
+
+  it('splits an earlier period around a later one in its middle', () => {
+    expect(mergePeriods([
+      { dayOfWeek: 2, start: '08:00', end: '18:00', capacity: 2 },
+      { dayOfWeek: 2, start: '12:00', end: '13:00', capacity: 1 },
+    ])).toEqual([
+      { dayOfWeek: 2, start: '08:00', end: '12:00', capacity: 2 },
+      { dayOfWeek: 2, start: '12:00', end: '13:00', capacity: 1 },
+      { dayOfWeek: 2, start: '13:00', end: '18:00', capacity: 2 },
+    ]);
+  });
+
+  it('handles a period ending at midnight (24:00)', () => {
+    expect(mergePeriods([
+      { dayOfWeek: 3, start: '20:00', end: '24:00', capacity: 2 },
+      { dayOfWeek: 3, start: '22:00', end: '24:00', capacity: 4 },
+    ])).toEqual([
+      { dayOfWeek: 3, start: '20:00', end: '22:00', capacity: 2 },
+      { dayOfWeek: 3, start: '22:00', end: '24:00', capacity: 4 },
+    ]);
   });
 
   it('handles empty input', () => {

@@ -449,41 +449,54 @@ export function compileArrivalRatePeriods(pattern, epoch, timeUnit = "minutes") 
 }
 
 /**
- * Merge overlapping/adjacent weekly periods that share the same day and
- * capacity/rate value into a single period each. Used by the weekly-grid
- * editors (capacity `WeeklyPatternEditor` and arrival-rate
- * `WeeklyPatternRateEditor`) after a drag-select "Apply" — both editors
- * produce the identical `{dayOfWeek,start,end,capacity}` period shape, so
- * this merge logic is shared rather than duplicated per editor.
+ * Normalise weekly periods after a weekly-grid editor's drag-select "Apply"
+ * (capacity `WeeklyPatternEditor` and arrival-rate `WeeklyPatternRateEditor`
+ * share the `{dayOfWeek,start,end,capacity}` shape, so they share this).
+ *
+ * Later periods win: each period overwrites whatever earlier periods cover
+ * the same hours on that day (the earlier ones are trimmed or split), so
+ * callers pass `[...existing, ...applied]` and re-applying a different value
+ * to cells replaces it instead of leaving two overlapping periods (V51).
+ * Afterwards, touching or overlapping periods with the same value are merged.
+ * Periods whose times don't parse are passed through untouched.
  * @param {Array<{dayOfWeek:number,start:string,end:string,capacity:number}>} periods
  */
 export function mergePeriods(periods) {
+  /** @param {string} t */
+  const toMin = (t) => (t === "24:00" ? 1440 : parseHHMM(t));
   /** @type {Record<number, any[]>} */
   const byDay = {};
+  /** @type {any[]} */
+  const invalid = [];
   for (const p of periods) {
-    if (!byDay[p.dayOfWeek]) byDay[p.dayOfWeek] = [];
-    byDay[p.dayOfWeek].push(p);
+    const s = toMin(p.start);
+    const e = toMin(p.end);
+    if (isNaN(s) || isNaN(e) || s >= e) { invalid.push(p); continue; }
+    const segs = (byDay[p.dayOfWeek] ||= []);
+    // Trim or split every earlier segment that this period overlaps.
+    const kept = [];
+    for (const seg of segs) {
+      if (seg.e <= s || seg.s >= e) { kept.push(seg); continue; }
+      if (seg.s < s) kept.push({ ...seg, e: s, end: p.start });
+      if (seg.e > e) kept.push({ ...seg, s: e, start: p.end });
+    }
+    kept.push({ s, e, start: p.start, end: p.end, capacity: p.capacity });
+    byDay[p.dayOfWeek] = kept;
   }
   const result = [];
-  for (const [dayStr, ps] of Object.entries(byDay)) {
+  for (const [dayStr, segs] of Object.entries(byDay)) {
     const day = Number(dayStr);
-    ps.sort((a, b) => parseHHMM(a.start) - parseHHMM(b.start));
+    segs.sort((a, b) => a.s - b.s);
     const merged = [];
-    for (const p of ps) {
+    for (const seg of segs) {
       const last = merged[merged.length - 1];
-      const pStart = parseHHMM(p.start);
-      const pEnd = parseHHMM(p.end);
-      if (last) {
-        const lStart = parseHHMM(last.start);
-        const lEnd = parseHHMM(last.end);
-        if (pStart <= lEnd && last.capacity === p.capacity) {
-          last.end = lEnd >= pEnd ? last.end : p.end;
-          continue;
-        }
+      if (last && seg.s <= last.e && last.capacity === seg.capacity) {
+        if (seg.e > last.e) { last.e = seg.e; last.end = seg.end; }
+        continue;
       }
-      merged.push({ dayOfWeek: day, start: p.start, end: p.end, capacity: p.capacity });
+      merged.push({ ...seg });
     }
-    result.push(...merged);
+    result.push(...merged.map(m => ({ dayOfWeek: day, start: m.start, end: m.end, capacity: m.capacity })));
   }
-  return result;
+  return [...result, ...invalid];
 }
