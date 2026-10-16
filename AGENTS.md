@@ -110,9 +110,13 @@ project root
 │   │   ├── determinism-parity.test.js ← Fixed-seed snapshots; must stay unchanged across engine changes
 │   │   ├── quiet-mode.test.js       ← collectTrace=false suppresses trace without changing summaries
 │   │   └── model-immutability.test.js ← Frozen-model safety gate for runtimeModel cache
+│   ├── mcp/                         ← Tool logic of the local MCP server (mcp/src), via the unit project
 │   └── setup.js                     ← Global setup: jsdom config, Supabase mock
+├── mcp/                             ← Local MCP server for AI assistants (own package.json — see below)
 └── .env.local                       ← Not committed. See §7 for required vars.
 ```
+
+**`mcp/` — local MCP server.** Lets an AI assistant on the user's own computer (Claude Desktop, Claude Code, Cursor, …) read the model schema (`docs/model-schema-for-llm.md`, a section at a time), validate, run (replications, 95% CIs, bottleneck/overload checks) and save models as Flow export files that **+ New Model → Import a file** accepts. It imports Flow's own engine, validator, `buildKpis` and CI code straight from `src/`, so its results match the app; nothing in `src/` depends on it. It has its own `package.json` (MCP SDK, zod, esbuild, mcpb), so the app's dependency list is unchanged. `npm run pack` in `mcp/` bundles everything, schema included, into `dist/flow-mcp.mjs` and the one-click Claude Desktop extension `dist/flow.mcpb`. Rebuild after engine or schema changes, since the bundle carries a copy. Tool logic is tested in `tests/mcp/`; the server end-to-end over MCP stdio in `mcp/test/` (`npm test` there). Setup for users: `mcp/README.md`.
 
 **Architecture rules that must never be violated:**
 - `src/engine/` has zero React imports and zero DOM access. It is pure JavaScript.
