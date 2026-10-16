@@ -906,7 +906,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const _utilStreaks = {};
   for (const srv of entities) {
     if (srv.role === "server" && !_utilStreaks[srv.type]) {
-      _utilStreaks[srv.type] = { highStart: null, highEnd: null, maxHigh: 0, zeroStart: null, zeroEnd: null, maxZero: 0 };
+      _utilStreaks[srv.type] = { highStart: null, maxHigh: 0, zeroStart: null, maxZero: 0 };
     }
   }
 
@@ -1534,6 +1534,15 @@ const cycleLog = [];
       if (ev.type === 'WARMUP' && !_warmupComplete) {
         _warmupComplete = true;
         _statsResetTime = clock;
+        // Sustained ≥90% / zero-utilisation stretches are post-warm-up figures
+        // like every other utilisation number; a stretch in progress restarts
+        // its measurement here.
+        for (const streak of Object.values(_utilStreaks)) {
+          if (streak.highStart != null) streak.highStart = clock;
+          if (streak.zeroStart != null) streak.zeroStart = clock;
+          streak.maxHigh = 0;
+          streak.maxZero = 0;
+        }
         _wipIntegral = 0;
         _lastWipSnapTime = clock;
         // Container level stats (G21) restart from the current level, like
@@ -1569,11 +1578,12 @@ const cycleLog = [];
           // post-warmup denominator-clipped calculation and could push
           // calendarUtilisation/skillUtil above 100%.
           srv._shiftBusyTime = {};
+          srv._shiftCompletions = {};
           srv._skillBusyTime = {};
           srv._totalDowntime = 0;
           srv._failureCount  = 0;
           srv._starvationTime = 0;
-          if (srv.status === 'busy') srv._busyStart = clock;
+          if (srv.status === 'busy') { srv._busyStart = clock; srv._shiftSegStart = clock; }
           else delete srv._busyStart;
           if (srv.status === 'failed') srv._failedAt = clock;
           if (srv._starvationStart != null) srv._starvationStart = clock;
@@ -2051,24 +2061,24 @@ const cycleLog = [];
           if (!bt || !bt.total) continue;
           const util = bt.busy / bt.total;
 
-          // High utilisation streak (≥ 90%)
+          // High utilisation streak (≥ 90%). Utilisation only changes at
+          // events, so a stretch lasts until the snapshot where it dropped
+          // (or the end of the run), not just until the last high snapshot.
           if (util >= 0.90) {
             if (streak.highStart == null) streak.highStart = clock;
-            streak.highEnd = clock;
           } else if (streak.highStart != null) {
-            const dur = streak.highEnd - streak.highStart;
+            const dur = clock - streak.highStart;
             if (dur > streak.maxHigh) streak.maxHigh = dur;
-            streak.highStart = null; streak.highEnd = null;
+            streak.highStart = null;
           }
 
           // Zero utilisation streak
           if (util === 0) {
             if (streak.zeroStart == null) streak.zeroStart = clock;
-            streak.zeroEnd = clock;
           } else if (streak.zeroStart != null) {
-            const dur = streak.zeroEnd - streak.zeroStart;
+            const dur = clock - streak.zeroStart;
             if (dur > streak.maxZero) streak.maxZero = dur;
-            streak.zeroStart = null; streak.zeroEnd = null;
+            streak.zeroStart = null;
           }
         }
       }
@@ -2538,15 +2548,18 @@ const cycleLog = [];
       // (if this server is busy right now) needs adding here, against its current
       // label. Do not use the lifetime `busyTime` total here — that would
       // re-misattribute every prior stint to just the current label again.
-      const addToBucket = (/** @type {string} */ label, /** @type {number} */ amount) => {
-        if (!label || !amount) return;
+      const addToBucket = (/** @type {string} */ label, /** @type {number} */ amount, completions = 0) => {
+        if (!label || (!amount && !completions)) return;
         if (!perShiftBuckets[srv.type]) perShiftBuckets[srv.type] = {};
         if (!perShiftBuckets[srv.type][label]) perShiftBuckets[srv.type][label] = { busyTimeSum: 0, completions: 0 };
         perShiftBuckets[srv.type][label].busyTimeSum += amount;
+        perShiftBuckets[srv.type][label].completions += completions;
       };
       for (const [label, bt] of Object.entries(srv._shiftBusyTime || {})) addToBucket(label, bt);
+      for (const [label, n] of Object.entries(srv._shiftCompletions || {})) addToBucket(label, 0, n);
       if (srv.status === "busy" && srv._busyStart != null) {
-        addToBucket(srv._shiftLabel, Math.max(0, clock - srv._busyStart));
+        const segStart = Math.max(srv._shiftSegStart ?? srv._busyStart, srv._busyStart);
+        addToBucket(srv._shiftLabel, Math.max(0, clock - segStart));
       }
 
       // Flush active starvation timer if running
@@ -2588,6 +2601,11 @@ const cycleLog = [];
           perShiftBuckets[type][label].busyTimeSum += bt;
         }
       }
+      for (const [label, n] of Object.entries(acc.perShiftCompletions || {})) {
+        if (!perShiftBuckets[type]) perShiftBuckets[type] = {};
+        if (!perShiftBuckets[type][label]) perShiftBuckets[type][label] = { busyTimeSum: 0, completions: 0 };
+        perShiftBuckets[type][label].completions += n;
+      }
     }
     for (const type of Object.keys(perResource)) {
       const r = perResource[type];
@@ -2617,7 +2635,10 @@ const cycleLog = [];
       const timeline = state.__shiftTimeline?.[type] || [];
       const buckets = perShiftBuckets[type] || {};
       if (timeline.length > 0) {
-        r.perShiftUtil = timeline.map((/** @type {any} */ period) => {
+        r.perShiftUtil = timeline
+          // A period that ended before warm-up finished has no measured time.
+          .filter((/** @type {any} */ period) => (period.endTime ?? clock) > _statsResetTime)
+          .map((/** @type {any} */ period) => {
           const label = `shift_${period.startTime}_cap${period.capacity}`;
           const bucket = buckets[label] || { busyTimeSum: 0 };
           // Clip to the post-warmup window: busyTimeSum only ever accrues after
@@ -2672,11 +2693,11 @@ const cycleLog = [];
     for (const [type, streak] of Object.entries(_utilStreaks)) {
       if (!perResource[type]) continue;
       if (streak.highStart != null) {
-        const dur = streak.highEnd - streak.highStart;
+        const dur = clock - streak.highStart;
         if (dur > streak.maxHigh) streak.maxHigh = dur;
       }
       if (streak.zeroStart != null) {
-        const dur = streak.zeroEnd - streak.zeroStart;
+        const dur = clock - streak.zeroStart;
         if (dur > streak.maxZero) streak.maxZero = dur;
       }
       perResource[type].maxSustainedHighUtil = streak.maxHigh > 0 ? +streak.maxHigh.toFixed(4) : null;

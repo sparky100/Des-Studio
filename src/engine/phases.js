@@ -12,7 +12,7 @@
 import { MACROS, applyScalar, buildStageRecord } from "./macros.js";
 import { evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
-import { clearWaitingState, attemptQueueJoin, preemptCustomer, markTerminal, setServerStatus, setServerSuspended, isCarriedClaim, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats } from "./entities.js";
+import { clearWaitingState, attemptQueueJoin, preemptCustomer, markTerminal, setServerStatus, setServerSuspended, isCarriedClaim, releaseServerClaim, indexAddServer, indexRemoveServer, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, splitShiftBusyTime } from "./entities.js";
 import { hasConditionDefinition, isMeaningfulRoutingBranch } from "../model/conditionFormat.js";
 
 // Distances are undirected — one declared entry covers travel in either direction.
@@ -91,8 +91,10 @@ export function applyShiftChange(ev, ctx) {
   }
   timeline.push({ startTime: ctx.clock, endTime: null, capacity: target, elapsed: 0 });
   ctx.state.__currentShiftLabel = ctx.state.__currentShiftLabel || {};
-  ctx.state.__currentShiftLabel[serverTypeName] = `shift_${ctx.clock}_cap${target}`;
+  const newShiftLabel = `shift_${ctx.clock}_cap${target}`;
+  ctx.state.__currentShiftLabel[serverTypeName] = newShiftLabel;
   const servers = ctx.entities.filter((/** @type {any} */ e) => e.role === "server" && match(e.type, serverTypeName));
+  for (const srv of servers) splitShiftBusyTime(srv, ctx.clock, newShiftLabel);
   const current = servers.length;
   const entityType = (ctx.model?.entityTypes || []).find((/** @type {any} */ et) => et.role === "server" && match(et.name, serverTypeName));
   const behavior = entityType?.shiftBehavior || "delay";

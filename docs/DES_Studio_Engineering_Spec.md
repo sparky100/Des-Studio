@@ -359,7 +359,7 @@ For server types with a `schedulePattern`, `getSummary()` additionally emits:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `perShiftUtil` | `PerShiftUtil[]` | Per-shift utilisation breakdown for each distinct (label, capacity) segment active in the run |
+| `perShiftUtil` | `PerShiftUtil[]` | Per-shift utilisation breakdown for each distinct (label, capacity) segment active after warm-up: busy server-time in the period ÷ (period length × planned capacity). A service that spans a shift change is split between the periods; `completions` counts services that finished in the period |
 | `calendarUtilisation` | `number` | Busy time as a fraction of open-hours-only capacity-time (`Σ busyTime / Σ period.elapsed × period.capacity`, aggregated from `perShiftUtil`), rather than `utilisation`'s wall-clock-elapsed × current-headcount denominator. `resolveScopedGoalValue`/reports/health-flag consumers prefer this over `utilisation` when present (`?? utilisation` fallback) so a resource that opens/closes daily isn't scored against 24/7 availability. |
 | `scheduleAdherence` | `number \| null` | Fraction of shift-change events that fired within tolerance of their scheduled time (0–1); null when no weekly pattern is configured |
 

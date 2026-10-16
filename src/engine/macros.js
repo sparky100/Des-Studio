@@ -13,7 +13,7 @@
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
 import { PREEMPT_ASSIGN_PATTERN, applyPreemptAssign } from "./preemptAssign.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, selectVictimServer, noteServiceInterrupted, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim, noteServerClaim, mayHoldOtherServers, markTerminal, setServerStatus } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, noteShiftCompletion, selectVictimServer, noteServiceInterrupted, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim, noteServerClaim, mayHoldOtherServers, markTerminal, setServerStatus } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
 // per-macro usages below for the (large, and macro-specific) set of fields
@@ -355,6 +355,7 @@ function finishServiceForPair(cust, srv, ctx, { felRef = null, endedBy = "COMPLE
     msgs.push(`#${cust.id} done [sojourn ${cust.sojournTime.toFixed(2)} t, ${cust.stages.length} stage(s)]`);
   }
   if (srv) {
+    noteShiftCompletion(srv);
     releaseServerClaim(cust, srv, clock);
     if (!beginTurnaround(srv, ctx)) msgs.push(`Server #${srv.id} → idle`);
     const retired = retireIdleExcessServers(ctx, srv.type);
@@ -859,6 +860,7 @@ export const MACROS = [
         cust.lastStageStart = clock;
         const destQueue = targetQueue || cust.lastQueue || cust.queue;
         delete cust.serviceStart;
+        noteShiftCompletion(srv);
         releaseServerClaim(cust, srv, clock);
         const inTurnaround = beginTurnaround(srv, ctx) > 0;
         const joined = attemptQueueJoin(cust, destQueue, clock, ctx);
@@ -949,6 +951,7 @@ export const MACROS = [
 
       let retired = 0;
       for (const srv of claimedServers) {
+        noteShiftCompletion(srv);
         releaseServerClaim(cust, srv, clock);
         beginTurnaround(srv, ctx);
         retired += retireIdleExcessServers(ctx, srv.type);
@@ -1744,6 +1747,9 @@ export const MACROS = [
         }
         setServerStatus(srv, "busy");
         srv._busyStart = clock;
+        // Co-seized units serve under the shift active now, same as the primary.
+        if (ctx.state?.__currentShiftLabel?.[srv.type]) srv._shiftLabel = ctx.state.__currentShiftLabel[srv.type];
+        srv._shiftSegStart = clock;
         srv._currentSkill = skill;
         srv.currentCustId = cust.id;
         srv._claimGroup = primary.srv._claimGroup;
