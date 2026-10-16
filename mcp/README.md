@@ -15,7 +15,7 @@ It works with desktop AI apps that support MCP: Claude Desktop, Claude Code, Cur
 
 ### Claude Desktop (one click)
 
-1. Download **`flow.mcpb`** (from the Flow release page).
+1. In Flow's Model Library, click **Connect AI app** and download **`flow.mcpb`**.
 2. Double-click it, or drag it onto Claude Desktop, and choose **Install**.
 3. Optionally pick a different models folder in the extension's settings.
 
@@ -23,7 +23,7 @@ It works with desktop AI apps that support MCP: Claude Desktop, Claude Code, Cur
 
 You need [Node.js](https://nodejs.org) 20 or later.
 
-1. Download **`flow-mcp.mjs`** (from the Flow release page) and keep it somewhere permanent.
+1. In Flow's Model Library, click **Connect AI app** and download **`flow-mcp.mjs`**. Keep it somewhere permanent.
 2. Add it to your app's MCP settings. For example, in Claude Desktop's `claude_desktop_config.json`, or Cursor's `mcp.json`:
 
    ```json
@@ -85,11 +85,14 @@ The server reuses Flow's own code from `../src`: the engine, the validator, the 
 cd mcp
 npm install
 npm test        # builds dist/flow-mcp.mjs, then runs the end-to-end tests over MCP stdio
-npm run pack    # also builds dist/flow.mcpb (Claude Desktop extension)
+npm run pack    # also builds dist/flow.mcpb, then publishes both to ../public/downloads/
+npm run check   # fails if public/downloads/ doesn't match a fresh build
 ```
 
 The tool logic (`src/tools.js`, `src/schema.js`) is also covered by `tests/mcp/` in the main test suite.
 
-**Releasing:** bump `version` in both `package.json` and `bundle/manifest.json` (`pack` refuses a mismatch). Run `npm run pack`, then attach `dist/flow.mcpb` and `dist/flow-mcp.mjs` to a GitHub release.
+**How users get it:** Flow serves both files from `public/downloads/`, which the **Connect AI app** dialog in the Model Library links to (`src/ui/AiAppConnectModal.jsx`). Nobody needs GitHub. `npm run pack` writes them there; commit them along with your change.
 
-Rebuild whenever the engine or the schema reference changes, since the bundle contains a copy of both.
+**Keeping them current:** the bundle contains copies of the engine and the schema reference. So after changing either, run `npm run pack` and commit `public/downloads/`. The **Flow MCP downloads** CI workflow (`.github/workflows/mcp-bundle.yml`) runs `npm run check` and the end-to-end tests on any change to the bundled sources, and fails if the published files are stale.
+
+**New version:** bump `version` in both `package.json` and `bundle/manifest.json` (`pack` refuses a mismatch), then `npm run pack`.

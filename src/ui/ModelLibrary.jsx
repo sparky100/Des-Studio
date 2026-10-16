@@ -7,6 +7,7 @@ import { validateModel } from "../engine/validation.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { WelcomeDialog } from "./WelcomeDialog.jsx";
+import { AiAppConnectModal } from "./AiAppConnectModal.jsx";
 import { buildLLMSchemaPromptPack } from "../llm/bundleExport.js";
 import { downloadTextFile, relativeTime, fullDate } from "./shared/utils.js";
 
@@ -553,6 +554,7 @@ export function ModelLibrary({
   const [tmplSearch, setTmplSearch] = useState("");
   const [tmplDomain, setTmplDomain] = useState("All");
   const [showPatternsGuide, setShowPatternsGuide] = useState(false);
+  const [showAiConnect, setShowAiConnect] = useState(false);
   const pendingTemplateDraftRef = useRef(null);
   const welcomeShownRef = useRef(false);
 
@@ -592,6 +594,7 @@ export function ModelLibrary({
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <Btn variant="ghost" onClick={() => downloadTextFile(buildLLMSchemaPromptPack(), "flow-ai-prompt-pack.md", "text/markdown")}>↓ AI Prompt Pack</Btn>
+          <Btn variant="ghost" onClick={() => setShowAiConnect(true)} title="Let your desktop AI app build, check and run Flow models">Connect AI app</Btn>
           <Btn variant="primary" onClick={() => { pendingTemplateDraftRef.current = null; setShowNew(true); }}>+ New Model</Btn>
         </div>
       </div>
@@ -719,6 +722,7 @@ export function ModelLibrary({
         />
       )}
       {showPatternsGuide && <PatternsGuidePanel onClose={() => setShowPatternsGuide(false)} />}
+      <AiAppConnectModal isOpen={showAiConnect} onClose={() => setShowAiConnect(false)} />
       {showWelcome && (
         <WelcomeDialog
           onClose={() => setShowWelcome(false)}
