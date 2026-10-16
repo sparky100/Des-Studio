@@ -50,6 +50,10 @@ export function sweepGoalKpiOptions(goals = []) {
 
 export const fmt = (value, digits = 0) => Number.isFinite(value) ? value.toFixed(digits) : "—";
 
+// Per-resource diagnostics carried into batch results as per-replication means.
+const RESOURCE_MEAN_FIELDS = ["starvationTime", "starvationPct", "maxStarvationDuration", "maxSustainedHighUtil", "maxSustainedZeroUtil", "meanDowntimePerFailure"];
+const NULL_IS_ZERO = new Set(["maxStarvationDuration", "maxSustainedHighUtil", "maxSustainedZeroUtil"]);
+
 export const COUNT_METRICS = new Set(["summary.total", "summary.served", "summary.reneged", "summary.balked"]);
 
 export const fmtMetric = (metric, value) => {
@@ -373,6 +377,8 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
   }
 
   // Average perResource utilisation across replications
+  const meanOfValues = (vs) => (vs.length ? +(vs.reduce((a, b) => a + b, 0) / vs.length).toFixed(4) : null);
+  const summaryMean = (f) => meanOfValues(summaries.map(s => Number(s[f])).filter((v, i) => summaries[i][f] != null && Number.isFinite(v)));
   const perResourceAcc = {};
   for (const s of summaries) {
     if (!s.perResource) continue;
@@ -402,6 +408,33 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
           perResourceAcc[type].skillUtilSum[skill] = (perResourceAcc[type].skillUtilSum[skill] || 0) + util;
         }
       }
+      // Starvation and sustained-utilisation stretches feed the Key Findings
+      // health flags (H5–H7); report each as its per-replication mean.
+      for (const f of RESOURCE_MEAN_FIELDS) {
+        // The engine reports "no such stretch" as null — that is a zero, not
+        // a missing replication, so it pulls the mean down.
+        const raw = stats[f] == null && NULL_IS_ZERO.has(f) && f in stats ? 0 : stats[f];
+        const v = Number(raw);
+        if (raw == null || !Number.isFinite(v)) continue;
+        const m = (perResourceAcc[type].means ||= {});
+        (m[f] ||= []).push(v);
+      }
+      // Per-shift utilisation (F86.4). The shift timeline comes from the
+      // model's schedule, so every replication has the same periods; pool
+      // them by start time + capacity (ratio of summed busy time to summed
+      // open capacity-time) rather than averaging per-replication ratios.
+      if (stats.perShiftUtil?.length) {
+        const shifts = (perResourceAcc[type].shifts ||= new Map());
+        for (const p of stats.perShiftUtil) {
+          const key = `${p.startTime}|${p.plannedCapacity}`;
+          const a = shifts.get(key) || { label: p.label, startTime: p.startTime, endTime: p.endTime, plannedCapacity: p.plannedCapacity, busy: 0, elapsed: 0, completions: 0, n: 0 };
+          a.busy += p.busyTimeSum || 0;
+          a.elapsed += p.elapsed || 0;
+          a.completions += p.completions || 0;
+          a.n++;
+          shifts.set(key, a);
+        }
+      }
       // Schedule adherence (only present for resource types on a weekly schedule)
       if (stats.scheduleAdherence != null) {
         perResourceAcc[type].adherenceSum += stats.scheduleAdherence;
@@ -424,7 +457,20 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
             skillUtil: acc.skillUtilSum
               ? Object.fromEntries(Object.entries(acc.skillUtilSum).map(([skill, sum]) => [skill, +(sum / acc.count).toFixed(4)]))
               : undefined,
+            ...Object.fromEntries(Object.entries(acc.means || {}).map(([f, vs]) => [f, meanOfValues(vs)])),
             scheduleAdherence: acc.adherenceCount ? +(acc.adherenceSum / acc.adherenceCount).toFixed(4) : undefined,
+            perShiftUtil: acc.shifts
+              ? [...acc.shifts.values()].sort((x, y) => x.startTime - y.startTime).map(a => {
+                  const denom = a.elapsed * a.plannedCapacity;
+                  return {
+                    label: a.label, startTime: a.startTime, endTime: a.endTime, plannedCapacity: a.plannedCapacity,
+                    busyTimeSum: +(a.busy / a.n).toFixed(4),
+                    elapsed: +(a.elapsed / a.n).toFixed(4),
+                    utilisation: denom > 0 ? +(a.busy / denom).toFixed(4) : 0,
+                    completions: +(a.completions / a.n).toFixed(2),
+                  };
+                })
+              : undefined,
             ...(acc.turnaroundN ? {
               turnaroundFraction: +(acc.turnaroundFractionSum / acc.turnaroundN).toFixed(4),
               turnaroundTime: +(acc.turnaroundTimeSum / acc.turnaroundN).toFixed(4),
@@ -723,6 +769,12 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       scanLimitReplicationCount,
       servedRatio: served > 0 && total > 0 ? +(served / total).toFixed(4) : null,
       numReplications: replicationPayloads.length,
+      // Per-replication means of single-run diagnostics that Key Findings,
+      // the report and the AI export read (Little's-Law check H8, plan
+      // adherence, entities excluded at warm-up).
+      waitDiscrepancy: summaryMean("waitDiscrepancy"),
+      avgPlanDeviation: summaryMean("avgPlanDeviation"),
+      excludedCount: summaryMean("excludedCount") != null ? Math.round(summaryMean("excludedCount")) : null,
       avgWait: aggregateStats["summary.avgWait"]?.mean ?? null,
       avgSvc: aggregateStats["summary.avgSvc"]?.mean ?? null,
       avgSojourn: aggregateStats["summary.avgSojourn"]?.mean ?? null,
