@@ -1,4 +1,10 @@
-import { describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
+import { mulberry32 } from '../../src/engine/distributions.js';
+
+// Seeded so these statistical checks are deterministic — with rand()
+// the batch-means autocorrelation check failed on a minority of CI runs.
+let rand = mulberry32(20261016);
+beforeEach(() => { rand = mulberry32(20261016); });
 import {
   batchMeansCI,
   bonferroniCI,
@@ -128,7 +134,7 @@ describe('detectWarmupWelch', () => {
       for (let t = 0; t < points; t++) {
         const isTransient = t < transientEnd;
         const base = isTransient ? transientMean : stableMean;
-        const val = base + (Math.random() - 0.5) * noise * 2;
+        const val = base + (rand() - 0.5) * noise * 2;
         ts.push({ t, byType: { Customer: { waiting: val } } });
       }
       reps.push(makeReplication(ts));
@@ -222,7 +228,7 @@ describe('batchMeansCI', () => {
     const autocorr = [];
     let prev = 10;
     for (let i = 0; i < 200; i++) {
-      prev = prev * 0.9 + (Math.random() - 0.5) * 2;
+      prev = prev * 0.9 + (rand() - 0.5) * 2;
       autocorr.push(prev);
     }
 
@@ -239,7 +245,7 @@ describe('batchMeansCI', () => {
     const autocorr = [];
     let prev = 5;
     for (let i = 0; i < 300; i++) {
-      prev = prev * 0.8 + (Math.random() - 0.5) * 3 + 5;
+      prev = prev * 0.8 + (rand() - 0.5) * 3 + 5;
       autocorr.push(prev);
     }
 
@@ -249,7 +255,7 @@ describe('batchMeansCI', () => {
   });
 
   test('auto-suggested batch size produces at least 2 batches', () => {
-    const values = Array.from({ length: 100 }, () => Math.random() * 10 + 5);
+    const values = Array.from({ length: 100 }, () => rand() * 10 + 5);
     const m = suggestBatchSize(values);
     expect(m).toBeGreaterThanOrEqual(1);
     expect(Math.floor(values.length / m)).toBeGreaterThanOrEqual(2);

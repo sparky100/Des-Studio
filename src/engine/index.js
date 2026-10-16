@@ -2495,11 +2495,14 @@ const cycleLog = [];
     }
     const elapsed = clock - _statsResetTime;
     const avgWip = elapsed > 0 ? +(_wipIntegral / elapsed).toFixed(4) : 0;
-    // Little's Law check: L = λW → W = L/λ
+    // Little's Law check: L = λW → W = L/λ. L is the time-average number in
+    // the system (waiting AND in service), so W is time in system — compare
+    // it with measured time in system (sojourn), not with queue wait alone
+    // (which differed by the whole service time and flagged every model).
     const arrivalRate = elapsed > 0 ? served.length / elapsed : 0;
-    const avgWaitByLittle = arrivalRate > 0 ? +(avgWip / arrivalRate).toFixed(4) : null;
-    const waitDiscrepancy = avgWait != null && avgWaitByLittle != null && avgWaitByLittle > 0
-      ? Math.round((Math.abs(avgWait - avgWaitByLittle) / avgWaitByLittle) * 100)
+    const avgTimeInSystemByLittle = arrivalRate > 0 ? +(avgWip / arrivalRate).toFixed(4) : null;
+    const waitDiscrepancy = avgSojourn != null && avgTimeInSystemByLittle != null && avgTimeInSystemByLittle > 0
+      ? Math.round((Math.abs(avgSojourn - avgTimeInSystemByLittle) / avgTimeInSystemByLittle) * 100)
       : null;
 
     /** @type {Record<string, any>} */
@@ -2855,7 +2858,7 @@ const cycleLog = [];
       reneged:           reneged.length,
       balked:            balked.length,
       avgWait:           avgWait   != null ? +avgWait.toFixed(4)   : null,
-      avgWaitByLittle,
+      avgTimeInSystemByLittle,
       waitDiscrepancy,
       waitSamplesBreakdown: {
         served:      servedWaits.length,

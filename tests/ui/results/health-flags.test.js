@@ -175,12 +175,12 @@ describe("evaluateResultsHealth — H11 (zombie asset) with a batch of replicati
   });
 });
 
-describe("evaluateResultsHealth — H12 (chart data auto-disabled)", () => {
+describe("evaluateResultsHealth — H17 (chart data auto-disabled)", () => {
   test("flag present when collection was requested but skipped", () => {
     const model = makeModel([]);
     const results = { summary: { total: 100 }, _requested_collect_time_series: true, _effective_collect_time_series: false };
     const flags = evaluateResultsHealth(results, model);
-    const h12 = flags.find(f => f.code === "H12");
+    const h12 = flags.find(f => f.code === "H17");
     expect(h12).toBeDefined();
     expect(h12.severity).toBe("warning");
   });
@@ -189,14 +189,14 @@ describe("evaluateResultsHealth — H12 (chart data auto-disabled)", () => {
     const model = makeModel([]);
     const results = { summary: { total: 100 }, _requested_collect_time_series: true, _effective_collect_time_series: true };
     const flags = evaluateResultsHealth(results, model);
-    expect(flags.some(f => f.code === "H12")).toBe(false);
+    expect(flags.some(f => f.code === "H17")).toBe(false);
   });
 
   test("no flag when fields are absent (normal runs untouched)", () => {
     const model = makeModel([]);
     const results = { summary: { total: 100 } };
     const flags = evaluateResultsHealth(results, model);
-    expect(flags.some(f => f.code === "H12")).toBe(false);
+    expect(flags.some(f => f.code === "H17")).toBe(false);
   });
 });
 
