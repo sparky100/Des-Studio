@@ -555,8 +555,8 @@ The engine's `getSummary()` computes `avgWait` as a weighted average across thre
 `avgWait = (sumServed + sumRenege + 0.5 * sumInProgress) / (nServed + nRenege + 0.5 * nInProgress)`
 
 The summary also includes:
-- `avgWaitByLittle`: Little's Law estimate (`avgWIP / arrivalRate`) for validation
-- `waitDiscrepancy`: percentage difference between `avgWait` and `avgWaitByLittle`; >5% suggests the run may be too short
+- `avgTimeInSystemByLittle`: Little's Law estimate of time in system (`avgWIP / throughput`, post-warm-up). Replaced `avgWaitByLittle` (2026-10): avgWIP counts entities in service as well as waiting, so L/λ is time in system and was wrongly compared with queue wait
+- `waitDiscrepancy`: percentage difference between `avgSojourn` and `avgTimeInSystemByLittle`; >5% suggests the run is too short or not at steady state (health flag H8)
 - `waitSamplesBreakdown`: `{ served, reneged, inProgress }` counts for UI transparency
 
 The `RENEGE` macro now calls `buildStageRecord(entity, null, clock)` before clearing the entity's waiting state, so reneged entities contribute wait samples to both `avgWait` and `waitDist`.

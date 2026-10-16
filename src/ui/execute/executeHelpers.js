@@ -783,7 +783,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 150) {
       maxSojourn: aggregateStats["summary.maxSojourn"]?.mean ?? null,
       totalCost: aggregateStats["summary.totalCost"]?.mean ?? null,
       costPerServed: aggregateStats["summary.costPerServed"]?.mean ?? null,
-      avgWaitByLittle: aggregateStats["summary.avgWaitByLittle"]?.mean ?? null,
+      avgTimeInSystemByLittle: summaryMean("avgTimeInSystemByLittle"),
       warmupPeriod,
       maxSimTime: maxTime,
       outcomes: Object.keys(outcomeAcc).length ? outcomeAcc : undefined,
