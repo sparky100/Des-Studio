@@ -66,7 +66,9 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
     const highDur = Number(stats?.maxSustainedHighUtil);
     if (!Number.isFinite(highDur) || highDur < 15) continue;
     flags.push({ code: "H10", severity: "warning", resource: typeName,
-      message: `${typeName} sustained ≥90% utilisation for ${highDur.toFixed(0)} consecutive time units — the system is running at a level where delays compound rapidly.`,
+      message: isMultiRep
+        ? `${typeName}'s longest stretch with ≥90% of its servers busy averaged ${highDur.toFixed(0)} time units per run — the system is running at a level where delays compound rapidly.`
+        : `${typeName} had ≥90% of its servers busy for ${highDur.toFixed(0)} consecutive time units — the system is running at a level where delays compound rapidly.`,
       suggestion: `Add capacity to ${typeName} or throttle arrivals — sustained high utilisation means the queue will not recover naturally.` });
   }
 

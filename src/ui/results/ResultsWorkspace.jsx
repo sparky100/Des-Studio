@@ -2212,7 +2212,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                             key={s.resourceType}
                             title={`${s.resourceType} — Per-shift utilisation`}
                             color={color}
-                            sourceLabel={`Computed from server busy-time attributed to the shift active when service started.`}
+                            sourceLabel={`Busy server-time in each shift ÷ (shift length × planned servers). A job that runs across a shift change is split between the shifts; completions count in the shift the job finished.`}
                           >
                             {s.shifts.length > 0 ? (
                               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

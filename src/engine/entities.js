@@ -679,6 +679,7 @@ export function claimServerForEntity(customer, server, clock, index = null, ctx 
   if (ctx?.state?.__currentShiftLabel?.[server.type]) {
     server._shiftLabel = ctx.state.__currentShiftLabel[server.type];
   }
+  server._shiftSegStart = clock;
 
   // Flush starvation timer — server was idle and is now busy
   if (server._starvationStart != null) {
@@ -724,12 +725,17 @@ export function releaseServerClaim(customer, server, clock) {
         // active at its most recent claim, wildly inflating that shift's
         // utilisation (seen as >100%, even >1000%, in practice) while starving
         // every other shift of the credit it actually earned.
+        // A stint that crossed a shift change has already credited its earlier
+        // part to the earlier shift(s) (splitShiftBusyTime); only the segment
+        // since the last change is left to credit here.
         if (prevShiftLabel) {
+          const segStart = Math.max(server._shiftSegStart ?? server._busyStart, server._busyStart);
           if (!server._shiftBusyTime) server._shiftBusyTime = {};
-          server._shiftBusyTime[prevShiftLabel] = (server._shiftBusyTime[prevShiftLabel] || 0) + delta;
+          server._shiftBusyTime[prevShiftLabel] = (server._shiftBusyTime[prevShiftLabel] || 0) + Math.max(0, clock - segStart);
         }
       }
       delete server._busyStart;
+      delete server._shiftSegStart;
       setServerStatus(server, "idle");
       // Start starvation timer — server just became idle; if no work arrives, this is starvation
       server._starvationStart = clock;
@@ -966,6 +972,45 @@ export function flushRetiredServerStats(srv, state) {
       acc.perShiftBusyTimeSum[label] = (acc.perShiftBusyTimeSum[label] || 0) + bt;
     }
   }
+  if (srv._shiftCompletions) {
+    acc.perShiftCompletions = acc.perShiftCompletions || {};
+    for (const [label, n] of Object.entries(srv._shiftCompletions)) {
+      acc.perShiftCompletions[label] = (acc.perShiftCompletions[label] || 0) + n;
+    }
+  }
+}
+
+/**
+ * Per-shift utilisation (F86.4): at a shift change, a busy server credits the
+ * part of its current stint served under the old shift to that shift and
+ * carries on under the new one — so a job that runs across 17:00 is split
+ * between the day and evening shifts instead of all landing on the day shift.
+ * @param {Record<string, any>} srv
+ * @param {number} clock
+ * @param {string} newLabel
+ */
+export function splitShiftBusyTime(srv, clock, newLabel) {
+  if (srv.status === "busy" && srv._busyStart != null) {
+    if (srv._shiftLabel) {
+      const segStart = Math.max(srv._shiftSegStart ?? srv._busyStart, srv._busyStart);
+      if (!srv._shiftBusyTime) srv._shiftBusyTime = {};
+      srv._shiftBusyTime[srv._shiftLabel] = (srv._shiftBusyTime[srv._shiftLabel] || 0) + Math.max(0, clock - segStart);
+    }
+    srv._shiftSegStart = clock;
+  }
+  srv._shiftLabel = newLabel;
+}
+
+/**
+ * Count a finished service against the shift it finished in (per-shift
+ * "completed" figure). Called only where a service ends normally (COMPLETE /
+ * RELEASE), never on preemption or failure.
+ * @param {Record<string, any>|null} srv
+ */
+export function noteShiftCompletion(srv) {
+  if (!srv?._shiftLabel) return;
+  if (!srv._shiftCompletions) srv._shiftCompletions = {};
+  srv._shiftCompletions[srv._shiftLabel] = (srv._shiftCompletions[srv._shiftLabel] || 0) + 1;
 }
 
 // ── Server turnaround (B4) ────────────────────────────────────────────────
