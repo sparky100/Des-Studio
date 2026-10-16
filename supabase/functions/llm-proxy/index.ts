@@ -49,8 +49,61 @@ export function configForRequest(request: { kind: string }, config: LlmProviderC
   return isBuildRequest(request) && config.buildModel ? { ...config, model: config.buildModel } : config;
 }
 
-function rateLimitKey(request: Request) {
-  return request.headers.get("authorization") || request.headers.get("x-forwarded-for") || "anonymous";
+// ── Caller authentication ──
+// The function is deployed with verify_jwt=true, but that only proves the
+// bearer is *a* JWT signed for this project -- the public anon key (shipped
+// in every app's JS bundle) passes it too. So every non-OPTIONS request is
+// additionally checked against Supabase Auth, which only returns a user for
+// a real signed-in session's access token (the anon key has no `sub`, so
+// Auth rejects it). Fails closed: any non-200, a body without an id, a
+// network error, or missing SUPABASE_URL / SUPABASE_ANON_KEY all mean "no
+// user".
+export type VerifiedUser = { id: string };
+export type VerifyUserDeps = {
+  fetchImpl?: typeof fetch;
+  supabaseUrl?: string;
+  anonKey?: string;
+};
+
+export function bearerToken(authorization: string | null): string | null {
+  const match = /^Bearer\s+(\S+)\s*$/i.exec(authorization ?? "");
+  return match ? match[1] : null;
+}
+
+export async function verifyUser(authorization: string | null, deps: VerifyUserDeps = {}): Promise<VerifiedUser | null> {
+  const token = bearerToken(authorization);
+  if (!token) return null;
+  const supabaseUrl = deps.supabaseUrl ?? Deno.env.get("SUPABASE_URL");
+  const anonKey = deps.anonKey ?? Deno.env.get("SUPABASE_ANON_KEY");
+  if (!supabaseUrl || !anonKey) {
+    console.error("[llm-proxy] auth: SUPABASE_URL or SUPABASE_ANON_KEY missing -- rejecting request");
+    return null;
+  }
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  try {
+    const response = await fetchImpl(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/user`, {
+      headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+    });
+    if (response.status !== 200) return null;
+    const body = await response.json();
+    return body && typeof body.id === "string" && body.id ? { id: body.id } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function unauthorizedResponse(): Response {
+  return new Response(JSON.stringify({ error: { message: "Sign in to use AI features." } }), {
+    status: 401,
+    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+  });
+}
+
+// Keyed on the verified user id, so a user keeps one bucket across access
+// token refreshes. Still per-isolate in-memory (a soft limit, not a hard
+// one -- each warm isolate counts independently).
+function rateLimitKey(user: VerifiedUser) {
+  return `user:${user.id}`;
 }
 
 function isRateLimited(key: string, maxPerHour: number) {
@@ -678,13 +731,15 @@ async function loadConfig(): Promise<LlmProviderConfig> {
 Deno.serve(async request => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
 
+  const user = await verifyUser(request.headers.get("authorization"));
+  if (!user) return unauthorizedResponse();
+
   if (request.method === "GET") {
     const config = await loadConfig();
     return new Response(JSON.stringify({
       provider: config.provider,
       model: config.model,
       hasApiKey: !!config.apiKey,
-      apiKeyPreview: config.apiKey ? config.apiKey.slice(0, 12) + "..." : "(none)",
       temperature: config.temperature,
       rateLimitPerHour: config.rateLimitPerHour,
       maxTokensPerRun: config.maxTokensPerRun,
@@ -696,7 +751,7 @@ Deno.serve(async request => {
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
 
   const config = await loadConfig();
-  if (isRateLimited(rateLimitKey(request), config.rateLimitPerHour || 25)) {
+  if (isRateLimited(rateLimitKey(user), config.rateLimitPerHour || 25)) {
     return new Response("Rate limit exceeded", { status: 429, headers: CORS_HEADERS });
   }
 

@@ -17,6 +17,7 @@ import {
   mapDeepgramResponseToTranscript, loadTranscriptionKeys, isBlockedHostname, extractReadableContent,
   anthropicModelTraits, buildAnthropicRequest, REASONING_MIN_MAX_TOKENS,
   normalizeRequest, configForRequest, DEFAULT_BUILD_MAX_TOKENS,
+  verifyUser, bearerToken, unauthorizedResponse,
 } from "./index.ts";
 
 function withMockedFetch<T>(handler: (url: string) => Response, fn: () => Promise<T>): Promise<T> {
@@ -364,4 +365,76 @@ Deno.test("normalizeRequest: model_builder gets its own token ceiling, not maxTo
   const capped = normalizeRequest({ version: "2026-05-05", kind: "model_builder", messages: msg, maxTokens: 30000 }, { ...BASE_CONFIG, buildMaxTokensPerRun: 12000 });
   if (capped instanceof Response) throw new Error("unexpected Response");
   assertEquals(capped.maxTokens, 12000);
+});
+
+// ── verifyUser: every non-OPTIONS request must carry a real user's token ──
+// fetch and env are injected, so these never touch the network or Deno.env.
+
+const AUTH_DEPS = { supabaseUrl: "https://proj.supabase.co/", anonKey: "anon-key" };
+
+function authFetch(respond: (url: string, init?: RequestInit) => Response | Promise<Response>) {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const fetchImpl = ((url: string, init?: RequestInit) => {
+    calls.push({ url, init });
+    return Promise.resolve(respond(url, init));
+  }) as typeof fetch;
+  return { fetchImpl, calls };
+}
+
+Deno.test("verifyUser: a real user's token resolves to that user via /auth/v1/user", async () => {
+  const { fetchImpl, calls } = authFetch(() => new Response(JSON.stringify({ id: "user-123", email: "a@b.c" }), { status: 200 }));
+  const user = await verifyUser("Bearer user-access-token", { ...AUTH_DEPS, fetchImpl });
+  assertEquals(user, { id: "user-123" });
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].url, "https://proj.supabase.co/auth/v1/user");
+  const headers = calls[0].init?.headers as Record<string, string>;
+  assertEquals(headers.apikey, "anon-key");
+  assertEquals(headers.Authorization, "Bearer user-access-token");
+});
+
+Deno.test("verifyUser: the anon key (Auth answers 401/403) is rejected", async () => {
+  for (const status of [401, 403]) {
+    const { fetchImpl } = authFetch(() => new Response(JSON.stringify({ msg: "invalid claim: missing sub claim" }), { status }));
+    assertEquals(await verifyUser("Bearer anon-key", { ...AUTH_DEPS, fetchImpl }), null);
+  }
+});
+
+Deno.test("verifyUser: a 200 without a user id is rejected", async () => {
+  const { fetchImpl } = authFetch(() => new Response(JSON.stringify({}), { status: 200 }));
+  assertEquals(await verifyUser("Bearer token", { ...AUTH_DEPS, fetchImpl }), null);
+});
+
+Deno.test("verifyUser: missing or malformed Authorization header is rejected without calling Auth", async () => {
+  const { fetchImpl, calls } = authFetch(() => new Response(JSON.stringify({ id: "x" }), { status: 200 }));
+  for (const header of [null, "", "Bearer", "Bearer ", "Basic abc", "token-without-scheme"]) {
+    assertEquals(await verifyUser(header, { ...AUTH_DEPS, fetchImpl }), null);
+  }
+  assertEquals(calls.length, 0);
+});
+
+Deno.test("verifyUser: a network error reaching Auth is rejected (fails closed)", async () => {
+  const fetchImpl = (() => Promise.reject(new TypeError("network down"))) as typeof fetch;
+  assertEquals(await verifyUser("Bearer token", { ...AUTH_DEPS, fetchImpl }), null);
+});
+
+Deno.test("verifyUser: missing SUPABASE_URL / SUPABASE_ANON_KEY fails closed", async () => {
+  const { fetchImpl, calls } = authFetch(() => new Response(JSON.stringify({ id: "x" }), { status: 200 }));
+  assertEquals(await verifyUser("Bearer token", { supabaseUrl: "", anonKey: "anon-key", fetchImpl }), null);
+  assertEquals(await verifyUser("Bearer token", { supabaseUrl: "https://p.supabase.co", anonKey: "", fetchImpl }), null);
+  assertEquals(calls.length, 0);
+});
+
+Deno.test("bearerToken: case-insensitive scheme, trims, rejects anything else", () => {
+  assertEquals(bearerToken("Bearer abc.def.ghi"), "abc.def.ghi");
+  assertEquals(bearerToken("bearer abc"), "abc");
+  assertEquals(bearerToken("Bearer a b"), null);
+  assertEquals(bearerToken(null), null);
+});
+
+Deno.test("unauthorizedResponse: 401 JSON with CORS headers", async () => {
+  const response = unauthorizedResponse();
+  assertEquals(response.status, 401);
+  assertEquals(response.headers.get("Content-Type"), "application/json");
+  assertEquals(response.headers.get("Access-Control-Allow-Origin"), "*");
+  assertEquals(await response.json(), { error: { message: "Sign in to use AI features." } });
 });
