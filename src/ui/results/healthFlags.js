@@ -49,16 +49,17 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
     }
   }
 
-  // H5 — Resource starvation (idle with work queued)
+  // H5 — Resource starvation: idle server-time while a queue this resource
+  // serves (via a plain ASSIGN) had work waiting. null = not tracked.
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
     const starvPct = Number(stats?.starvationPct);
     if (!Number.isFinite(starvPct) || starvPct <= 0.2) continue;
     flags.push({ code: "H5", severity: "warning", resource: typeName,
-      message: `${typeName} starved ${Math.round(starvPct * 100)}% of the time — idle servers while work was queued.`,
+      message: `${typeName} had idle servers while work was waiting in a queue it serves for ${Math.round(starvPct * 100)}% of its server time.`,
       suggestion: "Check routing rules or entity-to-server assignment — servers are idle when work is available." });
   }
 
-  // H9 — Continuous starvation exceeding 2× mean service time
+  // H9 — Longest continuous stretch of starvation exceeding 2× mean service time
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
     const maxStarv = Number(stats?.maxStarvationDuration);
     if (!Number.isFinite(maxStarv) || maxStarv <= 0) continue;
@@ -66,7 +67,9 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
     if (!Number.isFinite(avgSvc) || avgSvc <= 0) continue;
     if (maxStarv > avgSvc * 2) {
       flags.push({ code: "H9", severity: "warning", resource: typeName,
-        message: `${typeName} idle for ${maxStarv.toFixed(1)} time units continuously — exceeds 2× mean service time of ${avgSvc.toFixed(1)}.`,
+        message: isMultiRep
+          ? `${typeName}'s longest stretch with idle servers while work was waiting averaged ${maxStarv.toFixed(1)} time units per run — more than 2× the mean service time of ${avgSvc.toFixed(1)}.`
+          : `${typeName} had idle servers while work was waiting for ${maxStarv.toFixed(1)} time units in a row — more than 2× the mean service time of ${avgSvc.toFixed(1)}.`,
         suggestion: `Check upstream delivery to ${typeName} — work is not reaching this resource, suggesting a routing or blocking issue.` });
     }
   }
@@ -317,7 +320,7 @@ export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
     const starvPct = Number(stats?.starvationPct);
     if (!Number.isFinite(starvPct) || starvPct <= 0.2) continue;
     flags.push({ code: "L2", severity: "warning", resource: typeName,
-      message: `${typeName} starved ${Math.round(starvPct * 100)}% — idle with work queued.` });
+      message: `${typeName} idle with work waiting ${Math.round(starvPct * 100)}% of its server time.` });
   }
 
   // L4 — Continuous starvation exceeding 2× mean service time
@@ -328,7 +331,7 @@ export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
     if (!Number.isFinite(avgSvc) || avgSvc <= 0) continue;
     if (maxStarv > avgSvc * 2) {
       flags.push({ code: "L4", severity: "warning", resource: typeName,
-        message: `${typeName} idle ${maxStarv.toFixed(0)} units — exceeds 2× avg service time.` });
+        message: `${typeName} idle with work waiting for ${maxStarv.toFixed(0)} units in a row — over 2× avg service time.` });
     }
   }
 

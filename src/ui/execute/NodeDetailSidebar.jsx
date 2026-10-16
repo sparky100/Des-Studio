@@ -233,7 +233,7 @@ function ActivityResourceBlock({ typeStats, clock, onEntitySelect }) {
                 )}
                 {srv.status === "idle" && srv.starvationTime > 0 && (
                   <div style={{ fontSize: 10, color: C.amber, fontFamily: FONT }}>
-                    Starvation: t={srv.starvationTime.toFixed(1)}
+                    Idle for t={srv.starvationTime.toFixed(1)}
                   </div>
                 )}
                 {srv.status === "failed" && srv.downtime > 0 && (

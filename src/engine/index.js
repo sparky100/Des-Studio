@@ -20,6 +20,7 @@ import { makeSingleRunProgress } from "./progress-contract.js";
 import { nullRegistry }                        from "./adapters/index.js";
 import { expandWeeklyPatternToEvents, getPatternInitialCapacity, buildShiftPeriodLabels, resolveSchedulePattern, compileArrivalRatePeriods } from "./schedule-pattern.js";
 import { applyEntityInheritance } from "./entity-inheritance.js";
+import { macroCalls } from "../model/macroParser.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
@@ -910,6 +911,58 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     }
   }
 
+  // Starvation (H5/H9, live L2/L4): server-time spent idle while a queue the
+  // server type serves has work waiting. Which queues a type serves comes
+  // from the model's plain ASSIGN(Queue|CustomerType, ServerType) effects;
+  // skill-filtered and ANY assigns are left out, since an idle server there
+  // may legitimately be unable to take the waiting work. Accounted at every
+  // clock advance from the index's O(1) idle/queue counts.
+  /** @type {Map<string, string[]>} server type → queue names it serves */
+  const _starveQueues = new Map();
+  {
+    const norm = (/** @type {any} */ v) => String(v ?? "").trim().toLowerCase();
+    const queues = runtimeModel.queues || [];
+    for (const ce of runtimeModel.cEvents || []) {
+      for (const { macro, args } of macroCalls(ce.effect)) {
+        if (String(macro).toUpperCase() !== "ASSIGN" || args.length < 2) continue;
+        const extra = args.slice(2).map(a => String(a).trim());
+        if (extra.some(a => /^"|^Entity\./i.test(a) || /^(SCAN|PREEMPT)\b/i.test(a))) continue;
+        const sType = norm(args[1]);
+        if (!sType || sType === "any") continue;
+        const target = norm(args[0]);
+        const byName = queues.filter((/** @type {any} */ q) => norm(q.name) === target);
+        const served = byName.length ? byName : queues.filter((/** @type {any} */ q) => norm(q.customerType) === target);
+        if (!served.length) continue;
+        const list = _starveQueues.get(sType) || [];
+        for (const q of served) if (!list.includes(q.name)) list.push(q.name);
+        _starveQueues.set(sType, list);
+      }
+    }
+  }
+  /** @type {Map<string, { serverTime: number, since: number|null, maxStretch: number }>} */
+  const _starvation = new Map([..._starveQueues.keys()].map(t => [t, { serverTime: 0, since: null, maxStretch: 0 }]));
+  // The state now (after the last C-phase) held from `from` until `to`.
+  const accountStarvation = (/** @type {number} */ from, /** @type {number} */ to) => {
+    if (!_starvation.size || !(to > from)) return;
+    for (const [sType, acc] of _starvation) {
+      const idle = serverCountsOfType(queueIndex, sType).idle;
+      let starving = false;
+      if (idle > 0) {
+        for (const qName of /** @type {string[]} */ (_starveQueues.get(sType))) {
+          const bucket = indexBucket(queueIndex, qName);
+          if (bucket && bucket.length > 0) { starving = true; break; }
+        }
+      }
+      if (starving) {
+        acc.serverTime += idle * (to - from);
+        if (acc.since == null) acc.since = from;
+      } else if (acc.since != null) {
+        acc.maxStretch = Math.max(acc.maxStretch, from - acc.since);
+        acc.since = null;
+      }
+    }
+  };
+
   const helpers = () => makeHelpers(entities, runtimeModel, queueIndex);
   const createServerEntity = (/** @type {any} */ serverTypeName, arrivalTime = clock) => {
     const match = (/** @type {any} */ a, /** @type {any} */ b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
@@ -1502,6 +1555,7 @@ const cycleLog = [];
 
     // Time-based termination check (before advancing clock)
     if (maxSimTime !== null && nextTime > maxSimTime) {
+      accountStarvation(clock, maxSimTime);
       clock = maxSimTime;
       _terminationConditionMet = true;
       const msg = `Run limit reached (t=${maxSimTime.toFixed(3)}) — simulation complete`;
@@ -1509,6 +1563,7 @@ const cycleLog = [];
       return { done: true, cycleLog: [_trace("END", { message: msg })], snap: stepSnapshot() };
     }
 
+    accountStarvation(clock, nextTime);
     clock = nextTime;
 
     // Condition-based termination check
@@ -1537,6 +1592,11 @@ const cycleLog = [];
         // Sustained ≥90% / zero-utilisation stretches are post-warm-up figures
         // like every other utilisation number; a stretch in progress restarts
         // its measurement here.
+        for (const acc of _starvation.values()) {
+          acc.serverTime = 0;
+          acc.maxStretch = 0;
+          if (acc.since != null) acc.since = clock;
+        }
         for (const streak of Object.values(_utilStreaks)) {
           if (streak.highStart != null) streak.highStart = clock;
           if (streak.zeroStart != null) streak.zeroStart = clock;
@@ -2627,9 +2687,21 @@ const cycleLog = [];
       r.skillUtil = r.skillBusyTimeSum ? Object.fromEntries(
         Object.entries(r.skillBusyTimeSum).map(([skill, bt]) => [skill, denominator > 0 ? +(bt / denominator).toFixed(4) : 0])
       ) : undefined;
-      r.starvationTime = denominator > 0 ? +(r.starvationTimeSum / r.total).toFixed(4) : 0;
-      r.starvationPct = denominator > 0 ? +(r.starvationTimeSum / denominator).toFixed(4) : 0;
-      r.maxStarvationDuration = r.maxContStarvDur > 0 ? +r.maxContStarvDur.toFixed(4) : null;
+      // Starvation: idle server-time while a queue this type serves had work
+      // waiting (see accountStarvation). Not tracked (null) for types no plain
+      // ASSIGN serves.
+      const starve = _starvation.get(String(type).trim().toLowerCase());
+      if (starve) {
+        const openStretch = starve.since != null ? clock - starve.since : 0;
+        const longest = Math.max(starve.maxStretch, openStretch);
+        r.starvationTime = r.total > 0 ? +(starve.serverTime / r.total).toFixed(4) : 0;
+        r.starvationPct = denominator > 0 ? +(starve.serverTime / denominator).toFixed(4) : 0;
+        r.maxStarvationDuration = longest > 0 ? +longest.toFixed(4) : null;
+      } else {
+        r.starvationTime = null;
+        r.starvationPct = null;
+        r.maxStarvationDuration = null;
+      }
       r.totalDowntime = +r.downtimeSum.toFixed(4);
       r.availability  = denominator > 0 ? +(1 - r.downtimeSum / denominator).toFixed(4) : 1;
       r.meanDowntimePerFailure = r.failureCount > 0 ? +(r.downtimeSum / r.failureCount).toFixed(4) : null;
@@ -2674,6 +2746,7 @@ const cycleLog = [];
         // consumers that do not check calendarUtilisation first get the right
         // answer for shift-scheduled resources.
         r.utilisation = r.calendarUtilisation;
+        if (starve && denomSum > 0) r.starvationPct = +(starve.serverTime / denomSum).toFixed(4);
       }
       // Schedule adherence (F86.5) — weekly patterns only
       const match = (/** @type {any} */ a, /** @type {any} */ b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();

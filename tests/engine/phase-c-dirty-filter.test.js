@@ -183,6 +183,17 @@ function makeCoseizeModel({ decoyCount }) {
   };
 }
 
+// The decoy-padded copy adds ASSIGN(…, DecoyServer) effects, so starvation
+// tracking — which follows the model's ASSIGNs — exists for DecoyServer only
+// in that copy (0 vs untracked null). That is a model difference, not a
+// filtered-vs-unfiltered path difference; set those fields aside.
+function withoutDecoyStarvation(summary) {
+  const decoy = summary.perResource?.DecoyServer;
+  if (!decoy) return summary;
+  const { starvationTime: _t, starvationPct: _p, maxStarvationDuration: _m, ...rest } = decoy;
+  return { ...summary, perResource: { ...summary.perResource, DecoyServer: rest } };
+}
+
 describe('Phase C dirty-set filter — RELEASE_COSEIZED precision', () => {
   test('filtered path (>=8 C-events) matches unfiltered path (<8 C-events) bit-for-bit with RELEASE_COSEIZED', () => {
     const seed = 12345;
@@ -192,7 +203,7 @@ describe('Phase C dirty-set filter — RELEASE_COSEIZED precision', () => {
     const unfilteredResult = buildEngine(unfiltered, seed).runAll();
     const filteredResult = buildEngine(filtered, seed).runAll();
 
-    expect(filteredResult.summary).toEqual(unfilteredResult.summary);
+    expect(withoutDecoyStarvation(filteredResult.summary)).toEqual(withoutDecoyStarvation(unfilteredResult.summary));
     expect(filteredResult.finalTime).toEqual(unfilteredResult.finalTime);
     expect(filteredResult.runtimeMetrics.events_processed).toEqual(unfilteredResult.runtimeMetrics.events_processed);
     expect(filteredResult.runtimeMetrics.c_events_fired).toEqual(unfilteredResult.runtimeMetrics.c_events_fired);
@@ -303,7 +314,7 @@ describe('Phase C dirty-set filter — SPLIT → JOIN pipeline', () => {
     const unfilteredResult = buildEngine(unfiltered, seed).runAll();
     const filteredResult = buildEngine(filtered, seed).runAll();
 
-    expect(filteredResult.summary).toEqual(unfilteredResult.summary);
+    expect(withoutDecoyStarvation(filteredResult.summary)).toEqual(withoutDecoyStarvation(unfilteredResult.summary));
     expect(filteredResult.finalTime).toEqual(unfilteredResult.finalTime);
     expect(filteredResult.runtimeMetrics.events_processed).toEqual(unfilteredResult.runtimeMetrics.events_processed);
     expect(filteredResult.runtimeMetrics.c_events_fired).toEqual(unfilteredResult.runtimeMetrics.c_events_fired);

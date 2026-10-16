@@ -663,11 +663,11 @@ are listed worst-first.
 | H2 | A queue's late-run (last 20%) mean waiting count > 1.5× its early-run (first 20%) mean, and >2 — measured after warm-up | warning | Check upstream constraints — the queue is growing faster than it drains; the run may not be reaching steady state |
 | H3 | ≥15%/≥20% of arrivals still in system (waiting or serving) at end of run | warning / critical | Identify and relieve capacity constraints; results may be unreliable with a large unfinished backlog |
 | H4 | A capacity-limited queue blocked/overflowed ≥10% of arrivals (critical) or any amount (warning); or an unbounded queue peaked >50 waiting (warning) | warning / critical | Increase queue capacity or add an overflow route to handle peak demand |
-| H5 | Resource starved (idle despite queued work) >20% of the time | warning | Check routing rules or entity-to-server assignment — servers are idle when work is available |
+| H5 | Resource starved >20% of its server time — idle servers while a queue it serves (through a plain `ASSIGN(Queue, ServerType)`) had work waiting. Not tracked for types served only by skill-filtered or `ANY` assigns | warning | Check routing rules or entity-to-server assignment — servers are idle when work is available |
 | H6 | Entities balked (declined to join a queue) — ≥10% of arrivals is critical, any amount is warning | warning / critical | Review the queue's balk probability/condition if this is unintended |
 | H7 | Less than 50% of arrivals completed (with ≥10 arrivals) | critical | Reduce arrival rate or add capacity — the system is severely overwhelmed |
 | H8 | Little's Law check: measured time in system differs by >5% from average number in system ÷ throughput | warning | Increase run duration — the run may be too short to reach steady state |
-| H9 | A resource was continuously starved for longer than 2× the mean service time | warning | Check upstream delivery to this resource — work isn't reaching it, suggesting a routing or blocking issue |
+| H9 | A resource's longest continuous stretch of starvation (idle servers while work it serves was waiting) exceeded 2× the mean service time | warning | Check upstream delivery to this resource — work isn't reaching it, suggesting a routing or blocking issue |
 | H10 | ≥90% of a resource's servers stayed busy for at least 10× the mean service time (never less than 15 time units), after warm-up. For a batch run the figure is the average of each run's longest stretch | warning | Add capacity or throttle arrivals — sustained high utilisation means the queue will not recover naturally |
 | H11 | A resource was idle (0% busy, after warm-up) for longer than 5× the mean time between arrivals | warning | Check entity routing and Bound event destinations — the resource may be unreachable or blocked by an upstream queue |
 | H12 | A resource with failures was available <80% (critical) or <90% (warning) of the run | warning / critical | Review MTBF/MTTR or add redundant capacity |
@@ -685,9 +685,9 @@ context (no suggestion text is shown live).
 | Code | Mirrors | Condition |
 |------|---------|-----------|
 | L1 | H1 | Resource utilisation ≥85%/≥90%/≥95% |
-| L2 | H5 | Resource starved >20% of the time so far |
+| L2 | H5 | Resource idle with work waiting >20% of its server time so far |
 | L3 | H4 | Queue has rejected (blocked/overflowed) arrivals at capacity so far |
-| L4 | H9 | Resource continuously starved beyond 2× mean service time |
+| L4 | H9 | Resource idle with work waiting, continuously, beyond 2× mean service time |
 | L5 | H10 | ≥90% of a resource's servers busy for at least 10× the mean service time (min 15 time units) |
 | L6 | H11 | Resource at 0% utilisation while arrivals are active |
 | L7 | H6 | Entities have balked at a queue so far |
