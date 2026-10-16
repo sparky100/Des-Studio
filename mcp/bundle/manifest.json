@@ -1,0 +1,75 @@
+{
+  "manifest_version": "0.3",
+  "name": "flow-mcp",
+  "display_name": "Flow (simmodlr)",
+  "version": "0.1.0",
+  "description": "Build, check and run Flow discrete-event simulation models with your AI assistant, on your own computer.",
+  "long_description": "Lets your assistant read Flow's model format, validate models with Flow's own validator, run them with Flow's simulation engine (several replications, with 95% confidence intervals and warnings about bottlenecks and overload) and save them as files you open in Flow with + New Model → Import a file. Everything runs on your computer; models are plain JSON files in one folder.",
+  "author": {
+    "name": "simmodlr"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "server/flow-mcp.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/flow-mcp.mjs"
+      ],
+      "env": {
+        "FLOW_MODELS_DIR": "${user_config.models_folder}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "flow_get_schema",
+      "description": "Flow's model format: generation protocol, common mistakes, and any section on request."
+    },
+    {
+      "name": "flow_list_models",
+      "description": "List the model files in your Flow models folder."
+    },
+    {
+      "name": "flow_read_model",
+      "description": "Read a model file, e.g. one exported from Flow."
+    },
+    {
+      "name": "flow_validate_model",
+      "description": "Check a model with Flow's own validator."
+    },
+    {
+      "name": "flow_run_model",
+      "description": "Run a model for several replications and report results with 95% confidence intervals."
+    },
+    {
+      "name": "flow_save_model",
+      "description": "Save a model as a file Flow can import. Never overwrites by default."
+    }
+  ],
+  "user_config": {
+    "models_folder": {
+      "type": "directory",
+      "title": "Flow models folder",
+      "description": "Where models are read from and saved to. Leave empty to use Documents/Flow models.",
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  },
+  "keywords": [
+    "simulation",
+    "discrete-event",
+    "flow",
+    "simmodlr"
+  ],
+  "prompts_generated": true
+}
