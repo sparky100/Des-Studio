@@ -16,6 +16,16 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
   const isMultiRep = n > 1;
   const perRun = (total) => (isMultiRep && Number.isFinite(total) ? Math.round(total / n) : total);
   const perRunSuffix = isMultiRep ? " per run" : "";
+  // Measured (post-warm-up) run length and warm-up cut-off. Batch summaries
+  // carry maxSimTime; a single run's length is its final clock.
+  const warmup = Number(summary.warmupPeriod) || 0;
+  const runEnd = Number(summary.maxSimTime ?? results?.finalTime ?? results?.snap?.clock);
+  const measuredLength = Number.isFinite(runEnd) && runEnd > warmup ? runEnd - warmup : null;
+  // A "sustained" stretch has to outlast several back-to-back services —
+  // otherwise a single-server resource trips it on every job longer than
+  // the floor.
+  const avgSvcAll = Number(summary.avgSvc);
+  const sustainedFloor = Math.max(15, Number.isFinite(avgSvcAll) && avgSvcAll > 0 ? 10 * avgSvcAll : 0);
 
   // H1 — Resource utilisation ≥ 85% / ≥ 90% / ≥ 95%
   // Prefer the calendar-aware figure for scheduled resources — the plain
@@ -61,10 +71,11 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
     }
   }
 
-  // H10 — Sustained high utilisation (≥90% for 15+ consecutive time units)
+  // H10 — Sustained high utilisation (≥90% for at least 10 mean service
+  // times, and never less than 15 time units)
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
     const highDur = Number(stats?.maxSustainedHighUtil);
-    if (!Number.isFinite(highDur) || highDur < 15) continue;
+    if (!Number.isFinite(highDur) || highDur < sustainedFloor) continue;
     flags.push({ code: "H10", severity: "warning", resource: typeName,
       message: isMultiRep
         ? `${typeName}'s longest stretch with ≥90% of its servers busy averaged ${highDur.toFixed(0)} time units per run — the system is running at a level where delays compound rapidly.`
@@ -79,9 +90,12 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
     // summary.total is summed across all replications in a batch — bring it back
     // down to a single run's arrival count before pairing it with maxSimTime
     // (a single run's duration) to get a per-run average inter-arrival time.
+    // (Run length used to come from summary.terminatingState.finalTime, which
+    // doesn't exist, so it fell back to 100 and the threshold collapsed to a
+    // fraction of a time unit.)
     const totalArrivedPerRun = Number(summary.total ?? summary.arrived ?? summary.totalArrived ?? 0) / n;
-    const avgInterArrival = totalArrivedPerRun > 0 && summary.avgSojourn != null
-      ? (summary.maxSimTime ?? (summary.terminatingState?.finalTime ?? 100)) / totalArrivedPerRun
+    const avgInterArrival = totalArrivedPerRun > 0 && measuredLength != null
+      ? measuredLength / totalArrivedPerRun
       : null;
     if (avgInterArrival != null && zeroDur > avgInterArrival * 5) {
       flags.push({ code: "H11", severity: "warning", resource: typeName,
@@ -111,16 +125,19 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
   }
 
   // H2 — Growing queue (last 20% of run mean > 1.5× first 20%) — requires timeSeries
-  if (timeSeries.length >= 10) {
-    const splitAt = Math.max(1, Math.floor(timeSeries.length * 0.2));
-    const queueNames = Object.keys(timeSeries[0]?.byQueue || {});
+  // Compare after warm-up only: a model that starts empty always looks like
+  // it is "growing" if the warm-up transient sits in the early window.
+  const measuredSeries = warmup > 0 ? timeSeries.filter(pt => Number(pt?.t) >= warmup) : timeSeries;
+  if (measuredSeries.length >= 10) {
+    const splitAt = Math.max(1, Math.floor(measuredSeries.length * 0.2));
+    const queueNames = Object.keys(measuredSeries[0]?.byQueue || {});
     for (const q of queueNames) {
       const avg = (slice) => {
         const sum = slice.reduce((s, pt) => s + (pt.byQueue?.[q]?.waiting ?? 0), 0);
         return slice.length > 0 ? sum / slice.length : 0;
       };
-      const earlyMean = avg(timeSeries.slice(0, splitAt));
-      const lateMean  = avg(timeSeries.slice(-splitAt));
+      const earlyMean = avg(measuredSeries.slice(0, splitAt));
+      const lateMean  = avg(measuredSeries.slice(-splitAt));
       if (lateMean > earlyMean * 1.5 && lateMean > 2) {
         flags.push({ code: "H2", severity: "warning", resource: q,
           message: `${q} queue trending up (avg ${earlyMean.toFixed(1)} → ${lateMean.toFixed(1)} waiting) — the system may not reach steady state.`,
@@ -230,9 +247,10 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
     }
   }
 
-  // H12 — Chart/time-series data was not collected for this run (auto-disabled, large run)
+  // H17 — Chart/time-series data was not collected for this run (auto-disabled,
+  // large run). Was also coded H12, colliding with the availability check.
   if (results?._requested_collect_time_series === true && results?._effective_collect_time_series === false) {
-    flags.push({ code: "H12", severity: "warning",
+    flags.push({ code: "H17", severity: "warning",
       message: "Chart/time-series data was not collected for this run — collection was skipped because the run was estimated to be large. Numeric summaries (waits, utilisation, cost) are unaffected; only the time-series charts are unavailable." });
   }
 
@@ -259,7 +277,7 @@ export function evaluateResultsHealth(results = {}, model = {}, repCount = 1) {
   const d = summary.waitDiscrepancy;
   if (Number.isFinite(d) && d > 5) {
     flags.push({ code: "H8", severity: "warning",
-      message: `Little's Law check shows ${d}% discrepancy between measured and theoretical wait — the run may be too short to reach steady state.`,
+      message: `Little's Law check: measured time in system differs by ${d}% from average number in system ÷ throughput — the run may be too short to reach steady state.`,
       suggestion: "Increase run duration and check again — reliable results require the system to stabilise." });
   }
 
@@ -314,10 +332,12 @@ export function evaluateLiveHealth(snap = {}, summary = {}, model = {}) {
     }
   }
 
-  // L5 — Sustained high utilisation (≥90% for 15+ consecutive time units)
+  // L5 — Sustained high utilisation (same threshold as H10)
+  const liveAvgSvc = Number(summary.avgSvc);
+  const liveSustainedFloor = Math.max(15, Number.isFinite(liveAvgSvc) && liveAvgSvc > 0 ? 10 * liveAvgSvc : 0);
   for (const [typeName, stats] of Object.entries(summary.perResource || {})) {
     const highDur = Number(stats?.maxSustainedHighUtil);
-    if (!Number.isFinite(highDur) || highDur < 15) continue;
+    if (!Number.isFinite(highDur) || highDur < liveSustainedFloor) continue;
     flags.push({ code: "L5", severity: "warning", resource: typeName,
       message: `${typeName} ≥90% utilised for ${highDur.toFixed(0)} consecutive time units.` });
   }

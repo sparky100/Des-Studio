@@ -660,20 +660,21 @@ are listed worst-first.
 | Code | Condition | Severity | Suggestion |
 |------|-----------|----------|------------|
 | H1 | Resource utilisation ≥85%/≥90%/≥95% | warning / critical / critical | Add capacity or reduce arrival rate; ≥90% means the queue cannot recover without more capacity |
-| H2 | A queue's late-run (last 20%) mean waiting count > 1.5× its early-run (first 20%) mean, and >2 | warning | Check upstream constraints — the queue is growing faster than it drains; the run may not be reaching steady state |
+| H2 | A queue's late-run (last 20%) mean waiting count > 1.5× its early-run (first 20%) mean, and >2 — measured after warm-up | warning | Check upstream constraints — the queue is growing faster than it drains; the run may not be reaching steady state |
 | H3 | ≥15%/≥20% of arrivals still in system (waiting or serving) at end of run | warning / critical | Identify and relieve capacity constraints; results may be unreliable with a large unfinished backlog |
 | H4 | A capacity-limited queue blocked/overflowed ≥10% of arrivals (critical) or any amount (warning); or an unbounded queue peaked >50 waiting (warning) | warning / critical | Increase queue capacity or add an overflow route to handle peak demand |
 | H5 | Resource starved (idle despite queued work) >20% of the time | warning | Check routing rules or entity-to-server assignment — servers are idle when work is available |
 | H6 | Entities balked (declined to join a queue) — ≥10% of arrivals is critical, any amount is warning | warning / critical | Review the queue's balk probability/condition if this is unintended |
 | H7 | Less than 50% of arrivals completed (with ≥10 arrivals) | critical | Reduce arrival rate or add capacity — the system is severely overwhelmed |
-| H8 | Little's Law check shows >5% discrepancy between measured and theoretical wait | warning | Increase run duration — the run may be too short to reach steady state |
+| H8 | Little's Law check: measured time in system differs by >5% from average number in system ÷ throughput | warning | Increase run duration — the run may be too short to reach steady state |
 | H9 | A resource was continuously starved for longer than 2× the mean service time | warning | Check upstream delivery to this resource — work isn't reaching it, suggesting a routing or blocking issue |
-| H10 | A resource sustained ≥90% utilisation for 15+ consecutive time units | warning | Add capacity or throttle arrivals — sustained high utilisation means the queue will not recover naturally |
-| H11 | A resource was idle for an extended period (zombie asset) while arrivals were active | warning | Check entity routing and Bound event destinations — the resource may be unreachable or blocked by an upstream queue |
+| H10 | ≥90% of a resource's servers stayed busy for at least 10× the mean service time (never less than 15 time units), after warm-up. For a batch run the figure is the average of each run's longest stretch | warning | Add capacity or throttle arrivals — sustained high utilisation means the queue will not recover naturally |
+| H11 | A resource was idle (0% busy, after warm-up) for longer than 5× the mean time between arrivals | warning | Check entity routing and Bound event destinations — the resource may be unreachable or blocked by an upstream queue |
 | H12 | A resource with failures was available <80% (critical) or <90% (warning) of the run | warning / critical | Review MTBF/MTTR or add redundant capacity |
 | H13 | The run hit the internal cycle limit before its intended end | critical | Re-run; if it recurs, look for a runaway Conditional event chain |
 | H14 | A container that held stock ran empty — reports how many times, % of the run spent empty and when it first happened (mean level across replications for batch runs) | warning | If activities DRAIN from it, demand went unmet while it was empty — raise the initial level, FILL faster or more, or add capacity |
 | H15 | A container's level is trending down (late-run mean < half the early-run mean) without having run empty yet | warning | A longer run may run it dry — check the balance of FILL and DRAIN |
+| H17 | Chart/time-series data was not collected because the run was estimated to be large | warning | Numbers are unaffected; only the time-series charts are unavailable |
 | H16 | A replication hit the C-event scan limit (2× the plan's per-replication limit) and stopped early — batch results say how many replications | critical | Shorten the run, reduce arrivals, or merge C-events that wait on the same queue (e.g. one queue per station with `ASSIGN … SCAN`) |
 
 ### Live Flags (computed per-step, during execution)
@@ -687,7 +688,7 @@ context (no suggestion text is shown live).
 | L2 | H5 | Resource starved >20% of the time so far |
 | L3 | H4 | Queue has rejected (blocked/overflowed) arrivals at capacity so far |
 | L4 | H9 | Resource continuously starved beyond 2× mean service time |
-| L5 | H10 | Resource sustained ≥90% utilisation for 15+ consecutive time units |
+| L5 | H10 | ≥90% of a resource's servers busy for at least 10× the mean service time (min 15 time units) |
 | L6 | H11 | Resource at 0% utilisation while arrivals are active |
 | L7 | H6 | Entities have balked at a queue so far |
 

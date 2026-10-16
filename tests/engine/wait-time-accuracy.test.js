@@ -163,14 +163,14 @@ describe('avgWait comparison — with vs. without in-progress', () => {
 // ── Test 4: Little's Law gate produces reasonable discrepancy ────────────────
 
 describe('Little\'s Law validation gate', () => {
-  test('summary has avgWaitByLittle and waitDiscrepancy fields', () => {
+  test('summary has avgTimeInSystemByLittle and waitDiscrepancy fields', () => {
     const engine = buildEngine(truncatedModel(15), 42, 0, 15);
     const result = engine.runAll();
-    expect(result.summary).toHaveProperty('avgWaitByLittle');
+    expect(result.summary).toHaveProperty('avgTimeInSystemByLittle');
     expect(result.summary).toHaveProperty('waitDiscrepancy');
   });
 
-  test('Little\'s Law estimate is within 50% of avgWait for a stable model', () => {
+  test('Little\'s Law estimate (L/λ) matches measured time in system for a stable model', () => {
     // Run a standard M/M/1 to steady state
     const model = {
       entityTypes: [
@@ -193,12 +193,12 @@ describe('Little\'s Law validation gate', () => {
     };
     const engine = buildEngine(model, 42, 100, 1100); // 100 warmup, 1000 run
     const result = engine.runAll();
-    expect(result.summary.avgWaitByLittle).not.toBeNull();
-    if (result.summary.avgWait != null && result.summary.avgWaitByLittle != null) {
-      const pctDiff = Math.abs(result.summary.avgWait - result.summary.avgWaitByLittle) / result.summary.avgWaitByLittle * 100;
-      // For a long stable run, Little's Law should agree within 50%
-      expect(pctDiff).toBeLessThan(50);
-    }
+    // L counts entities waiting AND in service, so L/λ is time in system —
+    // it must be compared with sojourn, not with queue wait alone.
+    const { avgSojourn, avgTimeInSystemByLittle, waitDiscrepancy } = result.summary;
+    expect(avgTimeInSystemByLittle).toBeGreaterThan(0);
+    expect(Math.abs(avgSojourn - avgTimeInSystemByLittle) / avgTimeInSystemByLittle).toBeLessThan(0.1);
+    expect(waitDiscrepancy).toBeLessThan(10);
   });
 });
 
