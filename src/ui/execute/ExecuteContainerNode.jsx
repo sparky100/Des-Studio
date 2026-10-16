@@ -10,6 +10,7 @@
 // whatever the actual level, over an arbitrary, unlabelled stretch of time.
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { formatReadout } from "../shared/utils.js";
 import { EXEC_CARD_HEIGHT } from "./executeLayout.js";
 
 const TREND_W = 138;
@@ -27,8 +28,6 @@ function levelColor(level, capacity, C) {
   if (level >= capacity * 0.85) return C.amber;
   return C.accent;
 }
-
-const fmtLevel = v => (Math.abs(v) >= 10 || Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1));
 
 function fmtSpan(span, unit) {
   const n = span >= 10 ? Math.round(span) : Math.round(span * 10) / 10;
@@ -154,7 +153,7 @@ export function ExecuteContainerNode({ data }) {
   const hi = levels.length ? Math.max(...levels) : 0;
   const scaleMax = hasCapacity ? capacity : Math.max(hi, 1);
   const shownSpan = history.length >= 2 ? history[history.length - 1].clock - history[0].clock : 0;
-  const caption = `last ${fmtSpan(shownSpan, live?.timeUnit)} · ${lo === hi ? fmtLevel(lo) : `${fmtLevel(lo)}–${fmtLevel(hi)}`}`;
+  const caption = `last ${fmtSpan(shownSpan, live?.timeUnit)} · ${lo === hi ? formatReadout(lo) : `${formatReadout(lo)}–${formatReadout(hi)}`}`;
 
   return (
     <div style={{

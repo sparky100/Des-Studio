@@ -115,6 +115,15 @@ describe("ExecuteCanvas — conditional routing branch state", () => {
     expect(within(screen.getByTestId("switch-strip")).getByText("ON")).toBeInTheDocument();
   });
 
+  test("formats numeric switch values by magnitude", () => {
+    const numModel = { ...model, stateVariables: [{ name: "cost", initialValue: "0" }, { name: "rate", initialValue: "0" }, { name: "share", initialValue: "0" }] };
+    render(<ExecuteCanvas model={numModel} snap={{ ...baseSnap, scalars: { cost: 20387362.034938715, rate: 4.2468, share: 0.37249 } }} animationEnabled={false} />);
+    const strip = within(screen.getByTestId("switch-strip"));
+    expect(strip.getByText("20,387,362")).toBeInTheDocument();
+    expect(strip.getByText("4.2")).toBeInTheDocument();
+    expect(strip.getByText("0.37")).toBeInTheDocument();
+  });
+
   test("omits variables the modeller hid from the Switches panel", () => {
     const curatedModel = {
       ...model,
