@@ -26,7 +26,28 @@ const VALID_EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 type LlmProviderConfig = {
   provider: string; model: string; apiKey: string;
   temperature?: number; rateLimitPerHour?: number; maxTokensPerRun?: number;
+  // Optional stronger model for requests of kind "model_builder" (an app
+  // generating or editing a whole model as one long JSON document), and
+  // its own output ceiling. Unset = every request uses `model` /
+  // `maxTokensPerRun`, exactly as before.
+  buildModel?: string; buildMaxTokensPerRun?: number;
 };
+
+export const MODEL_BUILDER_KIND = "model_builder";
+// A whole generated model (tens of variables, subscripts, equations) plus
+// the reasoning that counts toward max_tokens on 5.x models needs far more
+// than the everyday per-run ceiling (8192 in the live config today).
+export const DEFAULT_BUILD_MAX_TOKENS = 16000;
+
+export function isBuildRequest(request: { kind: string }) {
+  return request.kind === MODEL_BUILDER_KIND;
+}
+
+// The config one request actually runs with: a model_builder request uses
+// buildModel when one is configured; everything else is untouched.
+export function configForRequest(request: { kind: string }, config: LlmProviderConfig): LlmProviderConfig {
+  return isBuildRequest(request) && config.buildModel ? { ...config, model: config.buildModel } : config;
+}
 
 function rateLimitKey(request: Request) {
   return request.headers.get("authorization") || request.headers.get("x-forwarded-for") || "anonymous";
@@ -56,7 +77,7 @@ function normalizeMessages(messages: unknown): LlmMessage[] {
     : [];
 }
 
-function normalizeRequest(body: Record<string, unknown>, config: LlmProviderConfig): LlmProxyRequest | Response {
+export function normalizeRequest(body: Record<string, unknown>, config: LlmProviderConfig): LlmProxyRequest | Response {
   const messages = normalizeMessages(body.messages);
   if (!messages.length) {
     return new Response("At least one LLM message is required", { status: 400, headers: CORS_HEADERS });
@@ -70,10 +91,14 @@ function normalizeRequest(body: Record<string, unknown>, config: LlmProviderConf
       maxTokens: Math.min(Number(body.max_tokens) || 450, 1000), stream: true, responseFormat: "text",
     };
   }
+  const kind = String(body.kind || "narrative");
+  const ceiling = kind === MODEL_BUILDER_KIND
+    ? (config.buildMaxTokensPerRun || DEFAULT_BUILD_MAX_TOKENS)
+    : (config.maxTokensPerRun || 16000);
   return {
     version: String(body.version || "2026-05-05"),
-    kind: String(body.kind || "narrative"), messages,
-    maxTokens: Math.min(Number(body.maxTokens) || Number(body.max_tokens) || 450, config.maxTokensPerRun || 16000),
+    kind, messages,
+    maxTokens: Math.min(Number(body.maxTokens) || Number(body.max_tokens) || 450, ceiling),
     stream: body.stream !== false,
     responseFormat: body.responseFormat === "json" ? "json" : "text",
     effort: VALID_EFFORTS.includes(body.effort as Effort) ? body.effort as Effort : undefined,
@@ -624,8 +649,12 @@ async function loadConfig(): Promise<LlmProviderConfig> {
           const maxTokensPerRun = typeof cfg.maxTokensPerRun === "number" && cfg.maxTokensPerRun > 0
             ? cfg.maxTokensPerRun
             : undefined;
-          console.log("[llm-proxy] config:platform_config", { provider, model, hasApiKey: !!apiKey, apiKeyLen: apiKey.length });
-          return { provider, model, apiKey, temperature, rateLimitPerHour, maxTokensPerRun };
+          const buildModel = typeof cfg.buildModel === "string" && cfg.buildModel.trim() ? cfg.buildModel.trim() : undefined;
+          const buildMaxTokensPerRun = typeof cfg.buildMaxTokensPerRun === "number" && cfg.buildMaxTokensPerRun > 0
+            ? cfg.buildMaxTokensPerRun
+            : undefined;
+          console.log("[llm-proxy] config:platform_config", { provider, model, buildModel, hasApiKey: !!apiKey, apiKeyLen: apiKey.length });
+          return { provider, model, apiKey, temperature, rateLimitPerHour, maxTokensPerRun, buildModel, buildMaxTokensPerRun };
         }
         console.log("[llm-proxy] config:platform_config table has no 'llm' row — falling back to env vars");
       } else {
@@ -659,6 +688,8 @@ Deno.serve(async request => {
       temperature: config.temperature,
       rateLimitPerHour: config.rateLimitPerHour,
       maxTokensPerRun: config.maxTokensPerRun,
+      buildModel: config.buildModel ?? null,
+      buildMaxTokensPerRun: config.buildMaxTokensPerRun ?? DEFAULT_BUILD_MAX_TOKENS,
     }, null, 2), { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
 
@@ -711,7 +742,9 @@ Deno.serve(async request => {
 
   const proxyRequest = normalizeRequest(body, config);
   if (proxyRequest instanceof Response) return proxyRequest;
-  const upstream = await callProvider(proxyRequest, config);
+  const requestConfig = configForRequest(proxyRequest, config);
+  if (requestConfig !== config) console.log("[llm-proxy] build request", { model: requestConfig.model, maxTokens: proxyRequest.maxTokens });
+  const upstream = await callProvider(proxyRequest, requestConfig);
 
   if (!upstream.ok) {
     let detail = "";

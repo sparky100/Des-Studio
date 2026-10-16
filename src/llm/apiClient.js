@@ -284,9 +284,15 @@ export async function streamModelBuilder(systemPrompt, messages = [], { onToken,
   return null;
 }
 
+// Non-streaming: nothing arrives until the whole response is done, so the
+// timeout has to cover the full generation. 150s matches the edge function's
+// own idle limit — 60s was too short once platform_config's buildModel can
+// route these requests to a slower, stronger model.
+export const MODEL_BUILDER_TIMEOUT_MS = 150_000;
+
 export async function callModelBuilder(systemPrompt, messages = [], onComplete, onError, { signal } = {}) {
   const timeout = new AbortController();
-  const timeoutId = setTimeout(() => timeout.abort(), 60_000);
+  const timeoutId = setTimeout(() => timeout.abort(), MODEL_BUILDER_TIMEOUT_MS);
   const combinedSignal = signal
     ? AbortSignal.any([signal, timeout.signal])
     : timeout.signal;

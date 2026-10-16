@@ -16,6 +16,7 @@ import { assertEquals, assertThrows } from "https://deno.land/std@0.224.0/assert
 import {
   mapDeepgramResponseToTranscript, loadTranscriptionKeys, isBlockedHostname, extractReadableContent,
   anthropicModelTraits, buildAnthropicRequest, REASONING_MIN_MAX_TOKENS,
+  normalizeRequest, configForRequest, DEFAULT_BUILD_MAX_TOKENS,
 } from "./index.ts";
 
 function withMockedFetch<T>(handler: (url: string) => Response, fn: () => Promise<T>): Promise<T> {
@@ -337,4 +338,30 @@ Deno.test("buildAnthropicRequest: Opus 4.8 drops temperature but gets no effort 
   assertEquals("temperature" in body, false);
   assertEquals("output_config" in body, false);
   assertEquals(body.max_tokens, 450);
+});
+
+// ── Build model: a stronger model for whole-model generation ───────────────
+
+const BASE_CONFIG = { provider: "anthropic", model: "claude-haiku-5-5", apiKey: "k", maxTokensPerRun: 8192 };
+const msg = [{ role: "user", content: "hi" }];
+
+Deno.test("configForRequest: model_builder requests use buildModel when one is configured", () => {
+  const config = { ...BASE_CONFIG, buildModel: "claude-sonnet-5-5" };
+  assertEquals(configForRequest({ kind: "model_builder" }, config).model, "claude-sonnet-5-5");
+  assertEquals(configForRequest({ kind: "narrative" }, config).model, "claude-haiku-5-5");
+});
+
+Deno.test("configForRequest: without buildModel every request keeps the shared model", () => {
+  assertEquals(configForRequest({ kind: "model_builder" }, BASE_CONFIG).model, "claude-haiku-5-5");
+});
+
+Deno.test("normalizeRequest: model_builder gets its own token ceiling, not maxTokensPerRun", () => {
+  const build = normalizeRequest({ version: "2026-05-05", kind: "model_builder", messages: msg, maxTokens: 16000 }, BASE_CONFIG);
+  const other = normalizeRequest({ version: "2026-05-05", kind: "narrative", messages: msg, maxTokens: 16000 }, BASE_CONFIG);
+  if (build instanceof Response || other instanceof Response) throw new Error("unexpected Response");
+  assertEquals(build.maxTokens, DEFAULT_BUILD_MAX_TOKENS);
+  assertEquals(other.maxTokens, 8192);
+  const capped = normalizeRequest({ version: "2026-05-05", kind: "model_builder", messages: msg, maxTokens: 30000 }, { ...BASE_CONFIG, buildMaxTokensPerRun: 12000 });
+  if (capped instanceof Response) throw new Error("unexpected Response");
+  assertEquals(capped.maxTokens, 12000);
 });
