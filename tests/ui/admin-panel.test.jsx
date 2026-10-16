@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AdminPanel, buildLlmConfigValue } from '../../src/ui/AdminPanel.jsx';
+import { AdminPanel, buildLlmConfigValue, proxyStatusForDisplay } from '../../src/ui/AdminPanel.jsx';
 import { getPlatformConfig, setPlatformConfig } from '../../src/db/models.js';
 
 // vi.hoisted ensures these values are available when vi.mock factory is called
@@ -154,5 +154,38 @@ describe('LLM settings — model for building models', () => {
     await waitFor(() => expect(setPlatformConfig).toHaveBeenCalled());
     const [, value] = setPlatformConfig.mock.calls[0];
     expect(value).toMatchObject({ model: 'claude-haiku-5-5', buildModel: 'claude-sonnet-5-5', otherAppSetting: 'keep' });
+  });
+});
+
+describe('LLM settings — proxy status check', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('proxyStatusForDisplay never carries an apiKeyPreview, and maps a non-2xx response to an error', () => {
+    const shown = proxyStatusForDisplay({ provider: 'anthropic', hasApiKey: true, apiKeyPreview: 'sk-ant-api03...' });
+    expect(shown).toEqual({ provider: 'anthropic', hasApiKey: true });
+    expect(proxyStatusForDisplay({ error: { message: 'Sign in to use AI features.' } }, { ok: false, status: 401 }))
+      .toEqual({ error: 'Sign in to use AI features.' });
+    expect(proxyStatusForDisplay(null, { ok: false, status: 502 })).toEqual({ error: 'Proxy returned 502' });
+  });
+
+  it.each([
+    [true, 'Key configured'],
+    [false, 'No key configured'],
+  ])('Check Proxy Config shows key status from hasApiKey=%s without any part of the key', async (hasApiKey, label) => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ provider: 'anthropic', model: 'claude-haiku-4-5', hasApiKey, apiKeyPreview: 'sk-ant-SECRET...' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      render(<AdminPanel {...defaultProps} />);
+      fireEvent.click(await screen.findByRole('button', { name: /check proxy config/i }));
+      expect(await screen.findByText(label)).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/functions/v1/llm-proxy'), expect.objectContaining({ method: 'GET' }));
+      expect(document.body.textContent).not.toContain('sk-ant-SECRET');
+      expect(document.body.textContent).not.toContain('apiKeyPreview');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

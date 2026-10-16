@@ -29,6 +29,21 @@ const LLM_PROVIDERS = [
 // fields laid over it, so fields the form doesn't edit (a setting another
 // app's admin panel added, such as buildModel) survive a save. An empty
 // buildModel removes the field, so build requests fall back to `model`.
+// What "Check Proxy Config" shows from llm-proxy's GET status endpoint. The
+// key itself is never shown -- only whether one is configured (hasApiKey).
+// apiKeyPreview is dropped defensively: proxy versions deployed before the
+// caller-auth change returned the key's first 12 characters. A non-2xx
+// response (e.g. 401 when the session has expired) becomes { error }.
+export function proxyStatusForDisplay(data, { ok = true, status } = {}) {
+  if (!ok) {
+    const message = data?.error?.message || (typeof data?.error === "string" ? data.error : null);
+    return { error: message || `Proxy returned ${status ?? "an error"}` };
+  }
+  const display = { ...(data || {}) };
+  delete display.apiKeyPreview;
+  return display;
+}
+
 export function buildLlmConfigValue(stored, { provider, model, temperature, maxTokensPerRun, rateLimitPerHour, buildModel, apiKey }) {
   const value = { ...(stored || {}), provider, model, temperature, maxTokensPerRun, rateLimitPerHour };
   if (buildModel) value.buildModel = buildModel; else delete value.buildModel;
@@ -341,8 +356,9 @@ function AdminPanel({ userId, isAdmin, onClose }) {
         headers["Authorization"] = `Bearer ${accessToken}`;
       }
       const res = await fetch(proxyUrl, { method: "GET", headers });
-      const data = await res.json();
-      setProxyConfig(data);
+      let data = null;
+      try { data = await res.json(); } catch { /* non-JSON body: status alone is reported */ }
+      setProxyConfig(proxyStatusForDisplay(data, { ok: res.ok, status: res.status }));
     } catch (err) {
       setProxyConfig({ error: err.message });
     }
@@ -574,6 +590,11 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                   <div style={{ fontWeight: 700, marginBottom: 4, color: proxyConfig.error ? C.error : C.muted }}>
                     {proxyConfig.error ? "Proxy Error" : "Edge Function Active Config"}
                   </div>
+                  {!proxyConfig.error && (
+                    <div style={{ marginBottom: 4, color: proxyConfig.hasApiKey ? C.green : C.amber }}>
+                      {proxyConfig.hasApiKey ? "Key configured" : "No key configured"}
+                    </div>
+                  )}
                   <pre style={{ margin: 0, whiteSpace: "pre-wrap", color: proxyConfig.error ? C.error : C.text, fontSize: 10 }}>
                     {JSON.stringify(proxyConfig, null, 2)}
                   </pre>
