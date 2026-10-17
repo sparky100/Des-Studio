@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "flow-mcp",
   "display_name": "Flow (simmodlr)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Build, check and run Flow discrete-event simulation models with your AI assistant, on your own computer.",
   "long_description": "Lets your assistant read Flow's model format, validate models with Flow's own validator, run them with Flow's simulation engine (several replications, with 95% confidence intervals and warnings about bottlenecks and overload) and save them as files you open in Flow with + New Model → Import a file. Everything runs on your computer; models are plain JSON files in one folder.",
   "author": {
@@ -40,7 +40,15 @@
     },
     {
       "name": "flow_run_model",
-      "description": "Run a model for several replications and report results with 95% confidence intervals."
+      "description": "Run a model for several replications: results with 95% confidence intervals, routes, goals met or missed."
+    },
+    {
+      "name": "flow_compare_models",
+      "description": "Compare two versions with the same random numbers: which differences are real, which could be chance."
+    },
+    {
+      "name": "flow_run_over_time",
+      "description": "Queue lengths, utilisation and work in progress period by period."
     },
     {
       "name": "flow_save_model",

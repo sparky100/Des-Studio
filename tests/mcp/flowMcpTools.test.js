@@ -122,3 +122,57 @@ describe('schema excerpts', () => {
     expect(sections.map(s => s.title)).toEqual(['A', 'B']);
   });
 });
+
+import { goalLines, routeLines, compareRuns, periodAverages, summariseOverTime } from '../../mcp/src/tools.js';
+
+describe('goals, routes, comparison and time series (v0.2)', () => {
+  const settings = { replications: 3, maxSimTime: 480, warmupPeriod: 0, baseSeed: 1 };
+
+  test('goals are evaluated per replication with Flow’s goal code: value, CI, target, met count', () => {
+    const model = { timeUnit: 'minutes', queues: [], entityTypes: [], goals: [{ label: 'Wait under 10', metric: 'summary.avgWait', operator: '<', target: 10 }] };
+    const reps = [8, 9, 12].map(w => ({ summary: { avgWait: w } }));
+    const [, title, line] = goalLines(model, reps);
+    expect(title).toBe('Goals:');
+    expect(line).toMatch(/^- ~ Wait under 10: 9\.67 minutes \(95% CI .*minutes\) vs target < 10 minutes — met in 2 of 3 replications$/);
+    expect(goalLines({ goals: [] }, reps)).toEqual([]);
+  });
+
+  test('routes are listed only when there is more than one way to finish', () => {
+    const one = [{ summary: { outcomes: { a: { routeLabel: 'Done', status: 'completed', count: 5, avgSojourn: 3 } } } }];
+    expect(routeLines(one, 'minutes')).toEqual([]);
+    const two = [{ summary: { outcomes: { a: { routeLabel: 'Served', status: 'completed', count: 5, avgSojourn: 3 }, b: { routeLabel: 'Gave up', status: 'reneged', count: 2, avgSojourn: 9 } } } }];
+    const lines = routeLines(two, 'minutes');
+    expect(lines).toContain('- Gave up (reneged): 2; average time in system 9 minutes');
+  });
+
+  test('comparison separates real differences from chance, with paired CIs on B − A', () => {
+    const model = { timeUnit: 'minutes', queues: [], entityTypes: [] };
+    const rep = (wait, total) => ({ summary: { total, served: total, servedRatio: 1, avgWait: wait, avgTimeInSystem: wait + 5 } });
+    const runA = { results: [rep(60, 100), rep(55, 104), rep(65, 98), rep(58, 101)], failures: [] };
+    const runB = { results: [rep(10, 101), rep(12, 99), rep(9, 103), rep(11, 100)], failures: [] };
+    const text = compareRuns(model, model, { ...settings, replications: 4 }, runA, runB, { a: '1 nurse', b: '2 nurses' });
+    expect(text).toMatch(/Compared "1 nurse" \(A\) and "2 nurses" \(B\): 4 paired replications/);
+    const real = text.split('Could be chance')[0];
+    expect(real).toMatch(/Average wait: A 59\.5 minutes → B 10\.5 minutes; difference -49 minutes \(95% CI -\d+(\.\d+)? to -\d+(\.\d+)? minutes\)/);
+    expect(text.split('Could be chance')[1]).toMatch(/Arrived/);
+  });
+
+  test('period averages are time-weighted over a step series', () => {
+    // 0 until t=5, then 10 until the end (t=10): two periods of 5 → [0, 10]; one period → 5.
+    const samples = [{ t: 0, v: 0 }, { t: 5, v: 10 }];
+    expect(periodAverages(samples, s => s.v, 0, 10, 2)).toEqual([0, 10]);
+    expect(periodAverages(samples, s => s.v, 0, 10, 1)).toEqual([5]);
+  });
+
+  test('over-time table: queues, % busy, WIP per period, averaged across replications', () => {
+    const model = { timeUnit: 'minutes', queues: [{ name: 'Triage' }], entityTypes: [{ name: 'Nurse', role: 'server' }] };
+    const series = (q) => [
+      { t: 0, byQueue: { Triage: { waiting: 0 } }, byType: { Nurse: { busy: 1, total: 2, failed: 0 } }, wip: 1 },
+      { t: 240, byQueue: { Triage: { waiting: q } }, byType: { Nurse: { busy: 2, total: 2, failed: 0 } }, wip: q + 2 },
+    ];
+    const text = summariseOverTime(model, settings, { results: [{ timeSeries: series(10) }, { timeSeries: series(20) }] }, 2);
+    expect(text).toMatch(/average of 2 replications, 2 equal periods of 240 minutes/);
+    expect(text).toMatch(/Waiting in Triage\s+0\s+15/);
+    expect(text).toMatch(/Nurse busy %\s+50\s+100/);
+  });
+});

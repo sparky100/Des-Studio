@@ -32,10 +32,10 @@ const call = async (name, args = {}) => {
   return { text: res.content.map(c => c.text).join('\n'), isError: !!res.isError };
 };
 
-test('lists the six tools and the build_model prompt, with workflow instructions', async () => {
+test('lists the eight tools and the build_model prompt, with workflow instructions', async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map(t => t.name).sort(), [
-    'flow_get_schema', 'flow_list_models', 'flow_read_model', 'flow_run_model', 'flow_save_model', 'flow_validate_model',
+    'flow_compare_models', 'flow_get_schema', 'flow_list_models', 'flow_read_model', 'flow_run_model', 'flow_run_over_time', 'flow_save_model', 'flow_validate_model',
   ]);
   const { prompts } = await client.listPrompts();
   assert.deepEqual(prompts.map(p => p.name), ['build_model']);
@@ -125,4 +125,31 @@ test('launched as the desktop extension with no folder set, it uses Documents/Fl
     await ext.close();
     await rm(home, { recursive: true, force: true });
   }
+});
+
+test('run reports the model\'s goals and how entities finished', async () => {
+  const res = await call('flow_run_model', { model: bikeShop, replications: 3, maxSimTime: 600 });
+  assert.match(res.text, /How entities finished/);
+  assert.match(res.text, /Goals:\n- [✓✗~] Staff utilisation under 90%: [\d.]+% \(95% CI/);
+  assert.match(res.text, /met in (every replication|\d of 3 replications)|missed in every replication/);
+});
+
+test('compare runs two versions on the same random numbers and separates real differences from chance', async () => {
+  const more = structuredClone(bikeShop);
+  for (const e of more.model_json.entityTypes) if (e.name === 'Staff') e.count += 2;
+  const res = await call('flow_compare_models', { modelA: bikeShop, modelB: more, labelA: '3 staff', labelB: '5 staff', replications: 4, maxSimTime: 600 });
+  assert.equal(res.isError, false, res.text);
+  assert.match(res.text, /Compared "3 staff" \(A\) and "5 staff" \(B\): 4 paired replications/);
+  assert.match(res.text, /Real differences/);
+  assert.match(res.text, /Staff: share of time busy: A [\d.]+% → B [\d.]+%/);
+  assert.match(res.text, /Goals in A:/);
+});
+
+test('over time gives a period-by-period table', async () => {
+  const res = await call('flow_run_over_time', { model: bikeShop, replications: 2, maxSimTime: 600, periods: 4 });
+  assert.equal(res.isError, false, res.text);
+  assert.match(res.text, /average of 2 replications, 4 equal periods of 150 minutes/);
+  assert.match(res.text, /0–150\s+150–300\s+300–450\s+450–600/);
+  assert.match(res.text, /Staff busy %/);
+  assert.match(res.text, /Waiting in Repair Queue/);
 });
