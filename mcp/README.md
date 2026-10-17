@@ -62,7 +62,7 @@ The assistant then:
 
 In Flow, choose **+ New Model → Import a file** and pick that file.
 
-To improve an existing model, export it from Flow into the models folder and ask, for example: "Open *Bike shop.json*. Why is the repair queue so long, and what would fix it?"
+To improve an existing model, export it from Flow into the models folder and ask, for example: "Open *Bike shop.json*. Why is the repair queue so long, and what would fix it?" The assistant can see when the queue builds (`flow_run_over_time`) and check whether a fix really helps (`flow_compare_models`).
 
 If your app shows MCP prompts, there is also a **build_model** prompt that asks for a description of the system.
 
@@ -74,7 +74,9 @@ If your app shows MCP prompts, there is also a **build_model** prompt that asks 
 | `flow_list_models` | Model files in the folder |
 | `flow_read_model` | A model file's JSON |
 | `flow_validate_model` | Flow's validator: errors (block running) and warnings, with rule codes |
-| `flow_run_model` | Several replications (default 10, max 50) with 95% CIs; queues, utilisation, things to check |
+| `flow_run_model` | Several replications (default 10, max 50) with 95% CIs; queues, utilisation, how entities finished, the model's goals (met in how many replications), things to check |
+| `flow_compare_models` | Two versions with the same random numbers (default 20 paired replications); each difference with a paired 95% CI, split into real differences and ones that could be chance |
+| `flow_run_over_time` | Waiting per queue, % busy per resource, work in progress and container levels, period by period (default 8 periods, averaged over 5 replications) |
 | `flow_save_model` | Saves a Flow export file; refuses a model with errors unless asked; never overwrites unless asked |
 
 ## For maintainers

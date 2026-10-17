@@ -6886,8 +6886,8 @@ var require_formats = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatNames = exports.fastFormats = exports.fullFormats = void 0;
-    function fmtDef(validate2, compare) {
-      return { validate: validate2, compare };
+    function fmtDef(validate2, compare2) {
+      return { validate: validate2, compare: compare2 };
     }
     exports.fullFormats = {
       // date: http://tools.ietf.org/html/rfc3339#section-5.6
@@ -22031,6 +22031,86 @@ var SUMMARY_METRICS = [
   // absent metric yields an empty CI, same as totalCost on cost-free models.
   "summary.servedQuantity"
 ];
+var CONTAINER_METRIC_KEY = { minLevel: "min", maxLevel: "max", avgLevel: "avg", finalLevel: "final" };
+function scopedGoalKey(metric, scope) {
+  if (!scope) return null;
+  if (scope.type === "queue") return `queue.${metric.replace("summary.", "")}.${scope.id}`;
+  if (scope.type === "resource") {
+    if (metric === "resource.quantityProcessed") return `resource.quantityProcessed.${scope.name || scope.id}`;
+    return `resource.utilisation.${scope.name || scope.id}`;
+  }
+  if (scope.type === "container") return `container.${metric.replace("container.", "")}.${scope.name || scope.id}`;
+  return null;
+}
+function pairedTConfidenceInterval(a = [], b = []) {
+  const droppedCount = Math.abs(a.length - b.length);
+  const truncated = droppedCount > 0;
+  const n = Math.min(a.length, b.length);
+  if (n < 2) return { n, meanDiff: null, lower: null, upper: null, halfWidth: null, truncated, droppedCount };
+  const diffs = [];
+  for (let i = 0; i < n; i++) {
+    if (Number.isFinite(a[i]) && Number.isFinite(b[i])) {
+      diffs.push(a[i] - b[i]);
+    }
+  }
+  const m = diffs.length;
+  if (m < 2) return { n: m, meanDiff: null, lower: null, upper: null, halfWidth: null, truncated, droppedCount };
+  const diffMean = diffs.reduce((s, d) => s + d, 0) / m;
+  const variance = diffs.reduce((s, d) => s + (d - diffMean) ** 2, 0) / (m - 1);
+  const halfWidth = tCritical95(m - 1) * Math.sqrt(variance) / Math.sqrt(m);
+  return {
+    n: m,
+    meanDiff: diffMean,
+    lower: diffMean - halfWidth,
+    upper: diffMean + halfWidth,
+    halfWidth,
+    pValue: null,
+    // could add t-distribution CDF lookup if needed
+    truncated,
+    // true when scenarioA/scenarioB had unequal replication counts — droppedCount pairs from the longer array were excluded
+    droppedCount
+  };
+}
+function bonferroniCI(comparisons = [], alpha = 0.05) {
+  const m = comparisons.length;
+  if (m === 0) return [];
+  const correctedAlpha = alpha / m;
+  return comparisons.map((c) => {
+    if (c.meanDiff == null || c.halfWidth == null || c.n < 2) {
+      return { ...c, correctedAlpha, significant95: false, significant99: false, bonferroniHalfWidth: null };
+    }
+    const df = c.n - 1;
+    const baseT = tCritical95(df);
+    const correctedT = tCriticalBonferroni(df, m);
+    const bonferroniHalfWidth = c.halfWidth * (correctedT / baseT);
+    const lower95 = c.meanDiff - bonferroniHalfWidth;
+    const upper95 = c.meanDiff + bonferroniHalfWidth;
+    const significant95 = lower95 > 0 || upper95 < 0;
+    const alpha99 = 0.01 / m;
+    const correctedT99 = tCriticalBonferroni(df, m, 0.01);
+    const halfWidth99 = c.halfWidth * (correctedT99 / baseT);
+    const lower99 = c.meanDiff - halfWidth99;
+    const upper99 = c.meanDiff + halfWidth99;
+    const significant99 = lower99 > 0 || upper99 < 0;
+    return {
+      ...c,
+      correctedAlpha,
+      bonferroniHalfWidth,
+      significant95,
+      significant99,
+      correctedLower: lower95,
+      correctedUpper: upper95
+    };
+  });
+}
+function tCriticalBonferroni(df, m, alpha = 0.05) {
+  const baseT = tCritical95(df);
+  if (m <= 1) return baseT;
+  const targetAlpha = alpha / m;
+  const ratio = Math.log(targetAlpha) / Math.log(alpha);
+  const multiplier = Math.sqrt(ratio);
+  return baseT * Math.max(1, multiplier);
+}
 var ENTITY_SUMMARY_TYPE_LIMIT = 12;
 function summarizeEntitySummary(entitySummary = []) {
   const byStatus = {};
@@ -31783,10 +31863,147 @@ function buildKpis(model = {}, results = {}) {
   }
   return kpis;
 }
+function resolveWaitDistEntry(waitDist, scopeName, scopeId) {
+  if (!waitDist || typeof waitDist !== "object") return null;
+  if (Array.isArray(waitDist)) return waitDist.find((w) => w.queueId === scopeId || w.queue === scopeId || w.label === scopeName) ?? null;
+  return waitDist[scopeName] || waitDist[scopeId] || Object.values(waitDist).find((w) => w.queueId === scopeId || w.queue === scopeId) || null;
+}
+function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}) {
+  const aggKey = scopedGoalKey(metric, scope);
+  if (aggKey && aggregateStats[aggKey]?.mean != null) return aggregateStats[aggKey].mean;
+  if (scope?.type === "queue") {
+    const qId = scope.id;
+    if (metric === "summary.quantityThrough") {
+      const byQ = summary.quantityThroughByQueue || {};
+      return byQ[scope.name] ?? byQ[qId] ?? (summary.servedQuantity !== void 0 ? 0 : null);
+    }
+    if (metric === "summary.maxWIP") {
+      const maxLengths = summary.runtimeMetrics?.max_queue_length_by_queue;
+      if (maxLengths && typeof maxLengths === "object") {
+        if (maxLengths[scope.name] != null) return maxLengths[scope.name];
+        const needle = String(scope.name || "").trim().toLowerCase();
+        const hit = Object.entries(maxLengths).find(([k]) => k.trim().toLowerCase() === needle);
+        if (hit) return hit[1];
+      }
+    }
+    const q = resolveWaitDistEntry(summary.waitDist, scope.name, qId);
+    if (q) {
+      if (metric === "summary.avgWait") return q.mean;
+      if (metric === "summary.served") return q.n;
+      if (metric === "summary.reneged") return q.reneged;
+      if (metric === "summary.avgWIP" || metric === "summary.maxWIP") return q.avgDepth;
+    }
+    if (summary.byQueue?.[qId]) {
+      const bq = summary.byQueue[qId];
+      if (metric === "summary.avgWait") return bq.avgWait;
+      if (metric === "summary.avgWIP" || metric === "summary.maxWIP") return bq.avgWIP;
+    }
+  }
+  if (scope?.type === "resource") {
+    const rName = scope.name || scope.id;
+    if (metric === "resource.quantityProcessed") {
+      return summary.perResource?.[rName]?.quantityProcessed ?? null;
+    }
+    return summary.perResource?.[rName]?.calendarUtilisation ?? summary.perResource?.[rName]?.utilisation ?? null;
+  }
+  if (scope?.type === "container") {
+    const cName = scope.name || scope.id;
+    const rawKey = metric.replace("container.", "");
+    const key = CONTAINER_METRIC_KEY[rawKey] || rawKey;
+    return summary.containerLevels?.[cName]?.[key] ?? null;
+  }
+  return null;
+}
+var GOAL_SUMMARY_KEY = {
+  "summary.avgWait": "avgWait",
+  "summary.avgSvc": "avgSvc",
+  "summary.avgSojourn": "avgSojourn",
+  "summary.avgTimeInSystem": "avgTimeInSystem",
+  "summary.avgWIP": "avgWIP",
+  "summary.maxWIP": "maxWIP",
+  "summary.served": "served",
+  "summary.servedQuantity": "servedQuantity",
+  "summary.servedRatio": "servedRatio",
+  "summary.reneged": "reneged",
+  "summary.balked": "balked",
+  "summary.totalCost": "totalCost",
+  "summary.costPerServed": "costPerServed",
+  avgWait: "avgWait",
+  avgSvc: "avgSvc",
+  avgSojourn: "avgSojourn",
+  avgTimeInSystem: "avgTimeInSystem",
+  avgWIP: "avgWIP",
+  maxWIP: "maxWIP",
+  served: "served",
+  servedRatio: "servedRatio",
+  reneged: "reneged",
+  balked: "balked",
+  totalCost: "totalCost",
+  costPerServed: "costPerServed"
+};
+function resolvePercentileValue(operator, summary = {}, scope) {
+  const p = parseInt(operator.replace("p", ""), 10);
+  if (!p) return null;
+  if (scope?.type === "queue") {
+    const q = resolveWaitDistEntry(summary.waitDist, scope.name, scope.id);
+    if (q) return q[`p${p}`] ?? null;
+  }
+  const wdEntries = summary.waitDist && typeof summary.waitDist === "object" && !Array.isArray(summary.waitDist) ? Object.values(summary.waitDist) : Array.isArray(summary.waitDist) ? summary.waitDist : [];
+  const allValues = wdEntries.flatMap((w) => w.values || []);
+  if (!allValues.length) return null;
+  allValues.sort((a, b) => a - b);
+  const idx = Math.ceil(p / 100 * allValues.length) - 1;
+  return allValues[Math.max(0, idx)] ?? null;
+}
+function buildGoalGapsFromResults(model = {}, results = {}) {
+  return buildGoalGaps(model, results.aggregateStats || {}, {
+    ...getSummary(results),
+    waitDist: results?.waitDist,
+    runtimeMetrics: results?.runtimeMetrics
+  });
+}
+function buildGoalGaps(model = {}, aggregateStats = {}, summary = {}) {
+  const goals = model.goals || [];
+  if (!goals.length) return null;
+  return goals.filter((g) => g.metric && g.target != null).map((g) => {
+    const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
+    let current = null;
+    if (isPercentile) {
+      current = finiteOrNull(resolvePercentileValue(g.operator, summary, g.scope));
+    } else if (g.scope) {
+      current = finiteOrNull(resolveScopedGoalValue(g.metric, g.scope, aggregateStats, summary));
+    } else {
+      current = finiteOrNull(aggregateStats[g.metric]?.mean) ?? finiteOrNull(summary[GOAL_SUMMARY_KEY[g.metric] ?? g.metric]);
+    }
+    const target = parseFloat(g.target);
+    const op = g.operator || "<";
+    let met = false;
+    if (current != null) {
+      if (isPercentile) {
+        met = current < target;
+      } else if (op === "<") met = current < target;
+      else if (op === "<=") met = current <= target;
+      else if (op === ">") met = current > target;
+      else if (op === ">=") met = current >= target;
+      else if (op === "==") met = Math.abs(current - target) < 1e-3;
+    }
+    const gap = current != null ? +(current - target).toFixed(1) : null;
+    return {
+      metric: g.metric,
+      label: g.label || (g.scope?.name ? `${g.scope.name} \u2014 ${g.metric} ${op} ${target}` : `${g.metric} ${op} ${target}`),
+      scope: g.scope || null,
+      operator: op,
+      target,
+      current,
+      gap,
+      met
+    };
+  });
+}
 var STUDY_PROPOSAL_OBJECTIVE_RULE = `Only propose an objective metric from this fixed list of summary metric fields: ${SUMMARY_METRIC_FIELDS.join(", ")}. objective.metricRef must be exactly { "kind": "summary", "field": "<one of those>" }, or objective may be null if no single metric should be optimised.`;
 
 // src/tools.js
-var VERSION = "0.1.0";
+var VERSION = "0.2.0";
 var DEFAULT_REPLICATIONS = 10;
 var MAX_REPLICATIONS = 50;
 var RUN_BUDGET_MS = 9e4;
@@ -31908,7 +32125,7 @@ function runSettings(model, args = {}) {
     terminationCondition: ed.terminationMode === "condition" ? ed.terminationCondition || null : null
   };
 }
-function runReplicationsSync(model, settings, { budgetMs = RUN_BUDGET_MS, now = Date.now } = {}) {
+function runReplicationsSync(model, settings, { budgetMs = RUN_BUDGET_MS, now = Date.now, collectTimeSeries = false } = {}) {
   const estimate = estimateRunComplexity(model, { maxSimTime: settings.maxSimTime, replications: 1 });
   const maxCycles = estimateMaxCycles(estimate);
   const started = now();
@@ -31918,7 +32135,7 @@ function runReplicationsSync(model, settings, { budgetMs = RUN_BUDGET_MS, now = 
     if (i > 0 && now() - started > budgetMs) break;
     const seed = settings.baseSeed + i;
     try {
-      const engine = buildEngine(model, seed, settings.warmupPeriod, settings.maxSimTime, settings.terminationCondition, maxCycles);
+      const engine = buildEngine(model, seed, settings.warmupPeriod, settings.maxSimTime, settings.terminationCondition, maxCycles, 5e3, collectTimeSeries);
       results.push(engine.runAll());
     } catch (e) {
       failures.push({ seed, message: e?.message || String(e) });
@@ -31997,6 +32214,8 @@ function summariseRun(model, settings, run2) {
       if (util2.mean != null && util2.mean >= 0.95) busy.push({ name: rName, util: util2.mean });
     }
   }
+  lines.push(...routeLines(results, timeUnit));
+  lines.push(...goalLines(model, results));
   const checks = [];
   for (const b of busy) {
     checks.push(`${b.name} is busy ${Math.round(b.util * 100)}% of the time \u2014 a bottleneck. Queues feeding it will keep growing in a longer run; add capacity or reduce demand before reading waits as typical.`);
@@ -32023,6 +32242,50 @@ function summariseRun(model, settings, run2) {
   if (checks.length) lines.push("", "Things to check:", ...checks.map((c) => `- ${c}`));
   return lines.join("\n");
 }
+function routeLines(results, timeUnit) {
+  const labels = /* @__PURE__ */ new Map();
+  for (const r of results) {
+    for (const o of Object.values(r.summary?.outcomes || {})) {
+      if (!labels.has(o.routeLabel)) labels.set(o.routeLabel, { status: o.status });
+    }
+  }
+  if (labels.size < 2 && [...labels.values()].every((l) => l.status === "completed")) return [];
+  const lines = ["", "How entities finished (per replication):"];
+  for (const [label, { status }] of labels) {
+    const pick2 = (f) => results.map((r) => Object.values(r.summary?.outcomes || {}).find((o) => o.routeLabel === label)?.[f] ?? (f === "count" ? 0 : null));
+    const count = confidenceInterval95(pick2("count"));
+    const sojourn = confidenceInterval95(pick2("avgSojourn"));
+    lines.push(`- ${label}${status && status !== "completed" ? ` (${status})` : ""}: ${fmtCi(count)}${sojourn.mean != null ? `; average time in system ${fmt(sojourn.mean)} ${timeUnit}` : ""}`);
+  }
+  return lines;
+}
+var SHARE_METRIC = /utili[sz]ation|ratio|rate|share|pct|percent/i;
+var TIME_METRIC = /wait|sojourn|timeInSystem|avgSvc|service/i;
+function goalLines(model, results) {
+  if (!(model.goals || []).length || results.length === 0) return [];
+  const perRep = results.map((r) => buildGoalGapsFromResults(model, r) || []);
+  const goals = perRep[0];
+  if (!goals.length) return [];
+  const lines = ["", "Goals:"];
+  goals.forEach((g, i) => {
+    const values = perRep.map((rep) => rep[i]?.current);
+    const ci = confidenceInterval95(values);
+    const metCount = perRep.filter((rep) => rep[i]?.met).length;
+    const asShare = SHARE_METRIC.test(g.metric) && Math.abs(g.target) <= 1;
+    const unit = TIME_METRIC.test(g.metric) && model.timeUnit ? ` ${model.timeUnit}` : "";
+    const bare = (v) => asShare ? fmt(v * 100) : fmt(v);
+    const suffix = asShare ? "%" : unit;
+    const show = (v) => `${bare(v)}${suffix}`;
+    if (ci.mean == null) {
+      lines.push(`- ${g.label}: can't be evaluated from this run`);
+      return;
+    }
+    const value = ci.lower == null ? show(ci.mean) : `${show(ci.mean)} (95% CI ${bare(Math.max(0, ci.lower))}\u2013${bare(ci.upper)}${suffix})`;
+    const verdict = metCount === results.length ? "met in every replication" : metCount === 0 ? "missed in every replication" : `met in ${metCount} of ${results.length} replications`;
+    lines.push(`- ${metCount === results.length ? "\u2713" : metCount === 0 ? "\u2717" : "~"} ${g.label}: ${value} vs target ${g.operator} ${show(g.target)} \u2014 ${verdict}`);
+  });
+  return lines;
+}
 async function run(args, folder) {
   const { model } = await modelFrom(args, folder);
   const { errors, text: text2 } = validationReport(model);
@@ -32030,6 +32293,170 @@ async function run(args, folder) {
 ${text2}`;
   const settings = runSettings(model, args);
   return summariseRun(model, settings, runReplicationsSync(model, settings));
+}
+function comparableMetrics(model, results, timeUnit) {
+  const metrics = /* @__PURE__ */ new Map();
+  for (const [key, label, isTime] of KPI_ROWS) {
+    metrics.set(key, { label, unit: isTime ? timeUnit : "", share: key === "summary.servedRatio", values: results.map((r) => r.summary?.[key.split(".")[1]]) });
+  }
+  const perRep = results.map((r) => buildKpis(model, r));
+  for (const q of perRep[0]?.queues || []) {
+    metrics.set(`queue:${q.name}`, { label: `${q.name}: average wait`, unit: timeUnit, values: perRep.map((k) => k.queues?.find((x) => x.name === q.name)?.meanWait) });
+  }
+  for (const res of perRep[0]?.resources || []) {
+    metrics.set(`resource:${res.name}`, { label: `${res.name}: share of time busy`, share: true, values: perRep.map((k) => {
+      const u = k.resources?.find((x) => x.name === res.name)?.utilisation;
+      return u == null ? null : u / 100;
+    }) });
+  }
+  return metrics;
+}
+function compareRuns(modelA, modelB, settings, runA, runB, labels = { a: "A", b: "B" }) {
+  const timeUnit = modelA.timeUnit || "time units";
+  const n = Math.min(runA.results.length, runB.results.length);
+  const lines = [`Compared "${labels.a}" (A) and "${labels.b}" (B): ${n} paired replications of ${fmt(settings.maxSimTime)} ${timeUnit} each, same random numbers in both (seeds ${settings.baseSeed}\u2013${settings.baseSeed + n - 1}), A's run settings for both.`];
+  for (const [tag, run2] of [["A", runA], ["B", runB]]) {
+    if (run2.failures.length) lines.push(`${tag}: ${run2.failures.length} replication(s) failed: ${[...new Set(run2.failures.map((f) => f.message))].slice(0, 2).join(" | ")}`);
+  }
+  if (n < 2) {
+    lines.push("Need at least 2 replications of each to compare.");
+    return lines.join("\n");
+  }
+  const mA = comparableMetrics(modelA, runA.results.slice(0, n), timeUnit);
+  const mB = comparableMetrics(modelB, runB.results.slice(0, n), timeUnit);
+  const rows = [];
+  for (const [key, a] of mA) {
+    const b = mB.get(key);
+    if (!b) continue;
+    const ca = confidenceInterval95(a.values);
+    const cb = confidenceInterval95(b.values);
+    if (ca.mean == null || cb.mean == null) continue;
+    if (!ca.mean && !cb.mean) continue;
+    rows.push({ key, a, ca, cb, ci: pairedTConfidenceInterval(b.values, a.values) });
+  }
+  const corrected = bonferroniCI(rows.map((r) => r.ci), 0.05);
+  const show = (v, row) => row.a.share ? `${fmt(v * 100)}%` : `${fmt(v)}${row.a.unit ? ` ${row.a.unit}` : ""}`;
+  const signed = (v, row) => `${v > 0 ? "+" : ""}${fmt(row.a.share ? v * 100 : v)}`;
+  const unitOf = (row) => row.a.share ? " points" : row.a.unit ? ` ${row.a.unit}` : "";
+  const showDiff = (v, row) => `${signed(v, row)}${unitOf(row)}`;
+  const real = [];
+  const chance = [];
+  rows.forEach((row, i) => {
+    const c = corrected[i];
+    const line = `- ${row.a.label}: A ${show(row.ca.mean, row)} \u2192 B ${show(row.cb.mean, row)}`;
+    if (c.meanDiff == null) {
+      chance.push(`${line} (no spread to test)`);
+      return;
+    }
+    const interval = c.correctedLower != null ? ` (95% CI ${signed(c.correctedLower, row)} to ${signed(c.correctedUpper, row)}${unitOf(row)})` : "";
+    const text2 = `${line}; difference ${showDiff(c.meanDiff, row)}${interval}`;
+    (c.significant95 ? real : chance).push(text2);
+  });
+  lines.push("", "Real differences (the interval excludes zero, after correcting for comparing several measures at once):", ...real.length ? real : ["- none"]);
+  lines.push("", "Could be chance (the interval includes zero \u2014 run more replications to tell):", ...chance.length ? chance : ["- none"]);
+  const goalsA = goalLines(modelA, runA.results.slice(0, n));
+  const goalsB = goalLines(modelB, runB.results.slice(0, n));
+  if (goalsA.length) lines.push("", "Goals in A:", ...goalsA.slice(2));
+  if (goalsB.length) lines.push("", "Goals in B:", ...goalsB.slice(2));
+  return lines.join("\n");
+}
+async function compare(args, folder) {
+  const a = await modelFrom({ model: args.modelA, file: args.fileA }, folder);
+  const b = await modelFrom({ model: args.modelB, file: args.fileB }, folder);
+  for (const [tag, m] of [["A", a], ["B", b]]) {
+    const { errors, text: text2 } = validationReport(m.model);
+    if (errors.length) return `Not run \u2014 version ${tag} has errors.
+${text2}`;
+  }
+  const settings = runSettings(a.model, { replications: 20, ...args });
+  const half = { budgetMs: RUN_BUDGET_MS / 2 };
+  const runA = runReplicationsSync(a.model, settings, half);
+  const runB = runReplicationsSync(b.model, { ...settings, replications: runA.results.length || settings.replications }, half);
+  return compareRuns(a.model, b.model, settings, runA, runB, { a: args.labelA || a.name || "A", b: args.labelB || b.name || "B" });
+}
+var DEFAULT_PERIODS = 8;
+function periodAverages(samples, read, start, end, periods) {
+  const width = (end - start) / periods;
+  const sums = new Array(periods).fill(0);
+  const covered = new Array(periods).fill(0);
+  for (let i = 0; i < samples.length; i++) {
+    const v = read(samples[i]);
+    if (typeof v !== "number" || !Number.isFinite(v)) continue;
+    const t0 = Math.max(start, samples[i].t);
+    const t1 = Math.min(end, i + 1 < samples.length ? samples[i + 1].t : end);
+    if (t1 <= t0) continue;
+    for (let k = Math.max(0, Math.floor((t0 - start) / width)); k < periods; k++) {
+      const p0 = start + k * width;
+      const p1 = p0 + width;
+      if (p0 >= t1) break;
+      const overlap = Math.min(t1, p1) - Math.max(t0, p0);
+      if (overlap > 0) {
+        sums[k] += v * overlap;
+        covered[k] += overlap;
+      }
+    }
+  }
+  return sums.map((s, k) => covered[k] > 0 ? s / covered[k] : null);
+}
+function cell(v) {
+  if (v == null || !Number.isFinite(v)) return "\u2014";
+  const a = Math.abs(v);
+  if (a < 0.05) return "0";
+  return a >= 10 ? Math.round(v).toLocaleString("en-US") : v.toFixed(1);
+}
+function table(header, rows) {
+  const all = [header, ...rows];
+  const widths = header.map((_, c) => Math.max(...all.map((r) => String(r[c] ?? "").length)));
+  return all.map((r) => r.map((cell2, c) => c === 0 ? String(cell2).padEnd(widths[c]) : String(cell2 ?? "\u2014").padStart(widths[c])).join("  ")).join("\n");
+}
+function summariseOverTime(model, settings, run2, periods = DEFAULT_PERIODS) {
+  const timeUnit = model.timeUnit || "time units";
+  const reps = run2.results.filter((r) => Array.isArray(r.timeSeries) && r.timeSeries.length);
+  if (!reps.length) return "No time series was recorded for this run.";
+  const start = settings.warmupPeriod || 0;
+  const end = settings.maxSimTime;
+  const width = (end - start) / periods;
+  const avg = (read) => {
+    const perRep = reps.map((r) => periodAverages(r.timeSeries, read, start, end, periods));
+    return perRep[0].map((_, k) => {
+      const vals = perRep.map((p) => p[k]).filter((v) => v != null);
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    });
+  };
+  const rows = [];
+  const queues = (model.queues || []).map((q) => q.name).filter(Boolean).slice(0, 10);
+  for (const q of queues) rows.push([`Waiting in ${q}`, ...avg((s) => s.byQueue?.[q]?.waiting).map(cell)]);
+  const servers = (model.entityTypes || []).filter((e) => e.role === "server").map((e) => e.name).slice(0, 8);
+  for (const sName of servers) {
+    rows.push([`${sName} busy %`, ...avg((s) => {
+      const b = s.byType?.[sName];
+      const avail = b ? b.total - (b.failed || 0) : 0;
+      return avail > 0 ? b.busy / avail * 100 : null;
+    }).map(cell)]);
+  }
+  rows.push(["In system (WIP)", ...avg((s) => s.wip).map(cell)]);
+  for (const c of (model.containerTypes || []).map((c2) => c2.name).filter(Boolean).slice(0, 4)) {
+    rows.push([`${c} level`, ...avg((s) => s.byContainer?.[c]).map(cell)]);
+  }
+  const header = ["", ...Array.from({ length: periods }, (_, k) => `${fmt(start + k * width)}\u2013${fmt(start + (k + 1) * width)}`)];
+  return [
+    `Over time: average of ${reps.length} replication${reps.length === 1 ? "" : "s"}, ${periods} equal periods of ${fmt(width)} ${timeUnit}${start ? ` after a ${fmt(start)} warm-up` : ""}. Each cell is the time-weighted average during that period.`,
+    "",
+    table(header, rows)
+  ].join("\n");
+}
+var MAX_PERIODS = 24;
+async function runOverTime(args, folder) {
+  const { model } = await modelFrom(args, folder);
+  const { errors, text: text2 } = validationReport(model);
+  if (errors.length) return `Not run \u2014 fix these first.
+${text2}`;
+  const settings = runSettings(model, { replications: 5, ...args });
+  const periods = Math.min(MAX_PERIODS, Math.max(2, Math.round(num(args.periods, DEFAULT_PERIODS))));
+  const run2 = runReplicationsSync(model, settings, { collectTimeSeries: true });
+  const failed = run2.failures.length ? `
+${run2.failures.length} replication(s) failed: ${run2.failures[0].message}` : "";
+  return summariseOverTime(model, settings, run2, periods) + failed;
 }
 function safeFileName(name) {
   const cleaned = String(name || "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
@@ -32088,8 +32515,9 @@ var FOLDER = modelsFolder();
 var WORKFLOW = `How to build a Flow model with these tools:
 1. Read the format first: flow_get_schema() gives the generation protocol, the most common mistakes and the list of sections; fetch the sections you need (e.g. "1, 2, 3, 4, 5, 6").
 2. Draft the model JSON, then flow_validate_model. Fix every error and re-validate until there are none.
-3. flow_run_model (10+ replications). Read the results and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't.
-4. flow_save_model with a clear name. Tell the person the file name and that they open it in Flow with + New Model \u2192 Import a file.
+3. flow_run_model (10+ replications). Read the results, goals and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't. To see WHEN queues build or resources saturate, use flow_run_over_time.
+4. To judge a change (an extra server, a new rule), use flow_compare_models rather than two separate runs: it uses the same random numbers in both and says which differences are real and which could be chance.
+5. flow_save_model with a clear name. Tell the person the file name and that they open it in Flow with + New Model \u2192 Import a file.
 Quote results with their confidence intervals, and say which numbers you assumed.`;
 var server = new McpServer(
   { name: "flow", version: VERSION },
@@ -32138,7 +32566,7 @@ server.registerTool("flow_validate_model", {
 }, handler((args) => validate(args, FOLDER)));
 server.registerTool("flow_run_model", {
   title: "Run a Flow model",
-  description: `Run a model with Flow's simulation engine for several replications and report the results with 95% confidence intervals: completions, waits, time in system, per-queue waits, resource utilisation, plus warnings about bottlenecks, overload, noisy results and engine limits. Uses the model's own experiment settings unless overridden. Up to ${MAX_REPLICATIONS} replications.`,
+  description: `Run a model with Flow's simulation engine for several replications and report the results with 95% confidence intervals: completions, waits, time in system, per-queue waits, resource utilisation, how entities finished (by route), the model's goals (met or missed, in how many replications), plus warnings about bottlenecks, overload, noisy results and engine limits. Uses the model's own experiment settings unless overridden. Up to ${MAX_REPLICATIONS} replications.`,
   inputSchema: {
     model: modelArg,
     file: fileArg,
@@ -32149,6 +32577,38 @@ server.registerTool("flow_run_model", {
   },
   annotations: { readOnlyHint: true }
 }, handler((args) => run(args, FOLDER)));
+var runSettingsArgs = {
+  maxSimTime: external_exports.number().positive().optional().describe("Run length in the model's time unit (default: the model's own setting, else 500)"),
+  warmupPeriod: external_exports.number().min(0).optional().describe("Warm-up excluded from results (default: the model's own setting, else 0)"),
+  seed: external_exports.number().int().optional().describe("Base random seed; replication i uses seed + i")
+};
+server.registerTool("flow_compare_models", {
+  title: "Compare two versions of a Flow model",
+  description: "Run two versions (A = current, B = changed) with the same run settings and the same random numbers, and report, for each result, A vs B and the difference with a paired 95% confidence interval, split into real differences and ones that could be chance. Also shows each version's goals. Use this to judge whether a change actually helps.",
+  inputSchema: {
+    modelA: modelArg,
+    fileA: fileArg,
+    labelA: external_exports.string().optional().describe('Short name for A, e.g. "1 nurse"'),
+    modelB: modelArg,
+    fileB: fileArg,
+    labelB: external_exports.string().optional().describe('Short name for B, e.g. "2 nurses"'),
+    replications: external_exports.number().int().min(2).max(MAX_REPLICATIONS).optional().describe("Paired replications (default 20)"),
+    ...runSettingsArgs
+  },
+  annotations: { readOnlyHint: true }
+}, handler((args) => compare(args, FOLDER)));
+server.registerTool("flow_run_over_time", {
+  title: "Flow results over time",
+  description: `Run a model and show how things change through the run: how many are waiting in each queue, how busy each resource is, work in progress and container levels, averaged over each of ${DEFAULT_PERIODS} equal periods (up to ${MAX_PERIODS}) and across replications. Use it to see when queues build up or resources saturate.`,
+  inputSchema: {
+    model: modelArg,
+    file: fileArg,
+    periods: external_exports.number().int().min(2).max(MAX_PERIODS).optional().describe(`Number of equal periods (default ${DEFAULT_PERIODS})`),
+    replications: external_exports.number().int().min(1).max(MAX_REPLICATIONS).optional().describe("Default 5"),
+    ...runSettingsArgs
+  },
+  annotations: { readOnlyHint: true }
+}, handler((args) => runOverTime(args, FOLDER)));
 server.registerTool("flow_save_model", {
   title: "Save a Flow model",
   description: 'Save a model to the Flow models folder as a file Flow can import (+ New Model \u2192 Import a file). Validates first and refuses a model with errors unless allowErrors is true. Never overwrites an existing file unless overwrite is true: it adds " (2)", " (3)"\u2026 instead.',

@@ -1,6 +1,6 @@
 {
   "name": "@simmodlr/flow-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local MCP server for Flow (simmodlr DES): lets an AI assistant check, run and save Flow models on your computer.",
   "type": "module",
   "private": true,

@@ -10,7 +10,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { loadSchemaText, schemaExcerpt } from './schema.js';
-import { VERSION, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, ToolError, listModels, readModel, validate, run, save } from './tools.js';
+import { VERSION, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, DEFAULT_PERIODS, MAX_PERIODS, ToolError, listModels, readModel, validate, run, compare, runOverTime, save } from './tools.js';
 
 function modelsFolder(argv = process.argv.slice(2)) {
   const i = argv.indexOf('--folder');
@@ -27,8 +27,9 @@ const FOLDER = modelsFolder();
 const WORKFLOW = `How to build a Flow model with these tools:
 1. Read the format first: flow_get_schema() gives the generation protocol, the most common mistakes and the list of sections; fetch the sections you need (e.g. "1, 2, 3, 4, 5, 6").
 2. Draft the model JSON, then flow_validate_model. Fix every error and re-validate until there are none.
-3. flow_run_model (10+ replications). Read the results and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't.
-4. flow_save_model with a clear name. Tell the person the file name and that they open it in Flow with + New Model → Import a file.
+3. flow_run_model (10+ replications). Read the results, goals and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't. To see WHEN queues build or resources saturate, use flow_run_over_time.
+4. To judge a change (an extra server, a new rule), use flow_compare_models rather than two separate runs: it uses the same random numbers in both and says which differences are real and which could be chance.
+5. flow_save_model with a clear name. Tell the person the file name and that they open it in Flow with + New Model → Import a file.
 Quote results with their confidence intervals, and say which numbers you assumed.`;
 
 const server = new McpServer(
@@ -83,7 +84,7 @@ server.registerTool('flow_validate_model', {
 
 server.registerTool('flow_run_model', {
   title: 'Run a Flow model',
-  description: `Run a model with Flow's simulation engine for several replications and report the results with 95% confidence intervals: completions, waits, time in system, per-queue waits, resource utilisation, plus warnings about bottlenecks, overload, noisy results and engine limits. Uses the model's own experiment settings unless overridden. Up to ${MAX_REPLICATIONS} replications.`,
+  description: `Run a model with Flow's simulation engine for several replications and report the results with 95% confidence intervals: completions, waits, time in system, per-queue waits, resource utilisation, how entities finished (by route), the model's goals (met or missed, in how many replications), plus warnings about bottlenecks, overload, noisy results and engine limits. Uses the model's own experiment settings unless overridden. Up to ${MAX_REPLICATIONS} replications.`,
   inputSchema: {
     model: modelArg,
     file: fileArg,
@@ -94,6 +95,37 @@ server.registerTool('flow_run_model', {
   },
   annotations: { readOnlyHint: true },
 }, handler(args => run(args, FOLDER)));
+
+const runSettingsArgs = {
+  maxSimTime: z.number().positive().optional().describe('Run length in the model\'s time unit (default: the model\'s own setting, else 500)'),
+  warmupPeriod: z.number().min(0).optional().describe('Warm-up excluded from results (default: the model\'s own setting, else 0)'),
+  seed: z.number().int().optional().describe('Base random seed; replication i uses seed + i'),
+};
+
+server.registerTool('flow_compare_models', {
+  title: 'Compare two versions of a Flow model',
+  description: 'Run two versions (A = current, B = changed) with the same run settings and the same random numbers, and report, for each result, A vs B and the difference with a paired 95% confidence interval, split into real differences and ones that could be chance. Also shows each version\'s goals. Use this to judge whether a change actually helps.',
+  inputSchema: {
+    modelA: modelArg, fileA: fileArg, labelA: z.string().optional().describe('Short name for A, e.g. "1 nurse"'),
+    modelB: modelArg, fileB: fileArg, labelB: z.string().optional().describe('Short name for B, e.g. "2 nurses"'),
+    replications: z.number().int().min(2).max(MAX_REPLICATIONS).optional().describe('Paired replications (default 20)'),
+    ...runSettingsArgs,
+  },
+  annotations: { readOnlyHint: true },
+}, handler(args => compare(args, FOLDER)));
+
+server.registerTool('flow_run_over_time', {
+  title: 'Flow results over time',
+  description: `Run a model and show how things change through the run: how many are waiting in each queue, how busy each resource is, work in progress and container levels, averaged over each of ${DEFAULT_PERIODS} equal periods (up to ${MAX_PERIODS}) and across replications. Use it to see when queues build up or resources saturate.`,
+  inputSchema: {
+    model: modelArg,
+    file: fileArg,
+    periods: z.number().int().min(2).max(MAX_PERIODS).optional().describe(`Number of equal periods (default ${DEFAULT_PERIODS})`),
+    replications: z.number().int().min(1).max(MAX_REPLICATIONS).optional().describe('Default 5'),
+    ...runSettingsArgs,
+  },
+  annotations: { readOnlyHint: true },
+}, handler(args => runOverTime(args, FOLDER)));
 
 server.registerTool('flow_save_model', {
   title: 'Save a Flow model',
