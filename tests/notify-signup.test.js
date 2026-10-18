@@ -1,265 +1,167 @@
 /**
  * tests/notify-signup.test.js
- * Sprint 71 — Unit tests for the notify-new-signup Edge Function handler logic.
- *
- * The edge function uses Deno-specific APIs (Deno.serve, Deno.env.get) which are
- * unavailable in Node.js. This test validates the notification payload construction
- * and handler behaviour through isolated pure-function tests with mocked fetch.
+ * The notify-new-signup Edge Function's request handling
+ * (supabase/functions/notify-new-signup/handler.ts), run directly against a
+ * fake Supabase and Resend. index.ts only wires it to Deno.serve.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
+import {
+  createHandler, isRecentSignup, signupEmail, testEmail, appLabel, DEFAULT_NOTIFY_EMAIL, RECENT_SIGNUP_MS,
+} from '../supabase/functions/notify-new-signup/handler.ts';
 
-// ── Pure helper functions extracted from edge function logic ──────────────────
-// These mirror the functions in supabase/functions/notify-new-signup/index.ts.
+const NOW = Date.parse('2026-10-18T09:00:00Z');
+const URL_ = 'https://proj.supabase.co';
 
-const APP_LABELS = {
-  simmodlr: 'simmodlr',
-  lens: 'Lens',
-  loop: 'Loop',
-};
-
-function appLabel(appName) {
-  if (!appName) return 'Unknown app';
-  return APP_LABELS[appName] ?? (appName.charAt(0).toUpperCase() + appName.slice(1));
+function fakeBackend({ users = {}, roles = {}, tokens = {}, resendOk = true, totalUsers = 20 } = {}) {
+  const notified = new Set();
+  const emails = [];
+  const calls = [];
+  const res = (body, status = 200, headers = {}) => new Response(body == null ? null : JSON.stringify(body), { status, headers });
+  async function fetch(url, init = {}) {
+    const u = new URL(url);
+    const method = init.method || 'GET';
+    calls.push(`${method} ${u.pathname}`);
+    if (u.origin === 'https://api.resend.com') {
+      emails.push(JSON.parse(init.body));
+      return resendOk ? res({ id: 'em_1' }) : new Response('domain not verified', { status: 403 });
+    }
+    if (u.pathname.startsWith('/auth/v1/admin/users/')) {
+      const user = users[decodeURIComponent(u.pathname.split('/').pop())];
+      return user ? res(user) : res({ msg: 'not found' }, 404);
+    }
+    if (u.pathname === '/auth/v1/user') {
+      const token = (init.headers.Authorization || '').replace('Bearer ', '');
+      return tokens[token] ? res(tokens[token]) : res({ msg: 'bad jwt' }, 401);
+    }
+    if (u.pathname === '/rest/v1/profiles' && method === 'HEAD') return res(null, 200, { 'content-range': `0-0/${totalUsers}` });
+    if (u.pathname === '/rest/v1/profiles') {
+      const id = u.searchParams.get('id').replace('eq.', '');
+      return res(roles[id] ? [{ role: roles[id] }] : []);
+    }
+    if (u.pathname === '/rest/v1/signup_notifications' && method === 'POST') {
+      const { user_id } = JSON.parse(init.body);
+      if (notified.has(user_id)) return res([], 201);
+      notified.add(user_id);
+      return res([{ user_id }], 201);
+    }
+    if (u.pathname === '/rest/v1/signup_notifications' && method === 'DELETE') {
+      notified.delete(u.searchParams.get('user_id').replace('eq.', ''));
+      return res(null, 204);
+    }
+    throw new Error(`unexpected ${method} ${url}`);
+  }
+  return { fetch, emails, calls, notified };
 }
 
-function buildEmailPayload(toEmail, userEmail, userId, signupAt, appName) {
-  const signupDate = new Date(signupAt).toUTCString();
-  const app = appLabel(appName);
-  return {
-    from: 'simmodlr <noreply@updates.simmodlr.app>',
-    to: [toEmail],
-    subject: `New signup on ${app}: ${userEmail}`,
-    text: [
-      `New user signup on ${app}`,
-      '',
-      `App:       ${app}`,
-      `Email:     ${userEmail}`,
-      `User ID:   ${userId}`,
-      `Signed up: ${signupDate}`,
-      '',
-      '— simmodlr Operator Notification',
-    ].join('\n'),
-  };
+function handlerWith(backend, env = {}) {
+  const all = { SUPABASE_URL: URL_, SUPABASE_SERVICE_ROLE_KEY: 'service', RESEND_API_KEY: 're_key', ...env };
+  return createHandler({ env: k => all[k], fetch: backend.fetch, now: () => NOW });
 }
 
-function buildSlackPayload(userEmail, signupAt) {
-  const signupDate = new Date(signupAt).toUTCString();
-  return {
-    text: `🎉 New simmodlr signup: *${userEmail}* at ${signupDate}`,
-  };
-}
+const post = (body, headers = {}) => new Request('https://fn/notify-new-signup', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
-function shouldProcess(payload) {
-  return (
-    payload.type === 'INSERT' &&
-    payload.table === 'users' &&
-    payload.schema === 'auth'
-  );
-}
+const newUser = { id: 'u1', email: 'new@example.com', created_at: new Date(NOW - 30_000).toISOString(), user_metadata: {} };
 
-function verifyWebhookSecret(authHeader, expectedSecret) {
-  if (!expectedSecret) return false;
-  return authHeader === `Bearer ${expectedSecret}`;
-}
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
-describe('notify-new-signup — email payload construction', () => {
-  const SIGNUP_AT = '2026-05-20T10:30:00.000Z';
-  const USER_EMAIL = 'newuser@example.com';
-  const USER_ID = 'abc-123-def';
-  const ADMIN_EMAIL = 'admin@operator.com';
-  const APP_NAME = 'simmodlr';
-
-  it('builds correct email subject', () => {
-    const payload = buildEmailPayload(ADMIN_EMAIL, USER_EMAIL, USER_ID, SIGNUP_AT, APP_NAME);
-    expect(payload.subject).toBe(`New signup on simmodlr: ${USER_EMAIL}`);
+describe('a new sign-up', () => {
+  it('emails support@simmodlr.app once, with the user count', async () => {
+    const backend = fakeBackend({ users: { u1: newUser } });
+    const handle = handlerWith(backend);
+    const first = await (await handle(post({ user_id: 'u1' }))).json();
+    expect(first).toEqual({ ok: true, sent: true });
+    expect(backend.emails).toHaveLength(1);
+    expect(backend.emails[0].to).toEqual([DEFAULT_NOTIFY_EMAIL]);
+    expect(backend.emails[0].subject).toBe('New sign-up: new@example.com');
+    expect(backend.emails[0].text).toMatch(/Users now: 20/);
+    // A repeat (a retry, or a forged call) sends nothing.
+    expect(await (await handle(post({ user_id: 'u1' }))).json()).toEqual({ ok: true, skipped: 'already_notified' });
+    expect(backend.emails).toHaveLength(1);
   });
 
-  it('addresses email to admin', () => {
-    const payload = buildEmailPayload(ADMIN_EMAIL, USER_EMAIL, USER_ID, SIGNUP_AT, APP_NAME);
-    expect(payload.to).toEqual([ADMIN_EMAIL]);
+  it('ignores accounts that are not brand new, and unknown ids', async () => {
+    const old = { ...newUser, id: 'u2', created_at: new Date(NOW - RECENT_SIGNUP_MS - 1000).toISOString() };
+    const backend = fakeBackend({ users: { u2: old } });
+    const handle = handlerWith(backend);
+    expect(await (await handle(post({ user_id: 'u2' }))).json()).toEqual({ ok: true, skipped: 'not_recent' });
+    expect(await (await handle(post({ user_id: 'nope' }))).json()).toEqual({ ok: true, skipped: 'unknown_user' });
+    expect(await (await handle(post({}))).json()).toEqual({ ok: true, skipped: 'no_user_id' });
+    expect(backend.emails).toHaveLength(0);
   });
 
-  it('email body contains user email', () => {
-    const payload = buildEmailPayload(ADMIN_EMAIL, USER_EMAIL, USER_ID, SIGNUP_AT, APP_NAME);
-    expect(payload.text).toContain(USER_EMAIL);
+  it('accepts the older webhook payload shape', async () => {
+    const backend = fakeBackend({ users: { u1: newUser } });
+    expect(await (await handlerWith(backend)(post({ type: 'INSERT', record: { id: 'u1' } }))).json()).toEqual({ ok: true, sent: true });
   });
 
-  it('email body contains user ID', () => {
-    const payload = buildEmailPayload(ADMIN_EMAIL, USER_EMAIL, USER_ID, SIGNUP_AT, APP_NAME);
-    expect(payload.text).toContain(USER_ID);
+  it('when the email fails, the claim is released so a retry can send it', async () => {
+    const backend = fakeBackend({ users: { u1: newUser }, resendOk: false });
+    const out = await (await handlerWith(backend)(post({ user_id: 'u1' }))).json();
+    expect(out.ok).toBe(false);
+    expect(out.error).toMatch(/Resend error 403/);
+    expect(backend.notified.has('u1')).toBe(false);
   });
 
-  it('email body contains formatted signup date', () => {
-    const payload = buildEmailPayload(ADMIN_EMAIL, USER_EMAIL, USER_ID, SIGNUP_AT, APP_NAME);
-    const expectedDate = new Date(SIGNUP_AT).toUTCString();
-    expect(payload.text).toContain(expectedDate);
-  });
-
-  it('email body contains operator signature', () => {
-    const payload = buildEmailPayload(ADMIN_EMAIL, USER_EMAIL, USER_ID, SIGNUP_AT, APP_NAME);
-    expect(payload.text).toContain('simmodlr Operator Notification');
-  });
-
-  it('from address is the platform noreply', () => {
-    const payload = buildEmailPayload(ADMIN_EMAIL, USER_EMAIL, USER_ID, SIGNUP_AT, APP_NAME);
-    expect(payload.from).toMatch(/noreply/i);
+  it('uses ADMIN_NOTIFY_EMAIL when set', async () => {
+    const backend = fakeBackend({ users: { u1: newUser } });
+    await handlerWith(backend, { ADMIN_NOTIFY_EMAIL: 'ops@example.com' })(post({ user_id: 'u1' }));
+    expect(backend.emails[0].to).toEqual(['ops@example.com']);
   });
 });
 
-describe('notify-new-signup — appLabel()', () => {
-  it('maps known app names to their display labels', () => {
-    expect(appLabel('simmodlr')).toBe('simmodlr');
-    expect(appLabel('lens')).toBe('Lens');
+describe('a test email from an admin panel', () => {
+  const tokens = { admintok: { id: 'a1', email: 'admin@example.com' }, usertok: { id: 'p1', email: 'p@example.com' } };
+  const roles = { a1: 'admin', p1: 'user' };
+
+  it('is sent for a platform admin', async () => {
+    const backend = fakeBackend({ tokens, roles });
+    const res = await handlerWith(backend)(post({ test: true }, { Authorization: 'Bearer admintok' }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, sent: true, to: DEFAULT_NOTIFY_EMAIL });
+    expect(backend.emails[0].subject).toMatch(/^Test:/);
+    expect(backend.emails[0].text).toMatch(/sent by admin@example.com/);
+  });
+
+  it('is refused for anyone else', async () => {
+    const backend = fakeBackend({ tokens, roles });
+    const handle = handlerWith(backend);
+    expect((await handle(post({ test: true }, { Authorization: 'Bearer usertok' }))).status).toBe(403);
+    expect((await handle(post({ test: true }))).status).toBe(401);
+    expect((await handle(post({ test: true }, { Authorization: 'Bearer forged' }))).status).toBe(401);
+    expect(backend.emails).toHaveLength(0);
+  });
+
+  it('reports a delivery problem so the admin can see it', async () => {
+    const backend = fakeBackend({ tokens, roles, resendOk: false });
+    const res = await handlerWith(backend)(post({ test: true }, { Authorization: 'Bearer admintok' }));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toMatch(/domain not verified/);
+  });
+
+  it('says so when no Resend key is configured', async () => {
+    const backend = fakeBackend({ tokens, roles });
+    const res = await handlerWith(backend, { RESEND_API_KEY: '' })(post({ test: true }, { Authorization: 'Bearer admintok' }));
+    expect((await res.json()).error).toBe('RESEND_API_KEY is not set');
+  });
+});
+
+describe('helpers', () => {
+  it('recent means created within the window', () => {
+    expect(isRecentSignup({ created_at: new Date(NOW - 1000).toISOString() }, NOW)).toBe(true);
+    expect(isRecentSignup({ created_at: new Date(NOW - RECENT_SIGNUP_MS - 1).toISOString() }, NOW)).toBe(false);
+    expect(isRecentSignup({ created_at: 'garbage' }, NOW)).toBe(false);
+  });
+
+  it('names the app when the sign-up recorded one', () => {
     expect(appLabel('loop')).toBe('Loop');
+    expect(appLabel(undefined)).toBeNull();
+    const email = signupEmail({ ...newUser, user_metadata: { app_name: 'loop' } }, 'x@y', null);
+    expect(email.text).toMatch(/\(Loop\)/);
+    expect(email.text).not.toMatch(/Users now/);
+    expect(testEmail('x@y', 'a@b').to).toEqual(['x@y']);
   });
 
-  it('capitalizes unknown app names as a fallback', () => {
-    expect(appLabel('otherapp')).toBe('Otherapp');
-  });
-
-  it('returns "Unknown app" for missing app name', () => {
-    expect(appLabel(undefined)).toBe('Unknown app');
-    expect(appLabel(null)).toBe('Unknown app');
-    expect(appLabel('')).toBe('Unknown app');
-  });
-
-  it('extracts app_name from raw_user_meta_data into the email subject', () => {
-    const record = {
-      id: 'abc-123-def',
-      email: 'newuser@example.com',
-      created_at: '2026-05-20T10:30:00.000Z',
-      raw_user_meta_data: { app_name: 'lens' },
-    };
-    const payload = buildEmailPayload(
-      'admin@operator.com',
-      record.email,
-      record.id,
-      record.created_at,
-      record.raw_user_meta_data.app_name,
-    );
-    expect(payload.subject).toBe(`New signup on Lens: ${record.email}`);
-  });
-});
-
-describe('notify-new-signup — Slack payload construction', () => {
-  const SIGNUP_AT = '2026-05-20T10:30:00.000Z';
-  const USER_EMAIL = 'newuser@example.com';
-
-  it('Slack payload text contains user email', () => {
-    const payload = buildSlackPayload(USER_EMAIL, SIGNUP_AT);
-    expect(payload.text).toContain(USER_EMAIL);
-  });
-
-  it('Slack payload text contains signup date', () => {
-    const payload = buildSlackPayload(USER_EMAIL, SIGNUP_AT);
-    const expectedDate = new Date(SIGNUP_AT).toUTCString();
-    expect(payload.text).toContain(expectedDate);
-  });
-
-  it('Slack payload has text property', () => {
-    const payload = buildSlackPayload(USER_EMAIL, SIGNUP_AT);
-    expect(typeof payload.text).toBe('string');
-    expect(payload.text.length).toBeGreaterThan(0);
-  });
-});
-
-describe('notify-new-signup — webhook event routing', () => {
-  it('processes INSERT on auth.users', () => {
-    expect(shouldProcess({ type: 'INSERT', table: 'users', schema: 'auth' })).toBe(true);
-  });
-
-  it('skips UPDATE events', () => {
-    expect(shouldProcess({ type: 'UPDATE', table: 'users', schema: 'auth' })).toBe(false);
-  });
-
-  it('skips INSERT on other tables', () => {
-    expect(shouldProcess({ type: 'INSERT', table: 'profiles', schema: 'public' })).toBe(false);
-  });
-
-  it('skips INSERT on public.users (not auth schema)', () => {
-    expect(shouldProcess({ type: 'INSERT', table: 'users', schema: 'public' })).toBe(false);
-  });
-});
-
-describe('notify-new-signup — webhook secret verification', () => {
-  it('accepts valid Bearer token', () => {
-    expect(verifyWebhookSecret('Bearer my-secret-123', 'my-secret-123')).toBe(true);
-  });
-
-  it('rejects wrong token', () => {
-    expect(verifyWebhookSecret('Bearer wrong-secret', 'my-secret-123')).toBe(false);
-  });
-
-  it('rejects missing Authorization header', () => {
-    expect(verifyWebhookSecret('', 'my-secret-123')).toBe(false);
-  });
-
-  it('rejects non-Bearer scheme', () => {
-    expect(verifyWebhookSecret('Basic my-secret-123', 'my-secret-123')).toBe(false);
-  });
-
-  it('rejects when WEBHOOK_SECRET is not configured (empty)', () => {
-    expect(verifyWebhookSecret('Bearer anything', '')).toBe(false);
-  });
-
-  it('rejects when WEBHOOK_SECRET is undefined/null', () => {
-    expect(verifyWebhookSecret('Bearer anything', undefined)).toBe(false);
-    expect(verifyWebhookSecret('Bearer anything', null)).toBe(false);
-  });
-});
-
-describe('notify-new-signup — fetch-based send functions', () => {
-  let fetchSpy;
-
-  beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, 'fetch');
-  });
-
-  afterEach(() => {
-    fetchSpy.mockRestore();
-  });
-
-  it('sends Resend API request with correct authorization header', async () => {
-    fetchSpy.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
-
-    const API_KEY = 're_test_key';
-    const payload = buildEmailPayload('admin@test.com', 'user@test.com', 'uid-1', '2026-05-01T00:00:00Z');
-
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const [url, options] = fetchSpy.mock.calls[0];
-    expect(url).toBe('https://api.resend.com/emails');
-    expect(options.method).toBe('POST');
-    expect(options.headers['Authorization']).toBe(`Bearer ${API_KEY}`);
-    const body = JSON.parse(options.body);
-    expect(body.to).toEqual(['admin@test.com']);
-    expect(body.subject).toContain('user@test.com');
-  });
-
-  it('sends Slack POST with JSON text payload', async () => {
-    fetchSpy.mockResolvedValueOnce({ ok: true, text: async () => 'ok' });
-
-    const SLACK_URL = 'https://hooks.slack.com/services/test';
-    const slackPayload = buildSlackPayload('user@test.com', '2026-05-01T00:00:00Z');
-
-    await fetch(SLACK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(slackPayload),
-    });
-
-    const [url, options] = fetchSpy.mock.calls[0];
-    expect(url).toBe(SLACK_URL);
-    expect(options.method).toBe('POST');
-    const body = JSON.parse(options.body);
-    expect(body.text).toContain('user@test.com');
+  it('OPTIONS and non-POST requests', async () => {
+    const handle = handlerWith(fakeBackend());
+    expect((await handle(new Request('https://fn', { method: 'OPTIONS' }))).status).toBe(200);
+    expect((await handle(new Request('https://fn', { method: 'GET' }))).status).toBe(405);
   });
 });

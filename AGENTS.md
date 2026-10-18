@@ -1929,20 +1929,24 @@ Auth pattern: identical to `import-model` — `authClient.auth.getUser(token)` f
 Full response schemas: `docs/architecture/results-api-design.md`.
 
 ### notify-new-signup Edge Function
-`supabase/functions/notify-new-signup/index.ts` — receives a database webhook POST on INSERT to `auth.users`. Sends an email via Resend API and optionally a Slack message. Email subject/body include the signup's app (`APP_LABELS`/`appLabel()`, read from `raw_user_meta_data.app_name`) since this Supabase project is shared by `simmodlr`, `Lens`, and `Loop`.
+`supabase/functions/notify-new-signup/` emails the operator when anyone signs up to any app on this shared project (Flow, Loop, Lens, Compass). The request handling lives in `handler.ts`, which has no Deno APIs, so `tests/notify-signup.test.js` runs it directly; `index.ts` only wires it to `Deno.serve`.
 
-**Webhook trigger:**
-Created by migration `supabase/migrations/20260730120000_notify_new_signup_webhook_trigger.sql` — a native Supabase Database Webhook (`supabase_functions.http_request`) on `AFTER INSERT` to `auth.users`. The migration ships with a placeholder secret; the real `WEBHOOK_SECRET` value must be substituted into the live trigger once, out-of-band (exact statement documented in the migration file), since a trigger definition embedding the secret as a literal cannot be committed to git.
+**Trigger (v2, `20261018090000_notify_new_signup_v2.sql`):** `notify_new_signup` runs AFTER INSERT on `auth.users`. It posts `{ user_id }` with `pg_net` to the URL in the Vault secret `project_url`. It never blocks a sign-up: errors become warnings, and with no `project_url` it does nothing. The v1 webhook trigger, which needed a hand-patched shared secret, had gone missing from the live project, so no sign-up was being announced. v2 drops it.
 
-### Environment variables (Sprint 71)
-Configured in Supabase Dashboard -> Edge Functions -> Secrets (NOT in .env files):
+**No shared secret:** the function looks the user up with the service role key and only emails when the account is under 10 minutes old and not already in `public.signup_notifications`. That table is RLS on with no policies, so only the service role can write to it. A forged call can at most announce a real, brand-new sign-up once. If the email fails, the claim is released so a retry can send it.
+
+**Test from an admin panel:** `{ test: true }` with the caller's own access token sends a test email, but only for `profiles.role = 'admin'`. Delivery errors (for example from Resend) are returned so the panel can show them. Loop's Admin → Users tab has the button.
+
+### Environment variables
+Configured in Supabase Dashboard → Edge Functions → Secrets (NOT in .env files):
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `WEBHOOK_SECRET` | Yes | Shared secret between Supabase webhook and `notify-new-signup` |
-| `ADMIN_NOTIFY_EMAIL` | Yes | Destination for signup notification emails |
-| `RESEND_API_KEY` | Yes | Resend transactional email API key |
+| `RESEND_API_KEY` | Yes | Resend API key (the same one `notify-feedback` uses) |
+| `ADMIN_NOTIFY_EMAIL` | No | Where sign-up emails go; default `support@simmodlr.app` |
 | `SLACK_WEBHOOK_URL` | No | Slack incoming webhook URL for parallel notifications |
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided by Supabase. `WEBHOOK_SECRET` is no longer used.
 
 ### profiles schema additions (Sprint 71)
 New nullable/defaulted columns added by migration `20260524060000_sprint71_saas_operator.sql`:
