@@ -28,5 +28,9 @@ from the baseline.
   `('app.settings.service_role_key')`, set by hand via `ALTER DATABASE ... SET`.
   Without them the trigger silently no-ops. Prefer moving the key to Supabase
   Vault; until then set both manually in new environments.
-- The `notify-new-signup` trigger on `auth.users` posts to the edge function
-  with a bearer secret configured at creation time.
+- The `notify_new_signup` trigger on `auth.users`
+  (`20261018090000_notify_new_signup_v2.sql`) reads the project URL from the
+  Vault secret `project_url`. Set it once per project, or the trigger does
+  nothing:
+  `select vault.create_secret('https://<project-ref>.supabase.co', 'project_url');`
+  No shared secret is needed: the edge function checks the user itself.
