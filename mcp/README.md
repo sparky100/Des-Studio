@@ -60,8 +60,8 @@ Just ask. For example:
 > Build me a Flow model of a GP surgery: patients arrive about every 4 minutes, a nurse triages them, then one of 3 GPs sees them for about 10 minutes. I want to know waiting times.
 
 The assistant then:
-1. reads the format;
-2. drafts the model;
+1. reads Flow's modelling method (`flow_get_guide`) and asks you about anything it needs, one question at a time, then checks its understanding with you;
+2. reads the format and drafts the model;
 3. validates it and fixes the errors;
 4. runs it and checks the results make sense;
 5. saves it, telling you the file name;
@@ -83,6 +83,7 @@ If your app shows MCP prompts, there is also a **build_model** prompt that asks 
 
 | Tool | What it does |
 |---|---|
+| `flow_get_guide` | Flow's modelling method, the same guidance as Flow's in-app model builder: interview before building (one question at a time, no invented numbers, confirm first), map the process onto Flow, which tool answers which question, the fatal errors that break models, how to report results |
 | `flow_get_schema` | The model format: generation protocol, common mistakes, section list; any section on request |
 | `flow_list_models` | Model files in the folder |
 | `flow_read_model` | A model file's JSON |
@@ -97,6 +98,8 @@ If your app shows MCP prompts, there is also a **build_model** prompt that asks 
 | `flow_open_in_app` | Opens a model file in Flow in the browser through a compressed `#import` link (written to a local page, so there's no length limit from the command line). A file exported from Flow opens as an update to that model; `asNew` adds a new model instead |
 
 ## For maintainers
+
+**The modelling guide** is `skills/flow-modelling/SKILL.md`. It is a Claude skill as it stands (for a plugin, or to upload in Claude's settings), and the server serves the same file, without its header, from `flow_get_guide` and in the `build_model` prompt, so assistants get the method with the MCP alone. It mirrors the in-app model builder's guidance (`../src/llm/model-builder-prompts.js`): when that changes, update the guide too.
 
 The server reuses Flow's own code from `../src`: the engine, the validator, the KPI extraction and the confidence intervals. `build.mjs` bundles it, with the schema reference (`../docs/model-schema-for-llm.md`) inlined, into one file that needs nothing installed.
 

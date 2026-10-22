@@ -7,6 +7,7 @@ import {
   runSettings, summariseRun, validationReport, ToolError,
 } from '../../mcp/src/tools.js';
 import { schemaExcerpt, splitSchema, loadSchemaText } from '../../mcp/src/schema.js';
+import { loadGuideText, stripFrontmatter } from '../../mcp/src/guide.js';
 import { extractImportedModelPayload } from '../../src/ui/shared/utils.js';
 import { MODEL_JSON_FIELDS } from '../../src/model/modelJsonFields.js';
 
@@ -452,3 +453,22 @@ describe('version and update check', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('modelling guide', () => {
+  test('is the flow-modelling skill without its YAML header', () => {
+    const raw = readFileSync(new URL('../../mcp/skills/flow-modelling/SKILL.md', import.meta.url), 'utf8');
+    expect(raw).toMatch(/^---\nname: flow-modelling\n/);
+    const guide = loadGuideText();
+    expect(guide).toMatch(/^# Modelling with Flow/);
+    expect(guide).not.toMatch(/^name: /m);
+    expect(stripFrontmatter('no header')).toBe('no header');
+  });
+
+  test('names only tools the server has', () => {
+    const server = readFileSync(new URL('../../mcp/src/server.js', import.meta.url), 'utf8');
+    const registered = new Set([...server.matchAll(/registerTool\('(flow_\w+)'/g)].map(m => m[1]));
+    const named = new Set([...loadGuideText().matchAll(/\b(flow_[a-z_]+)\b/g)].map(m => m[1]));
+    for (const tool of named) expect(registered, tool).toContain(tool);
+  });
+});
+

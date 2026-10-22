@@ -10,6 +10,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { loadSchemaText, schemaExcerpt } from './schema.js';
+import { loadGuideText } from './guide.js';
 import { checkForUpdate } from './update-check.js';
 import {
   VERSION, BUILD, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, DEFAULT_PERIODS, MAX_PERIODS, MAX_SWEEP_POINTS, MAX_SWEEP_RUNS, DEFAULT_SWEEP_REPLICATIONS,
@@ -30,7 +31,8 @@ function modelsFolder(argv = process.argv.slice(2)) {
 const FOLDER = modelsFolder();
 
 const WORKFLOW = `How to build a Flow model with these tools:
-1. Read the format first: flow_get_schema() gives the generation protocol, the most common mistakes and the list of sections; fetch the sections you need (e.g. "1, 2, 3, 4, 5, 6").
+0. Before building or changing a model, read flow_get_guide: Flow's modelling method — how to interview the person (one question at a time, never inventing numbers, confirming before you build), how to map their system onto Flow, which tool answers which question, and the fatal errors Flow's own model builder checks. Follow it.
+1. Read the format: flow_get_schema() gives the generation protocol, the most common mistakes and the list of sections; fetch the sections you need (e.g. "1, 2, 3, 4, 5, 6").
 2. Draft the model JSON, then flow_validate_model. Fix every error and re-validate until there are none.
 3. flow_run_model (10+ replications). Read the results, goals and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't. To see WHEN queues build or resources saturate, use flow_run_over_time. If something looks wrong (nothing completes, a queue never empties, a rule never fires), use flow_trace_run to see what actually happened in one run.
 4. To judge a change (an extra server, a new rule), use flow_compare_models rather than two separate runs: it uses the same random numbers in both and says which differences are real and which could be chance. To find a good setting ("how many nurses?"), use flow_sweep_parameter over a range of values.
@@ -70,6 +72,13 @@ function handler(fn) {
     }
   };
 }
+
+server.registerTool('flow_get_guide', {
+  title: 'How to model with Flow',
+  description: 'Flow\'s modelling method, the same guidance as Flow\'s in-app model builder: how to interview the person before building, how to map a process onto entities, queues, B-events and C-events, which tool to use for which question, the fatal errors that break Flow models, and how to report results. Read it before building or changing a model.',
+  inputSchema: {},
+  annotations: { readOnlyHint: true },
+}, handler(() => loadGuideText()));
 
 server.registerTool('flow_get_schema', {
   title: 'Flow model format',
@@ -224,7 +233,7 @@ server.registerPrompt('build_model', {
 }, ({ system }) => ({
   messages: [{
     role: 'user',
-    content: { type: 'text', text: `Build a Flow discrete-event simulation model of this system:\n\n${system}\n\n${WORKFLOW}\nAsk me about anything essential you can't reasonably assume, and list the assumptions you made.` },
+    content: { type: 'text', text: `Build a Flow discrete-event simulation model of this system:\n\n${system}\n\nFollow Flow's modelling method below.\n\n${loadGuideText()}` },
   }],
 }));
 
