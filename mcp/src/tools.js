@@ -14,7 +14,7 @@ import { spawn } from 'node:child_process';
 import { buildEngine } from '../../src/engine/index.js';
 import { validateModel } from '../../src/engine/validation.js';
 import { estimateRunComplexity, estimateMaxCycles } from '../../src/engine/complexity-estimator.js';
-import { confidenceInterval95, summarizeReplicationResults, SUMMARY_METRICS, pairedTConfidenceInterval, bonferroniCI } from '../../src/engine/statistics.js';
+import { confidenceInterval95, summarizeReplicationResults, SUMMARY_METRICS, pairedTConfidenceInterval, bonferroniCI, buildWaitDistEntry, buildHistogram } from '../../src/engine/statistics.js';
 import { pickModelJsonFields } from '../../src/model/modelJsonFields.js';
 import { buildImportLink } from '../../src/utils/importLink.js';
 import { buildKpis, buildGoalGapsFromResults } from '../../src/llm/prompts.js';
@@ -389,7 +389,58 @@ export async function run(args, folder) {
   const { errors, text } = validationReport(model);
   if (errors.length) return `Not run — fix these first.\n${text}`;
   const settings = runSettings(model, args);
-  return summariseRun(model, settings, runReplicationsSync(model, settings));
+  const run = runReplicationsSync(model, settings);
+  const summary = summariseRun(model, settings, run);
+  if (args.format === 'json') return JSON.stringify({ summary, ...runDetail(model, run) }, null, 2);
+  if (!args.detail || !run.results.length) return summary;
+  const d = runDetail(model, run);
+  const lines = [summary, '', `Each replication (for a chart of the spread across runs), as CSV:`, '```csv', toCsv(d.perReplication.columns, d.perReplication.rows), '```'];
+  for (const q of d.waitDistribution) {
+    lines.push('', `${q.queue}: wait times of all ${q.n} who queued, pooled across replications — median ${fmt(q.p50)}, 90th percentile ${fmt(q.p90)}, 95th ${fmt(q.p95)}, 99th ${fmt(q.p99)} ${d.timeUnit}. Histogram as CSV:`, '```csv', toCsv(['from', 'to', 'count'], q.histogram.map(b => [b.from, b.to, b.count])), '```');
+  }
+  return lines.join('\n');
+}
+
+const round4 = v => (Number.isFinite(v) ? Number(v.toPrecision(4)) : null);
+
+function toCsv(columns, rows) {
+  const esc = v => (v == null ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+  return [columns.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n');
+}
+
+export const HISTOGRAM_BINS = 12;
+
+// The data behind a run's charts: each replication's headline results,
+// queue waits and resource utilisation (the spread across runs), and each
+// queue's wait times pooled across replications (percentiles and a
+// histogram). Plain function, so tests/mcp checks it directly.
+export function runDetail(model, run) {
+  const { results } = run;
+  const seeds = run.seeds || [];
+  const perRep = results.map(r => buildKpis(model, r));
+  const queues = (perRep[0]?.queues || []).map(q => q.name);
+  const resources = (perRep[0]?.resources || []).map(r => r.name);
+  const kpis = KPI_ROWS.filter(([key]) => results.some(r => Number.isFinite(r.summary?.[key.split('.')[1]]) && (!['summary.totalCost', 'summary.reneged', 'summary.balked'].includes(key) || r.summary[key.split('.')[1]])));
+  const columns = ['replication', 'seed', ...kpis.map(([, label]) => label), ...queues.map(q => `${q}: average wait`), ...resources.map(r => `${r}: % busy`)];
+  const rows = results.map((r, i) => [
+    i + 1, seeds[i] ?? null,
+    ...kpis.map(([key]) => round4(r.summary?.[key.split('.')[1]])),
+    ...queues.map(q => round4(perRep[i].queues?.find(x => x.name === q)?.meanWait)),
+    ...resources.map(name => round4(perRep[i].resources?.find(x => x.name === name)?.utilisation)),
+  ]);
+  const waitDistribution = [];
+  const names = [...new Set(results.flatMap(r => Object.keys(r.waitDist || {})))];
+  for (const q of names) {
+    const pooled = results.flatMap(r => r.waitDist?.[q]?.values || []).filter(Number.isFinite).sort((a, b) => a - b);
+    if (!pooled.length) continue;
+    const d = buildWaitDistEntry(pooled);
+    const h = buildHistogram(pooled, { numBins: HISTOGRAM_BINS });
+    waitDistribution.push({
+      queue: q, n: d.n, mean: round4(d.mean), p50: round4(d.p50), p90: round4(d.p90), p95: round4(d.p95), p99: round4(d.p99),
+      histogram: (h.bins || []).map(b => ({ from: round4(b.low), to: round4(b.high), count: b.count })),
+    });
+  }
+  return { timeUnit: model.timeUnit || 'time units', perReplication: { columns, rows }, waitDistribution };
 }
 
 // ── Comparing two versions ─────────────────────────────────────────────────
@@ -534,16 +585,16 @@ function table(header, rows) {
   return all.map(r => r.map((cell, c) => (c === 0 ? String(cell).padEnd(widths[c]) : String(cell ?? '—').padStart(widths[c]))).join('  ')).join('\n');
 }
 
-// Queue lengths, resource utilisation and work in progress per period,
-// averaged across replications — answers "when does it go wrong?".
-export function summariseOverTime(model, settings, run, periods = DEFAULT_PERIODS) {
-  const timeUnit = model.timeUnit || 'time units';
+// The over-time series behind flow_run_over_time: per period, the
+// time-weighted average across replications of each queue's waiting count,
+// each resource's % busy, work in progress and container levels.
+export function overTimeData(model, settings, run, periods = DEFAULT_PERIODS) {
   const reps = run.results.filter(r => Array.isArray(r.timeSeries) && r.timeSeries.length);
-  if (!reps.length) return 'No time series was recorded for this run.';
+  if (!reps.length) return { error: 'No time series was recorded for this run.' };
   const start = settings.warmupPeriod || 0;
   // A run that stops on a rule has no fixed length: cover the longest one.
   const end = settings.maxSimTime ?? Math.max(...reps.map(r => Number(r.finalTime) || 0));
-  if (!(end > start)) return 'The run ended before the warm-up did, so there is nothing to show over time.';
+  if (!(end > start)) return { error: 'The run ended before the warm-up did, so there is nothing to show over time.' };
   const width = (end - start) / periods;
   const avg = read => {
     const perRep = reps.map(r => periodAverages(r.timeSeries, read, start, end, periods));
@@ -552,26 +603,44 @@ export function summariseOverTime(model, settings, run, periods = DEFAULT_PERIOD
       return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
     });
   };
-  const rows = [];
+  const series = [];
   const queues = (model.queues || []).map(q => q.name).filter(Boolean).slice(0, 10);
-  for (const q of queues) rows.push([`Waiting in ${q}`, ...avg(s => s.byQueue?.[q]?.waiting).map(cell)]);
+  for (const q of queues) series.push({ name: `Waiting in ${q}`, values: avg(s => s.byQueue?.[q]?.waiting) });
   const servers = (model.entityTypes || []).filter(e => e.role === 'server').map(e => e.name).slice(0, 8);
   for (const sName of servers) {
-    rows.push([`${sName} busy %`, ...avg(s => { const b = s.byType?.[sName]; const avail = b ? b.total - (b.failed || 0) : 0; return avail > 0 ? (b.busy / avail) * 100 : null; }).map(cell)]);
+    series.push({ name: `${sName} busy %`, values: avg(s => { const b = s.byType?.[sName]; const avail = b ? b.total - (b.failed || 0) : 0; return avail > 0 ? (b.busy / avail) * 100 : null; }) });
   }
-  rows.push(['In system (WIP)', ...avg(s => s.wip).map(cell)]);
+  series.push({ name: 'In system (WIP)', values: avg(s => s.wip) });
   for (const c of (model.containerTypes || []).map(c => c.name).filter(Boolean).slice(0, 4)) {
-    rows.push([`${c} level`, ...avg(s => s.byContainer?.[c]).map(cell)]);
+    series.push({ name: `${c} level`, values: avg(s => s.byContainer?.[c]) });
   }
-  const header = ['', ...Array.from({ length: periods }, (_, k) => `${fmt(start + k * width)}–${fmt(start + (k + 1) * width)}`)];
-  return [
-    `Over time: average of ${reps.length} replication${reps.length === 1 ? '' : 's'}, ${periods} equal periods of ${fmt(width)} ${timeUnit}${start ? ` after a ${fmt(start)} warm-up` : ''}. Each cell is the time-weighted average during that period.`,
-    '',
-    table(header, rows),
-  ].join('\n');
+  return {
+    timeUnit: model.timeUnit || 'time units',
+    replications: reps.length,
+    warmup: start,
+    periods: Array.from({ length: periods }, (_, k) => ({ from: round4(start + k * width), to: round4(start + (k + 1) * width) })),
+    series: series.map(x => ({ ...x, values: x.values.map(round4) })),
+  };
 }
 
-export const MAX_PERIODS = 24;
+// Up to this many periods the answer is a table; beyond it, CSV (one row
+// per period), which stays readable and goes straight into a chart.
+const TABLE_PERIODS = 12;
+
+export function summariseOverTime(model, settings, run, periods = DEFAULT_PERIODS) {
+  const d = overTimeData(model, settings, run, periods);
+  if (d.error) return d.error;
+  const width = d.periods[0].to - d.periods[0].from;
+  const intro = `Over time: average of ${d.replications} replication${d.replications === 1 ? '' : 's'}, ${periods} equal periods of ${fmt(width)} ${d.timeUnit}${d.warmup ? ` after a ${fmt(d.warmup)} warm-up` : ''}. Each value is the time-weighted average during that period.`;
+  if (periods > TABLE_PERIODS) {
+    const rows = d.periods.map((p, k) => [p.from, p.to, ...d.series.map(x => x.values[k])]);
+    return [intro, 'One row per period, as CSV for a chart:', '```csv', toCsv(['from', 'to', ...d.series.map(x => x.name)], rows), '```'].join('\n');
+  }
+  const header = ['', ...d.periods.map(p => `${fmt(p.from)}–${fmt(p.to)}`)];
+  return [intro, '', table(header, d.series.map(x => [x.name, ...x.values.map(cell)]))].join('\n');
+}
+
+export const MAX_PERIODS = 100;
 
 export async function runOverTime(args, folder) {
   const { model } = await modelFrom(args, folder);
@@ -580,6 +649,7 @@ export async function runOverTime(args, folder) {
   const settings = runSettings(model, { replications: 5, ...args });
   const periods = Math.min(MAX_PERIODS, Math.max(2, Math.round(num(args.periods, DEFAULT_PERIODS))));
   const run = runReplicationsSync(model, settings, { collectTimeSeries: true });
+  if (args.format === 'json') return JSON.stringify({ ...overTimeData(model, settings, run, periods), failures: run.failures }, null, 2);
   const failed = run.failures.length ? `\n${run.failures.length} replication(s) failed: ${run.failures[0].message}` : '';
   return summariseOverTime(model, settings, run, periods) + failed;
 }

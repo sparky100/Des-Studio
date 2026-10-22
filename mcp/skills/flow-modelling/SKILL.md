@@ -94,6 +94,8 @@ If a tool named here isn't available (an older version of the server), do that s
 
 ## 5. Reporting results
 
+- **Charts.** When the person wants a chart, or one would make the answer clearer, get the numbers from the tools rather than reading them off text: `flow_run_over_time` with `periods` of 50–100 (CSV, one row per period) or `format: "json"` for queues, utilisation and WIP over time; `flow_run_model` with `detail: true` (or `format: "json"`) for the spread across replications and each queue's wait-time percentiles and histogram.
+
 - Quote every result with its 95% confidence interval and the number of replications; say when an interval is too wide to decide and run more.
 - Name the bottleneck (the stage with the highest utilisation or growing queue) and what drives it.
 - Separate what the model says from what you assumed: list assumed numbers and which ones the answer is sensitive to.

@@ -171,6 +171,27 @@ test('over time gives a period-by-period table', async () => {
   assert.match(res.text, /Waiting in Repair Queue/);
 });
 
+test('over time with many periods returns CSV, and JSON on request', async () => {
+  const csv = await call('flow_run_over_time', { model: bikeShop, replications: 2, maxSimTime: 600, periods: 60 });
+  assert.equal(csv.isError, false, csv.text);
+  assert.match(csv.text, /```csv\nfrom,to,Waiting in .*Waiting in Repair Queue,/);
+  const json = await call('flow_run_over_time', { model: bikeShop, replications: 2, maxSimTime: 600, periods: 60, format: 'json' });
+  const d = JSON.parse(json.text);
+  assert.equal(d.periods.length, 60);
+  assert.ok(d.series.every(s => s.values.length === 60));
+});
+
+test('run detail adds per-replication values and wait distributions', async () => {
+  const res = await call('flow_run_model', { model: bikeShop, replications: 3, maxSimTime: 600, detail: true });
+  assert.equal(res.isError, false, res.text);
+  assert.match(res.text, /```csv\nreplication,seed,Arrived/);
+  assert.match(res.text, /Histogram as CSV/);
+  const json = JSON.parse((await call('flow_run_model', { model: bikeShop, replications: 3, maxSimTime: 600, format: 'json' })).text);
+  assert.match(json.summary, /Completed/);
+  assert.equal(json.perReplication.rows.length, 3);
+  assert.ok(json.waitDistribution[0].histogram.length > 0);
+});
+
 test('sweep lists the parameters, then runs a range of values on the same seeds', async () => {
   const list = await call('flow_sweep_parameter', { model: bikeShop });
   assert.match(list.text, /- Number of Staff — now 3/);

@@ -88,9 +88,9 @@ If your app shows MCP prompts, there is also a **build_model** prompt that asks 
 | `flow_list_models` | Model files in the folder |
 | `flow_read_model` | A model file's JSON |
 | `flow_validate_model` | Flow's validator: errors (block running) and warnings, with rule codes |
-| `flow_run_model` | Several replications (default 10, max 50) with 95% CIs; queues, utilisation, how entities finished, the model's goals (met in how many replications), things to check |
+| `flow_run_model` | Several replications (default 10, max 50) with 95% CIs; queues, utilisation, how entities finished, the model's goals (met in how many replications), things to check. `detail` adds chart data: each replication's results, and wait-time percentiles and a histogram per queue. `format: "json"` returns it all as JSON |
 | `flow_compare_models` | Two versions with the same random numbers (default 20 paired replications); each difference with a paired 95% CI, split into real differences and ones that could be chance |
-| `flow_run_over_time` | Waiting per queue, % busy per resource, work in progress and container levels, period by period (default 8 periods, averaged over 5 replications) |
+| `flow_run_over_time` | Waiting per queue, % busy per resource, work in progress and container levels, period by period (default 8 periods, up to 100, averaged over 5 replications). More than 12 periods come back as CSV for a chart; `format: "json"` returns JSON |
 | `flow_sweep_parameter` | One parameter (server count, a capacity, a distribution parameter, a starting value…) at up to 12 values, each on the same random numbers (default 5 replications per value): completions, waits, time in system, % busy and goals met per value. Without `parameter`, lists what can be varied |
 | `flow_trace_run` | One run: how often each rule and event fired and which never did, who was still in the system at the end and where, one entity's path, and the event log (window with `from`/`until`, filter with `entity`) |
 | `flow_edit_model` | Changes to a saved file by path, e.g. `entityTypes/Nurse/count` = 3 (set, remove, append); shows errors added or fixed, refuses to save errors unless asked, keeps the canvas layout |

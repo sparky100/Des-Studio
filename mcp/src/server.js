@@ -108,9 +108,11 @@ server.registerTool('flow_validate_model', {
   annotations: { readOnlyHint: true },
 }, handler(args => validate(args, FOLDER)));
 
+const formatArg = z.enum(['text', 'json']).optional().describe('"json" returns the numbers as JSON for a chart or further analysis (default "text")');
+
 server.registerTool('flow_run_model', {
   title: 'Run a Flow model',
-  description: `Run a model with Flow's simulation engine for several replications and report the results with 95% confidence intervals: completions, waits, time in system, per-queue waits, resource utilisation, how entities finished (by route), the model's goals (met or missed, in how many replications), plus warnings about bottlenecks, overload, noisy results and engine limits. Uses the model's own experiment settings unless overridden. Up to ${MAX_REPLICATIONS} replications.`,
+  description: `Run a model with Flow's simulation engine for several replications and report the results with 95% confidence intervals: completions, waits, time in system, per-queue waits, resource utilisation, how entities finished (by route), the model's goals (met or missed, in how many replications), plus warnings about bottlenecks, overload, noisy results and engine limits. Uses the model's own experiment settings unless overridden. Up to ${MAX_REPLICATIONS} replications. For charts, set \`detail\` (per-replication values, wait-time percentiles and histograms) or \`format: "json"\`.`,
   inputSchema: {
     model: modelArg,
     file: fileArg,
@@ -118,6 +120,8 @@ server.registerTool('flow_run_model', {
     maxSimTime: z.number().positive().optional().describe('Run length in the model\'s time unit (default: the model\'s own setting, else 500)'),
     warmupPeriod: z.number().min(0).optional().describe('Warm-up excluded from results (default: the model\'s own setting, else 0)'),
     seed: z.number().int().optional().describe('Base random seed; replication i uses seed + i'),
+    detail: z.boolean().optional().describe('Also return the data for charts: each replication\'s results as CSV, and each queue\'s wait-time percentiles and histogram'),
+    format: formatArg,
   },
   annotations: { readOnlyHint: true },
 }, handler(args => run(args, FOLDER)));
@@ -142,11 +146,12 @@ server.registerTool('flow_compare_models', {
 
 server.registerTool('flow_run_over_time', {
   title: 'Flow results over time',
-  description: `Run a model and show how things change through the run: how many are waiting in each queue, how busy each resource is, work in progress and container levels, averaged over each of ${DEFAULT_PERIODS} equal periods (up to ${MAX_PERIODS}) and across replications. Use it to see when queues build up or resources saturate.`,
+  description: `Run a model and show how things change through the run: how many are waiting in each queue, how busy each resource is, work in progress and container levels, averaged over each of ${DEFAULT_PERIODS} equal periods (up to ${MAX_PERIODS}) and across replications. Use it to see when queues build up or resources saturate. Up to 12 periods come back as a table; more come back as CSV, one row per period, ready to plot. \`format: "json"\` returns the series as JSON.`,
   inputSchema: {
     model: modelArg,
     file: fileArg,
-    periods: z.number().int().min(2).max(MAX_PERIODS).optional().describe(`Number of equal periods (default ${DEFAULT_PERIODS})`),
+    periods: z.number().int().min(2).max(MAX_PERIODS).optional().describe(`Number of equal periods (default ${DEFAULT_PERIODS}, up to ${MAX_PERIODS}; use 50–100 for a smooth chart)`),
+    format: formatArg,
     replications: z.number().int().min(1).max(MAX_REPLICATIONS).optional().describe('Default 5'),
     ...runSettingsArgs,
   },
