@@ -32,10 +32,11 @@ const call = async (name, args = {}) => {
   return { text: res.content.map(c => c.text).join('\n'), isError: !!res.isError };
 };
 
-test('lists the eight tools and the build_model prompt, with workflow instructions', async () => {
+test('lists the eleven tools and the build_model prompt, with workflow instructions', async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map(t => t.name).sort(), [
-    'flow_compare_models', 'flow_get_schema', 'flow_list_models', 'flow_read_model', 'flow_run_model', 'flow_run_over_time', 'flow_save_model', 'flow_validate_model',
+    'flow_compare_models', 'flow_edit_model', 'flow_get_schema', 'flow_list_models', 'flow_read_model', 'flow_run_model', 'flow_run_over_time',
+    'flow_save_model', 'flow_sweep_parameter', 'flow_trace_run', 'flow_validate_model',
   ]);
   const { prompts } = await client.listPrompts();
   assert.deepEqual(prompts.map(p => p.name), ['build_model']);
@@ -152,4 +153,35 @@ test('over time gives a period-by-period table', async () => {
   assert.match(res.text, /0–150\s+150–300\s+300–450\s+450–600/);
   assert.match(res.text, /Staff busy %/);
   assert.match(res.text, /Waiting in Repair Queue/);
+});
+
+test('sweep lists the parameters, then runs a range of values on the same seeds', async () => {
+  const list = await call('flow_sweep_parameter', { model: bikeShop });
+  assert.match(list.text, /- Number of Staff — now 3/);
+  const res = await call('flow_sweep_parameter', { model: bikeShop, parameter: 'Number of Staff', from: 2, to: 4, replications: 2, maxSimTime: 300 });
+  assert.equal(res.isError, false, res.text);
+  assert.match(res.text, /Varied "Number of Staff" \(now 3\): 3 values × 2 replications of 300 minutes/);
+  assert.match(res.text, /Staff busy %/);
+  const unknown = await call('flow_sweep_parameter', { model: bikeShop, parameter: 'Number of Wizards', values: [1] });
+  assert.equal(unknown.isError, true);
+  assert.match(unknown.text, /No parameter matches/);
+});
+
+test('trace shows what fired, what never did and the event log for one run', async () => {
+  const res = await call('flow_trace_run', { model: bikeShop, until: 120, limit: 5 });
+  assert.equal(res.isError, false, res.text);
+  assert.match(res.text, /Rules \(C-events\):/);
+  assert.match(res.text, /NEVER FIRED/);
+  assert.match(res.text, /Event log \(t=0–120;/);
+});
+
+test('edit changes a saved model in place, and refuses a change that breaks it', async () => {
+  await call('flow_save_model', { name: 'Edit me', model: bikeShop.model_json });
+  const bad = await call('flow_edit_model', { file: 'Edit me', changes: [{ path: 'entityTypes/Staff/count', value: 0 }] });
+  assert.match(bad.text, /Not saved/);
+  const ok = await call('flow_edit_model', { file: 'Edit me', changes: [{ path: 'entityTypes/Staff/count', value: 5 }] });
+  assert.equal(ok.isError, false, ok.text);
+  assert.match(ok.text, /entityTypes\/Staff\/count: 3 → 5/);
+  const saved = JSON.parse(await readFile(path.join(folder, 'Edit me.json'), 'utf8'));
+  assert.equal(saved.model_json.entityTypes.find(e => e.name === 'Staff').count, 5);
 });

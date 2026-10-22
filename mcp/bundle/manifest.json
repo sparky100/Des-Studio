@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "flow-mcp",
   "display_name": "Flow (simmodlr)",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Build, check and run Flow discrete-event simulation models with your AI assistant, on your own computer.",
-  "long_description": "Lets your assistant read Flow's model format, validate models with Flow's own validator, run them with Flow's simulation engine (several replications, with 95% confidence intervals and warnings about bottlenecks and overload) and save them as files you open in Flow with + New Model → Import a file. Everything runs on your computer; models are plain JSON files in one folder.",
+  "long_description": "Lets your assistant read Flow's model format, validate models with Flow's own validator, run them with Flow's simulation engine (several replications, with 95% confidence intervals and warnings about bottlenecks and overload), try a range of values for a parameter, trace a run to find out why a model misbehaves, edit saved models and save them as files you open in Flow with + New Model → Import a file. Everything runs on your computer; models are plain JSON files in one folder.",
   "author": {
     "name": "simmodlr"
   },
@@ -49,6 +49,18 @@
     {
       "name": "flow_run_over_time",
       "description": "Queue lengths, utilisation and work in progress period by period."
+    },
+    {
+      "name": "flow_sweep_parameter",
+      "description": "Try a range of values for one parameter (e.g. number of staff): a table of results and goals met per value."
+    },
+    {
+      "name": "flow_trace_run",
+      "description": "Trace one run: which rules fired or never did, who was left where, and the event log."
+    },
+    {
+      "name": "flow_edit_model",
+      "description": "Change parts of a saved model file without re-sending the whole model."
     },
     {
       "name": "flow_save_model",

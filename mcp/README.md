@@ -5,6 +5,9 @@ Connects an AI assistant on your computer to Flow. The assistant can then:
 - **read Flow's model format**: the same reference as the prompt pack, a section at a time;
 - **check** a model with Flow's own validator, and fix what it reports;
 - **run** a model with Flow's own simulation engine, over several replications, with 95% confidence intervals and warnings about bottlenecks, overload and noisy results;
+- **try a range of values** for one parameter ("how many nurses do I need?");
+- **trace** one run to find out why a model misbehaves (rules that never fire, entities stuck);
+- **edit** a saved model a few values at a time;
 - **save** the model as a file you open in Flow with **+ New Model → Import a file**.
 
 Everything runs on your computer. Models are plain JSON files in one folder, `Documents/Flow models` by default. Nothing is sent to Flow's servers, and you don't need to sign in.
@@ -62,7 +65,7 @@ The assistant then:
 
 In Flow, choose **+ New Model → Import a file** and pick that file.
 
-To improve an existing model, export it from Flow into the models folder and ask, for example: "Open *Bike shop.json*. Why is the repair queue so long, and what would fix it?" The assistant can see when the queue builds (`flow_run_over_time`) and check whether a fix really helps (`flow_compare_models`).
+To improve an existing model, export it from Flow into the models folder and ask, for example: "Open *Bike shop.json*. Why is the repair queue so long, and what would fix it?" The assistant can see when the queue builds (`flow_run_over_time`), trace a run to see what happened (`flow_trace_run`), try a range of staffing levels (`flow_sweep_parameter`), check whether a fix really helps (`flow_compare_models`) and make the change in the file (`flow_edit_model`).
 
 If your app shows MCP prompts, there is also a **build_model** prompt that asks for a description of the system.
 
@@ -77,6 +80,9 @@ If your app shows MCP prompts, there is also a **build_model** prompt that asks 
 | `flow_run_model` | Several replications (default 10, max 50) with 95% CIs; queues, utilisation, how entities finished, the model's goals (met in how many replications), things to check |
 | `flow_compare_models` | Two versions with the same random numbers (default 20 paired replications); each difference with a paired 95% CI, split into real differences and ones that could be chance |
 | `flow_run_over_time` | Waiting per queue, % busy per resource, work in progress and container levels, period by period (default 8 periods, averaged over 5 replications) |
+| `flow_sweep_parameter` | One parameter (server count, a capacity, a distribution parameter, a starting value…) at up to 12 values, each on the same random numbers (default 5 replications per value): completions, waits, time in system, % busy and goals met per value. Without `parameter`, lists what can be varied |
+| `flow_trace_run` | One run: how often each rule and event fired and which never did, who was still in the system at the end and where, one entity's path, and the event log (window with `from`/`until`, filter with `entity`) |
+| `flow_edit_model` | Changes to a saved file by path, e.g. `entityTypes/Nurse/count` = 3 (set, remove, append); shows errors added or fixed, refuses to save errors unless asked, keeps the canvas layout |
 | `flow_save_model` | Saves a Flow export file; refuses a model with errors unless asked; never overwrites unless asked |
 
 ## For maintainers

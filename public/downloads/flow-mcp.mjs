@@ -3173,18 +3173,18 @@ var require_utils = __commonJS({
       let bestStart = -1;
       let bestLength = 0;
       let runStart = -1;
-      let runLength = 0;
+      let runLength2 = 0;
       for (let i = 0; i < hextets.length; i++) {
         if (hextets[i] === "0") {
           if (runStart === -1) runStart = i;
-          runLength++;
-          if (runLength > bestLength) {
-            bestLength = runLength;
+          runLength2++;
+          if (runLength2 > bestLength) {
+            bestLength = runLength2;
             bestStart = runStart;
           }
         } else {
           runStart = -1;
-          runLength = 0;
+          runLength2 = 0;
         }
       }
       if (bestLength < 2) return hextets.join(":");
@@ -21520,7 +21520,7 @@ function splitSchema(text2) {
     if (/^```/.test(line)) inFence = !inFence;
     if (!inFence && /^## /.test(line)) {
       const title = line.replace(/^## /, "").trim();
-      const number3 = (title.match(/^(\d+(?:\.\d+)?)\./) || [])[1] || null;
+      const number3 = (title.match(/^(\d+(?:\.\d+)?)\.?\s/) || [])[1] || null;
       current = { title, number: number3, lines: [line] };
       sections.push(current);
     } else if (current) {
@@ -21552,7 +21552,8 @@ function schemaExcerpt(text2, section) {
   const wanted = String(section).split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   const picked = [];
   for (const w of wanted) {
-    const matches = sections.filter((s) => s.number && s.number === w || s.title.toLowerCase().includes(w));
+    const isNumber = /^\d+(\.\d+)?$/.test(w);
+    const matches = sections.filter((s) => isNumber ? s.number && (s.number === w || s.number.startsWith(`${w}.`)) : s.title.toLowerCase().includes(w));
     const sub = matches.length === 0 && /^\d+\.\d+$/.test(w) ? subsection(text2, w) : null;
     if (sub) picked.push({ text: sub });
     for (const m of matches) if (!picked.includes(m)) picked.push(m);
@@ -26150,6 +26151,11 @@ function periodToSimTime(dayOfWeek, startHHMM, weekOffset, startDayOfWeek, ms, e
   const timeMinutes = parseHHMM(startHHMM);
   if (isNaN(timeMinutes)) return null;
   return (dayMs + timeMinutes * 6e4) / ms;
+}
+function periodLabel(period) {
+  const days = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const dayName = days[period.dayOfWeek] || `Day${period.dayOfWeek}`;
+  return `${dayName} ${period.start}-${period.end}`;
 }
 function expandWeeklyPatternToEvents(pattern, epoch, maxSimTime = null, timeUnit = "minutes") {
   const warnings = [];
@@ -31577,6 +31583,340 @@ function summarizeContainerSeries(timeSeries, options = {}) {
   return Object.keys(out).length ? out : null;
 }
 
+// ../src/engine/sweep-params.js
+function deepClone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+var PARAM_LABELS = {
+  mean: "mean",
+  rate: "rate (\u03BB)",
+  lambda: "rate (\u03BB)",
+  alpha: "shape (\u03B1)",
+  beta: "scale (\u03B2)",
+  min: "minimum",
+  max: "maximum",
+  sd: "standard deviation",
+  sigma: "standard deviation",
+  p: "probability",
+  n: "n",
+  k: "k",
+  mu: "mean (\u03BC)"
+};
+function humanParamKey(key) {
+  return PARAM_LABELS[key] ?? key;
+}
+function isPiecewise(dist) {
+  return typeof dist === "string" && dist.toLowerCase() === "piecewise";
+}
+function enumerateSweepableParams(model) {
+  const params = [];
+  for (const et of model.entityTypes || []) {
+    if (et.role !== "server") continue;
+    if (Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) continue;
+    if (et.schedulePattern?.periods?.length) continue;
+    params.push({
+      type: "entityTypeCount",
+      targetId: et.id,
+      label: `Number of ${et.name}`,
+      description: `How many ${et.name} servers are available`,
+      currentValue: parseInt(et.count, 10) || 0,
+      path: `entityTypes.${et.id}.count`
+    });
+  }
+  for (const et of model.entityTypes || []) {
+    if (et.role !== "server") continue;
+    if (!Array.isArray(et.shiftSchedule) || !et.shiftSchedule.length) continue;
+    et.shiftSchedule.forEach((period, pi) => {
+      const time3 = period.time ?? period.startTime ?? 0;
+      const timeUnit = model.timeUnit ?? "minute";
+      params.push({
+        type: "shiftCapacity",
+        targetId: et.id,
+        periodIndex: pi,
+        label: `${et.name} \u2014 shift ${pi + 1} capacity`,
+        subLabel: `from ${timeUnit} ${time3}`,
+        description: `Number of ${et.name} available from time ${time3}`,
+        currentValue: parseInt(period.capacity, 10) || 0,
+        path: `entityTypes.${et.id}.shiftSchedule[${pi}].capacity`
+      });
+    });
+  }
+  for (const et of model.entityTypes || []) {
+    if (et.role !== "server") continue;
+    const pattern = et.schedulePattern;
+    if (!pattern?.periods?.length) continue;
+    if ((pattern.mode || "absolute") === "multiplier") {
+      params.push({
+        type: "schedulePatternBaseCapacity",
+        targetId: et.id,
+        label: `${et.name} \u2014 base capacity (weekly pattern)`,
+        description: `Base capacity the weekly pattern's per-period multipliers scale from for ${et.name}`,
+        currentValue: parseFloat(pattern.baseCapacity) || 0,
+        path: `entityTypes.${et.id}.schedulePattern.baseCapacity`
+      });
+      continue;
+    }
+    pattern.periods.forEach((period, pi) => {
+      params.push({
+        type: "schedulePatternPeriodCapacity",
+        targetId: et.id,
+        periodIndex: pi,
+        label: `${et.name} \u2014 ${periodLabel(period)} capacity`,
+        description: `Number of ${et.name} available ${periodLabel(period)}`,
+        currentValue: parseInt(period.capacity, 10) || 0,
+        path: `entityTypes.${et.id}.schedulePattern.periods[${pi}].capacity`
+      });
+    });
+    if (pattern.defaultCapacity != null) {
+      params.push({
+        type: "schedulePatternDefaultCapacity",
+        targetId: et.id,
+        label: `${et.name} \u2014 default capacity (outside scheduled periods)`,
+        description: `Number of ${et.name} available outside any scheduled period`,
+        currentValue: parseInt(pattern.defaultCapacity, 10) || 0,
+        path: `entityTypes.${et.id}.schedulePattern.defaultCapacity`
+      });
+    }
+  }
+  for (const q of model.queues || []) {
+    params.push({
+      type: "queueCapacity",
+      targetId: q.id,
+      label: `${q.name} \u2014 maximum capacity`,
+      description: `Maximum number of customers in ${q.name}`,
+      currentValue: q.capacity === "" ? Infinity : parseInt(q.capacity, 10) || 0,
+      path: `queues.${q.id}.capacity`
+    });
+  }
+  for (const b of model.bEvents || []) {
+    (b.schedules || []).forEach((s, si) => {
+      if (!s.distParams) return;
+      if (isPiecewise(s.dist)) {
+        (s.distParams.periods || []).forEach((period, pi) => {
+          const inner = period.distribution || period;
+          const startTime = period.startTime ?? period.time ?? 0;
+          const timeUnit = model.timeUnit ?? "minute";
+          for (const [paramKey, paramValue] of Object.entries(inner.distParams || {})) {
+            params.push({
+              type: "bEventPiecewisePeriodParam",
+              targetId: b.id,
+              scheduleIndex: si,
+              periodIndex: pi,
+              paramKey,
+              label: `${b.name} \u2014 period ${pi + 1} ${humanParamKey(paramKey)}`,
+              subLabel: `from ${timeUnit} ${startTime}`,
+              description: `'${paramKey}' for period ${pi + 1} of piecewise distribution on '${b.name}'`,
+              currentValue: parseFloat(paramValue) || 0,
+              path: `bEvents.${b.id}.schedules[${si}].distParams.periods[${pi}].distribution.distParams.${paramKey}`
+            });
+          }
+        });
+      } else {
+        for (const [paramKey, paramValue] of Object.entries(s.distParams)) {
+          params.push({
+            type: "bEventDistParam",
+            targetId: b.id,
+            parentLabel: b.name,
+            paramKey,
+            label: `${b.name} \u2014 ${humanParamKey(paramKey)}`,
+            description: `Distribution parameter '${paramKey}' of B-Event '${b.name}'`,
+            currentValue: parseFloat(paramValue) || 0,
+            path: `bEvents.${b.id}.schedules.distParams.${paramKey}`
+          });
+        }
+      }
+    });
+  }
+  for (const c of model.cEvents || []) {
+    (c.cSchedules || []).forEach((s, si) => {
+      if (!s.distParams) return;
+      if (isPiecewise(s.dist)) {
+        (s.distParams.periods || []).forEach((period, pi) => {
+          const inner = period.distribution || period;
+          const startTime = period.startTime ?? period.time ?? 0;
+          const timeUnit = model.timeUnit ?? "minute";
+          for (const [paramKey, paramValue] of Object.entries(inner.distParams || {})) {
+            params.push({
+              type: "cEventPiecewisePeriodParam",
+              targetId: c.id,
+              scheduleIndex: si,
+              periodIndex: pi,
+              paramKey,
+              label: `${c.name} \u2014 period ${pi + 1} ${humanParamKey(paramKey)}`,
+              subLabel: `from ${timeUnit} ${startTime}`,
+              description: `'${paramKey}' for period ${pi + 1} of piecewise distribution on '${c.name}'`,
+              currentValue: parseFloat(paramValue) || 0,
+              path: `cEvents.${c.id}.cSchedules[${si}].distParams.periods[${pi}].distribution.distParams.${paramKey}`
+            });
+          }
+        });
+      } else {
+        for (const [paramKey, paramValue] of Object.entries(s.distParams)) {
+          params.push({
+            type: "cEventDistParam",
+            targetId: c.id,
+            parentLabel: c.name,
+            paramKey,
+            label: `${c.name} \u2014 ${humanParamKey(paramKey)}`,
+            description: `Distribution parameter '${paramKey}' of C-Event '${c.name}'`,
+            currentValue: parseFloat(paramValue) || 0,
+            path: `cEvents.${c.id}.cSchedules.distParams.${paramKey}`
+          });
+        }
+      }
+    });
+  }
+  for (const sv of model.stateVariables || []) {
+    params.push({
+      type: "stateVarInit",
+      targetId: sv.name,
+      label: `${sv.name} \u2014 starting value`,
+      description: `Initial value of state variable '${sv.name}'`,
+      currentValue: parseFloat(sv.initialValue) || 0,
+      path: `stateVariables.${sv.name}.initialValue`
+    });
+  }
+  for (const ct of model.containerTypes || []) {
+    if (!ct.id) continue;
+    params.push({
+      type: "containerCapacity",
+      targetId: ct.id,
+      label: `${ct.id} \u2014 capacity`,
+      description: `Maximum level of container '${ct.id}' (blank = unbounded)`,
+      currentValue: ct.capacity == null || ct.capacity === "" ? Infinity : parseFloat(ct.capacity) || 0,
+      path: `containerTypes.${ct.id}.capacity`
+    });
+    params.push({
+      type: "containerInitialLevel",
+      targetId: ct.id,
+      label: `${ct.id} \u2014 initial level`,
+      description: `Starting level of container '${ct.id}'`,
+      currentValue: parseFloat(ct.initialLevel) || 0,
+      path: `containerTypes.${ct.id}.initialLevel`
+    });
+  }
+  return params;
+}
+function applySweepValue(model, paramConfig, value) {
+  return applySweepValues(model, [{ paramConfig, value }]);
+}
+function applySweepValues(model, sweepConfigs = []) {
+  let clone2 = deepClone(model);
+  for (const { paramConfig, value } of sweepConfigs) {
+    switch (paramConfig.type) {
+      case "entityTypeCount": {
+        const et = (clone2.entityTypes || []).find((e) => e.id === paramConfig.targetId);
+        if (et) et.count = String(Math.max(0, Math.round(value)));
+        break;
+      }
+      case "shiftCapacity": {
+        const et = (clone2.entityTypes || []).find((e) => e.id === paramConfig.targetId);
+        const period = et?.shiftSchedule?.[paramConfig.periodIndex];
+        if (period) period.capacity = String(Math.max(1, Math.round(value)));
+        break;
+      }
+      case "schedulePatternBaseCapacity": {
+        const et = (clone2.entityTypes || []).find((e) => e.id === paramConfig.targetId);
+        if (et?.schedulePattern) et.schedulePattern.baseCapacity = value;
+        break;
+      }
+      case "schedulePatternPeriodCapacity": {
+        const et = (clone2.entityTypes || []).find((e) => e.id === paramConfig.targetId);
+        const period = et?.schedulePattern?.periods?.[paramConfig.periodIndex];
+        if (period) period.capacity = Math.max(0, Math.round(value));
+        break;
+      }
+      case "schedulePatternDefaultCapacity": {
+        const et = (clone2.entityTypes || []).find((e) => e.id === paramConfig.targetId);
+        if (et?.schedulePattern) et.schedulePattern.defaultCapacity = Math.max(0, Math.round(value));
+        break;
+      }
+      case "queueCapacity": {
+        const q = (clone2.queues || []).find((q2) => q2.id === paramConfig.targetId);
+        if (q) {
+          q.capacity = value === Infinity || value <= 0 ? "" : String(Math.round(value));
+        }
+        break;
+      }
+      case "bEventDistParam": {
+        const b = (clone2.bEvents || []).find((e) => e.id === paramConfig.targetId);
+        if (b) {
+          for (const s of b.schedules || []) {
+            if (s.distParams && paramConfig.paramKey in s.distParams) {
+              s.distParams[paramConfig.paramKey] = String(Math.max(1e-3, value));
+            }
+          }
+        }
+        break;
+      }
+      case "bEventPiecewisePeriodParam": {
+        const b = (clone2.bEvents || []).find((e) => e.id === paramConfig.targetId);
+        const period = b?.schedules?.[paramConfig.scheduleIndex]?.distParams?.periods?.[paramConfig.periodIndex];
+        if (period) {
+          const inner = period.distribution || period;
+          if (!inner.distParams) inner.distParams = {};
+          inner.distParams[paramConfig.paramKey] = String(Math.max(1e-3, value));
+        }
+        break;
+      }
+      case "cEventDistParam": {
+        const c = (clone2.cEvents || []).find((e) => e.id === paramConfig.targetId);
+        if (c) {
+          for (const s of c.cSchedules || []) {
+            if (s.distParams && paramConfig.paramKey in s.distParams) {
+              s.distParams[paramConfig.paramKey] = String(Math.max(1e-3, value));
+            }
+          }
+        }
+        break;
+      }
+      case "cEventPiecewisePeriodParam": {
+        const c = (clone2.cEvents || []).find((e) => e.id === paramConfig.targetId);
+        const period = c?.cSchedules?.[paramConfig.scheduleIndex]?.distParams?.periods?.[paramConfig.periodIndex];
+        if (period) {
+          const inner = period.distribution || period;
+          if (!inner.distParams) inner.distParams = {};
+          inner.distParams[paramConfig.paramKey] = String(Math.max(1e-3, value));
+        }
+        break;
+      }
+      case "stateVarInit": {
+        const sv = (clone2.stateVariables || []).find((s) => s.name === paramConfig.targetId);
+        if (sv) {
+          const numeric = sv.valueType === "number" || typeof sv.initialValue === "number";
+          sv.initialValue = numeric ? Number(value) : String(value);
+        }
+        break;
+      }
+      case "containerCapacity": {
+        const ct = (clone2.containerTypes || []).find((c) => c.id === paramConfig.targetId);
+        if (ct) {
+          ct.capacity = value === Infinity || value <= 0 ? null : Math.round(value);
+        }
+        break;
+      }
+      case "containerInitialLevel": {
+        const ct = (clone2.containerTypes || []).find((c) => c.id === paramConfig.targetId);
+        if (ct) ct.initialLevel = Math.max(0, Math.round(value));
+        break;
+      }
+    }
+  }
+  return clone2;
+}
+var INTEGER_PARAM_TYPES = /* @__PURE__ */ new Set([
+  "entityTypeCount",
+  "shiftCapacity",
+  "schedulePatternPeriodCapacity",
+  "schedulePatternDefaultCapacity",
+  "queueCapacity",
+  "containerCapacity",
+  "containerInitialLevel"
+]);
+function isIntegerParamType(type) {
+  return INTEGER_PARAM_TYPES.has(type);
+}
+
 // ../src/contracts/study.ts
 var SUMMARY_METRIC_FIELDS = [
   "total",
@@ -32009,7 +32349,7 @@ function buildGoalGaps(model = {}, aggregateStats = {}, summary = {}) {
 var STUDY_PROPOSAL_OBJECTIVE_RULE = `Only propose an objective metric from this fixed list of summary metric fields: ${SUMMARY_METRIC_FIELDS.join(", ")}. objective.metricRef must be exactly { "kind": "summary", "field": "<one of those>" }, or objective may be null if no single metric should be optimised.`;
 
 // src/tools.js
-var VERSION = "0.2.0";
+var VERSION = "0.3.0";
 var DEFAULT_REPLICATIONS = 10;
 var MAX_REPLICATIONS = 50;
 var RUN_BUDGET_MS = 9e4;
@@ -32123,31 +32463,51 @@ function num(v, fallback) {
 function runSettings(model, args = {}) {
   const ed = model.experimentDefaults || {};
   const replications = Math.min(MAX_REPLICATIONS, Math.max(1, Math.round(num(args.replications, DEFAULT_REPLICATIONS))));
+  const terminationCondition = ed.terminationMode === "condition" ? ed.terminationCondition || null : null;
   return {
     replications,
-    maxSimTime: num(args.maxSimTime, num(ed.maxSimTime, 500)),
+    maxSimTime: num(args.maxSimTime, terminationCondition ? null : num(ed.maxSimTime, 500)),
     warmupPeriod: num(args.warmupPeriod, num(ed.warmupPeriod, 0)),
     baseSeed: Math.round(num(args.seed, num(ed.seed, 12345))),
-    terminationCondition: ed.terminationMode === "condition" ? ed.terminationCondition || null : null
+    terminationCondition
   };
 }
+function runLength(settings, timeUnit) {
+  if (!settings.terminationCondition) return `${fmt(settings.maxSimTime)} ${timeUnit}`;
+  return `until its stop rule is met${settings.maxSimTime != null ? ` (at most ${fmt(settings.maxSimTime)} ${timeUnit})` : ""}`;
+}
+function seedList(seeds) {
+  if (!seeds.length) return "no seeds";
+  if (seeds.length === 1) return `seed ${seeds[0]}`;
+  const contiguous = seeds.every((s, i) => i === 0 || s === seeds[i - 1] + 1);
+  return contiguous ? `seeds ${seeds[0]}\u2013${seeds[seeds.length - 1]}` : `seeds ${seeds.join(", ")}`;
+}
+var BATCH_ENGINE_OPTIONS = { collectTrace: false, entityDetail: false };
+function maxCyclesFor(model, settings) {
+  return estimateMaxCycles(estimateRunComplexity(model, {
+    terminationMode: settings.terminationCondition ? "condition" : "time",
+    maxSimTime: settings.maxSimTime,
+    replications: 1
+  }));
+}
 function runReplicationsSync(model, settings, { budgetMs = RUN_BUDGET_MS, now = Date.now, collectTimeSeries = false } = {}) {
-  const estimate = estimateRunComplexity(model, { maxSimTime: settings.maxSimTime, replications: 1 });
-  const maxCycles = estimateMaxCycles(estimate);
+  const maxCycles = maxCyclesFor(model, settings);
   const started = now();
   const results = [];
+  const seeds = [];
   const failures = [];
   for (let i = 0; i < settings.replications; i++) {
     if (i > 0 && now() - started > budgetMs) break;
     const seed = settings.baseSeed + i;
     try {
-      const engine = buildEngine(model, seed, settings.warmupPeriod, settings.maxSimTime, settings.terminationCondition, maxCycles, 5e3, collectTimeSeries);
+      const engine = buildEngine(model, seed, settings.warmupPeriod, settings.maxSimTime, settings.terminationCondition, maxCycles, 5e3, collectTimeSeries, void 0, BATCH_ENGINE_OPTIONS);
       results.push(engine.runAll());
+      seeds.push(seed);
     } catch (e) {
       failures.push({ seed, message: e?.message || String(e) });
     }
   }
-  return { results, failures, elapsedMs: now() - started };
+  return { results, seeds, failures, elapsedMs: now() - started };
 }
 var KPI_ROWS = [
   ["summary.total", "Arrived"],
@@ -32170,7 +32530,8 @@ function summariseRun(model, settings, run2) {
   const timeUnit = model.timeUnit || "time units";
   const lines = [];
   const n = results.length;
-  lines.push(`Ran ${n} replication${n === 1 ? "" : "s"} of ${fmt(settings.maxSimTime)} ${timeUnit}${settings.warmupPeriod ? `, warm-up ${fmt(settings.warmupPeriod)}` : ", no warm-up"}, seeds ${settings.baseSeed}\u2013${settings.baseSeed + Math.max(0, settings.replications - 1)}.`);
+  const seeds = run2.seeds || results.map((_, i) => settings.baseSeed + i);
+  lines.push(`Ran ${n} replication${n === 1 ? "" : "s"} ${settings.terminationCondition ? "" : "of "}${runLength(settings, timeUnit)}${settings.warmupPeriod ? `, warm-up ${fmt(settings.warmupPeriod)}` : ", no warm-up"}, ${seedList(seeds)}.`);
   if (n < settings.replications && failures.length === 0) {
     lines.push(`Stopped after ${n} of ${settings.replications} replications to stay within the time limit \u2014 ask for fewer replications or a shorter run for full results.`);
   }
@@ -32281,14 +32642,14 @@ function goalLines(model, results) {
     const unit = TIME_METRIC.test(g.metric) && model.timeUnit ? ` ${model.timeUnit}` : "";
     const bare = (v) => asShare ? fmt(v * 100) : fmt(v);
     const suffix = asShare ? "%" : unit;
-    const show = (v) => `${bare(v)}${suffix}`;
+    const show2 = (v) => `${bare(v)}${suffix}`;
     if (ci.mean == null) {
       lines.push(`- ${g.label}: can't be evaluated from this run`);
       return;
     }
-    const value = ci.lower == null ? show(ci.mean) : `${show(ci.mean)} (95% CI ${bare(Math.max(0, ci.lower))}\u2013${bare(ci.upper)}${suffix})`;
+    const value = ci.lower == null ? show2(ci.mean) : `${show2(ci.mean)} (95% CI ${bare(Math.max(0, ci.lower))}\u2013${bare(ci.upper)}${suffix})`;
     const verdict = metCount === results.length ? "met in every replication" : metCount === 0 ? "missed in every replication" : `met in ${metCount} of ${results.length} replications`;
-    lines.push(`- ${metCount === results.length ? "\u2713" : metCount === 0 ? "\u2717" : "~"} ${g.label}: ${value} vs target ${g.operator} ${show(g.target)} \u2014 ${verdict}`);
+    lines.push(`- ${metCount === results.length ? "\u2713" : metCount === 0 ? "\u2717" : "~"} ${g.label}: ${value} vs target ${g.operator} ${show2(g.target)} \u2014 ${verdict}`);
   });
   return lines;
 }
@@ -32317,10 +32678,25 @@ function comparableMetrics(model, results, timeUnit) {
   }
   return metrics;
 }
+function pairBySeed(settings, runA, runB) {
+  const seedsOf = (run2) => run2.seeds || run2.results.map((_, i) => settings.baseSeed + i);
+  const bySeedB = new Map(seedsOf(runB).map((seed, i) => [seed, runB.results[i]]));
+  const seeds = [];
+  const a = [];
+  const b = [];
+  seedsOf(runA).forEach((seed, i) => {
+    if (!bySeedB.has(seed)) return;
+    seeds.push(seed);
+    a.push(runA.results[i]);
+    b.push(bySeedB.get(seed));
+  });
+  return { seeds, a, b };
+}
 function compareRuns(modelA, modelB, settings, runA, runB, labels = { a: "A", b: "B" }) {
   const timeUnit = modelA.timeUnit || "time units";
-  const n = Math.min(runA.results.length, runB.results.length);
-  const lines = [`Compared "${labels.a}" (A) and "${labels.b}" (B): ${n} paired replications of ${fmt(settings.maxSimTime)} ${timeUnit} each, same random numbers in both (seeds ${settings.baseSeed}\u2013${settings.baseSeed + n - 1}), A's run settings for both.`];
+  const paired = pairBySeed(settings, runA, runB);
+  const n = paired.seeds.length;
+  const lines = [`Compared "${labels.a}" (A) and "${labels.b}" (B): ${n} paired replications ${settings.terminationCondition ? "" : "of "}${runLength(settings, timeUnit)} each, same random numbers in both (${seedList(paired.seeds)}), A's run settings for both.`];
   for (const [tag, run2] of [["A", runA], ["B", runB]]) {
     if (run2.failures.length) lines.push(`${tag}: ${run2.failures.length} replication(s) failed: ${[...new Set(run2.failures.map((f) => f.message))].slice(0, 2).join(" | ")}`);
   }
@@ -32328,8 +32704,8 @@ function compareRuns(modelA, modelB, settings, runA, runB, labels = { a: "A", b:
     lines.push("Need at least 2 replications of each to compare.");
     return lines.join("\n");
   }
-  const mA = comparableMetrics(modelA, runA.results.slice(0, n), timeUnit);
-  const mB = comparableMetrics(modelB, runB.results.slice(0, n), timeUnit);
+  const mA = comparableMetrics(modelA, paired.a, timeUnit);
+  const mB = comparableMetrics(modelB, paired.b, timeUnit);
   const rows = [];
   for (const [key, a] of mA) {
     const b = mB.get(key);
@@ -32341,7 +32717,7 @@ function compareRuns(modelA, modelB, settings, runA, runB, labels = { a: "A", b:
     rows.push({ key, a, ca, cb, ci: pairedTConfidenceInterval(b.values, a.values) });
   }
   const corrected = bonferroniCI(rows.map((r) => r.ci), 0.05);
-  const show = (v, row) => row.a.share ? `${fmt(v * 100)}%` : `${fmt(v)}${row.a.unit ? ` ${row.a.unit}` : ""}`;
+  const show2 = (v, row) => row.a.share ? `${fmt(v * 100)}%` : `${fmt(v)}${row.a.unit ? ` ${row.a.unit}` : ""}`;
   const signed = (v, row) => `${v > 0 ? "+" : ""}${fmt(row.a.share ? v * 100 : v)}`;
   const unitOf = (row) => row.a.share ? " points" : row.a.unit ? ` ${row.a.unit}` : "";
   const showDiff = (v, row) => `${signed(v, row)}${unitOf(row)}`;
@@ -32349,7 +32725,7 @@ function compareRuns(modelA, modelB, settings, runA, runB, labels = { a: "A", b:
   const chance = [];
   rows.forEach((row, i) => {
     const c = corrected[i];
-    const line = `- ${row.a.label}: A ${show(row.ca.mean, row)} \u2192 B ${show(row.cb.mean, row)}`;
+    const line = `- ${row.a.label}: A ${show2(row.ca.mean, row)} \u2192 B ${show2(row.cb.mean, row)}`;
     if (c.meanDiff == null) {
       chance.push(`${line} (no spread to test)`);
       return;
@@ -32360,8 +32736,8 @@ function compareRuns(modelA, modelB, settings, runA, runB, labels = { a: "A", b:
   });
   lines.push("", "Real differences (the interval excludes zero, after correcting for comparing several measures at once):", ...real.length ? real : ["- none"]);
   lines.push("", "Could be chance (the interval includes zero \u2014 run more replications to tell):", ...chance.length ? chance : ["- none"]);
-  const goalsA = goalLines(modelA, runA.results.slice(0, n));
-  const goalsB = goalLines(modelB, runB.results.slice(0, n));
+  const goalsA = goalLines(modelA, paired.a);
+  const goalsB = goalLines(modelB, paired.b);
   if (goalsA.length) lines.push("", "Goals in A:", ...goalsA.slice(2));
   if (goalsB.length) lines.push("", "Goals in B:", ...goalsB.slice(2));
   return lines.join("\n");
@@ -32377,7 +32753,8 @@ ${text2}`;
   const settings = runSettings(a.model, { replications: 20, ...args });
   const half = { budgetMs: RUN_BUDGET_MS / 2 };
   const runA = runReplicationsSync(a.model, settings, half);
-  const runB = runReplicationsSync(b.model, { ...settings, replications: runA.results.length || settings.replications }, half);
+  const lastSeedA = runA.seeds.length ? runA.seeds[runA.seeds.length - 1] : null;
+  const runB = runReplicationsSync(b.model, { ...settings, replications: lastSeedA != null ? lastSeedA - settings.baseSeed + 1 : settings.replications }, half);
   return compareRuns(a.model, b.model, settings, runA, runB, { a: args.labelA || a.name || "A", b: args.labelB || b.name || "B" });
 }
 var DEFAULT_PERIODS = 8;
@@ -32420,7 +32797,8 @@ function summariseOverTime(model, settings, run2, periods = DEFAULT_PERIODS) {
   const reps = run2.results.filter((r) => Array.isArray(r.timeSeries) && r.timeSeries.length);
   if (!reps.length) return "No time series was recorded for this run.";
   const start = settings.warmupPeriod || 0;
-  const end = settings.maxSimTime;
+  const end = settings.maxSimTime ?? Math.max(...reps.map((r) => Number(r.finalTime) || 0));
+  if (!(end > start)) return "The run ended before the warm-up did, so there is nothing to show over time.";
   const width = (end - start) / periods;
   const avg = (read) => {
     const perRep = reps.map((r) => periodAverages(r.timeSeries, read, start, end, periods));
@@ -32464,14 +32842,371 @@ ${text2}`;
 ${run2.failures.length} replication(s) failed: ${run2.failures[0].message}` : "";
   return summariseOverTime(model, settings, run2, periods) + failed;
 }
+var MAX_SWEEP_POINTS = 12;
+var MAX_SWEEP_RUNS = 200;
+var DEFAULT_SWEEP_REPLICATIONS = 5;
+function paramLine(p) {
+  return `- ${p.label}${p.subLabel ? ` (${p.subLabel})` : ""} \u2014 now ${p.currentValue}`;
+}
+function listParamsText(params) {
+  if (!params.length) return "This model has nothing Flow can vary (no servers, capacities or distribution parameters).";
+  return `Parameters you can vary (pass one as \`parameter\`, by its name as shown):
+${params.map(paramLine).join("\n")}`;
+}
+function findParam(params, query) {
+  const q = String(query || "").trim().toLowerCase();
+  const exact = params.filter((p) => p.label.toLowerCase() === q || String(p.path).toLowerCase() === q);
+  if (exact.length === 1) return exact[0];
+  const partial2 = params.filter((p) => `${p.label} ${p.subLabel || ""}`.toLowerCase().includes(q));
+  if (partial2.length === 1) return partial2[0];
+  const which = partial2.length > 1 ? `"${query}" matches ${partial2.length} parameters` : `No parameter matches "${query}"`;
+  throw new ToolError(`${which}.
+${listParamsText(partial2.length > 1 ? partial2 : params)}`);
+}
+function sweepValues(args, param) {
+  let values;
+  if (Array.isArray(args.values) && args.values.length) {
+    values = args.values.map(Number);
+  } else if (args.from != null && args.to != null) {
+    const from = Number(args.from);
+    const to = Number(args.to);
+    const step = Math.abs(Number(args.step ?? 1)) || 1;
+    if (!Number.isFinite(from) || !Number.isFinite(to)) throw new ToolError("`from` and `to` must be numbers.");
+    values = [];
+    const dir = to >= from ? 1 : -1;
+    for (let v = from; dir > 0 ? v <= to + 1e-9 : v >= to - 1e-9; v += dir * step) {
+      values.push(+v.toFixed(6));
+      if (values.length > MAX_SWEEP_POINTS) break;
+    }
+  } else {
+    throw new ToolError("Give `values` (e.g. [2, 3, 4]) or `from`, `to` and optionally `step`.");
+  }
+  if (values.some((v) => !Number.isFinite(v))) throw new ToolError("Every value must be a number.");
+  if (isIntegerParamType(param.type)) values = values.map((v) => Math.round(v));
+  values = [...new Set(values)];
+  if (values.length > MAX_SWEEP_POINTS) throw new ToolError(`That is more than ${MAX_SWEEP_POINTS} values. Use a coarser step or fewer values.`);
+  return values;
+}
+function meanPm(ci, scale = 1) {
+  if (!ci || ci.mean == null) return "\u2014";
+  return ci.halfWidth != null ? `${fmt(ci.mean * scale)} \xB1${fmt(ci.halfWidth * scale)}` : fmt(ci.mean * scale);
+}
+function summariseSweep(model, param, settings, points) {
+  const timeUnit = model.timeUnit || "time units";
+  const resources = (model.entityTypes || []).filter((e) => e.role === "server").map((e) => e.name).slice(0, 4);
+  const goals = model.goals || [];
+  const header = ["Value", "Completed", `Avg wait (${timeUnit})`, `Time in system (${timeUnit})`, ...resources.map((r) => `${r} busy %`), ...goals.length ? ["Goals met"] : []];
+  const rows = [];
+  const notes = [];
+  const goalMet = goals.map(() => []);
+  for (const pt of points) {
+    if (pt.error) {
+      notes.push(`- ${pt.value}: not run \u2014 ${pt.error}`);
+      continue;
+    }
+    const { results } = pt.run;
+    if (!results.length) {
+      notes.push(`- ${pt.value}: every replication failed (${pt.run.failures[0]?.message || "unknown error"})`);
+      continue;
+    }
+    const agg = summarizeReplicationResults(results, SUMMARY_METRICS);
+    const perRep = results.map((r) => buildKpis(pt.model, r));
+    const util2 = (name) => confidenceInterval95(perRep.map((k) => {
+      const u = k.resources?.find((x) => x.name === name)?.utilisation;
+      return u == null ? null : u / 100;
+    }));
+    let goalCell = [];
+    if (goals.length) {
+      const gaps = results.map((r) => buildGoalGapsFromResults(pt.model, r) || []);
+      const metAll = goals.map((_, i) => gaps.every((g) => g[i]?.met));
+      metAll.forEach((met, i) => {
+        if (met) goalMet[i].push(pt.value);
+      });
+      goalCell = [`${metAll.filter(Boolean).length}/${goals.length}`];
+    }
+    rows.push([
+      String(pt.value),
+      meanPm(agg["summary.served"]),
+      meanPm(agg["summary.avgWait"]),
+      meanPm(agg["summary.avgTimeInSystem"]),
+      ...resources.map((r) => meanPm(util2(r), 100)),
+      ...goalCell
+    ]);
+    if (pt.run.failures.length) notes.push(`- ${pt.value}: ${pt.run.failures.length} replication(s) failed`);
+    if (pt.run.results.length < settings.replications && !pt.run.failures.length) notes.push(`- ${pt.value}: stopped after ${pt.run.results.length} replications (time limit)`);
+  }
+  const lines = [
+    `Varied "${param.label}" (now ${param.currentValue}): ${points.length} values \xD7 ${settings.replications} replications ${settings.terminationCondition ? "" : "of "}${runLength(settings, timeUnit)}${settings.warmupPeriod ? `, warm-up ${fmt(settings.warmupPeriod)}` : ""}. Every value uses the same random numbers (${seedList(Array.from({ length: settings.replications }, (_, i) => settings.baseSeed + i))}), so the rows differ only because of the parameter. Cells are mean \xB195% half-width.`,
+    "",
+    rows.length ? table(header, rows) : "No value ran successfully."
+  ];
+  if (goals.length) {
+    lines.push("", "Values where each goal was met in every replication:");
+    goals.forEach((g, i) => lines.push(`- ${g.label || g.metric}: ${goalMet[i].length ? goalMet[i].join(", ") : "none"}`));
+  }
+  if (notes.length) lines.push("", "Notes:", ...notes);
+  lines.push("", "To check one value against another properly, use flow_compare_models on the two versions.");
+  return lines.join("\n");
+}
+function applyParam(model, param, value) {
+  const m = applySweepValue(model, param, value);
+  const et = (m.entityTypes || []).find((e) => e.id === param.targetId);
+  if (param.type === "entityTypeCount" && et) et.count = Number(et.count);
+  if (param.type === "shiftCapacity" && et?.shiftSchedule?.[param.periodIndex]) {
+    et.shiftSchedule[param.periodIndex].capacity = Number(et.shiftSchedule[param.periodIndex].capacity);
+  }
+  return m;
+}
+async function sweep(args, folder) {
+  const { model } = await modelFrom(args, folder);
+  const { errors, text: text2 } = validationReport(model);
+  if (errors.length) return `Not run \u2014 fix these first.
+${text2}`;
+  const params = enumerateSweepableParams(model);
+  if (!args.parameter) return listParamsText(params);
+  const param = findParam(params, args.parameter);
+  const values = sweepValues(args, param);
+  const settings = runSettings(model, { replications: DEFAULT_SWEEP_REPLICATIONS, ...args });
+  if (values.length * settings.replications > MAX_SWEEP_RUNS) {
+    throw new ToolError(`${values.length} values \xD7 ${settings.replications} replications is more than ${MAX_SWEEP_RUNS} runs. Use fewer values or replications.`);
+  }
+  const started = Date.now();
+  const points = [];
+  for (const value of values) {
+    if (Date.now() - started > RUN_BUDGET_MS) {
+      points.push({ value, error: "skipped to stay within the time limit" });
+      continue;
+    }
+    const pointModel = applyParam(model, param, value);
+    const pointErrors = validateModel(pointModel).errors;
+    if (pointErrors.length) {
+      points.push({ value, error: pointErrors.map((e) => `[${e.code}] ${e.message}`).slice(0, 2).join("; ") });
+      continue;
+    }
+    const budgetMs = Math.max(1e3, (RUN_BUDGET_MS - (Date.now() - started)) / (values.length - points.length));
+    points.push({ value, model: pointModel, run: runReplicationsSync(pointModel, settings, { budgetMs }) });
+  }
+  return summariseSweep(model, param, settings, points);
+}
+var DEFAULT_TRACE_LINES = 80;
+var MAX_TRACE_LINES = 400;
+var MAX_TRACE_EVENTS = 2e5;
+var clip = (t, n = 300) => t.length > n ? `${t.slice(0, n - 1)}\u2026` : t;
+function mentionsEntity(text2, id) {
+  return new RegExp(`#${id}(?!\\d)`).test(text2);
+}
+function summariseTrace(model, settings, seed, result, { from = 0, until = Infinity, entity = null, limit = DEFAULT_TRACE_LINES } = {}) {
+  const timeUnit = model.timeUnit || "time units";
+  const log = result.log || [];
+  const end = log.find((l) => l.phase === "END");
+  const lines = [`One replication (seed ${seed}), ended at t=${fmt(result.finalTime)} ${timeUnit}${end ? ` \u2014 ${end.message}` : ""}.`];
+  const cStats = new Map((model.cEvents || []).map((ce) => [ce.id, { name: ce.name, checked: 0, true: 0, fired: 0 }]));
+  const bFired = new Map((model.bEvents || []).map((be) => [be.id, { name: be.name, fired: 0 }]));
+  for (const l of log) {
+    if (l.cEval) {
+      const st = cStats.get(l.cEval.eventId);
+      if (st) {
+        st.checked++;
+        if (l.cEval.conditionTrue) st.true++;
+        if (l.event?.fired) st.fired++;
+      }
+    } else if (l.event?.type === "B" && l.event.fired) {
+      const st = bFired.get(l.event.id);
+      if (st) st.fired++;
+    }
+  }
+  if (cStats.size) {
+    lines.push("", "Rules (C-events):");
+    for (const st of cStats.values()) {
+      if (st.fired) lines.push(`- "${st.name}" fired ${st.fired} time${st.fired === 1 ? "" : "s"}`);
+      else if (st.true) lines.push(`- "${st.name}" NEVER FIRED: its condition was true ${st.true} time${st.true === 1 ? "" : "s"} but its effect did nothing (check the queue, server type or entity filter it names)`);
+      else lines.push(`- "${st.name}" NEVER FIRED: its condition was never true (checked ${st.checked} time${st.checked === 1 ? "" : "s"})`);
+    }
+  }
+  if (bFired.size) {
+    lines.push("", "Events (B-events):");
+    for (const st of bFired.values()) lines.push(`- "${st.name}" ${st.fired ? `happened ${st.fired} time${st.fired === 1 ? "" : "s"}` : "NEVER HAPPENED (nothing scheduled it, or not before the run ended)"}`);
+  }
+  const customers = (result.entitySummary || []).filter((e) => e.role !== "server" && e.status !== "done" && e.status !== "reneged" && e.status !== "balked");
+  if (customers.length) {
+    const groups = /* @__PURE__ */ new Map();
+    for (const e of customers) {
+      const where = e.status === "serving" ? `being served${e.lastQueue ? ` after ${e.lastQueue}` : ""}` : `${e.status} in ${e.queue || e.lastQueue || "(no queue)"}`;
+      const g = groups.get(where) || [];
+      g.push(e);
+      groups.set(where, g);
+    }
+    lines.push("", "Still in the system at the end:");
+    for (const [where, es] of [...groups].sort((a, b) => b[1].length - a[1].length)) {
+      const oldest = es.reduce((a, b) => (a.arrivalTime ?? 0) <= (b.arrivalTime ?? 0) ? a : b);
+      lines.push(`- ${es.length} ${where}; longest there since t=${fmt(oldest.lastStageStart ?? oldest.arrivalTime ?? 0)} (e.g. #${oldest.id}, ${oldest.type})`);
+    }
+  }
+  if (entity != null) {
+    const e = (result.entitySummary || []).find((x) => x.id === entity);
+    if (!e) {
+      lines.push("", `Entity #${entity} doesn't exist in this run.`);
+    } else {
+      lines.push("", `Entity #${e.id} (${e.type}): arrived t=${fmt(e.arrivalTime ?? 0)}, now ${e.status}${e.queue ? ` in ${e.queue}` : ""}.`);
+      if (Object.keys(e.attrs || {}).length) lines.push(`  Attributes: ${clip(JSON.stringify(e.attrs), 200)}`);
+      for (const st of e.stages || []) {
+        lines.push(`  - ${st.queueName || "?"} \u2192 ${st.serverType || "?"}: waited ${fmt(st.stageWait ?? 0)}, served ${fmt(st.stageService ?? 0)}${st.interrupted ? " (interrupted)" : ""}`);
+      }
+    }
+  }
+  const events = log.filter((l) => l.event?.fired && l.time >= from && l.time <= until && (entity == null || mentionsEntity(l.message || "", entity)));
+  const scope = `${from > 0 || until < Infinity ? `t=${fmt(from)}\u2013${until < Infinity ? fmt(until) : "end"}` : "whole run"}${entity != null ? `, entity #${entity}` : ""}`;
+  lines.push("", `Event log (${scope}; ${events.length} event${events.length === 1 ? "" : "s"}):`);
+  for (const l of events.slice(0, limit)) lines.push(`t=${fmt(l.time)}  ${clip(l.message || "")}`);
+  if (events.length > limit) lines.push(`\u2026${events.length - limit} more. Narrow it with from/until or entity, or raise limit (up to ${MAX_TRACE_LINES}).`);
+  const warnings = [...new Set((result.warnings || []).map((w) => typeof w === "string" ? w : w?.message).filter(Boolean))];
+  if (warnings.length) lines.push("", "Engine warnings:", ...warnings.slice(0, 8).map((w) => `- ${w}`));
+  return lines.join("\n");
+}
+async function traceRun(args, folder) {
+  const { model } = await modelFrom(args, folder);
+  const { errors, text: text2 } = validationReport(model);
+  if (errors.length) return `Not run \u2014 fix these first.
+${text2}`;
+  const settings = runSettings(model, { ...args, replications: 1 });
+  const from = Math.max(0, num(args.from, 0));
+  const until = num(args.until, null);
+  if (until != null && until <= from) throw new ToolError("`until` must be after `from`.");
+  const runSettingsForTrace = { ...settings, maxSimTime: until != null && (settings.maxSimTime == null || until < settings.maxSimTime) ? until : settings.maxSimTime };
+  const estimate = estimateRunComplexity(model, { terminationMode: runSettingsForTrace.terminationCondition ? "condition" : "time", maxSimTime: runSettingsForTrace.maxSimTime, replications: 1 });
+  if ((Number(estimate?.estimatedBEventFirings) || 0) > MAX_TRACE_EVENTS) {
+    throw new ToolError(`This run is too long to trace in full (about ${fmt(estimate.estimatedBEventFirings)} events). Give \`until\` (and optionally \`from\`) to trace a stretch of it.`);
+  }
+  const entity = args.entity != null ? Math.round(Number(args.entity)) : null;
+  const limit = Math.min(MAX_TRACE_LINES, Math.max(1, Math.round(num(args.limit, DEFAULT_TRACE_LINES))));
+  const engine = buildEngine(
+    model,
+    settings.baseSeed,
+    settings.warmupPeriod,
+    runSettingsForTrace.maxSimTime,
+    settings.terminationCondition,
+    maxCyclesFor(model, runSettingsForTrace),
+    5e3,
+    false,
+    void 0,
+    { collectTrace: true, entityDetail: true }
+  );
+  const result = engine.runAll();
+  return summariseTrace(model, settings, settings.baseSeed, result, { from, until: until ?? Infinity, entity, limit });
+}
+var MAX_EDIT_CHANGES = 50;
+function parsePath(p) {
+  const raw = String(p ?? "").trim().replace(/^\//, "");
+  if (!raw) throw new ToolError('Every change needs a `path`, e.g. "entityTypes/Nurse/count".');
+  return raw.split("/").map((seg) => seg.replace(/~1/g, "/").replace(/~0/g, "~"));
+}
+function arrayIndex(arr, seg, at) {
+  if (/^\d+$/.test(seg)) {
+    const i2 = Number(seg);
+    if (i2 < arr.length) return i2;
+  }
+  let i = arr.findIndex((x) => x && typeof x === "object" && x.id === seg);
+  if (i < 0) i = arr.findIndex((x) => x && typeof x === "object" && String(x.name ?? "").trim().toLowerCase() === seg.trim().toLowerCase());
+  if (i < 0) {
+    const names = arr.map((x, k) => x && typeof x === "object" ? x.name ?? x.id ?? k : k).slice(0, 20).join(", ");
+    throw new ToolError(`"${at}" has no "${seg}". It has: ${names || "nothing"}.`);
+  }
+  return i;
+}
+var show = (v) => v === void 0 ? "(not set)" : clip(JSON.stringify(v), 120);
+function applyChange(model, change) {
+  const op = change?.op || "set";
+  if (!["set", "remove", "append"].includes(op)) throw new ToolError(`Unknown op "${op}" \u2014 use set, remove or append.`);
+  if (op !== "remove" && !("value" in (change || {}))) throw new ToolError(`The change to "${change?.path}" needs a \`value\`.`);
+  const segs = parsePath(change.path);
+  let node = model;
+  for (let k = 0; k < segs.length - 1; k++) {
+    const at = segs.slice(0, k + 1).join("/");
+    const seg = segs[k];
+    const next = Array.isArray(node) ? node[arrayIndex(node, seg, segs.slice(0, k).join("/") || "(model)")] : node?.[seg];
+    if (next == null || typeof next !== "object") throw new ToolError(`"${at}" doesn't exist${next != null ? " or is not an object or list" : ""}.`);
+    node = next;
+  }
+  const last = segs[segs.length - 1];
+  const parentPath = segs.slice(0, -1).join("/") || "(model)";
+  if (op === "append") {
+    const arr = Array.isArray(node) ? node[arrayIndex(node, last, parentPath)] : node[last];
+    if (!Array.isArray(arr)) throw new ToolError(`"${change.path}" is not a list, so nothing can be appended to it.`);
+    arr.push(change.value);
+    return `${change.path}: appended ${show(change.value)}`;
+  }
+  if (Array.isArray(node)) {
+    if (op === "set" && last === "-") {
+      node.push(change.value);
+      return `${change.path}: appended ${show(change.value)}`;
+    }
+    const i = arrayIndex(node, last, parentPath);
+    const before2 = node[i];
+    if (op === "remove") {
+      node.splice(i, 1);
+      return `${change.path}: removed ${show(before2)}`;
+    }
+    node[i] = change.value;
+    return `${change.path}: ${show(before2)} \u2192 ${show(change.value)}`;
+  }
+  const before = node[last];
+  if (op === "remove") {
+    if (!(last in node)) throw new ToolError(`"${change.path}" doesn't exist.`);
+    delete node[last];
+    return `${change.path}: removed ${show(before)}`;
+  }
+  node[last] = change.value;
+  return `${change.path}: ${show(before)} \u2192 ${show(change.value)}`;
+}
+function issueDiff(before, after) {
+  const key = (i) => `${i.code}|${i.message}`;
+  const had = new Set(before.map(key));
+  const has = new Set(after.map(key));
+  return { added: after.filter((i) => !had.has(key(i))), fixed: before.filter((i) => !has.has(key(i))) };
+}
+async function editModel(args, folder) {
+  if (!args.file) throw new ToolError("Give the `file` to edit (a model in your Flow models folder). To change a model you hold as JSON, edit it and use flow_save_model.");
+  const changes = Array.isArray(args.changes) ? args.changes : [];
+  if (!changes.length) throw new ToolError('Give at least one change, e.g. { "path": "entityTypes/Nurse/count", "value": 3 }.');
+  if (changes.length > MAX_EDIT_CHANGES) throw new ToolError(`At most ${MAX_EDIT_CHANGES} changes at a time.`);
+  const { full, name, description, model } = await readModelFile(folder, args.file);
+  const original = JSON.parse(await readFile(full, "utf8"));
+  const graph = (original?.model_json ?? original)?.graph ?? null;
+  const edited = structuredClone(model);
+  const done = [];
+  for (const [i, change] of changes.entries()) {
+    try {
+      done.push(applyChange(edited, change));
+    } catch (e) {
+      throw new ToolError(`Change ${i + 1} (${change?.path ?? "no path"}) not applied, and nothing was saved: ${e.message}`);
+    }
+  }
+  const before = validateModel(model);
+  const after = validationReport(edited);
+  const errs = issueDiff(before.errors, after.errors);
+  const warns = issueDiff(before.warnings, after.warnings);
+  const lines = [`Changes to "${name || args.file}":`, ...done.map((d) => `- ${d}`), ""];
+  if (errs.added.length) lines.push("New errors:", ...errs.added.map(issueLine));
+  if (errs.fixed.length) lines.push("Errors fixed:", ...errs.fixed.map(issueLine));
+  if (warns.added.length) lines.push(`New warnings (${warns.added.length}):`, ...warns.added.slice(0, 15).map(issueLine));
+  lines.push(after.errors.length ? `${after.errors.length} error${after.errors.length === 1 ? "" : "s"} in total after the change.` : "No errors after the change.");
+  if (args.dryRun) return [...lines, "", "Dry run: nothing was saved."].join("\n");
+  if (after.errors.length && !args.allowErrors) {
+    return [...lines, "", "Not saved \u2014 the edited model has errors. Fix them in the same call, or pass allowErrors: true to save a work in progress."].join("\n");
+  }
+  const envelope = exportEnvelope({ name: name || path.basename(full, ".json"), description, model: edited, graph });
+  await writeFile(full, `${JSON.stringify(envelope, null, 2)}
+`, "utf8");
+  return [...lines, "", `Saved over ${full}. Re-import it in Flow (+ New Model \u2192 Import a file) to see the change there.`].join("\n");
+}
 function safeFileName(name) {
   const cleaned = String(name || "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
   return cleaned || "Untitled model";
 }
-function exportEnvelope({ name, description, model }, exportedAt = (/* @__PURE__ */ new Date()).toISOString()) {
+function exportEnvelope({ name, description, model, graph = null }, exportedAt = (/* @__PURE__ */ new Date()).toISOString()) {
   const payload = {
     name: name || "Untitled model",
-    model_json: { ...pickModelJsonFields(model), graph: null },
+    model_json: { ...pickModelJsonFields(model), graph },
     exportedAt,
     appVersion: `flow-mcp ${VERSION}`
   };
@@ -32521,9 +33256,9 @@ var FOLDER = modelsFolder();
 var WORKFLOW = `How to build a Flow model with these tools:
 1. Read the format first: flow_get_schema() gives the generation protocol, the most common mistakes and the list of sections; fetch the sections you need (e.g. "1, 2, 3, 4, 5, 6").
 2. Draft the model JSON, then flow_validate_model. Fix every error and re-validate until there are none.
-3. flow_run_model (10+ replications). Read the results, goals and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't. To see WHEN queues build or resources saturate, use flow_run_over_time.
-4. To judge a change (an extra server, a new rule), use flow_compare_models rather than two separate runs: it uses the same random numbers in both and says which differences are real and which could be chance.
-5. flow_save_model with a clear name. Tell the person the file name and that they open it in Flow with + New Model \u2192 Import a file.
+3. flow_run_model (10+ replications). Read the results, goals and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't. To see WHEN queues build or resources saturate, use flow_run_over_time. If something looks wrong (nothing completes, a queue never empties, a rule never fires), use flow_trace_run to see what actually happened in one run.
+4. To judge a change (an extra server, a new rule), use flow_compare_models rather than two separate runs: it uses the same random numbers in both and says which differences are real and which could be chance. To find a good setting ("how many nurses?"), use flow_sweep_parameter over a range of values.
+5. flow_save_model with a clear name. Tell the person the file name and that they open it in Flow with + New Model \u2192 Import a file. For later small changes to a saved model, use flow_edit_model instead of re-sending the whole model.
 Quote results with their confidence intervals, and say which numbers you assumed.`;
 var server = new McpServer(
   { name: "flow", version: VERSION },
@@ -32615,6 +33350,53 @@ server.registerTool("flow_run_over_time", {
   },
   annotations: { readOnlyHint: true }
 }, handler((args) => runOverTime(args, FOLDER)));
+server.registerTool("flow_sweep_parameter", {
+  title: "Try a range of values for one parameter",
+  description: `Answer "how many X do I need?" or "what if service took longer?": run the model at each of several values of one parameter (server count, shift or queue capacity, a distribution parameter, a state variable's starting value\u2026) and show a table of completions, waits, time in system, utilisation and goals met per value, with 95% intervals. Every value uses the same random numbers. Call it without \`parameter\` to list what can be varied. Up to ${MAX_SWEEP_POINTS} values and ${MAX_SWEEP_RUNS} runs in total.`,
+  inputSchema: {
+    model: modelArg,
+    file: fileArg,
+    parameter: external_exports.string().optional().describe('The parameter, by its name in the list (e.g. "Number of Nurse"). Omit to get the list.'),
+    values: external_exports.array(external_exports.number()).optional().describe("The values to try, e.g. [2, 3, 4, 5]. Or use from/to/step."),
+    from: external_exports.number().optional(),
+    to: external_exports.number().optional(),
+    step: external_exports.number().positive().optional().describe("Default 1"),
+    replications: external_exports.number().int().min(1).max(MAX_REPLICATIONS).optional().describe(`Per value (default ${DEFAULT_SWEEP_REPLICATIONS})`),
+    ...runSettingsArgs
+  },
+  annotations: { readOnlyHint: true }
+}, handler((args) => sweep(args, FOLDER)));
+server.registerTool("flow_trace_run", {
+  title: "Trace one run of a Flow model",
+  description: "Run the model once and show what actually happened: how often each rule (C-event) and event (B-event) fired and which never did, who was still in the system at the end and where, one entity's path through the model if asked, and the event log. Use it to find why a model misbehaves \u2014 entities stuck, a queue that never empties, a rule that never fires.",
+  inputSchema: {
+    model: modelArg,
+    file: fileArg,
+    from: external_exports.number().min(0).optional().describe("Show the event log from this time (default 0)"),
+    until: external_exports.number().positive().optional().describe("Stop the run and the log at this time \u2014 needed for long runs"),
+    entity: external_exports.number().int().optional().describe("Only events involving this entity id (e.g. 119 for #119), plus its path"),
+    limit: external_exports.number().int().min(1).max(MAX_TRACE_LINES).optional().describe(`Event log lines (default ${DEFAULT_TRACE_LINES})`),
+    seed: external_exports.number().int().optional().describe("Random seed (default: the model's own)"),
+    maxSimTime: runSettingsArgs.maxSimTime,
+    warmupPeriod: runSettingsArgs.warmupPeriod
+  },
+  annotations: { readOnlyHint: true }
+}, handler((args) => traceRun(args, FOLDER)));
+server.registerTool("flow_edit_model", {
+  title: "Edit a saved Flow model",
+  description: `Change parts of a model file in the Flow models folder without re-sending the whole model, then validate and save it in place (keeping its canvas layout). Each change has a \`path\` of names or positions separated by "/" \u2014 e.g. "entityTypes/Nurse/count", "bEvents/Patient Arrival/schedules/0/distParams/mean", "queues/Triage/capacity" \u2014 and op "set" (default), "remove" or "append" (to a list; or set ".../-"). List items can be named by id or name. Shows each change, and errors and warnings it added or fixed. Refuses to save a model with errors unless allowErrors is true. Up to ${MAX_EDIT_CHANGES} changes per call.`,
+  inputSchema: {
+    file: external_exports.string().describe('The model file, e.g. "GP surgery.json"'),
+    changes: external_exports.array(external_exports.object({
+      path: external_exports.string(),
+      op: external_exports.enum(["set", "remove", "append"]).optional(),
+      value: external_exports.any().optional()
+    })).min(1).max(MAX_EDIT_CHANGES),
+    dryRun: external_exports.boolean().optional().describe("Show the result of the changes without saving"),
+    allowErrors: external_exports.boolean().optional()
+  },
+  annotations: { destructiveHint: true, idempotentHint: false }
+}, handler((args) => editModel(args, FOLDER)));
 server.registerTool("flow_save_model", {
   title: "Save a Flow model",
   description: 'Save a model to the Flow models folder as a file Flow can import (+ New Model \u2192 Import a file). Validates first and refuses a model with errors unless allowErrors is true. Never overwrites an existing file unless overwrite is true: it adds " (2)", " (3)"\u2026 instead.',

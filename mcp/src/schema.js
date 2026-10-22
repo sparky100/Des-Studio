@@ -24,7 +24,8 @@ export function splitSchema(text) {
     if (/^```/.test(line)) inFence = !inFence;
     if (!inFence && /^## /.test(line)) {
       const title = line.replace(/^## /, '').trim();
-      const number = (title.match(/^(\d+(?:\.\d+)?)\./) || [])[1] || null;
+      // "1. Top-Level Structure" → "1"; "2.1 Runtime Outcome Metadata" → "2.1".
+      const number = (title.match(/^(\d+(?:\.\d+)?)\.?\s/) || [])[1] || null;
       current = { title, number, lines: [line] };
       sections.push(current);
     } else if (current) {
@@ -61,7 +62,13 @@ export function schemaExcerpt(text, section) {
   const wanted = String(section).split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   const picked = [];
   for (const w of wanted) {
-    const matches = sections.filter(s => (s.number && s.number === w) || s.title.toLowerCase().includes(w));
+    // A number picks that section and its numbered children ("8" → 8 and
+    // 8.1) — never other sections whose title merely contains the digit
+    // ("1" must not pull in 10–15). Words match anywhere in the title.
+    const isNumber = /^\d+(\.\d+)?$/.test(w);
+    const matches = sections.filter(s => (isNumber
+      ? s.number && (s.number === w || s.number.startsWith(`${w}.`))
+      : s.title.toLowerCase().includes(w)));
     // A sub-section number ("12.3") that isn't a top-level section: return
     // just that sub-section rather than all of §12.
     const sub = matches.length === 0 && /^\d+\.\d+$/.test(w) ? subsection(text, w) : null;
