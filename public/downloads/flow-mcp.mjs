@@ -24566,8 +24566,13 @@ var MACROS = [
       const destQueue = targetQueue || cust.lastQueue || cust.queue;
       delete cust.serviceStart;
       let retired = 0;
+      const countedTypes = /* @__PURE__ */ new Set();
       for (const srv of claimedServers) {
-        noteShiftCompletion(srv);
+        const typeKey = srv.type.trim().toLowerCase();
+        if (!countedTypes.has(typeKey)) {
+          countedTypes.add(typeKey);
+          noteShiftCompletion(srv);
+        }
         releaseServerClaim(cust, srv, clock);
         beginTurnaround(srv, ctx);
         retired += retireIdleExcessServers(ctx, srv.type);
@@ -27007,10 +27012,11 @@ function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminati
     const norm2 = (v) => String(v ?? "").trim().toLowerCase();
     const queues = runtimeModel.queues || [];
     for (const ce of runtimeModel.cEvents || []) {
+      if (hasConditionDefinition(ce.entityFilter)) continue;
       for (const { macro, args } of macroCalls(ce.effect)) {
         if (String(macro).toUpperCase() !== "ASSIGN" || args.length < 2) continue;
         const extra = args.slice(2).map((a) => String(a).trim());
-        if (extra.some((a) => /^"|^Entity\./i.test(a) || /^(SCAN|PREEMPT)\b/i.test(a))) continue;
+        if (extra.some((a) => /^"|^Entity\./i.test(a) || /^(SCAN|PREEMPT)\b/i.test(a) || /^[A-Za-z_]\w*\s*:/.test(a))) continue;
         const sType = norm2(args[1]);
         if (!sType || sType === "any") continue;
         const target = norm2(args[0]);
@@ -31578,7 +31584,7 @@ var SUMMARY_METRIC_FIELDS = [
   "reneged",
   "balked",
   "avgWait",
-  "avgWaitByLittle",
+  "avgTimeInSystemByLittle",
   "avgSvc",
   "avgSojourn",
   "maxSojourn",
