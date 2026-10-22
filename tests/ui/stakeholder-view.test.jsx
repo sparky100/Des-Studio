@@ -119,7 +119,7 @@ describe('StakeholderView', () => {
 
     const patched = runReplications.mock.calls[0][0].model;
     const teller = patched.entityTypes.find(e => e.id === 'et_srv');
-    expect(teller.count).toBe('4');
+    expect(teller.count).toBe(4);
     // The original model object is untouched
     expect(validModel.entityTypes.find(e => e.id === 'et_srv').count).toBe(1);
   });
@@ -192,7 +192,7 @@ describe('StakeholderView — Watch it run', () => {
     expect(await screen.findByTestId('execute-canvas')).toBeInTheDocument();
     expect(mockBuildEngine).toHaveBeenCalledTimes(1);
     const patched = mockBuildEngine.mock.calls[0][0];
-    expect(patched.entityTypes.find(e => e.id === 'et_srv').count).toBe('4');
+    expect(patched.entityTypes.find(e => e.id === 'et_srv').count).toBe(4);
     // Run/runReplications path is completely separate — never invoked by Watch it run.
     expect(runReplications).not.toHaveBeenCalled();
     // Settings panel is swapped out, not layered underneath.

@@ -267,7 +267,9 @@ export function applySweepValues(model, sweepConfigs = []) {
     switch (paramConfig.type) {
       case "entityTypeCount": {
         const et = (clone.entityTypes || []).find((/** @type {any} */ e) => e.id === paramConfig.targetId);
-        if (et) et.count = String(Math.max(0, Math.round(value)));
+        // A number, as the editors store it: the validator's V19 rejects a
+        // string count, so a string here failed validation on every point.
+        if (et) et.count = Math.max(0, Math.round(value));
         break;
       }
       case "shiftCapacity": {

@@ -31806,7 +31806,7 @@ function applySweepValues(model, sweepConfigs = []) {
     switch (paramConfig.type) {
       case "entityTypeCount": {
         const et = (clone2.entityTypes || []).find((e) => e.id === paramConfig.targetId);
-        if (et) et.count = String(Math.max(0, Math.round(value)));
+        if (et) et.count = Math.max(0, Math.round(value));
         break;
       }
       case "shiftCapacity": {
@@ -32948,15 +32948,6 @@ function summariseSweep(model, param, settings, points) {
   lines.push("", "To check one value against another properly, use flow_compare_models on the two versions.");
   return lines.join("\n");
 }
-function applyParam(model, param, value) {
-  const m = applySweepValue(model, param, value);
-  const et = (m.entityTypes || []).find((e) => e.id === param.targetId);
-  if (param.type === "entityTypeCount" && et) et.count = Number(et.count);
-  if (param.type === "shiftCapacity" && et?.shiftSchedule?.[param.periodIndex]) {
-    et.shiftSchedule[param.periodIndex].capacity = Number(et.shiftSchedule[param.periodIndex].capacity);
-  }
-  return m;
-}
 async function sweep(args, folder) {
   const { model } = await modelFrom(args, folder);
   const { errors, text: text2 } = validationReport(model);
@@ -32977,7 +32968,7 @@ ${text2}`;
       points.push({ value, error: "skipped to stay within the time limit" });
       continue;
     }
-    const pointModel = applyParam(model, param, value);
+    const pointModel = applySweepValue(model, param, value);
     const pointErrors = validateModel(pointModel).errors;
     if (pointErrors.length) {
       points.push({ value, error: pointErrors.map((e) => `[${e.code}] ${e.message}`).slice(0, 2).join("; ") });

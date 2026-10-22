@@ -90,7 +90,7 @@ describe("ExecutePanel — Run tab ad-hoc parameter adjustment", () => {
     await waitFor(() => expect(mockRunReplications).toHaveBeenCalledTimes(1));
     const runArgs = mockRunReplications.mock.calls[0][0];
     const patchedServer = runArgs.model.entityTypes.find(et => et.id === "et_server");
-    expect(patchedServer.count).toBe("3");
+    expect(patchedServer.count).toBe(3);
     // The base model prop itself is never mutated — applySweepValues clones.
     expect(validModel.entityTypes.find(et => et.id === "et_server").count).toBe(1);
   });

@@ -4,6 +4,7 @@ import {
   generateSweepValues, generate2DSweepValues, sampleLatinHypercube,
   isIntegerParamType, checkStudyBudget, MAX_STUDY_REPLICATIONS,
 } from "../../src/engine/sweep-params.js";
+import { validateModel } from "../../src/engine/validation.js";
 import { TEMPLATES } from "../../src/engine/templates.js";
 
 describe("generateSweepValues", () => {
@@ -450,7 +451,7 @@ describe("applySweepValue", () => {
     const model = { entityTypes: [{ id: "et_srv", name: "Server", count: "1" }] };
     const param = { type: "entityTypeCount", targetId: "et_srv" };
     const cloned = applySweepValue(model, param, 3);
-    expect(cloned.entityTypes[0].count).toBe("3");
+    expect(cloned.entityTypes[0].count).toBe(3);
     expect(model.entityTypes[0].count).toBe("1"); // original unchanged
   });
 
@@ -663,7 +664,9 @@ describe("M/M/1 template sweep", () => {
     const param = { type: "entityTypeCount", targetId: mm1.entityTypes.find(e => e.name === "Server").id };
     const cloned = applySweepValue(mm1, param, 2);
     const serverType = cloned.entityTypes.find(e => e.name === "Server");
-    expect(serverType.count).toBe("2");
+    expect(serverType.count).toBe(2);
+    // A string count failed V19 on every swept point.
+    expect(validateModel(cloned).errors).toEqual([]);
   });
 });
 
@@ -673,7 +676,7 @@ describe("applySweepValues", () => {
     const cloned = applySweepValues(model, [
       { paramConfig: { type: "entityTypeCount", targetId: "et_srv" }, value: 3 },
     ]);
-    expect(cloned.entityTypes[0].count).toBe("3");
+    expect(cloned.entityTypes[0].count).toBe(3);
     expect(model.entityTypes[0].count).toBe("1");
   });
 
@@ -686,7 +689,7 @@ describe("applySweepValues", () => {
       { paramConfig: { type: "entityTypeCount", targetId: "et_srv" }, value: 3 },
       { paramConfig: { type: "queueCapacity", targetId: "q_cust" }, value: 20 },
     ]);
-    expect(cloned.entityTypes[0].count).toBe("3");
+    expect(cloned.entityTypes[0].count).toBe(3);
     expect(cloned.queues[0].capacity).toBe("20");
     expect(model.entityTypes[0].count).toBe("1");
     expect(model.queues[0].capacity).toBe("10");
@@ -703,7 +706,7 @@ describe("applySweepValues", () => {
       { paramConfig: { type: "queueCapacity", targetId: "q_cust" }, value: 20 },
       { paramConfig: { type: "stateVarInit", targetId: "threshold" }, value: 25 },
     ]);
-    expect(cloned.entityTypes[0].count).toBe("3");
+    expect(cloned.entityTypes[0].count).toBe(3);
     expect(cloned.queues[0].capacity).toBe("20");
     expect(cloned.stateVariables[0].initialValue).toBe("25");
   });

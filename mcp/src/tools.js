@@ -680,19 +680,6 @@ export function summariseSweep(model, param, settings, points) {
   return lines.join('\n');
 }
 
-// Flow's applySweepValue writes server counts and shift capacities as
-// strings ("3"); the engine accepts either, but the validator (V19) wants a
-// number, so convert them back before checking the point.
-export function applyParam(model, param, value) {
-  const m = applySweepValue(model, param, value);
-  const et = (m.entityTypes || []).find(e => e.id === param.targetId);
-  if (param.type === 'entityTypeCount' && et) et.count = Number(et.count);
-  if (param.type === 'shiftCapacity' && et?.shiftSchedule?.[param.periodIndex]) {
-    et.shiftSchedule[param.periodIndex].capacity = Number(et.shiftSchedule[param.periodIndex].capacity);
-  }
-  return m;
-}
-
 export async function sweep(args, folder) {
   const { model } = await modelFrom(args, folder);
   const { errors, text } = validationReport(model);
@@ -709,7 +696,7 @@ export async function sweep(args, folder) {
   const points = [];
   for (const value of values) {
     if (Date.now() - started > RUN_BUDGET_MS) { points.push({ value, error: 'skipped to stay within the time limit' }); continue; }
-    const pointModel = applyParam(model, param, value);
+    const pointModel = applySweepValue(model, param, value);
     const pointErrors = validateModel(pointModel).errors;
     if (pointErrors.length) { points.push({ value, error: pointErrors.map(e => `[${e.code}] ${e.message}`).slice(0, 2).join('; ') }); continue; }
     const budgetMs = Math.max(1000, (RUN_BUDGET_MS - (Date.now() - started)) / (values.length - points.length));

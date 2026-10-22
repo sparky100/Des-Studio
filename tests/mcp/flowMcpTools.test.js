@@ -181,10 +181,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  runReplicationsSync, pairBySeed, seedList, runLength, sweepValues, findParam, applyParam, summariseTrace,
+  runReplicationsSync, pairBySeed, seedList, runLength, sweepValues, findParam, summariseTrace,
   sweep, traceRun, editModel, applyChange, parsePath, save,
 } from '../../mcp/src/tools.js';
-import { enumerateSweepableParams } from '../../src/engine/sweep-params.js';
+import { enumerateSweepableParams, applySweepValue } from '../../src/engine/sweep-params.js';
 
 describe('review fixes (v0.3)', () => {
   test('a section number picks that section and its children, not every title containing the digit', () => {
@@ -256,7 +256,7 @@ describe('flow_sweep_parameter', () => {
     expect(() => sweepValues({}, staff)).toThrow(/Give `values`/);
   });
   test('a swept server count stays a number, so the point passes validation', () => {
-    const m = applyParam(bikeShop.model_json, findParam(params, 'Number of Staff'), 5);
+    const m = applySweepValue(bikeShop.model_json, findParam(params, 'Number of Staff'), 5);
     expect(m.entityTypes.find(e => e.name === 'Staff').count).toBe(5);
     expect(validationReport(m).errors).toEqual([]);
   });
