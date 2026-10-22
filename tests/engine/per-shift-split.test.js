@@ -30,6 +30,25 @@ describe('per-shift utilisation attribution', () => {
     expect(second.utilisation).toBeCloseTo(50 / 200, 4);
   });
 
+  it('counts a job that held two units of a type as one completion', () => {
+    const m = {
+      entityTypes: [
+        { id: 'p', name: 'Patient', role: 'customer', attrDefs: [] },
+        { id: 'd', name: 'Doctor', role: 'server', count: 2, attrDefs: [], shiftSchedule: [{ time: '0', capacity: '2' }] },
+      ],
+      stateVariables: [], queues: [{ id: 'q', name: 'Q', customerType: 'Patient' }, { id: 'out', name: 'Done', customerType: 'Patient' }],
+      bEvents: [
+        { id: 'a', name: 'Arr', scheduledTime: '0', effect: ['ARRIVE(Patient, Q)'], schedules: [] },
+        { id: 'rel', name: 'Release', scheduledTime: '1e12', effect: ['RELEASE_COSEIZED([Doctor], Done)'], schedules: [] },
+      ],
+      cEvents: [{ id: 'c', name: 'Team', priority: 1, condition: 'queue(Q).length > 0 AND idle(Doctor).count >= 2', effect: ['COSEIZE(Q, Doctor:2)'],
+        cSchedules: [{ eventId: 'rel', dist: 'Fixed', distParams: { value: '10' }, useEntityCtx: true }] }],
+    };
+    const [shift] = buildEngine(m, 1, 0, 100).runAll().summary.perResource.Doctor.perShiftUtil;
+    expect(shift.busyTimeSum).toBe(20);
+    expect(shift.completions).toBe(1);
+  });
+
   it('omits shift periods that ended before warm-up finished', () => {
     const m = model({ shifts: [{ time: '0', capacity: '1' }, { time: '50', capacity: '1' }, { time: '100', capacity: '1' }], service: '10', arrivals: '120' });
     const r = buildEngine(m, 1, 100, 300).runAll();

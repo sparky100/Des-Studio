@@ -950,8 +950,12 @@ export const MACROS = [
       delete cust.serviceStart;
 
       let retired = 0;
+      // One job is one completion per server type, however many units of
+      // that type it held.
+      const countedTypes = new Set();
       for (const srv of claimedServers) {
-        noteShiftCompletion(srv);
+        const typeKey = srv.type.trim().toLowerCase();
+        if (!countedTypes.has(typeKey)) { countedTypes.add(typeKey); noteShiftCompletion(srv); }
         releaseServerClaim(cust, srv, clock);
         beginTurnaround(srv, ctx);
         retired += retireIdleExcessServers(ctx, srv.type);

@@ -21,6 +21,7 @@ import { nullRegistry }                        from "./adapters/index.js";
 import { expandWeeklyPatternToEvents, getPatternInitialCapacity, buildShiftPeriodLabels, resolveSchedulePattern, compileArrivalRatePeriods } from "./schedule-pattern.js";
 import { applyEntityInheritance } from "./entity-inheritance.js";
 import { macroCalls } from "../model/macroParser.js";
+import { hasConditionDefinition } from "../model/conditionFormat.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
@@ -914,8 +915,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // Starvation (H5/H9, live L2/L4): server-time spent idle while a queue the
   // server type serves has work waiting. Which queues a type serves comes
   // from the model's plain ASSIGN(Queue|CustomerType, ServerType) effects;
-  // skill-filtered and ANY assigns are left out, since an idle server there
-  // may legitimately be unable to take the waiting work. Accounted at every
+  // skill-filtered, ANY, container-gated and entity-filtered assigns are left
+  // out, since an idle server there may legitimately be unable to take the
+  // waiting work (it may be another class's, or the container empty). Accounted at every
   // clock advance from the index's O(1) idle/queue counts.
   /** @type {Map<string, string[]>} server type → queue names it serves */
   const _starveQueues = new Map();
@@ -923,10 +925,12 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const norm = (/** @type {any} */ v) => String(v ?? "").trim().toLowerCase();
     const queues = runtimeModel.queues || [];
     for (const ce of runtimeModel.cEvents || []) {
+      if (hasConditionDefinition(ce.entityFilter)) continue;
       for (const { macro, args } of macroCalls(ce.effect)) {
         if (String(macro).toUpperCase() !== "ASSIGN" || args.length < 2) continue;
         const extra = args.slice(2).map(a => String(a).trim());
-        if (extra.some(a => /^"|^Entity\./i.test(a) || /^(SCAN|PREEMPT)\b/i.test(a))) continue;
+        // Skill, SCAN[:N], PREEMPT, or a Container:amount guard.
+        if (extra.some(a => /^"|^Entity\./i.test(a) || /^(SCAN|PREEMPT)\b/i.test(a) || /^[A-Za-z_]\w*\s*:/.test(a))) continue;
         const sType = norm(args[1]);
         if (!sType || sType === "any") continue;
         const target = norm(args[0]);
