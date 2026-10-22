@@ -7,6 +7,7 @@ import {
   runSettings, summariseRun, validationReport, ToolError,
 } from '../../mcp/src/tools.js';
 import { schemaExcerpt, splitSchema, loadSchemaText } from '../../mcp/src/schema.js';
+import { loadGuideText, stripFrontmatter } from '../../mcp/src/guide.js';
 import { extractImportedModelPayload } from '../../src/ui/shared/utils.js';
 import { MODEL_JSON_FIELDS } from '../../src/model/modelJsonFields.js';
 
@@ -450,5 +451,69 @@ describe('version and update check', () => {
     expect(await checkForUpdate('0.3.0', { env: {}, argv: [], fetchImpl })).toMatch(/9\.0\.0/);
     expect(await checkForUpdate('0.3.0', { env: { FLOW_MCP_UPDATE_CHECK: 'off' }, argv: [], fetchImpl })).toBeNull();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('modelling guide', () => {
+  test('is the flow-modelling skill without its YAML header', () => {
+    const raw = readFileSync(new URL('../../mcp/skills/flow-modelling/SKILL.md', import.meta.url), 'utf8');
+    expect(raw).toMatch(/^---\nname: flow-modelling\n/);
+    const guide = loadGuideText();
+    expect(guide).toMatch(/^# Modelling with Flow/);
+    expect(guide).not.toMatch(/^name: /m);
+    expect(stripFrontmatter('no header')).toBe('no header');
+  });
+
+  test('names only tools the server has', () => {
+    const server = readFileSync(new URL('../../mcp/src/server.js', import.meta.url), 'utf8');
+    const registered = new Set([...server.matchAll(/registerTool\('(flow_\w+)'/g)].map(m => m[1]));
+    const named = new Set([...loadGuideText().matchAll(/\b(flow_[a-z_]+)\b/g)].map(m => m[1]));
+    for (const tool of named) expect(registered, tool).toContain(tool);
+  });
+});
+
+
+import { runDetail, overTimeData, HISTOGRAM_BINS } from '../../mcp/src/tools.js';
+
+describe('chart data', () => {
+  const tsModel = { timeUnit: 'minutes', queues: [{ name: 'Triage' }], entityTypes: [{ name: 'Nurse', role: 'server' }] };
+  const series = (q) => [
+    { t: 0, byQueue: { Triage: { waiting: 0 } }, byType: { Nurse: { busy: 1, total: 2, failed: 0 } }, wip: 1 },
+    { t: 240, byQueue: { Triage: { waiting: q } }, byType: { Nurse: { busy: 2, total: 2, failed: 0 } }, wip: q + 2 },
+  ];
+  const tsSettings = { warmupPeriod: 0, maxSimTime: 480 };
+
+  test('over-time data gives periods and named series for a chart', () => {
+    const d = overTimeData(tsModel, tsSettings, { results: [{ timeSeries: series(10) }, { timeSeries: series(20) }] }, 4);
+    expect(d.periods).toEqual([{ from: 0, to: 120 }, { from: 120, to: 240 }, { from: 240, to: 360 }, { from: 360, to: 480 }]);
+    expect(d.series.find(s => s.name === 'Waiting in Triage').values).toEqual([0, 0, 15, 15]);
+    expect(d.series.find(s => s.name === 'Nurse busy %').values).toEqual([50, 50, 100, 100]);
+    expect(d.replications).toBe(2);
+  });
+
+  test('over-time output above 12 periods is CSV, one row per period', () => {
+    const text = summariseOverTime(tsModel, tsSettings, { results: [{ timeSeries: series(10) }] }, 20);
+    expect(text).toMatch(/```csv\nfrom,to,Waiting in Triage,Nurse busy %,In system \(WIP\)\n0,24,0,50,1\n/);
+    expect(text.match(/^\d.*$/gm)).toHaveLength(20);
+  });
+
+  test('over-time data reports a missing time series', () => {
+    expect(overTimeData(tsModel, tsSettings, { results: [{}] }, 4).error).toMatch(/No time series/);
+  });
+
+  test('run detail: one row per replication, wait percentiles and a histogram per queue', () => {
+    const { model } = normaliseModelInput(bikeShop);
+    const run = runReplicationsSync(model, runSettings(model, { replications: 3, maxSimTime: 600 }));
+    const d = runDetail(model, run);
+    expect(d.perReplication.columns.slice(0, 3)).toEqual(['replication', 'seed', 'Arrived']);
+    expect(d.perReplication.rows).toHaveLength(3);
+    expect(d.perReplication.rows.map(r => r[1])).toEqual(run.seeds);
+    expect(d.waitDistribution.length).toBeGreaterThan(0);
+    for (const q of d.waitDistribution) {
+      expect(q.p50).toBeLessThanOrEqual(q.p95);
+      expect(q.p95).toBeLessThanOrEqual(q.p99);
+      expect(q.histogram.length).toBeLessThanOrEqual(HISTOGRAM_BINS);
+      expect(q.histogram.reduce((a, b) => a + b.count, 0)).toBe(q.n);
+    }
   });
 });

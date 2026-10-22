@@ -10,6 +10,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { loadSchemaText, schemaExcerpt } from './schema.js';
+import { loadGuideText } from './guide.js';
 import { checkForUpdate } from './update-check.js';
 import {
   VERSION, BUILD, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, DEFAULT_PERIODS, MAX_PERIODS, MAX_SWEEP_POINTS, MAX_SWEEP_RUNS, DEFAULT_SWEEP_REPLICATIONS,
@@ -30,7 +31,8 @@ function modelsFolder(argv = process.argv.slice(2)) {
 const FOLDER = modelsFolder();
 
 const WORKFLOW = `How to build a Flow model with these tools:
-1. Read the format first: flow_get_schema() gives the generation protocol, the most common mistakes and the list of sections; fetch the sections you need (e.g. "1, 2, 3, 4, 5, 6").
+0. Before building or changing a model, read flow_get_guide: Flow's modelling method — how to interview the person (one question at a time, never inventing numbers, confirming before you build), how to map their system onto Flow, which tool answers which question, and the fatal errors Flow's own model builder checks. Follow it.
+1. Read the format: flow_get_schema() gives the generation protocol, the most common mistakes and the list of sections; fetch the sections you need (e.g. "1, 2, 3, 4, 5, 6").
 2. Draft the model JSON, then flow_validate_model. Fix every error and re-validate until there are none.
 3. flow_run_model (10+ replications). Read the results, goals and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't. To see WHEN queues build or resources saturate, use flow_run_over_time. If something looks wrong (nothing completes, a queue never empties, a rule never fires), use flow_trace_run to see what actually happened in one run.
 4. To judge a change (an extra server, a new rule), use flow_compare_models rather than two separate runs: it uses the same random numbers in both and says which differences are real and which could be chance. To find a good setting ("how many nurses?"), use flow_sweep_parameter over a range of values.
@@ -71,6 +73,13 @@ function handler(fn) {
   };
 }
 
+server.registerTool('flow_get_guide', {
+  title: 'How to model with Flow',
+  description: 'Flow\'s modelling method, the same guidance as Flow\'s in-app model builder: how to interview the person before building, how to map a process onto entities, queues, B-events and C-events, which tool to use for which question, the fatal errors that break Flow models, and how to report results. Read it before building or changing a model.',
+  inputSchema: {},
+  annotations: { readOnlyHint: true },
+}, handler(() => loadGuideText()));
+
 server.registerTool('flow_get_schema', {
   title: 'Flow model format',
   description: 'The Flow model JSON format. With no section: the mandatory generation protocol, the most common mistakes and the list of sections. With `section`: those sections (number or title words, comma-separated, or "all").',
@@ -99,9 +108,11 @@ server.registerTool('flow_validate_model', {
   annotations: { readOnlyHint: true },
 }, handler(args => validate(args, FOLDER)));
 
+const formatArg = z.enum(['text', 'json']).optional().describe('"json" returns the numbers as JSON for a chart or further analysis (default "text")');
+
 server.registerTool('flow_run_model', {
   title: 'Run a Flow model',
-  description: `Run a model with Flow's simulation engine for several replications and report the results with 95% confidence intervals: completions, waits, time in system, per-queue waits, resource utilisation, how entities finished (by route), the model's goals (met or missed, in how many replications), plus warnings about bottlenecks, overload, noisy results and engine limits. Uses the model's own experiment settings unless overridden. Up to ${MAX_REPLICATIONS} replications.`,
+  description: `Run a model with Flow's simulation engine for several replications and report the results with 95% confidence intervals: completions, waits, time in system, per-queue waits, resource utilisation, how entities finished (by route), the model's goals (met or missed, in how many replications), plus warnings about bottlenecks, overload, noisy results and engine limits. Uses the model's own experiment settings unless overridden. Up to ${MAX_REPLICATIONS} replications. For charts, set \`detail\` (per-replication values, wait-time percentiles and histograms) or \`format: "json"\`.`,
   inputSchema: {
     model: modelArg,
     file: fileArg,
@@ -109,6 +120,8 @@ server.registerTool('flow_run_model', {
     maxSimTime: z.number().positive().optional().describe('Run length in the model\'s time unit (default: the model\'s own setting, else 500)'),
     warmupPeriod: z.number().min(0).optional().describe('Warm-up excluded from results (default: the model\'s own setting, else 0)'),
     seed: z.number().int().optional().describe('Base random seed; replication i uses seed + i'),
+    detail: z.boolean().optional().describe('Also return the data for charts: each replication\'s results as CSV, and each queue\'s wait-time percentiles and histogram'),
+    format: formatArg,
   },
   annotations: { readOnlyHint: true },
 }, handler(args => run(args, FOLDER)));
@@ -133,11 +146,12 @@ server.registerTool('flow_compare_models', {
 
 server.registerTool('flow_run_over_time', {
   title: 'Flow results over time',
-  description: `Run a model and show how things change through the run: how many are waiting in each queue, how busy each resource is, work in progress and container levels, averaged over each of ${DEFAULT_PERIODS} equal periods (up to ${MAX_PERIODS}) and across replications. Use it to see when queues build up or resources saturate.`,
+  description: `Run a model and show how things change through the run: how many are waiting in each queue, how busy each resource is, work in progress and container levels, averaged over each of ${DEFAULT_PERIODS} equal periods (up to ${MAX_PERIODS}) and across replications. Use it to see when queues build up or resources saturate. Up to 12 periods come back as a table; more come back as CSV, one row per period, ready to plot. \`format: "json"\` returns the series as JSON.`,
   inputSchema: {
     model: modelArg,
     file: fileArg,
-    periods: z.number().int().min(2).max(MAX_PERIODS).optional().describe(`Number of equal periods (default ${DEFAULT_PERIODS})`),
+    periods: z.number().int().min(2).max(MAX_PERIODS).optional().describe(`Number of equal periods (default ${DEFAULT_PERIODS}, up to ${MAX_PERIODS}; use 50–100 for a smooth chart)`),
+    format: formatArg,
     replications: z.number().int().min(1).max(MAX_REPLICATIONS).optional().describe('Default 5'),
     ...runSettingsArgs,
   },
@@ -224,7 +238,7 @@ server.registerPrompt('build_model', {
 }, ({ system }) => ({
   messages: [{
     role: 'user',
-    content: { type: 'text', text: `Build a Flow discrete-event simulation model of this system:\n\n${system}\n\n${WORKFLOW}\nAsk me about anything essential you can't reasonably assume, and list the assumptions you made.` },
+    content: { type: 'text', text: `Build a Flow discrete-event simulation model of this system:\n\n${system}\n\nFollow Flow's modelling method below.\n\n${loadGuideText()}` },
   }],
 }));
 

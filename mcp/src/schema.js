@@ -52,7 +52,7 @@ export function schemaExcerpt(text, section) {
     const core = sections.filter(s => ALWAYS.some(a => s.title.toUpperCase().startsWith(a)));
     const toc = sections.map(s => `- ${s.title}`).join('\n');
     return [
-      'Using these tools: the protocol below asks you to read every section first. You can instead fetch the sections for what you are building (usually 1–6, plus "12.3", the complete reference model) and use flow_validate_model for the §10 checks in step 4. It runs Flow\'s own validator.',
+      'Using these tools: the protocol below asks you to read every section first. You can instead fetch the sections for what you are building (usually 1–6, plus "12.3", the complete reference model) and use flow_validate_model for the §10 checks in step 4. It runs Flow\'s own validator. Read flow_get_guide first if you have not: it is the modelling method (the interview, mapping a process onto Flow, the fatal errors).',
       ...core.map(s => s.text),
       '## Sections available',
       'Ask for any of these with flow_get_schema({ section: "<number or title words>" }), e.g. "1", "5", "6.1", "Distributions", or several at once: "2, 3, 5".',

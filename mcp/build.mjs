@@ -1,4 +1,5 @@
-// Bundles the server, Flow's engine and the schema reference into one file,
+// Bundles the server, Flow's engine, the schema reference and the modelling
+// guide into one file,
 // dist/flow-mcp.mjs, that runs with plain `node` — nothing to install.
 // The version comes from package.json alone; the build is stamped with the
 // commit it was made from, so a user's copy can be traced to its engine.
@@ -21,6 +22,7 @@ export function buildSha() {
 
 const { version } = JSON.parse(readFileSync(here('./package.json'), 'utf8'));
 const schema = readFileSync(here('../docs/model-schema-for-llm.md'), 'utf8');
+const guide = readFileSync(here('./skills/flow-modelling/SKILL.md'), 'utf8');
 const outfile = here('./dist/flow-mcp.mjs');
 const sha = buildSha();
 
@@ -33,6 +35,7 @@ await build({
   target: 'node20',
   define: {
     __FLOW_SCHEMA__: JSON.stringify(schema),
+    __FLOW_GUIDE__: JSON.stringify(guide),
     __FLOW_MCP_VERSION__: JSON.stringify(version),
     __FLOW_MCP_BUILD__: JSON.stringify(sha),
   },

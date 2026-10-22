@@ -23,6 +23,10 @@
   },
   "tools": [
     {
+      "name": "flow_get_guide",
+      "description": "Flow's modelling method: how to interview you, map your process onto Flow, which tool to use when, and the mistakes to avoid."
+    },
+    {
       "name": "flow_get_schema",
       "description": "Flow's model format: generation protocol, common mistakes, and any section on request."
     },

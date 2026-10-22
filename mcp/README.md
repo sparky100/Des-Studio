@@ -60,8 +60,8 @@ Just ask. For example:
 > Build me a Flow model of a GP surgery: patients arrive about every 4 minutes, a nurse triages them, then one of 3 GPs sees them for about 10 minutes. I want to know waiting times.
 
 The assistant then:
-1. reads the format;
-2. drafts the model;
+1. reads Flow's modelling method (`flow_get_guide`) and asks you about anything it needs, one question at a time, then checks its understanding with you;
+2. reads the format and drafts the model;
 3. validates it and fixes the errors;
 4. runs it and checks the results make sense;
 5. saves it, telling you the file name;
@@ -83,13 +83,14 @@ If your app shows MCP prompts, there is also a **build_model** prompt that asks 
 
 | Tool | What it does |
 |---|---|
+| `flow_get_guide` | Flow's modelling method, the same guidance as Flow's in-app model builder: interview before building (one question at a time, no invented numbers, confirm first), map the process onto Flow, which tool answers which question, the fatal errors that break models, how to report results |
 | `flow_get_schema` | The model format: generation protocol, common mistakes, section list; any section on request |
 | `flow_list_models` | Model files in the folder |
 | `flow_read_model` | A model file's JSON |
 | `flow_validate_model` | Flow's validator: errors (block running) and warnings, with rule codes |
-| `flow_run_model` | Several replications (default 10, max 50) with 95% CIs; queues, utilisation, how entities finished, the model's goals (met in how many replications), things to check |
+| `flow_run_model` | Several replications (default 10, max 50) with 95% CIs; queues, utilisation, how entities finished, the model's goals (met in how many replications), things to check. `detail` adds chart data: each replication's results, and wait-time percentiles and a histogram per queue. `format: "json"` returns it all as JSON |
 | `flow_compare_models` | Two versions with the same random numbers (default 20 paired replications); each difference with a paired 95% CI, split into real differences and ones that could be chance |
-| `flow_run_over_time` | Waiting per queue, % busy per resource, work in progress and container levels, period by period (default 8 periods, averaged over 5 replications) |
+| `flow_run_over_time` | Waiting per queue, % busy per resource, work in progress and container levels, period by period (default 8 periods, up to 100, averaged over 5 replications). More than 12 periods come back as CSV for a chart; `format: "json"` returns JSON |
 | `flow_sweep_parameter` | One parameter (server count, a capacity, a distribution parameter, a starting value…) at up to 12 values, each on the same random numbers (default 5 replications per value): completions, waits, time in system, % busy and goals met per value. Without `parameter`, lists what can be varied |
 | `flow_trace_run` | One run: how often each rule and event fired and which never did, who was still in the system at the end and where, one entity's path, and the event log (window with `from`/`until`, filter with `entity`) |
 | `flow_edit_model` | Changes to a saved file by path, e.g. `entityTypes/Nurse/count` = 3 (set, remove, append); shows errors added or fixed, refuses to save errors unless asked, keeps the canvas layout |
@@ -97,6 +98,8 @@ If your app shows MCP prompts, there is also a **build_model** prompt that asks 
 | `flow_open_in_app` | Opens a model file in Flow in the browser through a compressed `#import` link (written to a local page, so there's no length limit from the command line). A file exported from Flow opens as an update to that model; `asNew` adds a new model instead |
 
 ## For maintainers
+
+**The modelling guide** is `skills/flow-modelling/SKILL.md`. It is a Claude skill as it stands (for a plugin, or to upload in Claude's settings), and the server serves the same file, without its header, from `flow_get_guide` and in the `build_model` prompt, so assistants get the method with the MCP alone. It mirrors the in-app model builder's guidance (`../src/llm/model-builder-prompts.js`): when that changes, update the guide too.
 
 The server reuses Flow's own code from `../src`: the engine, the validator, the KPI extraction and the confidence intervals. `build.mjs` bundles it, with the schema reference (`../docs/model-schema-for-llm.md`) inlined, into one file that needs nothing installed.
 

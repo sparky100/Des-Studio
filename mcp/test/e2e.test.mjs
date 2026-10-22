@@ -34,20 +34,31 @@ const call = async (name, args = {}) => {
   return { text: res.content.map(c => c.text).join('\n'), isError: !!res.isError };
 };
 
-test('lists the twelve tools and the build_model prompt, with workflow instructions', async () => {
+test('lists the thirteen tools and the build_model prompt, with workflow instructions', async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map(t => t.name).sort(), [
-    'flow_compare_models', 'flow_edit_model', 'flow_get_schema', 'flow_list_models', 'flow_open_in_app', 'flow_read_model', 'flow_run_model', 'flow_run_over_time',
+    'flow_compare_models', 'flow_edit_model', 'flow_get_guide', 'flow_get_schema', 'flow_list_models', 'flow_open_in_app', 'flow_read_model', 'flow_run_model', 'flow_run_over_time',
     'flow_save_model', 'flow_sweep_parameter', 'flow_trace_run', 'flow_validate_model',
   ]);
   const { prompts } = await client.listPrompts();
   assert.deepEqual(prompts.map(p => p.name), ['build_model']);
   const prompt = await client.getPrompt({ name: 'build_model', arguments: { system: 'a coffee shop' } });
   assert.match(prompt.messages[0].content.text, /a coffee shop/);
+  assert.match(prompt.messages[0].content.text, /Fatal errors/, 'the build_model prompt carries the modelling guide');
+  assert.match(client.getInstructions(), /flow_get_guide/);
   assert.match(client.getInstructions(), /flow_validate_model/);
   const { version } = JSON.parse(await readFile(path.join(here, '..', 'package.json'), 'utf8'));
   assert.equal(client.getServerVersion().version, version);
   assert.match(client.getInstructions(), new RegExp(`Flow tools ${version.replace(/\./g, '\\.')}, build [0-9a-f]{7}|Flow tools ${version.replace(/\./g, '\\.')}, build unknown`));
+});
+
+test('guide: the modelling method, without the skill header', async () => {
+  const guide = await call('flow_get_guide');
+  assert.equal(guide.isError, false);
+  assert.match(guide.text, /^# Modelling with Flow/);
+  assert.doesNotMatch(guide.text, /^---/);
+  assert.match(guide.text, /Never invent quantitative parameters/);
+  assert.match(guide.text, /Fatal errors/);
 });
 
 test('schema: protocol and table of contents by default, sections on request', async () => {
@@ -158,6 +169,27 @@ test('over time gives a period-by-period table', async () => {
   assert.match(res.text, /0–150\s+150–300\s+300–450\s+450–600/);
   assert.match(res.text, /Staff busy %/);
   assert.match(res.text, /Waiting in Repair Queue/);
+});
+
+test('over time with many periods returns CSV, and JSON on request', async () => {
+  const csv = await call('flow_run_over_time', { model: bikeShop, replications: 2, maxSimTime: 600, periods: 60 });
+  assert.equal(csv.isError, false, csv.text);
+  assert.match(csv.text, /```csv\nfrom,to,Waiting in .*Waiting in Repair Queue,/);
+  const json = await call('flow_run_over_time', { model: bikeShop, replications: 2, maxSimTime: 600, periods: 60, format: 'json' });
+  const d = JSON.parse(json.text);
+  assert.equal(d.periods.length, 60);
+  assert.ok(d.series.every(s => s.values.length === 60));
+});
+
+test('run detail adds per-replication values and wait distributions', async () => {
+  const res = await call('flow_run_model', { model: bikeShop, replications: 3, maxSimTime: 600, detail: true });
+  assert.equal(res.isError, false, res.text);
+  assert.match(res.text, /```csv\nreplication,seed,Arrived/);
+  assert.match(res.text, /Histogram as CSV/);
+  const json = JSON.parse((await call('flow_run_model', { model: bikeShop, replications: 3, maxSimTime: 600, format: 'json' })).text);
+  assert.match(json.summary, /Completed/);
+  assert.equal(json.perReplication.rows.length, 3);
+  assert.ok(json.waitDistribution[0].histogram.length > 0);
 });
 
 test('sweep lists the parameters, then runs a range of values on the same seeds', async () => {
