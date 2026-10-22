@@ -46,6 +46,22 @@ describe('starvation tracking', () => {
     expect(doc.maxStarvationDuration).toBeNull();
   });
 
+  it('is not tracked for a type only served through an entity-filtered C-event', () => {
+    // The filter may exclude everything waiting (it can be another class's work),
+    // so idle-with-work-waiting is not evidence of starvation.
+    const model = gatedModel();
+    model.cEvents[0].entityFilter = { variable: 'Entity.vip', operator: '==', value: '1' };
+    const doc = buildEngine(model, 1, 0, 100).runAll().summary.perResource.Doctor;
+    expect(doc.starvationPct).toBeNull();
+    expect(doc.maxStarvationDuration).toBeNull();
+  });
+
+  it('is not tracked for a type only served by a container-gated ASSIGN', () => {
+    const doc = buildEngine(gatedModel({ effect: 'ASSIGN(Q, Doctor, Fuel:5)' }), 1, 0, 100).runAll().summary.perResource.Doctor;
+    expect(doc.starvationPct).toBeNull();
+    expect(doc.maxStarvationDuration).toBeNull();
+  });
+
   it('is ~0 for a plain M/M/1, where the server never idles with work waiting', () => {
     const mm1 = TEMPLATES.find(t => t.id === 'mm1');
     const server = buildEngine(mm1, 1, 0, 2000, null, 1e7, 1e7).runAll().summary.perResource.Server;

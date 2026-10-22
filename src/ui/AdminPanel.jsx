@@ -21,14 +21,6 @@ const LLM_PROVIDERS = [
   { value: "zen",          label: "Zen" },
 ];
 
-// Anthropic models: current generation (5.5) first, then the previous models
-// still selectable so a saved choice never disappears from the list. The 5.5
-// models need the shared llm-proxy's newer-model support (drops `temperature`,
-// adds reasoning headroom) — keep this list in sync across Flow, Lens and Loop.
-// The platform_config 'llm' value to save: the stored row with this form's
-// fields laid over it, so fields the form doesn't edit (a setting another
-// app's admin panel added, such as buildModel) survive a save. An empty
-// buildModel removes the field, so build requests fall back to `model`.
 // What "Check Proxy Config" shows from llm-proxy's GET status endpoint. The
 // key itself is never shown -- only whether one is configured (hasApiKey).
 // apiKeyPreview is dropped defensively: proxy versions deployed before the
@@ -44,6 +36,10 @@ export function proxyStatusForDisplay(data, { ok = true, status } = {}) {
   return display;
 }
 
+// The platform_config 'llm' value to save: the stored row with this form's
+// fields laid over it, so fields the form doesn't edit (a setting another
+// app's admin panel added, such as buildModel) survive a save. An empty
+// buildModel removes the field, so build requests fall back to `model`.
 export function buildLlmConfigValue(stored, { provider, model, temperature, maxTokensPerRun, rateLimitPerHour, buildModel, apiKey }) {
   const value = { ...(stored || {}), provider, model, temperature, maxTokensPerRun, rateLimitPerHour };
   if (buildModel) value.buildModel = buildModel; else delete value.buildModel;
@@ -51,6 +47,10 @@ export function buildLlmConfigValue(stored, { provider, model, temperature, maxT
   return value;
 }
 
+// Anthropic models: current generation (5.5) first, then the previous models
+// still selectable so a saved choice never disappears from the list. The 5.5
+// models need the shared llm-proxy's newer-model support (drops `temperature`,
+// adds reasoning headroom) — keep this list in sync across Flow, Lens and Loop.
 const LLM_MODELS = {
   anthropic:   ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-4-5", "claude-sonnet-4-6"],
   openai:      ["gpt-5.1-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max"],

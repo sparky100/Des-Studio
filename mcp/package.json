@@ -1,6 +1,6 @@
 {
   "name": "@simmodlr/flow-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local MCP server for Flow (simmodlr DES): lets an AI assistant check, run and save Flow models on your computer.",
   "type": "module",
   "private": true,
@@ -18,8 +18,7 @@
     "build": "node build.mjs",
     "pack": "node build.mjs && node pack.mjs",
     "start": "node dist/flow-mcp.mjs",
-    "test": "npm run build && node --test test/e2e.test.mjs",
-    "check": "node check.mjs"
+    "test": "npm run build && node --test test/e2e.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

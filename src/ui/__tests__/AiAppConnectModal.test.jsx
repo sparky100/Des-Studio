@@ -1,10 +1,8 @@
 // src/ui/__tests__/AiAppConnectModal.test.jsx
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { existsSync } from "node:fs";
-import path from "node:path";
 
-import { AiAppConnectModal, MCP_DOWNLOADS, MCP_CONFIG_SNIPPET } from "../AiAppConnectModal.jsx";
+import { AiAppConnectModal, MCP_DOWNLOADS, MCP_CONFIG_SNIPPET, fetchMcpVersion } from "../AiAppConnectModal.jsx";
 
 describe("AiAppConnectModal", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -26,10 +24,24 @@ describe("AiAppConnectModal", () => {
     expect(document.body.innerHTML).not.toMatch(/github\.com/i);
   });
 
-  it("the linked files are published in public/downloads", () => {
-    // Vitest runs from the repo root.
-    expect(existsSync(path.join(process.cwd(), "public/downloads/flow.mcpb"))).toBe(true);
-    expect(existsSync(path.join(process.cwd(), "public/downloads/flow-mcp.mjs"))).toBe(true);
+  it("shows the version on offer, read from the published version file", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ version: "0.3.0", build: "abc1234" }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      render(<AiAppConnectModal isOpen onClose={vi.fn()} />);
+      expect(await screen.findByTestId("mcp-version")).toHaveTextContent("Version 0.3.0 (build abc1234)");
+      expect(fetchMock).toHaveBeenCalledWith(MCP_DOWNLOADS.version, { cache: "no-store" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("works without the version file (e.g. a dev server that hasn't built the MCP downloads)", async () => {
+    expect(await fetchMcpVersion(() => Promise.resolve({ ok: false }))).toBeNull();
+    expect(await fetchMcpVersion(() => Promise.reject(new Error("offline")))).toBeNull();
+    // A host that answers every path with the app's index.html.
+    expect(await fetchMcpVersion(() => Promise.resolve({ ok: true, json: () => Promise.reject(new SyntaxError("Unexpected token <")) }))).toBeNull();
+    expect(await fetchMcpVersion(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ version: "0.3.0" }) }))).toEqual({ version: "0.3.0" });
   });
 
   it("copies the settings snippet for other MCP apps", async () => {

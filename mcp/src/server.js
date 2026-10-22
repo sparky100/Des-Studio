@@ -10,7 +10,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { loadSchemaText, schemaExcerpt } from './schema.js';
-import { VERSION, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, DEFAULT_PERIODS, MAX_PERIODS, ToolError, listModels, readModel, validate, run, compare, runOverTime, save } from './tools.js';
+import { checkForUpdate } from './update-check.js';
+import {
+  VERSION, BUILD, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, DEFAULT_PERIODS, MAX_PERIODS, MAX_SWEEP_POINTS, MAX_SWEEP_RUNS, DEFAULT_SWEEP_REPLICATIONS,
+  DEFAULT_TRACE_LINES, MAX_TRACE_LINES, MAX_EDIT_CHANGES,
+  ToolError, listModels, readModel, validate, run, compare, runOverTime, sweep, traceRun, editModel, save,
+} from './tools.js';
 
 function modelsFolder(argv = process.argv.slice(2)) {
   const i = argv.indexOf('--folder');
@@ -27,14 +32,14 @@ const FOLDER = modelsFolder();
 const WORKFLOW = `How to build a Flow model with these tools:
 1. Read the format first: flow_get_schema() gives the generation protocol, the most common mistakes and the list of sections; fetch the sections you need (e.g. "1, 2, 3, 4, 5, 6").
 2. Draft the model JSON, then flow_validate_model. Fix every error and re-validate until there are none.
-3. flow_run_model (10+ replications). Read the results, goals and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't. To see WHEN queues build or resources saturate, use flow_run_over_time.
-4. To judge a change (an extra server, a new rule), use flow_compare_models rather than two separate runs: it uses the same random numbers in both and says which differences are real and which could be chance.
-5. flow_save_model with a clear name. Tell the person the file name and that they open it in Flow with + New Model → Import a file.
+3. flow_run_model (10+ replications). Read the results, goals and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't. To see WHEN queues build or resources saturate, use flow_run_over_time. If something looks wrong (nothing completes, a queue never empties, a rule never fires), use flow_trace_run to see what actually happened in one run.
+4. To judge a change (an extra server, a new rule), use flow_compare_models rather than two separate runs: it uses the same random numbers in both and says which differences are real and which could be chance. To find a good setting ("how many nurses?"), use flow_sweep_parameter over a range of values.
+5. flow_save_model with a clear name. Tell the person the file name and that they open it in Flow with + New Model → Import a file. For later small changes to a saved model, use flow_edit_model instead of re-sending the whole model.
 Quote results with their confidence intervals, and say which numbers you assumed.`;
 
 const server = new McpServer(
   { name: 'flow', version: VERSION },
-  { instructions: `Tools for Flow, a discrete-event simulation app. Models are JSON files in ${FOLDER}.\n\n${WORKFLOW}` },
+  { instructions: `Tools for Flow, a discrete-event simulation app (Flow tools ${VERSION}, build ${BUILD}). Models are JSON files in ${FOLDER}.\n\n${WORKFLOW}` },
 );
 
 const modelArg = z.any().optional().describe('The model: a Flow model JSON object (or a Flow export with model_json). Give this or `file`.');
@@ -42,14 +47,25 @@ const fileArg = z.string().optional().describe('A model file in the Flow models 
 
 function text(t) { return { content: [{ type: 'text', text: t }] }; }
 
+// Started in the background at launch; a newer version's note rides on the
+// first tool result after it arrives, once per session.
+let updateNote = null;
+checkForUpdate(VERSION).then(note => { updateNote = note; }, () => {});
+function withUpdateNote(t) {
+  if (!updateNote) return t;
+  const note = updateNote;
+  updateNote = null;
+  return `${t}\n\n${note}`;
+}
+
 // Turns expected problems (bad JSON, missing file) into a readable tool
 // error the assistant can act on, rather than a protocol error.
 function handler(fn) {
   return async args => {
-    try { return text(await fn(args || {})); }
+    try { return text(withUpdateNote(await fn(args || {}))); }
     catch (e) {
       const msg = e instanceof ToolError ? e.message : `Unexpected error: ${e?.message || e}`;
-      return { ...text(msg), isError: true };
+      return { ...text(withUpdateNote(msg)), isError: true };
     }
   };
 }
@@ -127,6 +143,56 @@ server.registerTool('flow_run_over_time', {
   annotations: { readOnlyHint: true },
 }, handler(args => runOverTime(args, FOLDER)));
 
+server.registerTool('flow_sweep_parameter', {
+  title: 'Try a range of values for one parameter',
+  description: `Answer "how many X do I need?" or "what if service took longer?": run the model at each of several values of one parameter (server count, shift or queue capacity, a distribution parameter, a state variable's starting value…) and show a table of completions, waits, time in system, utilisation and goals met per value, with 95% intervals. Every value uses the same random numbers. Call it without \`parameter\` to list what can be varied. Up to ${MAX_SWEEP_POINTS} values and ${MAX_SWEEP_RUNS} runs in total.`,
+  inputSchema: {
+    model: modelArg,
+    file: fileArg,
+    parameter: z.string().optional().describe('The parameter, by its name in the list (e.g. "Number of Nurse"). Omit to get the list.'),
+    values: z.array(z.number()).optional().describe('The values to try, e.g. [2, 3, 4, 5]. Or use from/to/step.'),
+    from: z.number().optional(),
+    to: z.number().optional(),
+    step: z.number().positive().optional().describe('Default 1'),
+    replications: z.number().int().min(1).max(MAX_REPLICATIONS).optional().describe(`Per value (default ${DEFAULT_SWEEP_REPLICATIONS})`),
+    ...runSettingsArgs,
+  },
+  annotations: { readOnlyHint: true },
+}, handler(args => sweep(args, FOLDER)));
+
+server.registerTool('flow_trace_run', {
+  title: 'Trace one run of a Flow model',
+  description: 'Run the model once and show what actually happened: how often each rule (C-event) and event (B-event) fired and which never did, who was still in the system at the end and where, one entity\'s path through the model if asked, and the event log. Use it to find why a model misbehaves — entities stuck, a queue that never empties, a rule that never fires.',
+  inputSchema: {
+    model: modelArg,
+    file: fileArg,
+    from: z.number().min(0).optional().describe('Show the event log from this time (default 0)'),
+    until: z.number().positive().optional().describe('Stop the run and the log at this time — needed for long runs'),
+    entity: z.number().int().optional().describe('Only events involving this entity id (e.g. 119 for #119), plus its path'),
+    limit: z.number().int().min(1).max(MAX_TRACE_LINES).optional().describe(`Event log lines (default ${DEFAULT_TRACE_LINES})`),
+    seed: z.number().int().optional().describe('Random seed (default: the model\'s own)'),
+    maxSimTime: runSettingsArgs.maxSimTime,
+    warmupPeriod: runSettingsArgs.warmupPeriod,
+  },
+  annotations: { readOnlyHint: true },
+}, handler(args => traceRun(args, FOLDER)));
+
+server.registerTool('flow_edit_model', {
+  title: 'Edit a saved Flow model',
+  description: `Change parts of a model file in the Flow models folder without re-sending the whole model, then validate and save it in place (keeping its canvas layout). Each change has a \`path\` of names or positions separated by "/" — e.g. "entityTypes/Nurse/count", "bEvents/Patient Arrival/schedules/0/distParams/mean", "queues/Triage/capacity" — and op "set" (default), "remove" or "append" (to a list; or set ".../-"). List items can be named by id or name. Shows each change, and errors and warnings it added or fixed. Refuses to save a model with errors unless allowErrors is true. Up to ${MAX_EDIT_CHANGES} changes per call.`,
+  inputSchema: {
+    file: z.string().describe('The model file, e.g. "GP surgery.json"'),
+    changes: z.array(z.object({
+      path: z.string(),
+      op: z.enum(['set', 'remove', 'append']).optional(),
+      value: z.any().optional(),
+    })).min(1).max(MAX_EDIT_CHANGES),
+    dryRun: z.boolean().optional().describe('Show the result of the changes without saving'),
+    allowErrors: z.boolean().optional(),
+  },
+  annotations: { destructiveHint: true, idempotentHint: false },
+}, handler(args => editModel(args, FOLDER)));
+
 server.registerTool('flow_save_model', {
   title: 'Save a Flow model',
   description: 'Save a model to the Flow models folder as a file Flow can import (+ New Model → Import a file). Validates first and refuses a model with errors unless allowErrors is true. Never overwrites an existing file unless overwrite is true: it adds " (2)", " (3)"… instead.',
@@ -152,4 +218,4 @@ server.registerPrompt('build_model', {
 }));
 
 await server.connect(new StdioServerTransport());
-console.error(`Flow MCP ${VERSION} ready — models folder: ${FOLDER}`);
+console.error(`Flow MCP ${VERSION} (${BUILD}) ready — models folder: ${FOLDER}`);

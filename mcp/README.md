@@ -5,9 +5,14 @@ Connects an AI assistant on your computer to Flow. The assistant can then:
 - **read Flow's model format**: the same reference as the prompt pack, a section at a time;
 - **check** a model with Flow's own validator, and fix what it reports;
 - **run** a model with Flow's own simulation engine, over several replications, with 95% confidence intervals and warnings about bottlenecks, overload and noisy results;
+- **try a range of values** for one parameter ("how many nurses do I need?");
+- **trace** one run to find out why a model misbehaves (rules that never fire, entities stuck);
+- **edit** a saved model a few values at a time;
 - **save** the model as a file you open in Flow with **+ New Model → Import a file**.
 
-Everything runs on your computer. Models are plain JSON files in one folder, `Documents/Flow models` by default. Nothing is sent to Flow's servers, and you don't need to sign in.
+Everything runs on your computer. Models are plain JSON files in one folder, `Documents/Flow models` by default. Your models are never sent anywhere, and you don't need to sign in.
+
+**Updates:** each time it starts, the server fetches a small version file from Flow's website. If a newer version is out, your assistant tells you, and you update by downloading it again from **Connect AI app**. Nothing about you or your models is sent. To turn this off: in Claude Desktop, untick **Check for updates** in the extension's settings; elsewhere, add `--no-update-check` to the server's arguments (or set `FLOW_MCP_UPDATE_CHECK=off`).
 
 It works with desktop AI apps that support MCP: Claude Desktop, Claude Code, Cursor, VS Code and others. It doesn't work in the claude.ai website or phone apps.
 
@@ -62,7 +67,7 @@ The assistant then:
 
 In Flow, choose **+ New Model → Import a file** and pick that file.
 
-To improve an existing model, export it from Flow into the models folder and ask, for example: "Open *Bike shop.json*. Why is the repair queue so long, and what would fix it?" The assistant can see when the queue builds (`flow_run_over_time`) and check whether a fix really helps (`flow_compare_models`).
+To improve an existing model, export it from Flow into the models folder and ask, for example: "Open *Bike shop.json*. Why is the repair queue so long, and what would fix it?" The assistant can see when the queue builds (`flow_run_over_time`), trace a run to see what happened (`flow_trace_run`), try a range of staffing levels (`flow_sweep_parameter`), check whether a fix really helps (`flow_compare_models`) and make the change in the file (`flow_edit_model`).
 
 If your app shows MCP prompts, there is also a **build_model** prompt that asks for a description of the system.
 
@@ -77,6 +82,9 @@ If your app shows MCP prompts, there is also a **build_model** prompt that asks 
 | `flow_run_model` | Several replications (default 10, max 50) with 95% CIs; queues, utilisation, how entities finished, the model's goals (met in how many replications), things to check |
 | `flow_compare_models` | Two versions with the same random numbers (default 20 paired replications); each difference with a paired 95% CI, split into real differences and ones that could be chance |
 | `flow_run_over_time` | Waiting per queue, % busy per resource, work in progress and container levels, period by period (default 8 periods, averaged over 5 replications) |
+| `flow_sweep_parameter` | One parameter (server count, a capacity, a distribution parameter, a starting value…) at up to 12 values, each on the same random numbers (default 5 replications per value): completions, waits, time in system, % busy and goals met per value. Without `parameter`, lists what can be varied |
+| `flow_trace_run` | One run: how often each rule and event fired and which never did, who was still in the system at the end and where, one entity's path, and the event log (window with `from`/`until`, filter with `entity`) |
+| `flow_edit_model` | Changes to a saved file by path, e.g. `entityTypes/Nurse/count` = 3 (set, remove, append); shows errors added or fixed, refuses to save errors unless asked, keeps the canvas layout |
 | `flow_save_model` | Saves a Flow export file; refuses a model with errors unless asked; never overwrites unless asked |
 
 ## For maintainers
@@ -87,14 +95,15 @@ The server reuses Flow's own code from `../src`: the engine, the validator, the 
 cd mcp
 npm install
 npm test        # builds dist/flow-mcp.mjs, then runs the end-to-end tests over MCP stdio
-npm run pack    # also builds dist/flow.mcpb, then publishes both to ../public/downloads/
-npm run check   # fails if public/downloads/ doesn't match a fresh build
+npm run pack    # also builds dist/flow.mcpb, then publishes both, with flow-mcp-version.json, to ../public/downloads/
 ```
 
-The tool logic (`src/tools.js`, `src/schema.js`) is also covered by `tests/mcp/` in the main test suite.
+The tool logic (`src/tools.js`, `src/schema.js`, `src/update-check.js`) is also covered by `tests/mcp/` in the main test suite.
 
-**How users get it:** Flow serves both files from `public/downloads/`, which the **Connect AI app** dialog in the Model Library links to (`src/ui/AiAppConnectModal.jsx`). Nobody needs GitHub. `npm run pack` writes them there; commit them along with your change.
+**How users get it:** Flow serves the files from `/downloads/`, which the **Connect AI app** dialog in the Model Library links to (`src/ui/AiAppConnectModal.jsx`). Nobody needs GitHub.
 
-**Keeping them current:** the bundle contains copies of the engine and the schema reference. So after changing either, run `npm run pack` and commit `public/downloads/`. The **Flow MCP downloads** CI workflow (`.github/workflows/mcp-bundle.yml`) runs `npm run check` and the end-to-end tests on any change to the bundled sources, and fails if the published files are stale.
+**Keeping them current:** nothing to do by hand. The app's `npm run build` runs `build:mcp` first (the root `prebuild` script), which installs this package and runs `npm run pack`, so every deploy serves a bundle built from the same commit as the app. The files in `public/downloads/` are build output and are git-ignored. For `npm run dev`, run `npm run build:mcp` once if you want the download links to work locally. The **Flow MCP server** CI workflow (`.github/workflows/mcp-bundle.yml`) runs the end-to-end tests and packs the extension whenever anything the bundle contains changes; the main CI's build job builds it too.
 
-**New version:** bump `version` in both `package.json` and `bundle/manifest.json` (`pack` refuses a mismatch), then `npm run pack`.
+**Versions:** `package.json` is the only place the version is set. The build passes it to the server and to the extension's manifest, and stamps the build with the git commit (`0.3.0`, build `8b81d3c`): the server reports both, the Connect AI app dialog shows them, and saved files record them in `appVersion`. To release a new version, bump `version` in `package.json` and deploy.
+
+**Update check:** `flow-mcp-version.json` (`{ version, build, published }`), published next to the downloads, is what installed servers check at startup (`src/update-check.js`, default `https://des.simmodlr.app/downloads/flow-mcp-version.json`; override with `FLOW_MCP_UPDATE_URL`). A newer version adds a note to the next tool result, once per session. The check gives up after 3 seconds and ignores any failure. Users only hear about versions you deploy, so bump the version when a release changes what the tools do.

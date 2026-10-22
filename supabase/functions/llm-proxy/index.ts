@@ -28,8 +28,10 @@ type LlmProviderConfig = {
   temperature?: number; rateLimitPerHour?: number; maxTokensPerRun?: number;
   // Optional stronger model for requests of kind "model_builder" (an app
   // generating or editing a whole model as one long JSON document), and
-  // its own output ceiling. Unset = every request uses `model` /
-  // `maxTokensPerRun`, exactly as before.
+  // its own output ceiling. Unset buildModel = every request uses `model`.
+  // model_builder requests always get their own ceiling, though:
+  // buildMaxTokensPerRun, else DEFAULT_BUILD_MAX_TOKENS, never
+  // maxTokensPerRun (see normalizeRequest).
   buildModel?: string; buildMaxTokensPerRun?: number;
 };
 

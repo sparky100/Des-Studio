@@ -9,7 +9,9 @@
   "packageManager": "npm@10.9.7",
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm run build:mcp",
     "build": "vite build",
+    "build:mcp": "npm --prefix mcp ci --include=dev --no-audit --no-fund && npm --prefix mcp run pack",
     "preview": "vite preview",
     "test": "vitest run --project unit --project ui",
     "test:soak": "vitest run --project soak",

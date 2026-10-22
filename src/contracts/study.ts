@@ -112,7 +112,7 @@ export type SummaryMetricField =
   | "reneged"
   | "balked"
   | "avgWait"
-  | "avgWaitByLittle"
+  | "avgTimeInSystemByLittle"
   | "avgSvc"
   | "avgSojourn"
   | "maxSojourn"
@@ -167,7 +167,7 @@ export type MetricRef =
   | { kind: "runtimeMetrics"; field: RuntimeMetricsField };
 
 export const SUMMARY_METRIC_FIELDS: SummaryMetricField[] = [
-  "total", "served", "reneged", "balked", "avgWait", "avgWaitByLittle",
+  "total", "served", "reneged", "balked", "avgWait", "avgTimeInSystemByLittle",
   "avgSvc", "avgSojourn", "maxSojourn", "avgTimeInSystem", "servedRatio",
   "avgWIP", "totalCost", "costPerServed", "avgPlanDeviation",
 ];
