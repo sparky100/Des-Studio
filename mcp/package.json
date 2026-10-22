@@ -18,8 +18,7 @@
     "build": "node build.mjs",
     "pack": "node build.mjs && node pack.mjs",
     "start": "node dist/flow-mcp.mjs",
-    "test": "npm run build && node --test test/e2e.test.mjs",
-    "check": "node check.mjs"
+    "test": "npm run build && node --test test/e2e.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

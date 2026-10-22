@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -19,7 +20,8 @@ let client;
 before(async () => {
   folder = await mkdtemp(path.join(os.tmpdir(), 'flow-mcp-'));
   client = new Client({ name: 'e2e', version: '1.0.0' });
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [server, '--folder', folder], stderr: 'ignore' }));
+  // No update check here: tests never contact Flow's website.
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [server, '--folder', folder], env: { ...process.env, FLOW_MCP_UPDATE_CHECK: 'off' }, stderr: 'ignore' }));
 });
 
 after(async () => {
@@ -43,6 +45,9 @@ test('lists the eleven tools and the build_model prompt, with workflow instructi
   const prompt = await client.getPrompt({ name: 'build_model', arguments: { system: 'a coffee shop' } });
   assert.match(prompt.messages[0].content.text, /a coffee shop/);
   assert.match(client.getInstructions(), /flow_validate_model/);
+  const { version } = JSON.parse(await readFile(path.join(here, '..', 'package.json'), 'utf8'));
+  assert.equal(client.getServerVersion().version, version);
+  assert.match(client.getInstructions(), new RegExp(`Flow tools ${version.replace(/\./g, '\\.')}, build [0-9a-f]{7}|Flow tools ${version.replace(/\./g, '\\.')}, build unknown`));
 });
 
 test('schema: protocol and table of contents by default, sections on request', async () => {
@@ -117,7 +122,7 @@ test('launched as the desktop extension with no folder set, it uses Documents/Fl
       command: process.execPath,
       args: [server],
       // What Claude Desktop passes when the optional folder setting is empty.
-      env: { ...process.env, HOME: home, USERPROFILE: home, FLOW_MODELS_DIR: '${user_config.models_folder}' },
+      env: { ...process.env, HOME: home, USERPROFILE: home, FLOW_MODELS_DIR: '${user_config.models_folder}', FLOW_MCP_UPDATE_CHECK: 'off' },
       stderr: 'ignore',
     }));
     const res = await ext.callTool({ name: 'flow_list_models', arguments: {} });
@@ -184,4 +189,40 @@ test('edit changes a saved model in place, and refuses a change that breaks it',
   assert.match(ok.text, /entityTypes\/Staff\/count: 3 → 5/);
   const saved = JSON.parse(await readFile(path.join(folder, 'Edit me.json'), 'utf8'));
   assert.equal(saved.model_json.entityTypes.find(e => e.name === 'Staff').count, 5);
+});
+
+test('a newer published version is mentioned once, on the next tool result', async () => {
+  const site = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ version: '99.0.0', build: 'abc1234' }));
+  });
+  await new Promise(r => site.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${site.address().port}/downloads/flow-mcp-version.json`;
+  const c = new Client({ name: 'e2e-update', version: '1.0.0' });
+  try {
+    await c.connect(new StdioClientTransport({ command: process.execPath, args: [server, '--folder', folder], env: { ...process.env, FLOW_MCP_UPDATE_URL: url }, stderr: 'ignore' }));
+    // The check runs in the background at launch; give it a moment.
+    await new Promise(r => setTimeout(r, 500));
+    const first = await c.callTool({ name: 'flow_list_models', arguments: {} });
+    assert.match(first.content[0].text, /newer version of the Flow tools is available \(99\.0\.0; this is /);
+    assert.match(first.content[0].text, /open Flow \(http:\/\/127\.0\.0\.1:\d+\)/);
+    const second = await c.callTool({ name: 'flow_list_models', arguments: {} });
+    assert.doesNotMatch(second.content[0].text, /newer version/);
+  } finally {
+    await c.close();
+    site.close();
+  }
+});
+
+test('the update check stays silent when the version is current or the site is unreachable', async () => {
+  const c = new Client({ name: 'e2e-offline', version: '1.0.0' });
+  try {
+    await c.connect(new StdioClientTransport({ command: process.execPath, args: [server, '--folder', folder], env: { ...process.env, FLOW_MCP_UPDATE_URL: 'http://127.0.0.1:9/nothing.json' }, stderr: 'ignore' }));
+    await new Promise(r => setTimeout(r, 300));
+    const res = await c.callTool({ name: 'flow_list_models', arguments: {} });
+    assert.equal(!!res.isError, false, res.content[0].text);
+    assert.doesNotMatch(res.content[0].text, /newer version/);
+  } finally {
+    await c.close();
+  }
 });

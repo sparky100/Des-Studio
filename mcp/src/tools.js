@@ -7,6 +7,7 @@
 // own (src/engine, src/llm/prompts.js), so numbers here match the app.
 
 import { readdir, readFile, writeFile, stat, mkdir } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildEngine } from '../../src/engine/index.js';
 import { validateModel } from '../../src/engine/validation.js';
@@ -16,7 +17,14 @@ import { pickModelJsonFields } from '../../src/model/modelJsonFields.js';
 import { buildKpis, buildGoalGapsFromResults } from '../../src/llm/prompts.js';
 import { enumerateSweepableParams, applySweepValue, isIntegerParamType } from '../../src/engine/sweep-params.js';
 
-export const VERSION = '0.3.0';
+/* global __FLOW_MCP_VERSION__, __FLOW_MCP_BUILD__ */
+// package.json is the one place the version is set: the bundle has it built
+// in (build.mjs); run from source, it is read from there.
+export const VERSION = typeof __FLOW_MCP_VERSION__ !== 'undefined'
+  ? __FLOW_MCP_VERSION__
+  : JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+// The commit the bundle was built from ("dev" when run from source).
+export const BUILD = typeof __FLOW_MCP_BUILD__ !== 'undefined' ? __FLOW_MCP_BUILD__ : 'dev';
 export const DEFAULT_REPLICATIONS = 10;
 export const MAX_REPLICATIONS = 50;
 const RUN_BUDGET_MS = 90_000;
@@ -949,7 +957,7 @@ export function exportEnvelope({ name, description, model, graph = null }, expor
     name: name || 'Untitled model',
     model_json: { ...pickModelJsonFields(model), graph },
     exportedAt,
-    appVersion: `flow-mcp ${VERSION}`,
+    appVersion: `flow-mcp ${VERSION}+${BUILD}`,
   };
   if (description) payload.description = description;
   return payload;

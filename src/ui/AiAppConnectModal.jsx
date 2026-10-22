@@ -11,7 +11,22 @@ const headingId = "ai-app-connect-heading";
 export const MCP_DOWNLOADS = {
   extension: `${import.meta.env.BASE_URL || "/"}downloads/flow.mcpb`,
   server: `${import.meta.env.BASE_URL || "/"}downloads/flow-mcp.mjs`,
+  // Written with the downloads by mcp/pack.mjs: { version, build, published }.
+  version: `${import.meta.env.BASE_URL || "/"}downloads/flow-mcp-version.json`,
 };
+
+// The version on offer, or null if the file can't be read (e.g. a dev server
+// that hasn't run `npm run build:mcp`) — the dialog works without it.
+export async function fetchMcpVersion(fetchImpl = globalThis.fetch) {
+  try {
+    const res = await fetchImpl(MCP_DOWNLOADS.version, { cache: "no-store" });
+    if (!res.ok) return null;
+    const body = await res.json();
+    return typeof body?.version === "string" ? body : null;
+  } catch {
+    return null;
+  }
+}
 
 export const MCP_CONFIG_SNIPPET = `{
   "mcpServers": {
@@ -29,6 +44,14 @@ export function AiAppConnectModal({ isOpen, onClose }) {
   const { C, FONT } = useTheme();
   const dialogRef = useRef(null);
   const [copied, setCopied] = useState(false);
+  const [mcpVersion, setMcpVersion] = useState(null);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    let live = true;
+    fetchMcpVersion().then(v => { if (live) setMcpVersion(v); });
+    return () => { live = false; };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -82,6 +105,11 @@ export function AiAppConnectModal({ isOpen, onClose }) {
           <p style={muted}>
             Runs on your computer, in desktop AI apps (not in a web browser). Models are saved in <b>Documents/Flow models</b>.
           </p>
+          {mcpVersion && (
+            <p style={muted} data-testid="mcp-version">
+              Version {mcpVersion.version}{mcpVersion.build && mcpVersion.build !== "unknown" ? ` (build ${mcpVersion.build})` : ""}. Your AI app will tell you when a newer one is available; download it here again to update.
+            </p>
+          )}
 
           <section style={{ display: "flex", flexDirection: "column", gap: SPACE.sm }} aria-labelledby="ai-connect-claude">
             <h3 id="ai-connect-claude" style={sectionTitle}>Claude Desktop</h3>

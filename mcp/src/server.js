@@ -10,8 +10,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { loadSchemaText, schemaExcerpt } from './schema.js';
+import { checkForUpdate } from './update-check.js';
 import {
-  VERSION, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, DEFAULT_PERIODS, MAX_PERIODS, MAX_SWEEP_POINTS, MAX_SWEEP_RUNS, DEFAULT_SWEEP_REPLICATIONS,
+  VERSION, BUILD, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, DEFAULT_PERIODS, MAX_PERIODS, MAX_SWEEP_POINTS, MAX_SWEEP_RUNS, DEFAULT_SWEEP_REPLICATIONS,
   DEFAULT_TRACE_LINES, MAX_TRACE_LINES, MAX_EDIT_CHANGES,
   ToolError, listModels, readModel, validate, run, compare, runOverTime, sweep, traceRun, editModel, save,
 } from './tools.js';
@@ -38,7 +39,7 @@ Quote results with their confidence intervals, and say which numbers you assumed
 
 const server = new McpServer(
   { name: 'flow', version: VERSION },
-  { instructions: `Tools for Flow, a discrete-event simulation app. Models are JSON files in ${FOLDER}.\n\n${WORKFLOW}` },
+  { instructions: `Tools for Flow, a discrete-event simulation app (Flow tools ${VERSION}, build ${BUILD}). Models are JSON files in ${FOLDER}.\n\n${WORKFLOW}` },
 );
 
 const modelArg = z.any().optional().describe('The model: a Flow model JSON object (or a Flow export with model_json). Give this or `file`.');
@@ -46,14 +47,25 @@ const fileArg = z.string().optional().describe('A model file in the Flow models 
 
 function text(t) { return { content: [{ type: 'text', text: t }] }; }
 
+// Started in the background at launch; a newer version's note rides on the
+// first tool result after it arrives, once per session.
+let updateNote = null;
+checkForUpdate(VERSION).then(note => { updateNote = note; }, () => {});
+function withUpdateNote(t) {
+  if (!updateNote) return t;
+  const note = updateNote;
+  updateNote = null;
+  return `${t}\n\n${note}`;
+}
+
 // Turns expected problems (bad JSON, missing file) into a readable tool
 // error the assistant can act on, rather than a protocol error.
 function handler(fn) {
   return async args => {
-    try { return text(await fn(args || {})); }
+    try { return text(withUpdateNote(await fn(args || {}))); }
     catch (e) {
       const msg = e instanceof ToolError ? e.message : `Unexpected error: ${e?.message || e}`;
-      return { ...text(msg), isError: true };
+      return { ...text(withUpdateNote(msg)), isError: true };
     }
   };
 }
@@ -206,4 +218,4 @@ server.registerPrompt('build_model', {
 }));
 
 await server.connect(new StdioServerTransport());
-console.error(`Flow MCP ${VERSION} ready — models folder: ${FOLDER}`);
+console.error(`Flow MCP ${VERSION} (${BUILD}) ready — models folder: ${FOLDER}`);

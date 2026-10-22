@@ -2,7 +2,6 @@
   "manifest_version": "0.3",
   "name": "flow-mcp",
   "display_name": "Flow (simmodlr)",
-  "version": "0.3.0",
   "description": "Build, check and run Flow discrete-event simulation models with your AI assistant, on your own computer.",
   "long_description": "Lets your assistant read Flow's model format, validate models with Flow's own validator, run them with Flow's simulation engine (several replications, with 95% confidence intervals and warnings about bottlenecks and overload), try a range of values for a parameter, trace a run to find out why a model misbehaves, edit saved models and save them as files you open in Flow with + New Model → Import a file. Everything runs on your computer; models are plain JSON files in one folder.",
   "author": {
@@ -17,7 +16,8 @@
         "${__dirname}/server/flow-mcp.mjs"
       ],
       "env": {
-        "FLOW_MODELS_DIR": "${user_config.models_folder}"
+        "FLOW_MODELS_DIR": "${user_config.models_folder}",
+        "FLOW_MCP_UPDATE_CHECK": "${user_config.check_for_updates}"
       }
     }
   },
@@ -72,6 +72,13 @@
       "type": "directory",
       "title": "Flow models folder",
       "description": "Where models are read from and saved to. Leave empty to use Documents/Flow models.",
+      "required": false
+    },
+    "check_for_updates": {
+      "type": "boolean",
+      "title": "Check for updates",
+      "description": "Once each time it starts, fetch a small version file from Flow's website to tell you when a newer version is available. Sends nothing about you or your models.",
+      "default": true,
       "required": false
     }
   },

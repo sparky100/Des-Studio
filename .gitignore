@@ -9,3 +9,8 @@ supabase/.temp/
 *.bak
 tmp-*
 null
+
+# Flow MCP downloads: built by `npm run build` (prebuild → build:mcp), never committed.
+public/downloads/flow-mcp.mjs
+public/downloads/flow.mcpb
+public/downloads/flow-mcp-version.json

@@ -1,6 +1,6 @@
 // The local Flow MCP server's tool logic (mcp/src). The server itself is
 // exercised end-to-end over MCP stdio by mcp/test/e2e.test.mjs.
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   fmt, fmtCi, pct, normaliseModelInput, resolveInFolder, safeFileName, exportEnvelope,
@@ -353,5 +353,60 @@ describe('flow_edit_model', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+import { compareVersions, updateCheckEnabled, updateUrl, fetchLatest, updateNotice, checkForUpdate, DEFAULT_UPDATE_URL } from '../../mcp/src/update-check.js';
+import { VERSION, BUILD } from '../../mcp/src/tools.js';
+
+describe('version and update check', () => {
+  test('the version comes from mcp/package.json, the one place it is set', () => {
+    const pkg = JSON.parse(readFileSync(new URL('../../mcp/package.json', import.meta.url), 'utf8'));
+    expect(VERSION).toBe(pkg.version);
+    expect(BUILD).toBe('dev'); // run from source, not a bundle
+    expect(exportEnvelope({ name: 'x', model: {} }).appVersion).toBe(`flow-mcp ${VERSION}+dev`);
+  });
+
+  test('versions compare numerically, ignoring build stamps and pre-release tags', () => {
+    expect(compareVersions('0.10.0', '0.9.9')).toBe(1);
+    expect(compareVersions('0.3.0', '0.3.0+abc1234')).toBe(0);
+    expect(compareVersions('v1.2', '1.2.1')).toBe(-1);
+    expect(compareVersions('1.0.0-beta', '1.0.0')).toBe(0);
+  });
+
+  test('on by default (including the desktop extension’s unset setting); off by flag or variable', () => {
+    expect(updateCheckEnabled({}, [])).toBe(true);
+    expect(updateCheckEnabled({ FLOW_MCP_UPDATE_CHECK: '${user_config.check_for_updates}' }, [])).toBe(true);
+    expect(updateCheckEnabled({ FLOW_MCP_UPDATE_CHECK: 'true' }, [])).toBe(true);
+    for (const off of ['false', 'off', '0', 'No']) expect(updateCheckEnabled({ FLOW_MCP_UPDATE_CHECK: off }, [])).toBe(false);
+    expect(updateCheckEnabled({}, ['--no-update-check'])).toBe(false);
+    expect(updateUrl({})).toBe(DEFAULT_UPDATE_URL);
+    expect(updateUrl({ FLOW_MCP_UPDATE_URL: 'http://localhost:1/v.json' })).toBe('http://localhost:1/v.json');
+  });
+
+  test('a failed or odd response is ignored, never an error', async () => {
+    const ok = body => () => Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    expect(await fetchLatest('u', { fetchImpl: ok({ version: '0.4.0' }) })).toEqual({ version: '0.4.0' });
+    expect(await fetchLatest('u', { fetchImpl: ok({ nope: 1 }) })).toBeNull();
+    expect(await fetchLatest('u', { fetchImpl: () => Promise.resolve({ ok: false }) })).toBeNull();
+    expect(await fetchLatest('u', { fetchImpl: () => Promise.reject(new Error('offline')) })).toBeNull();
+    // A host that answers every path with the app's index.html.
+    expect(await fetchLatest('u', { fetchImpl: () => Promise.resolve({ ok: true, json: () => Promise.reject(new SyntaxError('<')) }) })).toBeNull();
+    // Gives up after the timeout rather than holding anything up.
+    const hang = (_u, { signal }) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted'))));
+    expect(await fetchLatest('u', { fetchImpl: hang, timeoutMs: 20 })).toBeNull();
+  });
+
+  test('a note only when the published version is newer, saying where to get it', async () => {
+    expect(updateNotice('0.3.0', { version: '0.3.0' })).toBeNull();
+    expect(updateNotice('0.3.0', { version: '0.2.9' })).toBeNull();
+    expect(updateNotice('0.3.0', null)).toBeNull();
+    const note = updateNotice('0.3.0', { version: '0.4.0' }, 'https://flow.example/downloads/flow-mcp-version.json');
+    expect(note).toMatch(/newer version of the Flow tools is available \(0\.4\.0; this is 0\.3\.0\)/);
+    expect(note).toMatch(/open Flow \(https:\/\/flow\.example\), go to the Model Library, click Connect AI app/);
+    const fetchImpl = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ version: '9.0.0' }) }));
+    expect(await checkForUpdate('0.3.0', { env: {}, argv: [], fetchImpl })).toMatch(/9\.0\.0/);
+    expect(await checkForUpdate('0.3.0', { env: { FLOW_MCP_UPDATE_CHECK: 'off' }, argv: [], fetchImpl })).toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });
