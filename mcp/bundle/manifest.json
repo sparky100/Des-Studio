@@ -3,7 +3,7 @@
   "name": "flow-mcp",
   "display_name": "Flow (simmodlr)",
   "description": "Build, check and run Flow discrete-event simulation models with your AI assistant, on your own computer.",
-  "long_description": "Lets your assistant read Flow's model format, validate models with Flow's own validator, run them with Flow's simulation engine (several replications, with 95% confidence intervals and warnings about bottlenecks and overload), try a range of values for a parameter, trace a run to find out why a model misbehaves, edit saved models and save them as files you open in Flow with + New Model → Import a file. Everything runs on your computer; models are plain JSON files in one folder.",
+  "long_description": "Lets your assistant read Flow's model format, validate models with Flow's own validator, run them with Flow's simulation engine (several replications, with 95% confidence intervals and warnings about bottlenecks and overload), try a range of values for a parameter, trace a run to find out why a model misbehaves, edit saved models, save them as files, and open them in Flow in your browser, either as a new model or as an update to the model they were exported from. Everything runs on your computer; models are plain JSON files in one folder.",
   "author": {
     "name": "simmodlr"
   },
@@ -65,6 +65,10 @@
     {
       "name": "flow_save_model",
       "description": "Save a model as a file Flow can import. Never overwrites by default."
+    },
+    {
+      "name": "flow_open_in_app",
+      "description": "Open a model file in Flow in your browser: add it as a new model, or update the model it was exported from."
     }
   ],
   "user_config": {

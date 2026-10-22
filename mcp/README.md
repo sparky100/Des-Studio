@@ -8,9 +8,10 @@ Connects an AI assistant on your computer to Flow. The assistant can then:
 - **try a range of values** for one parameter ("how many nurses do I need?");
 - **trace** one run to find out why a model misbehaves (rules that never fire, entities stuck);
 - **edit** a saved model a few values at a time;
-- **save** the model as a file you open in Flow with **+ New Model → Import a file**.
+- **save** the model as a file;
+- **open** it in Flow in your browser, as a new model or as an update to the model it was exported from.
 
-Everything runs on your computer. Models are plain JSON files in one folder, `Documents/Flow models` by default. Your models are never sent anywhere, and you don't need to sign in.
+Everything runs on your computer. Models are plain JSON files in one folder, `Documents/Flow models` by default. Your models are never sent anywhere, and the assistant doesn't need your Flow sign-in: when it opens a model in Flow, the model travels in the link's `#` part, which your browser keeps to itself, and you save it there yourself.
 
 **Updates:** each time it starts, the server fetches a small version file from Flow's website. If a newer version is out, your assistant tells you, and you update by downloading it again from **Connect AI app**. Nothing about you or your models is sent. To turn this off: in Claude Desktop, untick **Check for updates** in the extension's settings; elsewhere, add `--no-update-check` to the server's arguments (or set `FLOW_MCP_UPDATE_CHECK=off`).
 
@@ -63,9 +64,16 @@ The assistant then:
 2. drafts the model;
 3. validates it and fixes the errors;
 4. runs it and checks the results make sense;
-5. saves it, telling you the file name.
+5. saves it, telling you the file name;
+6. if you ask, opens it in Flow (`flow_open_in_app`): your browser shows a preview and you choose **Save to my models**.
 
-In Flow, choose **+ New Model → Import a file** and pick that file.
+You can also import the file yourself: **+ New Model → Import a file**.
+
+### Changing a model you already have in Flow
+
+1. In Flow, export the model (**Access** tab → **Export Model**) into the models folder. The file remembers which model it came from.
+2. Ask the assistant to work on it. It edits the file with `flow_edit_model`.
+3. Ask it to open the result in Flow. The preview offers **Update "your model"**: Flow saves the current model as a version first (so you can go back in **Version history**), then replaces it. You can still choose **Save as a new model**. Only the model's owner or an editor gets the update option.
 
 To improve an existing model, export it from Flow into the models folder and ask, for example: "Open *Bike shop.json*. Why is the repair queue so long, and what would fix it?" The assistant can see when the queue builds (`flow_run_over_time`), trace a run to see what happened (`flow_trace_run`), try a range of staffing levels (`flow_sweep_parameter`), check whether a fix really helps (`flow_compare_models`) and make the change in the file (`flow_edit_model`).
 
@@ -85,7 +93,8 @@ If your app shows MCP prompts, there is also a **build_model** prompt that asks 
 | `flow_sweep_parameter` | One parameter (server count, a capacity, a distribution parameter, a starting value…) at up to 12 values, each on the same random numbers (default 5 replications per value): completions, waits, time in system, % busy and goals met per value. Without `parameter`, lists what can be varied |
 | `flow_trace_run` | One run: how often each rule and event fired and which never did, who was still in the system at the end and where, one entity's path, and the event log (window with `from`/`until`, filter with `entity`) |
 | `flow_edit_model` | Changes to a saved file by path, e.g. `entityTypes/Nurse/count` = 3 (set, remove, append); shows errors added or fixed, refuses to save errors unless asked, keeps the canvas layout |
-| `flow_save_model` | Saves a Flow export file; refuses a model with errors unless asked; never overwrites unless asked |
+| `flow_save_model` | Saves a Flow export file; refuses a model with errors unless asked; never overwrites unless asked (an overwrite keeps the file's link to the Flow model it was exported from) |
+| `flow_open_in_app` | Opens a model file in Flow in the browser through a compressed `#import` link (written to a local page, so there's no length limit from the command line). A file exported from Flow opens as an update to that model; `asNew` adds a new model instead |
 
 ## For maintainers
 
@@ -99,6 +108,8 @@ npm run pack    # also builds dist/flow.mcpb, then publishes both, with flow-mcp
 ```
 
 The tool logic (`src/tools.js`, `src/schema.js`, `src/update-check.js`) is also covered by `tests/mcp/` in the main test suite.
+
+**Opening in Flow:** `flow_open_in_app` builds `https://des.simmodlr.app/#import?z=<deflate-raw, base64url>&target=<model id>` with the app's own `src/utils/importLink.js` (override the address with `FLOW_APP_URL`), writes a page that redirects to it in the temp folder and opens that page. `FLOW_MCP_NO_BROWSER=1` writes the page without opening it. `target` comes from `sourceModelId`, which Flow's export writes and `flow_edit_model` / `flow_save_model` (overwrite) keep. The app's import preview (`src/ui/ImportPreview.jsx`) offers the update only when that model is in the user's library and they can edit it.
 
 **How users get it:** Flow serves the files from `/downloads/`, which the **Connect AI app** dialog in the Model Library links to (`src/ui/AiAppConnectModal.jsx`). Nobody needs GitHub.
 

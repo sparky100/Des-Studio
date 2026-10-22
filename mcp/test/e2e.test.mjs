@@ -21,7 +21,7 @@ before(async () => {
   folder = await mkdtemp(path.join(os.tmpdir(), 'flow-mcp-'));
   client = new Client({ name: 'e2e', version: '1.0.0' });
   // No update check here: tests never contact Flow's website.
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [server, '--folder', folder], env: { ...process.env, FLOW_MCP_UPDATE_CHECK: 'off' }, stderr: 'ignore' }));
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [server, '--folder', folder], env: { ...process.env, FLOW_MCP_UPDATE_CHECK: 'off', FLOW_MCP_NO_BROWSER: '1', TMPDIR: folder, TMP: folder, TEMP: folder }, stderr: 'ignore' }));
 });
 
 after(async () => {
@@ -34,10 +34,10 @@ const call = async (name, args = {}) => {
   return { text: res.content.map(c => c.text).join('\n'), isError: !!res.isError };
 };
 
-test('lists the eleven tools and the build_model prompt, with workflow instructions', async () => {
+test('lists the twelve tools and the build_model prompt, with workflow instructions', async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map(t => t.name).sort(), [
-    'flow_compare_models', 'flow_edit_model', 'flow_get_schema', 'flow_list_models', 'flow_read_model', 'flow_run_model', 'flow_run_over_time',
+    'flow_compare_models', 'flow_edit_model', 'flow_get_schema', 'flow_list_models', 'flow_open_in_app', 'flow_read_model', 'flow_run_model', 'flow_run_over_time',
     'flow_save_model', 'flow_sweep_parameter', 'flow_trace_run', 'flow_validate_model',
   ]);
   const { prompts } = await client.listPrompts();
@@ -122,7 +122,7 @@ test('launched as the desktop extension with no folder set, it uses Documents/Fl
       command: process.execPath,
       args: [server],
       // What Claude Desktop passes when the optional folder setting is empty.
-      env: { ...process.env, HOME: home, USERPROFILE: home, FLOW_MODELS_DIR: '${user_config.models_folder}', FLOW_MCP_UPDATE_CHECK: 'off' },
+      env: { ...process.env, HOME: home, USERPROFILE: home, FLOW_MODELS_DIR: '${user_config.models_folder}', FLOW_MCP_UPDATE_CHECK: 'off', FLOW_MCP_NO_BROWSER: '1', TMPDIR: folder, TMP: folder, TEMP: folder },
       stderr: 'ignore',
     }));
     const res = await ext.callTool({ name: 'flow_list_models', arguments: {} });
@@ -225,4 +225,18 @@ test('the update check stays silent when the version is current or the site is u
   } finally {
     await c.close();
   }
+});
+
+test('open in app: writes a page that redirects to a compressed import link, with the source model as target', async () => {
+  const exported = { ...bikeShop, name: 'Open me', sourceModelId: 'model-123' };
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(path.join(folder, 'Open me.json'), JSON.stringify(exported));
+  const res = await call('flow_open_in_app', { file: 'Open me.json' });
+  assert.equal(res.isError, false);
+  assert.match(res.text, /Couldn't open the browser[\s\S]*open-in-flow\.html[\s\S]*"Update"/);
+  const page = await readFile(path.join(folder, 'flow-mcp', 'open-in-flow.html'), 'utf8');
+  assert.match(page, /https:\/\/des\.simmodlr\.app\/#import\?z=[\w-]+&target=model-123/);
+  const asNew = await call('flow_open_in_app', { file: 'Open me.json', asNew: true });
+  assert.match(asNew.text, /Save to my models/);
+  assert.doesNotMatch(await readFile(path.join(folder, 'flow-mcp', 'open-in-flow.html'), 'utf8'), /target=/);
 });

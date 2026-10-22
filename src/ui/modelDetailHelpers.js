@@ -78,6 +78,9 @@ export function buildModelExportPayload(model, exportedAt = new Date().toISOStri
     appVersion: pkg.version,
   };
   if (inlinedModel.description) payload.description = inlinedModel.description;
+  // Lets the file come back as an update to this model (the Flow MCP's
+  // "open in Flow" passes it on as the import link's target).
+  if (model.id) payload.sourceModelId = model.id;
   return payload;
 }
 
