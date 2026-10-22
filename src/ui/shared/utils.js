@@ -35,6 +35,35 @@ export function extractImportedModelPayload(payload) {
   return model;
 }
 
+/**
+ * The model an import link updates in place: `target` (an existing model
+ * from the library) with every model_json field replaced by the imported
+ * one's. Unlike extractImportedModelPayload, the incoming layout is kept: a
+ * file exported from Flow and edited by the Flow MCP still carries the
+ * canvas positions. With no layout in the import, the target's is kept.
+ */
+export function buildModelUpdateFromImport(target, payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Import must be a flow model JSON object.");
+  }
+  const source = payload.model_json && typeof payload.model_json === "object"
+    ? payload.model_json
+    : payload;
+  const fields = pickModelJsonFields(source);
+  if (!fields.graph) fields.graph = target.graph ?? null;
+  return {
+    ...target,
+    ...fields,
+    name: String(payload.name || source.name || target.name || "").trim() || target.name,
+    description: payload.description ?? source.description ?? target.description ?? "",
+  };
+}
+
+/** True when `userId` may change `model`: its owner or an editor. */
+export function canEditModel(model, userId) {
+  return !!model && !!userId && (model.owner_id === userId || model.access?.[userId] === "editor");
+}
+
 export function disciplineBase(d) {
   if (!d || d.toUpperCase() === "FIFO") return "FIFO";
   const m = String(d).match(/^PRIORITY\((\w+)\)$/i);

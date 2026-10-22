@@ -173,4 +173,38 @@ describe('ImportPreview', () => {
     });
     expect(await screen.findByRole('alert')).toHaveTextContent('DB write failed');
   });
+
+  it('offers to update the model it came from, or save a copy', async () => {
+    const onUpdate = vi.fn().mockResolvedValue();
+    const onSave = vi.fn().mockResolvedValue();
+    render(
+      <ImportPreview model={sampleModel} errors={[]} warnings={[]} user={{ id: 'u1' }}
+        targetId="m1" target={{ id: 'm1', name: 'Clinic' }} onUpdate={onUpdate} onSave={onSave} onDismiss={vi.fn()} />
+    );
+    expect(screen.getByText(/saves the current model as a version first/)).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update “Clinic”' })); });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('says it will save a new model when the source model is not editable', async () => {
+    const onSave = vi.fn().mockResolvedValue();
+    render(
+      <ImportPreview model={sampleModel} errors={[]} warnings={[]} user={{ id: 'u1' }}
+        targetId="m1" target={null} onUpdate={vi.fn()} onSave={onSave} onDismiss={vi.fn()} />
+    );
+    expect(screen.getByText(/saved as a new model/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Update/ })).not.toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save to my models' })); });
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the target across sign-in', () => {
+    render(
+      <ImportPreview model={sampleModel} errors={[]} warnings={[]} user={null}
+        targetId="m1" onSave={vi.fn()} onDismiss={vi.fn()} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Sign in/ }));
+    expect(sessionStorage.getItem('des.pendingImportTarget')).toBe('m1');
+  });
 });

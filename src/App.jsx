@@ -13,7 +13,8 @@ import { fetchModels, fetchProfiles,
          validateDbSchema,
          fetchUserSettings,
          getPlatformConfig,
-         updateModelTags }              from "./db/models.js";
+         updateModelTags,
+         getNextVersion, createVersion } from "./db/models.js";
 import { saveLocalModel } from "./db/local.js";
 import { GOOGLE_FONT_URL } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
@@ -24,12 +25,12 @@ import { HelpAssistant }                    from "./ui/HelpAssistant.jsx";
 import { AuthShell }                        from "./ui/AuthShell.jsx";
 import { AppNavBar }                        from "./ui/AppNavBar.jsx";
 import { ModelLibrary }                     from "./ui/ModelLibrary.jsx";
-import { extractImportedModelPayload }      from "./ui/shared/utils.js";
+import { extractImportedModelPayload, buildModelUpdateFromImport, canEditModel } from "./ui/shared/utils.js";
 import { ModelDetail }                      from "./ui/ModelDetail.jsx";
 import { modelPayloadFromTemplate }         from "./ui/modelDetailHelpers.js";
 import { StakeholderView }                  from "./ui/StakeholderView.jsx";
 import { validateModel }                    from "./engine/validation.js";
-import { decodeModelFromUrl, validateLinkModel } from "./utils/importLink.js";
+import { parseImportLink, validateLinkModel } from "./utils/importLink.js";
 import { ImportPreview }                    from "./ui/ImportPreview.jsx";
 import DashboardView                        from "./ui/share/DashboardView.jsx";
 import { AdminPanel }                       from "./ui/AdminPanel.jsx";
@@ -145,11 +146,10 @@ export default function App({ onThemeChange }){
   useEffect(()=>{
     const hash=window.location.hash
     if(hash.startsWith('#import')){
-      try{
-        const model=decodeModelFromUrl(hash)
+      parseImportLink(hash).then(({model,targetId})=>{
         const {errors,warnings}=validateLinkModel(model)
-        setPendingImport({model,errors,warnings})
-      }catch(_){/* malformed or stale import link — ignore */}
+        setPendingImport({model,targetId,errors,warnings})
+      }).catch(()=>{/* malformed or stale import link — ignore */})
     }
     const modelLinkMatch=hash.match(/^#model\/([^/?]+)/)
     if(modelLinkMatch){
@@ -193,9 +193,11 @@ export default function App({ onThemeChange }){
         if(stored){
           try{
             const model=JSON.parse(stored)
+            const targetId=sessionStorage.getItem('des.pendingImportTarget')||null
             const {errors,warnings}=validateLinkModel(model)
-            setPendingImport({model,errors,warnings})
+            setPendingImport({model,targetId,errors,warnings})
             sessionStorage.removeItem('des.pendingImport')
+            sessionStorage.removeItem('des.pendingImportTarget')
           }catch(_){/* malformed or stale import link — ignore */}
         }
         const storedModelId=sessionStorage.getItem('des.pendingModelId')
@@ -499,12 +501,34 @@ export default function App({ onThemeChange }){
   }
 
   if(pendingImport){
+    const importTarget=pendingImport.targetId?models.find(m=>m.id===pendingImport.targetId)||null:null
+    const clearImport=()=>{
+      setPendingImport(null)
+      if(window.location.hash.startsWith('#import'))window.location.hash=''
+    }
     return (
       <ImportPreview
         model={pendingImport.model}
         errors={pendingImport.errors}
         warnings={pendingImport.warnings}
         user={session?.user||null}
+        targetId={pendingImport.targetId}
+        target={canEditModel(importTarget,uid)?importTarget:null}
+        onUpdate={async()=>{
+          // Keep what is being replaced as a version, so the update can be undone.
+          const version=await getNextVersion(importTarget.id)
+          await createVersion(importTarget.id,uid,{
+            version,
+            name:`Before update from AI app (v${version})`,
+            notes:'Saved automatically before the model was replaced by an import from an AI app.',
+            modelJson:importTarget,
+            isStructural:true,
+          })
+          const saved=await saveModel(buildModelUpdateFromImport(importTarget,pendingImport.model),uid)
+          await loadData()
+          clearImport()
+          setOpenId(saved.id)
+        }}
         onSave={async()=>{
           const normalised=extractImportedModelPayload(pendingImport.model)
           normalised.name=pendingImport.model.name||normalised.name||'Imported Model'

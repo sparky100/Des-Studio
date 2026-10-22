@@ -5,8 +5,12 @@ import { Btn } from './shared/components.jsx';
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 const PENDING_IMPORT_KEY = 'des.pendingImport';
+const PENDING_IMPORT_TARGET_KEY = 'des.pendingImportTarget';
 
-export function ImportPreview({ model, errors, warnings, user, onSave, onDismiss }) {
+// `targetId`: the model the link says this came from (a file exported from
+// Flow, edited in an AI app). `target`: that model, when it is in the
+// user's library and they can edit it — then the preview offers to update it.
+export function ImportPreview({ model, errors, warnings, user, onSave, onDismiss, targetId = null, target = null, onUpdate }) {
   const { C, FONT } = useTheme();
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -17,11 +21,11 @@ export function ImportPreview({ model, errors, warnings, user, onSave, onDismiss
   const queues = model.queues || [];
   const expDefaults = model.experimentDefaults || {};
 
-  const handleSave = async () => {
+  const handleSave = async (action = onSave) => {
     setSaving(true);
     setSaveError('');
     try {
-      await onSave();
+      await action();
     } catch (e) {
       setSaveError(e.message || 'Save failed.');
       setSaving(false);
@@ -30,6 +34,7 @@ export function ImportPreview({ model, errors, warnings, user, onSave, onDismiss
 
   const handleSignInToSave = () => {
     sessionStorage.setItem(PENDING_IMPORT_KEY, JSON.stringify(model));
+    if (targetId) sessionStorage.setItem(PENDING_IMPORT_TARGET_KEY, targetId);
     onDismiss();
   };
 
@@ -147,12 +152,34 @@ export function ImportPreview({ model, errors, warnings, user, onSave, onDismiss
               {saveError && (
                 <div role="alert" style={{ ...TYPO.caption, color: C.red, fontFamily: FONT }}>{saveError}</div>
               )}
-              <div style={{ display: 'flex', gap: 10 }}>
-                <Btn variant="primary" onClick={handleSave} disabled={saving}>
-                  {saving ? 'Saving…' : 'Save to my models'}
-                </Btn>
-                <Btn variant="ghost" onClick={onDismiss}>Dismiss</Btn>
-              </div>
+              {target && onUpdate ? (
+                <>
+                  <div style={{ ...TYPO.caption, color: C.muted, fontFamily: FONT }}>
+                    This is an edited copy of <strong style={{ color: C.text }}>{target.name || 'your model'}</strong>. Updating it saves the current model as a version first, so you can go back.
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <Btn variant="primary" onClick={() => handleSave(onUpdate)} disabled={saving}>
+                      {saving ? 'Saving…' : `Update “${target.name || 'model'}”`}
+                    </Btn>
+                    <Btn variant="ghost" onClick={() => handleSave()} disabled={saving}>Save as a new model</Btn>
+                    <Btn variant="ghost" onClick={onDismiss}>Dismiss</Btn>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {targetId && (
+                    <div style={{ ...TYPO.caption, color: C.muted, fontFamily: FONT }}>
+                      The model this came from isn't in your library, or you can't edit it, so it will be saved as a new model.
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <Btn variant="primary" onClick={() => handleSave()} disabled={saving}>
+                      {saving ? 'Saving…' : 'Save to my models'}
+                    </Btn>
+                    <Btn variant="ghost" onClick={onDismiss}>Dismiss</Btn>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

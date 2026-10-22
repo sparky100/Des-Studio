@@ -182,8 +182,9 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   runReplicationsSync, pairBySeed, seedList, runLength, sweepValues, findParam, summariseTrace,
-  sweep, traceRun, editModel, applyChange, parsePath, save,
+  sweep, traceRun, editModel, applyChange, parsePath, save, openInApp, redirectPage, readModel,
 } from '../../mcp/src/tools.js';
+import { parseImportLink } from '../../src/utils/importLink.js';
 import { enumerateSweepableParams, applySweepValue } from '../../src/engine/sweep-params.js';
 
 describe('review fixes (v0.3)', () => {
@@ -353,6 +354,47 @@ describe('flow_edit_model', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('flow_open_in_app (v0.4)', () => {
+  test('a file exported from Flow keeps its source model id through edits and overwrites, and opens as an update to it', async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'flow-open-'));
+    const fs = await import('node:fs');
+    try {
+      const file = path.join(dir, 'Bike.json');
+      fs.writeFileSync(file, JSON.stringify({ ...bikeShop, name: 'Bike', sourceModelId: 'abc-123' }));
+      expect(await readModel(dir, 'Bike.json')).toMatch(/Exported from a model in Flow/);
+      await editModel({ file: 'Bike', changes: [{ path: 'entityTypes/Staff/count', value: 4 }] }, dir);
+      expect(JSON.parse(readFileSync(file, 'utf8')).sourceModelId).toBe('abc-123');
+      await save({ name: 'Bike', model: bikeShop, overwrite: true }, dir);
+      expect(JSON.parse(readFileSync(file, 'utf8')).sourceModelId).toBe('abc-123');
+
+      const opened = [];
+      const msg = await openInApp({ file: 'Bike.json' }, dir, { tempDir: dir, appUrl: 'https://example.test/', openFile: p => { opened.push(p); } });
+      expect(msg).toMatch(/^Opened "Bike" in Flow[\s\S]*"Update"/);
+      expect(opened).toEqual([path.join(dir, 'open-in-flow.html')]);
+      const page = readFileSync(opened[0], 'utf8');
+      const link = JSON.parse(page.match(/const u=(".*?");/)[1]);
+      expect(link).toMatch(/^https:\/\/example\.test\/#import\?z=/);
+      const { model, targetId } = await parseImportLink(link);
+      expect(targetId).toBe('abc-123');
+      expect(model.name).toBe('Bike');
+      expect(model.queues).toEqual(bikeShop.model_json.queues);
+
+      const asNew = await openInApp({ file: 'Bike.json', asNew: true }, dir, { tempDir: dir, openFile: () => {} });
+      expect(asNew).toMatch(/Save to my models/);
+      const failed = await openInApp({ file: 'Bike.json' }, dir, { tempDir: dir, openFile: () => { throw new Error('no browser'); } });
+      expect(failed).toMatch(/Couldn't open the browser/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the redirect page escapes the model name and the link', () => {
+    const page = redirectPage('https://x.test/#import?z=a</script>', '<b>&"');
+    expect(page).not.toMatch(/<\/script>"/);
+    expect(page).toMatch(/Opening b in Flow/);
   });
 });
 

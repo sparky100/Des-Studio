@@ -100,7 +100,7 @@ export function AiAppConnectModal({ isOpen, onClose }) {
 
         <div style={{ padding: SPACE.lg, display: "flex", flexDirection: "column", gap: SPACE.lg, overflowY: "auto" }}>
           <p style={text}>
-            Your AI assistant can build Flow models for you, then check them with Flow&apos;s own validator and run them with Flow&apos;s simulation engine, fixing problems before you see them. Finished models are saved as files you open here with <b>+ New Model → Import a file</b>.
+            Your AI assistant can build Flow models for you, then check them with Flow&apos;s own validator and run them with Flow&apos;s simulation engine, fixing problems before you see them. Finished models are saved as files; ask the assistant to open one here, or use <b>+ New Model → Import a file</b>. To change a model you already have, export it (<b>Access → Export Model</b>) into the models folder: when the assistant opens it here again, you can update the original, and the current one is kept as a version.
           </p>
           <p style={muted}>
             Runs on your computer, in desktop AI apps (not in a web browser). Models are saved in <b>Documents/Flow models</b>.

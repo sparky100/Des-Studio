@@ -14,7 +14,7 @@ import { checkForUpdate } from './update-check.js';
 import {
   VERSION, BUILD, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, DEFAULT_PERIODS, MAX_PERIODS, MAX_SWEEP_POINTS, MAX_SWEEP_RUNS, DEFAULT_SWEEP_REPLICATIONS,
   DEFAULT_TRACE_LINES, MAX_TRACE_LINES, MAX_EDIT_CHANGES,
-  ToolError, listModels, readModel, validate, run, compare, runOverTime, sweep, traceRun, editModel, save,
+  ToolError, listModels, readModel, validate, run, compare, runOverTime, sweep, traceRun, editModel, save, openInApp,
 } from './tools.js';
 
 function modelsFolder(argv = process.argv.slice(2)) {
@@ -34,7 +34,8 @@ const WORKFLOW = `How to build a Flow model with these tools:
 2. Draft the model JSON, then flow_validate_model. Fix every error and re-validate until there are none.
 3. flow_run_model (10+ replications). Read the results, goals and "Things to check" critically: does the behaviour match what the person described? Fix structure or numbers that don't. To see WHEN queues build or resources saturate, use flow_run_over_time. If something looks wrong (nothing completes, a queue never empties, a rule never fires), use flow_trace_run to see what actually happened in one run.
 4. To judge a change (an extra server, a new rule), use flow_compare_models rather than two separate runs: it uses the same random numbers in both and says which differences are real and which could be chance. To find a good setting ("how many nurses?"), use flow_sweep_parameter over a range of values.
-5. flow_save_model with a clear name. Tell the person the file name and that they open it in Flow with + New Model → Import a file. For later small changes to a saved model, use flow_edit_model instead of re-sending the whole model.
+5. flow_save_model with a clear name. For later small changes to a saved model, use flow_edit_model instead of re-sending the whole model.
+6. When the person wants it in Flow, flow_open_in_app opens it in their browser. For a file exported from Flow, Flow then offers to update the original model (keeping the current one as a version); otherwise it is added as a new model. Ask before opening it.
 Quote results with their confidence intervals, and say which numbers you assumed.`;
 
 const server = new McpServer(
@@ -205,6 +206,16 @@ server.registerTool('flow_save_model', {
   },
   annotations: { destructiveHint: false },
 }, handler(args => save(args, FOLDER)));
+
+server.registerTool('flow_open_in_app', {
+  title: 'Open a model in Flow',
+  description: 'Open a model file from the Flow models folder in Flow, in the person\'s browser, through a link that carries the model (it goes straight to the browser, not to any server). Flow shows a preview; the person saves it to their library. If the file was exported from Flow (and edited here), Flow offers to update that original model, saving the current one as a version first. Pass asNew: true to always add it as a new model. The person must be signed in to Flow in that browser.',
+  inputSchema: {
+    file: z.string().describe('The model file, e.g. "GP surgery.json"'),
+    asNew: z.boolean().optional().describe('Add it as a new model even if it was exported from one in Flow'),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+}, handler(args => openInApp(args, FOLDER)));
 
 server.registerPrompt('build_model', {
   title: 'Build a Flow model',

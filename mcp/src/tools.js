@@ -9,11 +9,14 @@
 import { readdir, readFile, writeFile, stat, mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { spawn } from 'node:child_process';
 import { buildEngine } from '../../src/engine/index.js';
 import { validateModel } from '../../src/engine/validation.js';
 import { estimateRunComplexity, estimateMaxCycles } from '../../src/engine/complexity-estimator.js';
 import { confidenceInterval95, summarizeReplicationResults, SUMMARY_METRICS, pairedTConfidenceInterval, bonferroniCI } from '../../src/engine/statistics.js';
 import { pickModelJsonFields } from '../../src/model/modelJsonFields.js';
+import { buildImportLink } from '../../src/utils/importLink.js';
 import { buildKpis, buildGoalGapsFromResults } from '../../src/llm/prompts.js';
 import { enumerateSweepableParams, applySweepValue, isIntegerParamType } from '../../src/engine/sweep-params.js';
 
@@ -69,7 +72,8 @@ export function normaliseModelInput(input) {
   const source = payload.model_json && typeof payload.model_json === 'object' ? payload.model_json : payload;
   const name = String(payload.name || source.name || '').trim();
   const description = String(payload.description || source.description || '').trim();
-  return { name, description, model: { name, description, ...pickModelJsonFields(source) } };
+  const sourceModelId = typeof payload.sourceModelId === 'string' && payload.sourceModelId ? payload.sourceModelId : null;
+  return { name, description, sourceModelId, model: { name, description, ...pickModelJsonFields(source) } };
 }
 
 export function resolveInFolder(folder, file) {
@@ -115,11 +119,12 @@ export async function listModels(folder) {
 }
 
 export async function readModel(folder, file) {
-  const { name, description, model } = await readModelFile(folder, file);
+  const { name, description, sourceModelId, model } = await readModelFile(folder, file);
   const counts = ['entityTypes', 'queues', 'bEvents', 'cEvents', 'stateVariables', 'containerTypes', 'goals']
     .map(k => `${(model[k] || []).length} ${k}`).join(', ');
   const { name: _n, description: _d, graph: _g, ...body } = model;
-  return `"${name || file}"${description ? ` — ${description}` : ''}\n${counts}\n\n${JSON.stringify(body, null, 2)}`;
+  const origin = sourceModelId ? '\nExported from a model in Flow: flow_open_in_app can update that model.' : '';
+  return `"${name || file}"${description ? ` — ${description}` : ''}\n${counts}${origin}\n\n${JSON.stringify(body, null, 2)}`;
 }
 
 // ── Validation ─────────────────────────────────────────────────────────────
@@ -914,7 +919,7 @@ export async function editModel(args, folder) {
   const changes = Array.isArray(args.changes) ? args.changes : [];
   if (!changes.length) throw new ToolError('Give at least one change, e.g. { "path": "entityTypes/Nurse/count", "value": 3 }.');
   if (changes.length > MAX_EDIT_CHANGES) throw new ToolError(`At most ${MAX_EDIT_CHANGES} changes at a time.`);
-  const { full, name, description, model } = await readModelFile(folder, args.file);
+  const { full, name, description, sourceModelId, model } = await readModelFile(folder, args.file);
   const original = JSON.parse(await readFile(full, 'utf8'));
   const graph = (original?.model_json ?? original)?.graph ?? null;
   const edited = structuredClone(model);
@@ -936,9 +941,9 @@ export async function editModel(args, folder) {
   if (after.errors.length && !args.allowErrors) {
     return [...lines, '', 'Not saved — the edited model has errors. Fix them in the same call, or pass allowErrors: true to save a work in progress.'].join('\n');
   }
-  const envelope = exportEnvelope({ name: name || path.basename(full, '.json'), description, model: edited, graph });
+  const envelope = exportEnvelope({ name: name || path.basename(full, '.json'), description, model: edited, graph, sourceModelId });
   await writeFile(full, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
-  return [...lines, '', `Saved over ${full}. Re-import it in Flow (+ New Model → Import a file) to see the change there.`].join('\n');
+  return [...lines, '', `Saved over ${full}. To see the change in Flow, use flow_open_in_app${sourceModelId ? ' (it offers to update the model it was exported from)' : ''}, or import the file (+ New Model → Import a file).`].join('\n');
 }
 
 // ── Saving ─────────────────────────────────────────────────────────────────
@@ -952,7 +957,9 @@ export function safeFileName(name) {
 // reading the file) treats it like any other exported model.
 // `graph` is the canvas layout (positions only; Flow derives the structure
 // from the model), kept when editing a file Flow exported.
-export function exportEnvelope({ name, description, model, graph = null }, exportedAt = new Date().toISOString()) {
+// `sourceModelId` is the Flow model the file was exported from; kept through
+// edits so flow_open_in_app can offer to update that model.
+export function exportEnvelope({ name, description, model, graph = null, sourceModelId = null }, exportedAt = new Date().toISOString()) {
   const payload = {
     name: name || 'Untitled model',
     model_json: { ...pickModelJsonFields(model), graph },
@@ -960,6 +967,7 @@ export function exportEnvelope({ name, description, model, graph = null }, expor
     appVersion: `flow-mcp ${VERSION}+${BUILD}`,
   };
   if (description) payload.description = description;
+  if (sourceModelId) payload.sourceModelId = sourceModelId;
   return payload;
 }
 
@@ -981,9 +989,74 @@ export async function save(args, folder) {
     }
   }
   const full = resolveInFolder(folder, file);
-  await writeFile(full, `${JSON.stringify(exportEnvelope({ name, description, model: input.model }), null, 2)}\n`, 'utf8');
+  // Overwriting a file exported from Flow keeps its link to that model.
+  let sourceModelId = null;
+  if (args.overwrite) {
+    try { sourceModelId = normaliseModelInput(await readFile(full, 'utf8')).sourceModelId; } catch { /* new file, or not a model */ }
+  }
+  await writeFile(full, `${JSON.stringify(exportEnvelope({ name, description, model: input.model, sourceModelId }), null, 2)}\n`, 'utf8');
   const status = errors.length
     ? `with ${errors.length} error${errors.length === 1 ? '' : 's'} (Flow will import it, but it won't run until they're fixed)`
     : warnings.length ? `with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}` : 'with no errors or warnings';
-  return `Saved "${name}" as ${full} ${status}.\nTo open it in Flow: + New Model → Import a file → choose "${file}".`;
+  return `Saved "${name}" as ${full} ${status}.\nTo open it in Flow: flow_open_in_app with file "${file}", or + New Model → Import a file → choose "${file}".`;
+}
+
+// ── Opening in Flow ────────────────────────────────────────────────────────
+
+export const DEFAULT_APP_URL = 'https://des.simmodlr.app';
+// Comfortably under what browsers accept in a URL (Chrome: 2 MB).
+export const MAX_LINK_CHARS = 1_500_000;
+
+// A local page that sends the browser on to the import link. Going through a
+// file, rather than passing the link to the OS, avoids Windows' 8,191
+// character command-line limit; the model stays in the URL fragment, which
+// the browser never sends to a server.
+export function redirectPage(link, name) {
+  const safe = JSON.stringify(link).replace(/</g, '\\u003c');
+  const title = String(name || 'model').replace(/[<>&"]/g, '');
+  return `<!doctype html>\n<meta charset="utf-8">\n<title>Opening ${title} in Flow…</title>\n<p>Opening ${title} in Flow… If nothing happens, <a id="go">click here</a>.</p>\n<script>const u=${safe};document.getElementById('go').href=u;location.replace(u);</script>\n`;
+}
+
+/**
+ * Builds the "open in Flow" link for a model file and opens it in the
+ * browser. `deps` is for tests: { openFile(path), tempDir }.
+ */
+export async function openInApp(args, folder, deps = {}) {
+  if (!args.file) throw new ToolError('Give the `file` to open (a model in your Flow models folder). Save a new model with flow_save_model first.');
+  const { name, description, sourceModelId, model } = await readModelFile(folder, args.file);
+  const { errors } = validateModel(model);
+  const targetId = args.asNew ? null : sourceModelId;
+  const appUrl = deps.appUrl || process.env.FLOW_APP_URL || DEFAULT_APP_URL;
+  const link = await buildImportLink({ ...model, name, description }, { baseUrl: appUrl, targetId });
+  if (link.length > MAX_LINK_CHARS) {
+    return `"${name || args.file}" is too large to open with a link. Import the file in Flow instead: + New Model → Import a file → choose "${args.file}".`;
+  }
+  const dir = deps.tempDir || path.join(os.tmpdir(), 'flow-mcp');
+  await mkdir(dir, { recursive: true });
+  const page = path.join(dir, 'open-in-flow.html');
+  await writeFile(page, redirectPage(link, name), 'utf8');
+  // FLOW_MCP_NO_BROWSER=1 (tests, headless setups) writes the page without opening it.
+  const opener = deps.openFile || (process.env.FLOW_MCP_NO_BROWSER === '1' ? () => { throw new Error('disabled'); } : openWithSystem);
+  let opened = true;
+  try { await opener(page); } catch { opened = false; }
+  const lines = [
+    opened ? `Opened "${name || args.file}" in Flow in the browser.` : `Couldn't open the browser. Ask the person to open this file in their browser: ${page}`,
+    targetId
+      ? 'Flow shows a preview. Because the file was exported from Flow, the person can choose "Update" to replace that model (the current one is kept as a version first) or save it as a new model.'
+      : 'Flow shows a preview, and the person chooses "Save to my models" to add it to their library.',
+    'The person must be signed in to Flow in that browser; the model goes straight from this computer to the browser and is not sent anywhere else.',
+  ];
+  if (errors.length) lines.push(`Note: the model has ${errors.length} validation error${errors.length === 1 ? '' : 's'}; Flow will import it but it won't run until they're fixed.`);
+  return lines.join('\n');
+}
+
+export function openWithSystem(file) {
+  const [cmd, cmdArgs] = process.platform === 'win32' ? ['explorer.exe', [file]]
+    : process.platform === 'darwin' ? ['open', [file]]
+    : ['xdg-open', [file]];
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, cmdArgs, { detached: true, stdio: 'ignore', windowsHide: true });
+    child.once('error', reject);
+    child.once('spawn', () => { child.unref(); resolve(); });
+  });
 }
