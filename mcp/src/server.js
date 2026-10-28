@@ -15,7 +15,7 @@ import { checkForUpdate } from './update-check.js';
 import {
   VERSION, BUILD, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, DEFAULT_PERIODS, MAX_PERIODS, MAX_SWEEP_POINTS, MAX_SWEEP_RUNS, DEFAULT_SWEEP_REPLICATIONS,
   DEFAULT_TRACE_LINES, MAX_TRACE_LINES, MAX_EDIT_CHANGES,
-  ToolError, listModels, readModel, validate, run, compare, runOverTime, sweep, traceRun, editModel, save, openInApp,
+  ToolError, listModels, readModel, validate, evidenceCoverage, run, compare, runOverTime, sweep, traceRun, editModel, save, openInApp,
 } from './tools.js';
 
 function modelsFolder(argv = process.argv.slice(2)) {
@@ -100,6 +100,13 @@ server.registerTool('flow_read_model', {
   inputSchema: { file: z.string().describe('File name, e.g. "Bike shop.json"') },
   annotations: { readOnlyHint: true },
 }, handler(({ file }) => readModel(FOLDER, file)));
+
+server.registerTool('flow_evidence_coverage', {
+  title: 'Evidence and assumptions coverage',
+  description: 'Show what backs a model: the share of elements and parameters with evidence or an assumption, the arrival and capacity parameters nothing backs, contested assumptions, and the evidence warnings (V-BACK). Read-only.',
+  inputSchema: { model: modelArg, file: fileArg },
+  annotations: { readOnlyHint: true },
+}, handler(args => evidenceCoverage(args, FOLDER)));
 
 server.registerTool('flow_validate_model', {
   title: 'Validate a Flow model',
