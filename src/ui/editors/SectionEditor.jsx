@@ -42,6 +42,8 @@ function MemberRow({ label, id, inSection, onToggleMember }) {
   );
 }
 
+const DESCRIPTION_MAX = 500;
+
 const SectionEditor = ({ sections = [], queues = [], entityTypes = [], bEvents = [], cEvents = [], onChange }) => {
   const { C, FONT } = useTheme();
   const [expandedIds, setExpandedIds] = useState(new Set());
@@ -54,7 +56,7 @@ const SectionEditor = ({ sections = [], queues = [], entityTypes = [], bEvents =
     const id = "sec_" + Date.now();
     const usedColors = sections.map(s => s.color);
     const color = PRESET_COLORS.find(c => !usedColors.includes(c)) || PRESET_COLORS[sections.length % PRESET_COLORS.length];
-    onChange([...sections, { id, name: "", color, memberIds: [] }]);
+    onChange([...sections, { id, name: "", description: "", color, memberIds: [] }]);
     setExpandedIds(prev => new Set([...prev, id]));
   };
 
@@ -67,8 +69,11 @@ const SectionEditor = ({ sections = [], queues = [], entityTypes = [], bEvents =
   const toggleMember = (i, elemId) => {
     const s = sections[i];
     const inSection = s.memberIds.includes(elemId);
-    const memberIds = inSection ? s.memberIds.filter(x => x !== elemId) : [...s.memberIds, elemId];
-    upd(i, { memberIds });
+    // An element belongs to at most one section: ticking it here moves it out of any other.
+    onChange(sections.map((sec, idx) => {
+      if (idx === i) return { ...sec, memberIds: inSection ? sec.memberIds.filter(x => x !== elemId) : [...sec.memberIds, elemId] };
+      return sec.memberIds.includes(elemId) && !inSection ? { ...sec, memberIds: sec.memberIds.filter(x => x !== elemId) } : sec;
+    }));
   };
 
   const allElements = [
@@ -106,6 +111,7 @@ const SectionEditor = ({ sections = [], queues = [], entityTypes = [], bEvents =
       {sections.map((s, i) => {
         const isExpanded = expandedIds.has(s.id);
         const memberCount = s.memberIds.length;
+        const otherSection = (elemId) => sections.find((o, idx) => idx !== i && o.memberIds.includes(elemId));
         return (
           <div key={s.id} style={{
             background: C.bg, border: `1px solid ${s.color}44`,
@@ -133,6 +139,19 @@ const SectionEditor = ({ sections = [], queues = [], entityTypes = [], bEvents =
             </div>
 
             {isExpanded && <>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>DESCRIPTION</span>
+                <CommitInput
+                  multiline
+                  rows={2}
+                  ariaLabel={`Description for section ${s.name || i + 1}`}
+                  value={s.description || ""}
+                  maxLength={DESCRIPTION_MAX}
+                  onCommit={v => { if (v !== (s.description || "")) upd(i, { description: v.slice(0, DESCRIPTION_MAX) }); }}
+                  placeholder="What happens in this section, in a sentence or two"
+                  style={{ background: "transparent", border: `1px solid ${s.color}55`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", minHeight: 52, resize: "vertical" }}
+                />
+              </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COLOUR</span>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -169,7 +188,7 @@ const SectionEditor = ({ sections = [], queues = [], entityTypes = [], bEvents =
                         <MemberRow
                           key={elem.id}
                           id={elem.id}
-                          label={elem.label}
+                          label={otherSection(elem.id) ? `${elem.label} (currently in ${otherSection(elem.id).name || "another section"})` : elem.label}
                           inSection={s.memberIds.includes(elem.id)}
                           onToggleMember={(id) => toggleMember(i, id)}
                         />

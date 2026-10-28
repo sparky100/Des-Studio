@@ -90,7 +90,7 @@ If a tool named here isn't available (an older version of the server), do that s
 24. **Entities of different sizes**: a number attribute named in `quantityAttr`, set with `SET_ATTR` after `ARRIVE`.
 25. **A weighted service mix keeps one arrival stream**: a `Categorical` class attribute (non-empty `options`) plus one C-event per class using `entityFilter`, each with its own service distribution. Separate ARRIVE streams only when the arrival *patterns* differ (shape, scheduled vs random, time profile, trigger).
 26. **`defaultQueueName` does nothing without a routing table** on the same B-event; entities silently stall.
-27. **Large models** (≥ 8 queues or ≥ 3 stages) need `sections[]` using `memberIds`, and every queue, entity type, B-event and C-event belongs to exactly one section.
+27. **Large models** (≥ 8 queues or ≥ 3 stages) need `sections[]` using `memberIds`, and every queue, entity type, B-event and C-event belongs to exactly one section. Give each section a one-sentence `description` of what happens in it.
 
 ## 4a. Evidence and assumptions
 

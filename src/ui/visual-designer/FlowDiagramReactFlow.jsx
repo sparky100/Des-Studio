@@ -189,11 +189,11 @@ function DesNode({ data, selected }) {
 
 function SubmodelNode({ data }) {
   const { C, FONT } = useTheme();
-  return <div style={{ width: NODE_WIDTH, height: NODE_HEIGHT, boxSizing: "border-box", padding: SPACE.sm, borderRadius: RADIUS.md, background: C.surface, color: C.text, border: `2px solid ${data.hasError ? C.red : data.sectionColor || C.accent}`, fontFamily: FONT, ...TYPO.body, display: "flex", flexDirection: "column", gap: SPACE.sm }} title={data.errorMessage}>
+  return <div style={{ width: NODE_WIDTH, height: NODE_HEIGHT, boxSizing: "border-box", padding: SPACE.sm, borderRadius: RADIUS.md, background: C.surface, color: C.text, border: `2px solid ${data.hasError ? C.red : data.sectionColor || C.accent}`, fontFamily: FONT, ...TYPO.body, display: "flex", flexDirection: "column", gap: SPACE.sm }} title={[data.errorMessage, data.description].filter(Boolean).join("\n") || undefined} onDoubleClick={e => { e.stopPropagation(); data.onExpand(); }}>
     <Handle type="target" position={Position.Left} isConnectable={false} />
     <strong title={data.label} style={{ minHeight: 0, overflow: "hidden", overflowWrap: "anywhere", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2 }}>{data.label}</strong>
     <p style={{ margin: 0, flexShrink: 0 }}>{data.sublabel}</p>
-    <button type="button" aria-label={`Expand to edit ${data.label}`} style={{ marginTop: "auto", padding: SPACE.xs, flexShrink: 0, whiteSpace: "normal", overflowWrap: "anywhere", background: C.panel, color: C.text, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, fontFamily: FONT, ...TYPO.caption, cursor: "pointer" }} onClick={e => { e.stopPropagation(); data.onExpand(); }}>Expand to edit</button>
+    <button type="button" aria-label={`Show detail: ${data.label}`} style={{ marginTop: "auto", padding: SPACE.xs, flexShrink: 0, whiteSpace: "normal", overflowWrap: "anywhere", background: C.panel, color: C.text, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, fontFamily: FONT, ...TYPO.caption, cursor: "pointer" }} onClick={e => { e.stopPropagation(); data.onExpand(); }}>Show detail</button>
     <Handle type="source" position={Position.Right} isConnectable={false} />
   </div>;
 }
@@ -397,7 +397,7 @@ function SelectionRectSuppressor() {
   return null;
 }
 
-function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId, onOverview, onExpandAll }) {
+function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId, onOverview, onExpandAll, sectionsView }) {
   const { C, FONT } = useTheme();
   const [showShortcuts, setShowShortcuts] = useState(false);
   const panelBtnStyle = {
@@ -414,8 +414,12 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
   return (
     <>
       <Panel position="top-left" style={{ display: "flex", gap: 5, flexWrap: "wrap", maxWidth: `calc(100% - ${SPACE.lg * 2}px)` }}>
-        {onOverview && <button type="button" style={panelBtnStyle} onClick={onOverview}>Compact overview</button>}
-        {onExpandAll && <button type="button" style={panelBtnStyle} onClick={onExpandAll}>Expand all</button>}
+        {onOverview && onExpandAll && (
+          <div role="group" aria-label="Canvas view" style={{ display: "flex", gap: 0 }}>
+            <button type="button" aria-pressed={!sectionsView} style={{ ...panelBtnStyle, borderRadius: "4px 0 0 4px", background: !sectionsView ? `${C.accent}22` : panelBtnStyle.background, color: !sectionsView ? C.accent : panelBtnStyle.color }} onClick={onExpandAll}>Detail</button>
+            <button type="button" aria-pressed={sectionsView} style={{ ...panelBtnStyle, borderRadius: "0 4px 4px 0", borderLeft: "none", background: sectionsView ? `${C.accent}22` : panelBtnStyle.background, color: sectionsView ? C.accent : panelBtnStyle.color }} onClick={onOverview}>Sections</button>
+          </div>
+        )}
         <button
           type="button"
           style={panelBtnStyle}
@@ -876,7 +880,8 @@ export function FlowDiagramReactFlow({
           focusSectionRef={focusSectionRef}
           setFocusedSectionId={id => { if (id) expandSection(id); setFocusedSectionId(id); }}
           onOverview={showSections && canonicalGraph.sectionPanels?.length > 0 ? () => changeCollapse(new Set(canonicalGraph.sectionPanels.map(p => p.sectionId)), true) : null}
-          onExpandAll={projected ? () => changeCollapse(new Set()) : null}
+          onExpandAll={canonicalGraph.sectionPanels?.length > 0 ? () => changeCollapse(new Set()) : null}
+          sectionsView={projected && compact}
         />
       </ReactFlow>
       <AlignmentGuidesOverlay guides={alignmentGuides} reactFlowInstance={reactFlowInstance} wrapperRef={wrapperRef} C={C} />
