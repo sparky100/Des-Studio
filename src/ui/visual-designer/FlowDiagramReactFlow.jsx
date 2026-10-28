@@ -26,7 +26,7 @@ import { computeAlignmentGuides } from "./alignmentGuides.js";
 import { computeLoopRailYById } from "./loopEdgeRouting.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useFitNodeRef } from "../shared/useFitNodeRef.js";
-import { SectionPanelNode } from "./SectionPanelNode.jsx";
+import { SectionPanelNode, SectionPanelControlsNode } from "./SectionPanelNode.jsx";
 import { SPACE, RADIUS, TYPO } from "../shared/tokens.js";
 
 // Nothing docks below the Draw canvas the way Execute's BottomPanel does —
@@ -301,7 +301,7 @@ function DesEdge({
   );
 }
 
-const nodeTypes = { desNode: DesNode, submodel: SubmodelNode, sectionPanel: SectionPanelNode };
+const nodeTypes = { desNode: DesNode, submodel: SubmodelNode, sectionPanel: SectionPanelNode, sectionControls: SectionPanelControlsNode };
 const edgeTypes = { desEdge: DesEdge };
 
 function toFlowNode(node) {
@@ -399,7 +399,7 @@ function SelectionRectSuppressor() {
   return null;
 }
 
-function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId, onOverview, onExpandAll, sectionsView }) {
+function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId, onOverview, onExpandAll, sectionsView, detailView = !sectionsView }) {
   const { C, FONT } = useTheme();
   const [showShortcuts, setShowShortcuts] = useState(false);
   const panelBtnStyle = {
@@ -418,7 +418,7 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
       <Panel position="top-left" style={{ display: "flex", gap: 5, flexWrap: "wrap", maxWidth: `calc(100% - ${SPACE.lg * 2}px)` }}>
         {onOverview && onExpandAll && (
           <div role="group" aria-label="Canvas view" style={{ display: "flex", gap: 0 }}>
-            <button type="button" aria-pressed={!sectionsView} style={{ ...panelBtnStyle, borderRadius: "4px 0 0 4px", background: !sectionsView ? `${C.accent}22` : panelBtnStyle.background, color: !sectionsView ? C.accent : panelBtnStyle.color }} onClick={onExpandAll}>Detail</button>
+            <button type="button" aria-pressed={detailView} style={{ ...panelBtnStyle, borderRadius: "4px 0 0 4px", background: detailView ? `${C.accent}22` : panelBtnStyle.background, color: detailView ? C.accent : panelBtnStyle.color }} onClick={onExpandAll}>Detail</button>
             <button type="button" aria-pressed={sectionsView} style={{ ...panelBtnStyle, borderRadius: "0 4px 4px 0", borderLeft: "none", background: sectionsView ? `${C.accent}22` : panelBtnStyle.background, color: sectionsView ? C.accent : panelBtnStyle.color }} onClick={onOverview}>Sections</button>
           </div>
         )}
@@ -522,7 +522,12 @@ export function FlowDiagramReactFlow({
   }, [viewStorageKey]);
   const [collapsedIds, setCollapsedIds] = useState(() => savedView === "sections" ? new Set((canonicalGraph.sectionPanels || []).map(p => p.sectionId)) : new Set());
   const [compact, setCompact] = useState(() => savedView === "sections" && (canonicalGraph.sectionPanels?.length ?? 0) > 0);
-  const graph = useMemo(() => projectCollapsedSections(canonicalGraph, showSections ? collapsedIds : new Set(), { compact }), [canonicalGraph, collapsedIds, showSections, compact]);
+  // Every section collapsed is the Sections view, however it was reached (the switch or
+  // each section's chevron), so it gets the same flow-ordered layout and the same label.
+  const sectionIds = useMemo(() => (canonicalGraph.sectionPanels || []).map(p => p.sectionId), [canonicalGraph.sectionPanels]);
+  const allCollapsed = sectionIds.length > 0 && sectionIds.every(id => collapsedIds.has(id));
+  const effectiveCompact = compact || allCollapsed;
+  const graph = useMemo(() => projectCollapsedSections(canonicalGraph, showSections ? collapsedIds : new Set(), { compact: effectiveCompact }), [canonicalGraph, collapsedIds, showSections, effectiveCompact]);
   const projected = graph !== canonicalGraph;
   const changeCollapse = useCallback((ids, overview = false) => {
     setFocusedSectionId(null);
@@ -531,8 +536,9 @@ export function FlowDiagramReactFlow({
     onEdgeSelect?.(null);
     setCollapsedIds(ids);
     setCompact(overview);
-    try { if (viewStorageKey) localStorage.setItem(viewStorageKey, overview ? "sections" : "detail"); } catch { /* storage unavailable (private mode) — non-critical */ }
-  }, [onNodeSelect, onNodeSelectionChange, onEdgeSelect, viewStorageKey]);
+    const everySection = overview || (sectionIds.length > 0 && sectionIds.every(id => ids.has(id)));
+    try { if (viewStorageKey) localStorage.setItem(viewStorageKey, everySection ? "sections" : "detail"); } catch { /* storage unavailable (private mode) — non-critical */ }
+  }, [onNodeSelect, onNodeSelectionChange, onEdgeSelect, viewStorageKey, sectionIds]);
   const expandSection = useCallback(id => {
     setCollapsedIds(prev => new Set([...prev].filter(value => value !== id)));
     setCompact(false);
@@ -628,23 +634,44 @@ export function FlowDiagramReactFlow({
     });
 
     if (showSections && graph.sectionPanels?.length) {
-      const panelNodes = graph.sectionPanels.map(panel => ({
-        id: panel.id,
-        type: "sectionPanel",
-        position: { x: panel.x, y: panel.y },
-        width: panel.width,
-        height: panel.height,
-        data: {
+      // Boxes sit under the nodes, larger ones lowest so a nested section stays visible.
+      // Each section's chevron and label are a separate node above everything, so
+      // overlapping sections or nodes can't hide them.
+      const byArea = [...graph.sectionPanels].sort((p, q) => q.width * q.height - p.width * p.height);
+      const rank = new Map(byArea.map((panel, i) => [panel.id, i]));
+      const panelNodes = graph.sectionPanels.flatMap(panel => {
+        const data = {
           ...panel,
           isFocused: focusedSectionId === panel.sectionId,
           onToggleFocus: () => setFocusedSectionId(id => id === panel.sectionId ? null : panel.sectionId),
           onCollapse: () => changeCollapse(new Set([...collapsedIds, panel.sectionId])),
-        },
-        selectable: false,
-        draggable: false,
-        focusable: false,
-        style: { width: panel.width, height: panel.height },
-      }));
+          controlsSeparate: true,
+        };
+        return [
+          {
+            id: panel.id,
+            type: "sectionPanel",
+            position: { x: panel.x, y: panel.y },
+            width: panel.width,
+            height: panel.height,
+            data,
+            selectable: false,
+            draggable: false,
+            focusable: false,
+            style: { width: panel.width, height: panel.height },
+          },
+          {
+            id: `${panel.id}:controls`,
+            type: "sectionControls",
+            position: { x: panel.x + 8, y: panel.y + 5 },
+            data,
+            selectable: false,
+            draggable: false,
+            focusable: false,
+            zIndex: 1000 + (graph.sectionPanels.length - rank.get(panel.id)),
+          },
+        ];
+      });
       return [...panelNodes, ...flowNodes];
     }
 
@@ -889,7 +916,8 @@ export function FlowDiagramReactFlow({
           setFocusedSectionId={id => { if (id) expandSection(id); setFocusedSectionId(id); }}
           onOverview={showSections && canonicalGraph.sectionPanels?.length > 0 ? () => changeCollapse(new Set(canonicalGraph.sectionPanels.map(p => p.sectionId)), true) : null}
           onExpandAll={canonicalGraph.sectionPanels?.length > 0 ? () => changeCollapse(new Set()) : null}
-          sectionsView={projected && compact}
+          sectionsView={projected && effectiveCompact}
+          detailView={collapsedIds.size === 0 || !showSections}
         />
       </ReactFlow>
       <AlignmentGuidesOverlay guides={alignmentGuides} reactFlowInstance={reactFlowInstance} wrapperRef={wrapperRef} C={C} />

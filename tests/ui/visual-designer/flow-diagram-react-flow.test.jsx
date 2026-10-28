@@ -486,7 +486,7 @@ describe('FlowDiagramReactFlow collapsed submodels', () => {
     const graph = sectionGraph();
     const before = structuredClone(graph);
     render(<FlowDiagramReactFlow graph={graph} canEdit />);
-    act(() => screen.getByRole('button', { name: 'Summarise section: Acquisition' }).click());
+    act(() => screen.getByRole('button', { name: 'Show Acquisition as a card' }).click());
     expect(screen.queryByText('Queue 1')).not.toBeInTheDocument();
     expect(screen.getByText('Queue 2')).toBeInTheDocument();
     expect(screen.getByText('2 links')).toBeInTheDocument();
@@ -530,6 +530,21 @@ describe('FlowDiagramReactFlow collapsed submodels', () => {
     expect(screen.getByText('Queue 1')).toBeInTheDocument();
     expect(screen.getByText('Queue 2')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Layout/ })).toBeInTheDocument();
+  });
+
+  it('treats collapsing every section as the Sections view', () => {
+    localStorage.removeItem('des.sections.view.m2');
+    render(<FlowDiagramReactFlow graph={sectionGraph()} viewStorageKey="des.sections.view.m2" />);
+    const panels = latestFlowProps.current.nodes.filter(n => n.type === 'sectionControls');
+    expect(panels.length).toBeGreaterThan(1);
+    act(() => screen.getByRole('button', { name: 'Show Acquisition as a card' }).click());
+    expect(screen.getByRole('button', { name: 'Detail' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Sections' })).toHaveAttribute('aria-pressed', 'false');
+    act(() => screen.getByRole('button', { name: 'Show Billing as a card' }).click());
+    expect(screen.getByRole('button', { name: 'Sections' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Detail' })).toHaveAttribute('aria-pressed', 'false');
+    expect(localStorage.getItem('des.sections.view.m2')).toBe('sections');
+    localStorage.removeItem('des.sections.view.m2');
   });
 
   it('remembers the Detail | Sections choice per model', () => {
