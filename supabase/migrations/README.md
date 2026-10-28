@@ -1,5 +1,23 @@
 # Migrations
 
+## Published models
+
+Apply `20261021100000_published_models.sql` followed by
+`20261028180000_published_release_snapshots.sql` through the normal deployment
+process. The first creates owner-scoped settings and public reads; the second
+adds atomic publication and immutable public payloads. Do not deploy the public
+UI with only the first migration.
+
+The second migration aborts if an existing published row does not pin a version
+belonging to its own model. Review and correct those rows before retrying. Valid
+legacy public payloads are frozen as they stand at migration time.
+
+Before release, verify with separate owner, collaborator and anonymous sessions:
+only the owner can publish; direct anonymous table access is denied; public RPCs
+return no draft/withdrawn payload; saved draft changes leave the current release
+unchanged; republishing updates it; deleted versions/timetables cannot change an
+already released payload. Static migration tests do not replace these checks.
+
 ## Baseline
 
 `20260504000000_baseline_core_tables.sql` captures the dashboard-created

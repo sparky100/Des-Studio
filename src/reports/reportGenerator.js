@@ -1472,12 +1472,13 @@ export async function generateReport(model = {}, results = {}, experimentConfig 
     type = 'technical',     // 'seniorMgmt' | 'technical'
     format = 'html',        // 'html' | 'markdown'
     aggregateStats = {},
+    includeAi = true,
   } = opts;
 
   const narrativeText = runMeta.narrativeText || '';
 
   // Generate recommendations (not stored at run-time)
-  const recsRaw = await callLLMOnce(buildReportRecommendationsPrompt(model, results)).catch(() => '[]');
+  const recsRaw = includeAi ? await callLLMOnce(buildReportRecommendationsPrompt(model, results)).catch(() => '[]') : '[]';
   const recommendations = parseReportRecommendations(recsRaw);
 
   // Build a plain-English description for the report.
@@ -1485,7 +1486,7 @@ export async function generateReport(model = {}, results = {}, experimentConfig 
   // If absent, call the LLM — do NOT use model.description directly: it is a
   // technical spec written for modellers, not suitable for a management report.
   let finalDescription = runMeta.modelDescriptionText || '';
-  if (!finalDescription) {
+  if (!finalDescription && includeAi) {
     finalDescription = await callLLMOnce(buildModelDescriptionPrompt(model, results)).catch(() => '');
   }
 

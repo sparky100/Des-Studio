@@ -14,6 +14,7 @@ import { useTheme } from "./shared/ThemeContext.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { resolveExposedParams } from "../engine/exposed-params.js";
 import { enumerateSweepableParams } from "../engine/sweep-params.js";
+import { PublishPanel } from "./PublishPanel.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
@@ -22,12 +23,17 @@ export function AccessTab({
   onChangeVisibility, onPersistAccess,
   onExportJson, onExportSimPy,
   setField, dirty,
+  validation,
 }) {
   const { C, FONT } = useTheme();
   const toast = useToast();
   const [collabQuery, setCollabQuery] = useState("");
   const [pendingRoles, setPendingRoles] = useState({});
   const [exposedPickerOpen, setExposedPickerOpen] = useState(false);
+  // The publish panel is collapsed until the owner asks for it: it is a
+  // separate act from sharing, and it adds a lot of controls to a tab that
+  // is otherwise about collaborators and exports.
+  const [publishOpen, setPublishOpen] = useState(false);
 
   return (
           <div style={{maxWidth:700,margin:"0 auto",display:"flex",flexDirection:"column",gap:18}}>
@@ -84,6 +90,40 @@ export function AccessTab({
                 <Btn small variant="ghost" onClick={onExportSimPy}>Export SimPy</Btn>
               </div>
             </section>
+            {userId ? (
+              <section aria-label="Publish model" style={{display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Publish</div>
+                {!publishOpen ? (
+                  <div style={{
+                    background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:"14px 16px",
+                    display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",
+                  }}>
+                    <div style={{fontSize:12,color:C.muted,fontFamily:SANS,lineHeight:1.6,flex:1,minWidth:200}}>
+                      Give this model a public, documented page of its own — a title, a description, a
+                      pinned release, and its evidence register. Publishing is separate from making a
+                      model visible in the community gallery.
+                    </div>
+                    <Btn variant="primary" onClick={()=>setPublishOpen(true)}>Set up publishing</Btn>
+                  </div>
+                ) : (
+                  <PublishPanel
+                    model={model}
+                    modelId={modelId}
+                    userId={userId}
+                    validation={validation}
+                    onClose={()=>setPublishOpen(false)}
+                  />
+                )}
+              </section>
+            ) : (
+              <section aria-label="Publish model unavailable" style={{display:"flex",flexDirection:"column",gap:6}}>
+                <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Publish</div>
+                <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
+                  Publishing needs a Flow account, so it is not available for models stored only on
+                  this device. Sign in to publish this model.
+                </div>
+              </section>
+            )}
             <section aria-label="Collaborator access" style={{display:"flex",flexDirection:"column",gap:14}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
                 <div>

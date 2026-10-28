@@ -1,5 +1,15 @@
 # simmodlr — Product Specification
 
+## Roadmap addition: published model releases
+
+Publishing is independent of library visibility and collaboration. Owners release
+a named model version, public description, optional existing provenance, curated
+parameters and timetable snapshot. Anonymous visitors can discover the public
+page, execute the DES simulation locally and download a report. Draft settings
+do not alter an existing public release; republishing replaces it explicitly.
+Deployment requires the publication migrations and live security acceptance.
+See `docs/reviews/des-roadmap-publishing.md` for audit scope and verification limits.
+
 **Version:** 7.7.0  
 **Date:** 2026-08-26  
 **Sprint baseline:** Sprint 89, plus the 2026-08 expert-review remediation work (named scenarios, Business view, Visual Designer alignment guides)  

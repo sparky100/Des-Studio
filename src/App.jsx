@@ -27,12 +27,15 @@ import { AppNavBar }                        from "./ui/AppNavBar.jsx";
 import { ModelLibrary }                     from "./ui/ModelLibrary.jsx";
 import { extractImportedModelPayload, buildModelUpdateFromImport, canEditModel } from "./ui/shared/utils.js";
 import { ModelDetail }                      from "./ui/ModelDetail.jsx";
-import { modelPayloadFromTemplate }         from "./ui/modelDetailHelpers.js";
+import { inlineSchedulesForExport, modelPayloadFromTemplate } from "./ui/modelDetailHelpers.js";
 import { StakeholderView }                  from "./ui/StakeholderView.jsx";
 import { validateModel }                    from "./engine/validation.js";
 import { parseImportLink, validateLinkModel } from "./utils/importLink.js";
 import { ImportPreview }                    from "./ui/ImportPreview.jsx";
 import DashboardView                        from "./ui/share/DashboardView.jsx";
+import { PublicModelPage }                 from "./ui/public/PublicModelPage.jsx";
+import { PublicGallery }                   from "./ui/public/PublicGallery.jsx";
+import { fetchPublishedModel }             from "./db/published.js";
 import { AdminPanel }                       from "./ui/AdminPanel.jsx";
 import { UserSettingsPanel }               from "./ui/UserSettingsPanel.jsx";
 
@@ -123,6 +126,8 @@ export default function App({ onThemeChange }){
   const [error,setError]=useState('')
   const [showForkConfirm,setShowForkConfirm]=useState(false)
   const [modelToFork,setModelToFork]=useState(null)
+  const [modelToCopy,setModelToCopy]=useState(null)
+  const [showCopyConfirm,setShowCopyConfirm]=useState(false)
   const [openModelOptions,setOpenModelOptions]=useState({ initialTab: undefined, autoRun: false, showStarterGuide: true })
   const [importStatus,setImportStatus]=useState(null)
   const [runStatsError,setRunStatsError]=useState('')
@@ -131,6 +136,7 @@ export default function App({ onThemeChange }){
   const [isRecoverySession,setIsRecoverySession]=useState(false)
   const [showSettings,setShowSettings]=useState(false)
   const [shareToken,setShareToken]=useState(null)
+  const [publicRoute,setPublicRoute]=useState(null)
   const [pendingImport,setPendingImport]=useState(null)
   const [pendingModelId,setPendingModelId]=useState(null)
   const [helpOpen,setHelpOpen]=useState(false)
@@ -214,6 +220,21 @@ export default function App({ onThemeChange }){
     const check=()=>{
       const m=window.location.hash.match(/^#share\/(.+)$/)
       setShareToken(m?m[1]:null)
+      // Public routes (ADR-025): a published model and the public gallery are
+      // reachable WITHOUT an account. They are dispatched before the session
+      // check below, so a signed-out visitor sees them rather than a sign-in
+      // form. `#/published/<id>` is a published model's public page;
+      // `#/published` is the gallery. `#model/<id>` is deliberately a
+      // DIFFERENT route — it opens the model in the app and needs an account.
+      const p=window.location.hash.match(/^#\/published(?:\/([^/?]+))?\/?$/)
+      setPublicRoute(p?{kind:p[1]?'model':'gallery',modelId:p[1]||null}:null)
+      // A `#model/<id>` deep link pasted into an already-open tab should
+      // open the model, not do nothing.
+      const mlink=window.location.hash.match(/^#model\/([^/?]+)/)
+      if(mlink){
+        setPendingModelId(mlink[1])
+        sessionStorage.setItem('des.pendingModelId',mlink[1])
+      }
     }
     check()
     window.addEventListener('hashchange',check)
@@ -311,9 +332,27 @@ export default function App({ onThemeChange }){
   useEffect(()=>{
     if(!pendingModelId || !session || loading) return
     const target=models.find(m=>m.id===pendingModelId)
-    if(target) handleOpenModel(target)
-    setPendingModelId(null)
-    if(window.location.hash.startsWith('#model/')) window.location.hash=''
+    if(target){
+      handleOpenModel(target)
+      setPendingModelId(null)
+      if(window.location.hash.startsWith('#model/')) window.location.hash=''
+      return
+    }
+    // Not in the visitor's own library. It may be a PUBLISHED model they have
+    // come to copy. Publishing is independent of `visibility` (ADR-022), so
+    // a published model is not necessarily in the community list either —
+    // without this, "Open in Flow" on a published-but-unlisted model would
+    // silently do nothing.
+    let cancelled=false
+    fetchPublishedModel(pendingModelId)
+      .then(payload=>{
+        if(cancelled) return
+        if(!payload){ setPendingModelId(null); if(window.location.hash.startsWith('#model/')) window.location.hash=''; return }
+        setModelToCopy(payload)
+        setShowCopyConfirm(true)
+      })
+      .catch(()=>{ if(!cancelled){ setPendingModelId(null); if(window.location.hash.startsWith('#model/')) window.location.hash='' } })
+    return ()=>{ cancelled=true }
   },[pendingModelId,session,loading,models,handleOpenModel])
 
   const confirmFork = useCallback(async () => {
@@ -335,6 +374,43 @@ export default function App({ onThemeChange }){
   const cancelFork = useCallback(() => {
     setShowForkConfirm(false);
     setModelToFork(null);
+  }, []);
+
+  // "Open in Flow" on a published model the visitor cannot otherwise see:
+  // take a copy. The published payload carries the model definition (the
+  // whitelisted model JSON), so the copy is made from that — not from the
+  // owner's row, which the visitor cannot read.
+  const confirmCopy = useCallback(async () => {
+    if (!modelToCopy || !uid) return;
+    setLoading(true);setError('');setShowCopyConfirm(false);
+    try {
+      const saved = await saveModel({
+        // The model's own fields first, so nothing in the payload can
+        // override the identity and ownership fields below.
+        ...inlineSchedulesForExport(modelToCopy.model || {}, modelToCopy.schedules || []),
+        name: modelToCopy.title || 'Copied model',
+        description: modelToCopy.description || modelToCopy.summary || '',
+        visibility: 'private',
+        access: {},
+      }, uid);
+      await loadData();
+      setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
+      setOpenId(saved.id);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+      setModelToCopy(null);
+      setPendingModelId(null);
+      if(window.location.hash.startsWith('#model/')) window.location.hash=''
+    }
+  }, [modelToCopy, uid, loadData]);
+
+  const cancelCopy = useCallback(() => {
+    setShowCopyConfirm(false);
+    setModelToCopy(null);
+    setPendingModelId(null);
+    if(window.location.hash.startsWith('#model/')) window.location.hash=''
   }, []);
 
   const handleImportFile = useCallback((jsonText, name, desc) => {
@@ -477,14 +553,14 @@ export default function App({ onThemeChange }){
   },[uid,loadData]);
 
 
-  if(loading && !session)return(
+  if(loading && !session && !publicRoute)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:C.muted,fontFamily:FONT,fontSize:13}}>
       <style>{`@import url('${GOOGLE_FONT_URL}');`}</style>
       Loading...
     </div>
   )
 
-  if(error && !session)return(
+  if(error && !session && !publicRoute)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:C.red,fontFamily:FONT,fontSize:13,padding:24,textAlign:'center'}}>
       ERROR: {error}
     </div>
@@ -498,6 +574,12 @@ export default function App({ onThemeChange }){
 
   if(shareToken){
     return <DashboardView token={shareToken} onBack={()=>{setShareToken(null);window.location.hash=''}} />
+  }
+
+  if(publicRoute){
+    return publicRoute.kind==='model'
+      ? <PublicModelPage key={publicRoute.modelId} modelId={publicRoute.modelId} onBack={()=>{setPublicRoute(null);window.location.hash=''}} onOpenInFlow={id=>{window.location.hash=`#model/${id}`}}/>
+      : <PublicGallery onBack={()=>{setPublicRoute(null);window.location.hash=''}} onOpenModel={id=>{window.location.hash=`#/published/${id}`}}/>
   }
 
   if(pendingImport){
@@ -792,6 +874,21 @@ export default function App({ onThemeChange }){
         </>}
       >
         <p style={{fontSize:13,color:C.muted}}>To run "{modelToFork?.name}", a private copy will be created in your library. You will own this copy and its run history.</p>
+      </ModalShell>
+      <ModalShell
+        isOpen={showCopyConfirm && !!modelToCopy}
+        onClose={cancelCopy}
+        title="Copy this published model"
+        width="min(440px, 90vw)"
+        footer={<>
+          <Btn variant="ghost" onClick={cancelCopy}>Cancel</Btn>
+          <Btn variant="primary" onClick={confirmCopy}>Copy &amp; Open</Btn>
+        </>}
+      >
+        <p style={{fontSize:13,color:C.muted,lineHeight:1.6}}>
+          To open &quot;{modelToCopy?.title}&quot; in Flow, a private copy will be created in your
+          library. You will own this copy and its run history. The author keeps their own.
+        </p>
       </ModalShell>
       {confirmDialog}
       {helpOpen && (

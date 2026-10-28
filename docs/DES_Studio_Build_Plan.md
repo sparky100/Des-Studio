@@ -1,4 +1,11 @@
 # simmodlr — Build Plan
+
+## October 2026 roadmap implementation
+
+The agreed order is Publish Models, then Collapsible Sub-models, with a separate
+Run-panel layout fix in parallel. Audit and incremental acceptance are tracked
+in `docs/reviews/des-roadmap-publishing.md`. Work is under review; no roadmap item
+is marked complete until its tests, build and applicable deployment checks pass.
 *Living document. Update after each sprint completion.*
 *Version: 1.87 | Created: 2026-04-30 | Updated: 2026-06-29 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
