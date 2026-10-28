@@ -2,7 +2,7 @@
 // Derives graph topology from canonical model_json (same helper as Visual Designer).
 // Receives live snap state and overlays queue depths, server busy/idle counts on each node.
 // Returns null when the model yields no derivable nodes — caller falls back to VisualView.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -15,7 +15,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import { TOKEN_COLORS } from "../shared/tokens.js";
 import { useFitNodeRef } from "../shared/useFitNodeRef.js";
-import { deriveGraphFromModel, searchGraphNodes } from "../visual-designer/graph.js";
+import { deriveGraphFromModel, searchGraphNodes, projectCollapsedSections } from "../visual-designer/graph.js";
+import { SectionCardNode } from "./SectionCardNode.jsx";
+import { computeSectionLiveStats } from "./sectionLiveStats.js";
 import { ExecuteSourceNode }   from "./ExecuteSourceNode.jsx";
 import { ExecuteQueueNode }    from "./ExecuteQueueNode.jsx";
 import { ExecuteActivityNode } from "./ExecuteActivityNode.jsx";
@@ -437,6 +439,7 @@ const liveNodeTypes = {
   sinkNode:      ExecuteSinkNode,
   containerNode: ExecuteContainerNode,
   sectionPanel:  SectionPanelNode,
+  sectionCard:   SectionCardNode,
 };
 
 const edgeTypes = { animatedEdge: AnimatedEdge };
@@ -495,7 +498,7 @@ function SwitchStrip({ stateVariables, values, flashNames }) {
 function toFlowNode(node) {
   return {
     id: node.id,
-    type: FLOW_NODE_TYPE[node.type] || "liveNode",
+    type: node.virtual ? "sectionCard" : FLOW_NODE_TYPE[node.type] || "liveNode",
     position: { x: node.x || 0, y: node.y || 0 },
     data: node,
     selectable: false,
@@ -504,12 +507,16 @@ function toFlowNode(node) {
 }
 
 function toFlowEdge(edge, C) {
+  // Sections view: one arrow per pair of stages; links back to an earlier stage are dashed.
+  const returning = edge.returning === true;
+  const stroke = returning ? C.amber : C.muted;
   return {
     id: edge.id,
     source: edge.from,
     target: edge.to,
-    markerEnd: { type: MarkerType.ArrowClosed, color: C.muted },
-    style: { stroke: C.muted, strokeWidth: 1.5 },
+    ...(edge.virtual ? { label: edge.label, labelStyle: { fill: C.text, fontSize: 10 }, labelBgStyle: { fill: C.bg } } : {}),
+    markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
+    style: { stroke, strokeWidth: returning ? 2 : 1.5, strokeDasharray: returning ? "8,4" : undefined },
   };
 }
 
@@ -525,6 +532,8 @@ function ExecuteCanvasToolbar({
   hasSections,
   showSections,
   onToggleSections,
+  sectionsView,
+  onChangeView,
 }) {
   const { C, FONT } = useTheme();
   useFitNodeRef({ fitNodeRef, defaultWidth: EXEC_NODE_WIDTH, defaultHeight: 120 });
@@ -595,12 +604,37 @@ function ExecuteCanvasToolbar({
           </div>
         )}
       </div>
-      {hasSections && (
+      {hasSections && showSections && (
+        <div role="group" aria-label="Canvas view" style={{ display: "flex" }}>
+          {[["detail", "Detail"], ["sections", "Sections"]].map(([id, label], i) => {
+            const active = (id === "sections") === sectionsView;
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onChangeView(id)}
+                style={{
+                  background: active ? `${C.accent}22` : C.surface,
+                  border: `1px solid ${active ? C.accent : C.border}`,
+                  borderLeft: i ? "none" : undefined,
+                  borderRadius: i ? "0 4px 4px 0" : "4px 0 0 4px",
+                  color: active ? C.accent : C.muted,
+                  cursor: "pointer", fontFamily: FONT, fontSize: 10, fontWeight: 700, padding: "5px 9px",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {hasSections && !sectionsView && (
         <button
           type="button"
           aria-pressed={showSections}
           onClick={onToggleSections}
-          title={showSections ? "Hide section overlays" : "Show section overlays"}
+          title={showSections ? "Hide section outlines" : "Show section outlines"}
           style={{
             background: showSections ? `${C.accent}22` : C.surface,
             border: `1px solid ${showSections ? C.accent : C.border}`,
@@ -613,7 +647,7 @@ function ExecuteCanvasToolbar({
             padding: "5px 9px",
           }}
         >
-          Sections
+          Outlines
         </button>
       )}
     </Panel>
@@ -672,6 +706,18 @@ export function ExecuteCanvas({
     try { return localStorage.getItem("des.sections.show") !== "0"; } catch { return true; }
   });
   const [focusedSectionId, setFocusedSectionId] = useState(null);
+  // Detail | Sections choice, shared with Draw and remembered per model.
+  const viewStorageKey = model?.id ? `des.sections.view.${model.id}` : null;
+  const [sectionsViewChoice, setSectionsViewChoice] = useState(() => {
+    try { return viewStorageKey ? localStorage.getItem(viewStorageKey) === "sections" : false; } catch { return false; }
+  });
+  const hasModelSections = (baseGraph.sectionPanels?.length ?? 0) > 0;
+  const sectionsView = sectionsViewChoice && showSections && hasModelSections;
+  const changeView = useCallback((id, focusSectionId = null) => {
+    setSectionsViewChoice(id === "sections");
+    setFocusedSectionId(focusSectionId);
+    try { if (viewStorageKey) localStorage.setItem(viewStorageKey, id); } catch { /* storage unavailable (private mode) — non-critical */ }
+  }, [viewStorageKey]);
   const dragStateRef = useRef(null);
 
   useEffect(() => { if (!showSections) setFocusedSectionId(null); }, [showSections]);
@@ -826,9 +872,16 @@ export function ExecuteCanvas({
     prevSnapRef.current = snap;
   }, [snap, animationEnabled, baseGraph]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sections view: one live card per section (flow-ordered, laid out by the projection).
+  const activeGraph = useMemo(
+    () => sectionsView
+      ? projectCollapsedSections(baseGraph, new Set(baseGraph.sectionPanels.map(p => p.sectionId)), { compact: true })
+      : baseGraph,
+    [sectionsView, baseGraph]
+  );
   const layoutedNodes = useMemo(
-    () => computeExecuteLayout(baseGraph.nodes, baseGraph.edges),
-    [baseGraph.nodes, baseGraph.edges]
+    () => computeExecuteLayout(activeGraph.nodes, activeGraph.edges),
+    [activeGraph]
   );
 
   // Lookup used for edge dimming — keyed by graph node id
@@ -837,7 +890,7 @@ export function ExecuteCanvas({
   // Bounding-box panels for each section, computed from execute-layout positions.
   // Cannot reuse graph.sectionPanels — those use design-canvas (smaller, uniform) dimensions.
   const sectionPanels = useMemo(() => {
-    if (!showSections || !(model.sections?.length)) return [];
+    if (!showSections || sectionsView || !(model.sections?.length)) return [];
     const SECTION_PAD = 24;
     const SECTION_LABEL_H = 22;
     return model.sections.map(sec => {
@@ -858,7 +911,7 @@ export function ExecuteCanvas({
         height: (maxY - minY) + SECTION_PAD * 2 + SECTION_LABEL_H,
       };
     }).filter(Boolean);
-  }, [showSections, model.sections, layoutedNodes]);
+  }, [showSections, sectionsView, model.sections, layoutedNodes]);
 
   // Current value of every declared state variable (snapshot scalar, falling
   // back to the declared initial value before the first step).
@@ -887,6 +940,17 @@ export function ExecuteCanvas({
     () => computeRoutingSwitchDeps(baseGraph, model),
     [baseGraph, model],
   );
+
+  // Live numbers for the Sections view's cards. Activity utilisation comes from the
+  // same live data the detail nodes show, so the two views never disagree.
+  const sectionStats = useMemo(() => {
+    if (!sectionsView || !snap) return new Map();
+    const activityLive = new Map();
+    for (const node of baseGraph.nodes) {
+      if (node.type === "activity") activityLive.set(node.id, deriveActivityLiveData(snap, node.refId, serverTypeIndex, model));
+    }
+    return computeSectionLiveStats({ nodes: baseGraph.nodes, snap, activityLive });
+  }, [sectionsView, snap, baseGraph.nodes, serverTypeIndex, model]);
 
   const flowNodes = useMemo(() => {
     const entities = snap?.entities || [];
@@ -978,7 +1042,19 @@ export function ExecuteCanvas({
         }
       }
       const dimmed = (showSections && focusedSectionId != null && node.sectionId !== focusedSectionId) ||
-        (matchedNodeIds.size > 0 && !matchedNodeIds.has(node.id));
+        (matchedNodeIds.size > 0 && !(node.memberNodeIds || [node.id]).some(id => matchedNodeIds.has(id)));
+      if (node.virtual) {
+        return {
+          ...toFlowNode(node),
+          data: {
+            ...node,
+            liveData: sectionStats.get(node.sectionId) ?? null,
+            timeUnit: model.timeUnit || "minutes",
+            onShowDetail: () => changeView("detail", node.sectionId),
+          },
+          style: { opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms" },
+        };
+      }
       const depNames = node.type === "activity" ? switchDeps.get(node.id) : null;
       const switchBadges = depNames?.length
         ? depNames.map(name => ({ name, value: switchValues[name], ...classifySwitch(switchValues[name]) }))
@@ -1011,7 +1087,7 @@ export function ExecuteCanvas({
     }
 
     return mapped;
-  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels, matchedNodeIds, queuePulses, switchDeps, switchValues]);
+  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels, matchedNodeIds, queuePulses, switchDeps, switchValues, sectionStats, changeView, model.timeUnit]);
 
   // Live conditional-routing branch state (state-variable-driven diversion).
   // Evaluated from the snapshot so the canvas can show which branch is live.
@@ -1042,11 +1118,11 @@ export function ExecuteCanvas({
     }
   }, [switchValues]);
 
-  const flowEdges = useMemo(() => baseGraph.edges.map(edge => {
+  const flowEdges = useMemo(() => activeGraph.edges.map(edge => {
     const base = {
       ...toFlowEdge(edge, C),
-      type: animationEnabled ? "animatedEdge" : undefined,
-      data: animationEnabled ? { tokens: edgeTokens[edge.id] || [] } : undefined,
+      type: animationEnabled && !edge.virtual ? "animatedEdge" : undefined,
+      data: animationEnabled && !edge.virtual ? { tokens: edgeTokens[edge.id] || [] } : undefined,
     };
     const branchState = branchStates.get(edge.id);
     if (branchState) {
@@ -1066,7 +1142,7 @@ export function ExecuteCanvas({
       }
     }
     return base;
-  }), [baseGraph.edges, animationEnabled, edgeTokens, C, showSections, focusedSectionId, nodeById, branchStates]);
+  }), [activeGraph.edges, animationEnabled, edgeTokens, C, showSections, focusedSectionId, nodeById, branchStates]);
 
   // No derivable nodes — caller renders VisualView fallback
   if (!baseGraph.nodes.length) return null;
@@ -1131,11 +1207,12 @@ export function ExecuteCanvas({
           style={{ flex: 1, minWidth: 0, height: "100%" }}
         >
           <ReactFlow
+            key={sectionsView ? "sections" : "detail"}
             nodes={flowNodes}
             edges={flowEdges}
             nodeTypes={liveNodeTypes}
             edgeTypes={edgeTypes}
-            {...(drawViewport
+            {...(drawViewport && !sectionsView
               ? { defaultViewport: drawViewport }
               : { fitView: true, fitViewOptions: { padding: 0.18, duration: 0 } })}
             nodesDraggable={false}
@@ -1173,8 +1250,10 @@ export function ExecuteCanvas({
               }}
               searchMatches={searchMatches}
               onSelectResult={selectSearchResult}
-              hasSections={(model.sections?.length ?? 0) > 0}
+              hasSections={hasModelSections}
               showSections={showSections}
+              sectionsView={sectionsView}
+              onChangeView={changeView}
               onToggleSections={() => setShowSections(prev => {
                 const next = !prev;
                 try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch { /* storage unavailable (private mode) — non-critical */ }

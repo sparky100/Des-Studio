@@ -1275,7 +1275,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                     try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch { /* storage unavailable (private mode) — non-critical */ }
                     return next;
                   })}
-                  title={showSections ? "Hide section overlays" : "Show section overlays"}
+                  title={showSections ? "Hide section outlines" : "Show section outlines"}
                   style={{
                     background: showSections ? `${C.accent}22` : "transparent",
                     border: `1px solid ${showSections ? C.accent : C.border}`,
@@ -1288,7 +1288,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                     padding: "5px 10px",
                   }}
                 >
-                  Sections
+                  Outlines
                 </button>
               )}
 
