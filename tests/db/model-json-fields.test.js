@@ -27,7 +27,7 @@ const FULL = {
   skills: ["sour", "sweet"],
   goals: [{ label: "Tank", metric: "container.maxLevel", scope: { type: "container", id: "tank", name: "tank" }, operator: "<", target: 90 }],
   dataSources: [{ id: "ds1", type: "csv", name: "feed" }],
-  sections: [{ id: "sec1", name: "Supply", color: "#4A90D9", memberIds: ["q1"] }],
+  sections: [{ id: "sec1", name: "Supply", description: "Where cargo is bought in.", color: "#4A90D9", memberIds: ["q1"] }],
   exposedParams: [{ path: "stateVariables.level.initialValue", businessLabel: "Level" }],
   graph: { nodes: [{ id: "n1", x: 1, y: 2 }], edges: [] },
   experimentDefaults: { seed: 7, replications: 3, maxSimTime: 50, warmupPeriod: 5 },

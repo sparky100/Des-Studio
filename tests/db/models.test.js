@@ -2268,7 +2268,7 @@ describe('Sprint 71 — persistence layer', () => {
   describe('round-trip — model_json.sections survives saveModel insert', () => {
     it('the insert payload model_json contains sections from the input object', async () => {
       const sections = [
-        { id: 'sec_1', name: 'Triage', color: '#4A90D9', memberIds: ['q1'], entryQueues: [], exitQueues: ['q1'] },
+        { id: 'sec_1', name: 'Triage', description: 'Callers are assessed.', color: '#4A90D9', memberIds: ['q1'], entryQueues: [], exitQueues: ['q1'] },
       ];
       const model = { name: 'Sections RT', entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [], sections };
       supabase.from('des_models').insert.mockReturnThis();
@@ -2335,7 +2335,7 @@ describe('Sprint 71 — persistence layer', () => {
 
     it('round-trips sections[] through model_json', () => {
       const sections = [
-        { id: 'sec_a', name: 'Section A', color: '#4A90D9', memberIds: ['q1', 'et1'], entryQueues: ['q1'], exitQueues: [] },
+        { id: 'sec_a', name: 'Section A', description: 'Arrivals are triaged here.', color: '#4A90D9', memberIds: ['q1', 'et1'], entryQueues: ['q1'], exitQueues: [] },
       ];
       const result = norm({
         id: 'x',

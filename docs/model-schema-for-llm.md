@@ -1604,6 +1604,7 @@ All generated model JSON MUST pass every blocking rule below.
   {
     "id": "sec_nhs24",
     "name": "NHS 24 / 111 Triage",
+    "description": "Callers are answered, assessed by a call handler and routed to the right service.",
     "color": "#4A90D9",
     "memberIds": ["q_nhs24_call", "q_nhs24_clinical", "et_call_handler", "b_arrive_111", "c_assign_handler"]
   },
@@ -1621,8 +1622,9 @@ All generated model JSON MUST pass every blocking rule below.
 |---|---|---|
 | `id` | string | Unique section ID (e.g. `"sec_nhs24"`) |
 | `name` | string | Human-readable label shown in filter tabs and swimlane headers |
+| `description` | string | Optional. One or two plain-text sentences (max 500 characters) saying what happens in this section. Shown on the section card, in Results, in the report and on published pages. |
 | `color` | string | CSS hex colour used for swimlane background and filter tab indicators. Always assign a distinct colour per section — use the palette below. |
-| `memberIds` | string[] | IDs of queues, entity types, B-events, and/or C-events that belong to this section. Each element may appear in at most one section. |
+| `memberIds` | string[] | IDs of queues, entity types, B-events, and/or C-events that belong to this section. Each element may appear in at most one section; the validator warns (V82) if one appears in several. |
 
 **Section colours:** assign a visually distinct colour to each section so swimlane headers and filter tabs are easy to tell apart. Suggested palette (use in order, then cycle):
 
