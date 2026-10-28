@@ -53,6 +53,7 @@ describe("published release snapshots", () => {
   });
 
   it("keeps data-source configuration and row metadata out of a new release", () => {
+    expect(migration).toContain("jsonb_set(public.get_published_model(p.model_id), '{model,dataSources}', '[]'::jsonb)");
     const whitelist = migration.match(/WHERE key = ANY\(ARRAY\[([\s\S]*?)\]\)/)[1];
     for (const field of ["owner_id", "access", "notes", "dataSources"]) {
       expect(whitelist).not.toContain("'" + field + "'");

@@ -18,7 +18,7 @@ DES already has parameter enumeration, exposed-parameter resolution, numeric bou
 
 Apply both new publication migrations in timestamp order. The second migration freezes existing valid public payloads, then makes every new publication capture its model version, metadata, exposed parameters, optional registers and current named timetables together in one database transaction. An empty timetable set is a real snapshot. Saving settings changes the next release; Publish again replaces the public snapshot. Withdrawing or unpublishing removes anonymous access immediately.
 
-Existing published rows must reference a version belonging to the same model before the snapshot migration can run; otherwise it aborts with a clear error. It does not silently publish a live working model. Legacy payload backfill preserves what was publicly visible when this migration runs; it cannot reconstruct historical timetable rows.
+Existing published rows must reference a version belonging to the same model before the snapshot migration can run; otherwise it aborts with a clear error. It does not silently publish a live working model. Legacy payload backfill freezes the existing public response after removing external data-source configuration; it cannot reconstruct historical timetable rows.
 
 New releases omit data-source configuration. Their numeric model values remain available; external data is not refreshed. Publication is owner-only. Draft and withdrawn public reads have the same empty response as an unknown id. No public table SELECT policy is added.
 

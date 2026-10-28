@@ -15,7 +15,7 @@ END;
 $$;
 
 UPDATE public.published_models p
-SET public_payload = public.get_published_model(p.model_id)
+SET public_payload = jsonb_set(public.get_published_model(p.model_id), '{model,dataSources}', '[]'::jsonb)
 WHERE p.status = 'published' AND p.public_payload IS NULL;
 
 CREATE OR REPLACE FUNCTION public.get_published_model(p_model_id uuid)
