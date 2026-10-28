@@ -8,7 +8,6 @@ export function SectionPanelNode({ data }) {
   const isFocused = !!data.isFocused;
   return (
     <div
-      aria-hidden="true"
       style={{
         width: data.width,
         height: data.height,
@@ -50,6 +49,12 @@ export function SectionPanelNode({ data }) {
       >
         {data.name}
       </button>
+      {data.onCollapse && <button
+        type="button"
+        aria-label={`Collapse section: ${data.name}`}
+        onClick={e => { e.stopPropagation(); data.onCollapse(); }}
+        style={{ position: "absolute", right: 0, top: 0, pointerEvents: "auto", background: C.surface, color: C.text, border: `1px solid ${C.border}`, fontFamily: FONT, cursor: "pointer" }}
+      >Collapse</button>}
     </div>
   );
 }

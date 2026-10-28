@@ -628,6 +628,8 @@ Updated at each timeSeries snapshot (`index.js:1039–1059`). Streaks are flushe
 
 The Visual Designer is an authoring surface over the canonical `model_json`; it does not maintain a separate graph model. `deriveGraphFromModel(model)` derives nodes and edges from queues, B-Events, C-Events, and `model_json.graph` layout metadata.
 
+`projectCollapsedSections(graph, collapsedIds, { compact })` creates a disposable Draw display projection from that derived graph. Section ownership comes from the existing `sections[].memberIds` resolution. Collapsed members become virtual cards; internal links disappear and redirected links aggregate by ordered endpoint pair with counts. Ungrouped nodes and unchanged links survive. Compact overview reuses the existing Dagre layout helper on fresh display objects. Expansion reuses the canonical detailed graph, preserving saved coordinates exactly. Collapse state is component-local; no model schema or engine changes are involved. Virtual cards and aggregate links cannot be selected, connected, deleted or measured for persistence. Canvas dragging, layout reset and viewport persistence are suppressed while projected; `updateGraphLayout` also refuses graphs marked `displayProjection`. Search focus expands the relevant section, and summary cards reflect hidden members' search matches and validation warnings.
+
 | Interaction | Implementation contract |
 |-------------|-------------------------|
 | Single selection | `selectedNodeIds` contains one node id; the inspector edits that canonical element. |

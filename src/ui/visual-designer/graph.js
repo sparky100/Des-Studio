@@ -628,6 +628,52 @@ export function searchGraphNodes(nodes = [], query = "") {
   );
 }
 
+export function projectCollapsedSections(graph, collapsedIds = new Set(), { compact = false } = {}) {
+  const panels = (graph.sectionPanels || []).filter(p => collapsedIds.has(p.sectionId));
+  if (!panels.length) return graph;
+  const panelBySection = new Map(panels.map(p => [p.sectionId, p]));
+  const endpoint = new Map();
+  const members = new Map(panels.map(p => [p.sectionId, []]));
+  const nodes = graph.nodes.filter(node => {
+    const panel = panelBySection.get(node.sectionId);
+    if (!panel) { endpoint.set(node.id, node.id); return true; }
+    endpoint.set(node.id, `submodel:${panel.sectionId}`);
+    members.get(panel.sectionId).push(node.id);
+    return false;
+  });
+  panels.forEach(panel => nodes.push({
+    id: `submodel:${panel.sectionId}`, type: "submodel", virtual: true,
+    sectionId: panel.sectionId, sectionColor: panel.color, label: panel.name,
+    memberNodeIds: members.get(panel.sectionId),
+    sublabel: `${members.get(panel.sectionId).length} nodes`,
+    x: panel.x, y: panel.y,
+  }));
+  const aggregates = new Map();
+  const edges = [];
+  graph.edges.forEach(edge => {
+    const from = endpoint.get(edge.from), to = endpoint.get(edge.to);
+    if (!from || !to) return;
+    const changed = from !== edge.from || to !== edge.to;
+    if (!changed) { edges.push(edge); return; }
+    if (from === to) return;
+    const key = JSON.stringify([from, to]);
+    if (!aggregates.has(key)) aggregates.set(key, {
+      id: `submodel-edge:${key}`, from, to, virtual: true, count: 0, memberEdgeIds: [],
+    });
+    const aggregate = aggregates.get(key);
+    aggregate.count++;
+    aggregate.memberEdgeIds.push(edge.id);
+  });
+  aggregates.forEach(edge => edges.push({ ...edge, label: `${edge.count} connection${edge.count === 1 ? "" : "s"}` }));
+  return {
+    ...graph,
+    displayProjection: true,
+    nodes: compact ? withLayout(nodes, edges) : nodes,
+    edges,
+    sectionPanels: (graph.sectionPanels || []).filter(p => !collapsedIds.has(p.sectionId)),
+  };
+}
+
 export function graphLayoutFromDerivedGraph(derivedGraph = {}) {
   return {
     version: 1,

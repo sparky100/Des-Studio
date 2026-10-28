@@ -17,7 +17,7 @@ import {
 } from "../shared/xyflow.js";
 import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
-import { isActivityRouteEdge, NODE_WIDTH, NODE_HEIGHT } from "./graph.js";
+import { isActivityRouteEdge, NODE_WIDTH, NODE_HEIGHT, projectCollapsedSections } from "./graph.js";
 // Pure layout utility shared with the Execute canvas (see executeLayout.js's
 // own comment) — importing from this constants-only module, not from
 // ExecuteCanvas.jsx itself, keeps ADR-020's Draw/Execute component boundary intact.
@@ -27,6 +27,7 @@ import { computeLoopRailYById } from "./loopEdgeRouting.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useFitNodeRef } from "../shared/useFitNodeRef.js";
 import { SectionPanelNode } from "./SectionPanelNode.jsx";
+import { SPACE, RADIUS, TYPO } from "../shared/tokens.js";
 
 // Nothing docks below the Draw canvas the way Execute's BottomPanel does —
 // just its own container margin/padding, so this is much smaller than
@@ -186,6 +187,17 @@ function DesNode({ data, selected }) {
   );
 }
 
+function SubmodelNode({ data }) {
+  const { C, FONT } = useTheme();
+  return <div style={{ width: NODE_WIDTH, height: NODE_HEIGHT, boxSizing: "border-box", padding: SPACE.sm, borderRadius: RADIUS.md, background: C.surface, color: C.text, border: `2px solid ${data.hasError ? C.red : data.sectionColor || C.accent}`, fontFamily: FONT, ...TYPO.body, display: "flex", flexDirection: "column", gap: SPACE.sm }} title={data.errorMessage}>
+    <Handle type="target" position={Position.Left} isConnectable={false} />
+    <strong title={data.label} style={{ minHeight: 0, overflow: "hidden", overflowWrap: "anywhere", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2 }}>{data.label}</strong>
+    <p style={{ margin: 0, flexShrink: 0 }}>{data.sublabel}</p>
+    <button type="button" aria-label={`Expand to edit ${data.label}`} style={{ marginTop: "auto", padding: SPACE.xs, flexShrink: 0, whiteSpace: "normal", overflowWrap: "anywhere", background: C.panel, color: C.text, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, fontFamily: FONT, ...TYPO.caption, cursor: "pointer" }} onClick={e => { e.stopPropagation(); data.onExpand(); }}>Expand to edit</button>
+    <Handle type="source" position={Position.Right} isConnectable={false} />
+  </div>;
+}
+
 // Custom edge that renders labels via EdgeLabelRenderer (HTML portal) instead
 // of the built-in SVG EdgeText which relies on getBBox() — a measurement that
 // returns zero on some browsers/mobile, permanently hiding the label.
@@ -289,13 +301,13 @@ function DesEdge({
   );
 }
 
-const nodeTypes = { desNode: DesNode, sectionPanel: SectionPanelNode };
+const nodeTypes = { desNode: DesNode, submodel: SubmodelNode, sectionPanel: SectionPanelNode };
 const edgeTypes = { desEdge: DesEdge };
 
 function toFlowNode(node) {
   return {
     id: node.id,
-    type: "desNode",
+    type: node.virtual ? "submodel" : "desNode",
     position: { x: node.x || 0, y: node.y || 0 },
     data: node,
   };
@@ -385,7 +397,7 @@ function SelectionRectSuppressor() {
   return null;
 }
 
-function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId }) {
+function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId, onOverview, onExpandAll }) {
   const { C, FONT } = useTheme();
   const [showShortcuts, setShowShortcuts] = useState(false);
   const panelBtnStyle = {
@@ -401,7 +413,9 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
 
   return (
     <>
-      <Panel position="top-left" style={{ display: "flex", gap: 5 }}>
+      <Panel position="top-left" style={{ display: "flex", gap: 5, flexWrap: "wrap", maxWidth: `calc(100% - ${SPACE.lg * 2}px)` }}>
+        {onOverview && <button type="button" style={panelBtnStyle} onClick={onOverview}>Compact overview</button>}
+        {onExpandAll && <button type="button" style={panelBtnStyle} onClick={onExpandAll}>Expand all</button>}
         <button
           type="button"
           style={panelBtnStyle}
@@ -470,7 +484,7 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
 }
 
 export function FlowDiagramReactFlow({
-  graph,
+  graph: canonicalGraph,
   canEdit = false,
   selectedNodeId = null,
   selectedNodeIds = [],
@@ -496,6 +510,22 @@ export function FlowDiagramReactFlow({
   const [dragOver, setDragOver] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [focusedSectionId, setFocusedSectionId] = useState(null);
+  const [collapsedIds, setCollapsedIds] = useState(new Set());
+  const [compact, setCompact] = useState(false);
+  const graph = useMemo(() => projectCollapsedSections(canonicalGraph, showSections ? collapsedIds : new Set(), { compact }), [canonicalGraph, collapsedIds, showSections, compact]);
+  const projected = graph !== canonicalGraph;
+  const changeCollapse = useCallback((ids, overview = false) => {
+    setFocusedSectionId(null);
+    onNodeSelect?.(null);
+    onNodeSelectionChange?.([]);
+    onEdgeSelect?.(null);
+    setCollapsedIds(ids);
+    setCompact(overview);
+  }, [onNodeSelect, onNodeSelectionChange, onEdgeSelect]);
+  const expandSection = useCallback(id => {
+    setCollapsedIds(prev => new Set([...prev].filter(value => value !== id)));
+    setCompact(false);
+  }, []);
   const [alignmentGuides, setAlignmentGuides] = useState([]);
   // Live positions for nodes mid-drag. Nodes are fully controlled (positions
   // derive from the graph), so without echoing React Flow's position changes
@@ -504,6 +534,21 @@ export function FlowDiagramReactFlow({
   const [dragPositions, setDragPositions] = useState({});
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const wrapperRef = useRef(null);
+  const previousViewRef = useRef({ collapsedIds, compact, showSections });
+  useEffect(() => {
+    const previous = previousViewRef.current;
+    previousViewRef.current = { collapsedIds, compact, showSections };
+    if (previous.collapsedIds === collapsedIds && previous.compact === compact && previous.showSections === showSections) return;
+    if (focusedSectionId != null) return;
+    const frame = requestAnimationFrame(() => {
+      if (projected) reactFlowInstance?.fitView({ padding: 0.15, duration: 0 });
+      else if (reactFlowInstance?.setViewport) {
+        suppressViewportSyncRef.current = true;
+        reactFlowInstance.setViewport(canonicalGraph.viewport || { x: 0, y: 0, zoom: 1 });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [collapsedIds, compact, showSections, projected, reactFlowInstance, canonicalGraph.viewport, focusedSectionId]);
   // Auto-fill height (F9C.9-style, mirroring ExecuteCanvas.jsx's own canvas):
   // measured live from the canvas's actual position rather than a static
   // "100vh - 260px" guess capped at 900px, which clipped the canvas well
@@ -546,17 +591,21 @@ export function FlowDiagramReactFlow({
   const nodes = useMemo(() => {
     const flowNodes = (graph.nodes || []).map(node => {
       const base = toFlowNode(node);
-      const hasError = errorNodeIds ? errorNodeIds.has(node.id) : false;
-      const errorMessage = hasError ? (errorNodeIds.get?.(node.id) || []).join(" · ") : undefined;
+      const representedIds = node.memberNodeIds || [node.id];
+      const hasError = representedIds.some(id => errorNodeIds?.has(id));
+      const errorMessage = hasError ? representedIds.flatMap(id => errorNodeIds.get?.(id) || []).join(" · ") : undefined;
       const dimmed = (showSections && focusedSectionId != null && node.sectionId !== focusedSectionId) ||
-        (matchedNodeIds && matchedNodeIds.size > 0 && !matchedNodeIds.has(node.id));
+        (matchedNodeIds && matchedNodeIds.size > 0 && !representedIds.some(id => matchedNodeIds.has(id)));
       return {
         ...base,
         position: dragPositions[node.id] ?? base.position,
         selected: selectedSet.has(node.id),
-        selectable: true,
+        selectable: !node.virtual,
+        draggable: canEdit && !projected,
+        connectable: canEdit && !node.virtual,
         data: {
           ...base.data,
+          onExpand: () => expandSection(node.sectionId),
           hasError,
           errorMessage,
           sectionColor: showSections ? base.data.sectionColor : undefined,
@@ -577,6 +626,7 @@ export function FlowDiagramReactFlow({
           ...panel,
           isFocused: focusedSectionId === panel.sectionId,
           onToggleFocus: () => setFocusedSectionId(id => id === panel.sectionId ? null : panel.sectionId),
+          onCollapse: () => changeCollapse(new Set([...collapsedIds, panel.sectionId])),
         },
         selectable: false,
         draggable: false,
@@ -587,7 +637,7 @@ export function FlowDiagramReactFlow({
     }
 
     return flowNodes;
-  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet, matchedNodeIds, dragPositions]);
+  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet, matchedNodeIds, dragPositions, collapsedIds, projected, canEdit, changeCollapse, expandSection]);
 
   // Ref-synced copy of `nodes` so onNodeDrag/onNodeDragStop's alignment-guide
   // computation always reads current node positions, not a stale closure
@@ -606,10 +656,12 @@ export function FlowDiagramReactFlow({
       const opensRouteDialog = isActivityRouteEdge(e, nodeById.get(e.from)?.type);
       const flowEdge = {
         ...toFlowEdge(e, C, FONT),
-        selected: selectedEdgeId === e.id,
+        selected: !e.virtual && selectedEdgeId === e.id,
+        selectable: !e.virtual,
+        focusable: !e.virtual,
         interactionWidth: 20,
         data: {
-          onDelete: canEdit && !opensRouteDialog ? onDeleteEdge : null,
+          onDelete: canEdit && !e.virtual && !opensRouteDialog ? onDeleteEdge : null,
           loopRailY: loopRailYById.get(e.id),
         },
       };
@@ -631,17 +683,18 @@ export function FlowDiagramReactFlow({
   }, [graph.edges, C, FONT, showSections, focusedSectionId, nodeById, selectedEdgeId, canEdit, onDeleteEdge, loopRailYById]);
 
   const isValidConnection = useCallback(connection => {
+    if (nodeById.get(connection.source)?.virtual || nodeById.get(connection.target)?.virtual) return false;
     const validation = validateVisualConnection(graph, connection.source, connection.target);
     connection._validation = validation;
     return validation.ok;
-  }, [graph]);
+  }, [graph, nodeById]);
 
   return (
     <div
       ref={wrapperRef}
       aria-label="Visual Designer canvas"
       onDragOver={event => {
-        if (!canEdit) return;
+        if (!canEdit || projected) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "copy";
         setDragOver(true);
@@ -649,7 +702,7 @@ export function FlowDiagramReactFlow({
       onDragLeave={() => setDragOver(false)}
       onDrop={event => {
         setDragOver(false);
-        if (!canEdit) return;
+        if (!canEdit || projected) return;
         const type = event.dataTransfer.getData("application/simmodlr-node");
         if (!type) return;
         event.preventDefault();
@@ -670,6 +723,7 @@ export function FlowDiagramReactFlow({
         height: autoFillHeight != null ? `${autoFillHeight}px` : "clamp(400px, calc(100vh - 260px), 900px)",
         minHeight: 380,
         width: "100%",
+        boxSizing: "border-box",
         background: dragOver ? `${C.accent}06` : C.bg,
         border: `1px solid ${C.border}`,
         borderRadius: 6,
@@ -706,6 +760,7 @@ export function FlowDiagramReactFlow({
         panOnScroll
         isValidConnection={isValidConnection}
         onNodeClick={(event, node) => {
+          if (node.data?.virtual) return;
           if (node.type === "sectionPanel") return;
           nodeClickHandledRef.current = true;
           const toggle = !!(event?.shiftKey || event?.ctrlKey || event?.metaKey);
@@ -716,7 +771,7 @@ export function FlowDiagramReactFlow({
           onNodeSelect?.(null);
           onEdgeSelect?.(null);
         }}
-        onEdgeClick={(_, edge) => onEdgeSelect?.(edge.id)}
+        onEdgeClick={(_, edge) => { if (!graph.edges.find(e => e.id === edge.id)?.virtual) onEdgeSelect?.(edge.id); }}
         onSelectionStart={() => {
           boxSelectingRef.current = true;
         }}
@@ -735,7 +790,7 @@ export function FlowDiagramReactFlow({
           // selectedSet), the node objects here are our own props echoed back — their
           // `.selected` field is always stale/false. Membership in this array IS the
           // signal that ReactFlow considers them selected, so don't re-check `.selected`.
-          const ids = selectedNodes.filter(node => node.type !== "sectionPanel").map(node => node.id);
+          const ids = selectedNodes.filter(node => node.type !== "sectionPanel" && !node.data?.virtual).map(node => node.id);
           if (boxSelectingRef.current) {
             // Defer applying mid-drag updates: feeding them back into the controlled
             // `nodes` prop while ReactFlow is still computing the drag-box intersection
@@ -752,7 +807,7 @@ export function FlowDiagramReactFlow({
           // of assuming every node is exactly NODE_WIDTH x NODE_HEIGHT.
           for (const change of changes) {
             if (change.type === "dimensions" && change.id && change.dimensions) {
-              onNodeMeasureRef.current?.(change.id, { width: change.dimensions.width, height: change.dimensions.height });
+              if (nodeById.has(change.id) && !nodeById.get(change.id).virtual) onNodeMeasureRef.current?.(change.id, { width: change.dimensions.width, height: change.dimensions.height });
             }
           }
           // Echo mid-drag position changes back into the controlled nodes so
@@ -777,6 +832,7 @@ export function FlowDiagramReactFlow({
           setAlignmentGuides(computeAlignmentGuides(node, others, zoom).guides);
         }}
         onNodeDragStop={(_, node, movedNodes = []) => {
+          if (projected || node.type === "sectionPanel" || node.data?.virtual) return;
           setAlignmentGuides([]);
           setDragPositions({});
           const moved = movedNodes.length ? movedNodes : [node];
@@ -790,13 +846,14 @@ export function FlowDiagramReactFlow({
           onNodesMove?.(movedPositions);
         }}
         onMoveEnd={(_, viewport) => {
+          if (projected) return;
           if (suppressViewportSyncRef.current) {
             suppressViewportSyncRef.current = false;
             return;
           }
           onViewportChange?.(viewport);
         }}
-        onConnect={connection => onConnectNodes?.(connection.source, connection.target)}
+        onConnect={connection => { if (isValidConnection(connection)) onConnectNodes?.(connection.source, connection.target); }}
         onConnectStart={() => setConnecting(true)}
         onConnectEnd={() => setConnecting(false)}
         proOptions={{ hideAttribution: true }}
@@ -812,12 +869,14 @@ export function FlowDiagramReactFlow({
         />
         <CanvasControls
           canEdit={canEdit}
-          onResetLayout={onResetLayout}
+          onResetLayout={projected ? null : onResetLayout}
           connecting={connecting}
           fitNodeRef={fitNodeRef}
           fitAllRef={fitAllRef}
           focusSectionRef={focusSectionRef}
-          setFocusedSectionId={setFocusedSectionId}
+          setFocusedSectionId={id => { if (id) expandSection(id); setFocusedSectionId(id); }}
+          onOverview={showSections && canonicalGraph.sectionPanels?.length > 0 ? () => changeCollapse(new Set(canonicalGraph.sectionPanels.map(p => p.sectionId)), true) : null}
+          onExpandAll={projected ? () => changeCollapse(new Set()) : null}
         />
       </ReactFlow>
       <AlignmentGuidesOverlay guides={alignmentGuides} reactFlowInstance={reactFlowInstance} wrapperRef={wrapperRef} C={C} />
