@@ -486,12 +486,13 @@ describe('FlowDiagramReactFlow collapsed submodels', () => {
     const graph = sectionGraph();
     const before = structuredClone(graph);
     render(<FlowDiagramReactFlow graph={graph} canEdit />);
-    act(() => screen.getByRole('button', { name: 'Collapse section: Acquisition' }).click());
+    act(() => screen.getByRole('button', { name: 'Summarise section: Acquisition' }).click());
     expect(screen.queryByText('Queue 1')).not.toBeInTheDocument();
     expect(screen.getByText('Queue 2')).toBeInTheDocument();
     expect(screen.getByText('2 connections')).toBeInTheDocument();
+    expect(latestFlowProps.current.nodes.find(n => n.id === 'submodel:sec-a').data.sublabel).toMatch(/^\d+ \w+/);
     expect(latestFlowProps.current.nodes.find(n => n.id === 'submodel:sec-a')).toMatchObject({ selectable: false, draggable: false, connectable: false });
-    act(() => screen.getByRole('button', { name: 'Expand to edit Acquisition' }).click());
+    act(() => screen.getByRole('button', { name: 'Show detail: Acquisition' }).click());
     expect(screen.getByText('Queue 1')).toBeInTheDocument();
     expect(latestFlowProps.current.nodes.filter(n => n.type === 'desNode').map(n => n.position)).toEqual(graph.nodes.map(n => ({ x: n.x, y: n.y })));
     expect(graph).toEqual(before);
@@ -500,7 +501,7 @@ describe('FlowDiagramReactFlow collapsed submodels', () => {
   it('makes compact overview read-only for synthetic objects and excludes view layout from persistence', () => {
     const onNodeSelect = vi.fn(), onEdgeSelect = vi.fn(), onNodesMove = vi.fn(), onConnectNodes = vi.fn(), onViewportChange = vi.fn(), onNodeMeasure = vi.fn();
     render(<FlowDiagramReactFlow graph={sectionGraph()} canEdit onNodeSelect={onNodeSelect} onEdgeSelect={onEdgeSelect} onNodesMove={onNodesMove} onConnectNodes={onConnectNodes} onViewportChange={onViewportChange} onNodeMeasure={onNodeMeasure} onResetLayout={vi.fn()} />);
-    act(() => screen.getByRole('button', { name: 'Compact overview' }).click());
+    act(() => screen.getByRole('button', { name: 'Sections' }).click());
     onNodeSelect.mockClear(); onEdgeSelect.mockClear();
     const props = latestFlowProps.current;
     const summary = props.nodes.find(n => n.data?.virtual);
@@ -525,7 +526,7 @@ describe('FlowDiagramReactFlow collapsed submodels', () => {
     expect(onConnectNodes).not.toHaveBeenCalled();
     expect(onViewportChange).not.toHaveBeenCalled();
     expect(onNodeMeasure).not.toHaveBeenCalled();
-    act(() => screen.getByRole('button', { name: 'Expand all' }).click());
+    act(() => screen.getByRole('button', { name: 'Detail' }).click());
     expect(screen.getByText('Queue 1')).toBeInTheDocument();
     expect(screen.getByText('Queue 2')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Layout/ })).toBeInTheDocument();
@@ -534,12 +535,12 @@ describe('FlowDiagramReactFlow collapsed submodels', () => {
   it('allows read-only viewers to collapse and search focus to reveal a hidden member', () => {
     const focusSectionRef = { current: null };
     render(<FlowDiagramReactFlow graph={sectionGraph()} focusSectionRef={focusSectionRef} matchedNodeIds={new Set(['queue:queue-1'])} errorNodeIds={new Map([['queue:queue-1', ['Check queue']]])} />);
-    act(() => screen.getByRole('button', { name: 'Compact overview' }).click());
+    act(() => screen.getByRole('button', { name: 'Sections' }).click());
     const summary = latestFlowProps.current.nodes.find(n => n.id === 'submodel:sec-a');
     expect(summary.style.opacity).toBe(1);
     expect(screen.getByTitle('Check queue')).toBeInTheDocument();
     act(() => focusSectionRef.current('sec-a'));
     expect(screen.getByText('Queue 1')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Expand to edit Billing' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show detail: Billing' })).toBeInTheDocument();
   });
 });

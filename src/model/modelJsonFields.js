@@ -15,6 +15,7 @@ export const MODEL_JSON_ARRAY_FIELDS = Object.freeze([
   "entityTypes", "stateVariables", "bEvents", "cEvents", "queues",
   "containerTypes", "distances", "skills", "goals",
   "dataSources", "sections", "exposedParams",
+  "evidence", "assumptions", "backingLinks",
 ]);
 
 /** Object-valued fields (missing → graph: null, experimentDefaults: {}). */

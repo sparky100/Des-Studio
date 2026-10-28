@@ -1296,6 +1296,21 @@ export function validateModel(model) {
   checkContainerRefs(bEvents, 'bevents');
   checkContainerRefs(cEvents, 'cevents');
 
+  // ── V82: an element belongs to at most one section ──
+  {
+    /** @type {Map<string, string[]>} */
+    const homes = new Map();
+    for (const sec of /** @type {Record<string, any>[]} */ (model.sections || [])) {
+      for (const id of sec.memberIds || []) {
+        homes.set(id, [...(homes.get(id) || []), sec.name || sec.id]);
+      }
+    }
+    for (const [id, names] of homes) {
+      if (names.length > 1)
+        warn('V82', `'${id}' is in more than one section (${names.join(', ')}). Keep it in one section so section views and results stay unambiguous.`, 'sections');
+    }
+  }
+
   // ── V81: ASSIGN(Queue, ServerType, PREEMPT, …) and plain PREEMPT (Sprint 99) ──
   const findQueueByName = (/** @type {string} */ name) => queues.find(q => String(q.name || '').trim().toLowerCase() === String(name).trim().toLowerCase());
   const checkPreemptAssign = (/** @type {Record<string, any>[]} */ events, /** @type {string} */ tab) => {

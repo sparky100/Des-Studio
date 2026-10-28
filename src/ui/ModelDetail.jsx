@@ -257,6 +257,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     // Owner curation for the stakeholder view — never AI-generated, always
     // preserved from the current model (same rationale as sections above).
     exposedParams: current.exposedParams || [],
+    // Evidence and assumptions are the modeller's own registers, never AI-generated;
+    // keep them from the current model so an AI rebuild cannot drop them.
+    evidence: current.evidence || [],
+    assumptions: current.assumptions || [],
+    backingLinks: current.backingLinks || [],
   });
   const applyGeneratedModel=(nextModel)=>{
     const merged=mergeGeneratedModel(model,nextModel);

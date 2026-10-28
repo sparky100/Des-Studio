@@ -600,6 +600,7 @@ export function deriveGraphFromModel(model = {}) {
       sectionId: sec.id,
       name: sec.name || sec.id,
       color: sec.color || "#888",
+      description: sec.description || "",
       x: minX - SECTION_PAD,
       y: minY - SECTION_PAD - SECTION_LABEL_H,
       width: (maxX - minX) + SECTION_PAD * 2,
@@ -628,24 +629,46 @@ export function searchGraphNodes(nodes = [], query = "") {
   );
 }
 
+const CONTENT_LABELS = {
+  [VISUAL_NODE_TYPES.SOURCE]: ["source", "sources"],
+  [VISUAL_NODE_TYPES.QUEUE]: ["queue", "queues"],
+  [VISUAL_NODE_TYPES.ACTIVITY]: ["activity", "activities"],
+  [VISUAL_NODE_TYPES.SINK]: ["exit", "exits"],
+  [VISUAL_NODE_TYPES.CONTAINER]: ["container", "containers"],
+};
+
+// "2 queues · 3 activities · 1 exit" — what a section holds, in flow order.
+export function summarizeSectionContents(nodes = []) {
+  return Object.entries(CONTENT_LABELS)
+    .map(([type, [one, many]]) => {
+      const n = nodes.filter(node => node.type === type).length;
+      return n ? `${n} ${n === 1 ? one : many}` : null;
+    })
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export function projectCollapsedSections(graph, collapsedIds = new Set(), { compact = false } = {}) {
   const panels = (graph.sectionPanels || []).filter(p => collapsedIds.has(p.sectionId));
   if (!panels.length) return graph;
   const panelBySection = new Map(panels.map(p => [p.sectionId, p]));
   const endpoint = new Map();
   const members = new Map(panels.map(p => [p.sectionId, []]));
+  const memberNodes = new Map(panels.map(p => [p.sectionId, []]));
   const nodes = graph.nodes.filter(node => {
     const panel = panelBySection.get(node.sectionId);
     if (!panel) { endpoint.set(node.id, node.id); return true; }
     endpoint.set(node.id, `submodel:${panel.sectionId}`);
     members.get(panel.sectionId).push(node.id);
+    memberNodes.get(panel.sectionId).push(node);
     return false;
   });
   panels.forEach(panel => nodes.push({
     id: `submodel:${panel.sectionId}`, type: "submodel", virtual: true,
     sectionId: panel.sectionId, sectionColor: panel.color, label: panel.name,
     memberNodeIds: members.get(panel.sectionId),
-    sublabel: `${members.get(panel.sectionId).length} nodes`,
+    sublabel: summarizeSectionContents(memberNodes.get(panel.sectionId)),
+    description: panel.description || "",
     x: panel.x, y: panel.y,
   }));
   const aggregates = new Map();

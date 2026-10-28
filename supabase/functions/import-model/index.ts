@@ -13,7 +13,7 @@ const CORS_HEADERS = {
 const MODEL_JSON_KEYS = [
   "entityTypes", "stateVariables", "bEvents", "cEvents",
   "queues", "graph", "experimentDefaults", "goals", "containerTypes",
-  "distances", "skills",
+  "distances", "skills", "evidence", "assumptions", "backingLinks",
 ];
 
 type ModelRecord = Record<string, unknown>;
@@ -48,6 +48,9 @@ function normalizeModel(payload: ModelRecord, nameOverride?: string): ModelRecor
   if (Array.isArray(source.dataSources)) model.dataSources = source.dataSources;
   if (Array.isArray(source.sections))    model.sections    = source.sections;
   if (Array.isArray(source.exposedParams)) model.exposedParams = source.exposedParams;
+  if (Array.isArray(source.evidence))     model.evidence     = source.evidence;
+  if (Array.isArray(source.assumptions))  model.assumptions  = source.assumptions;
+  if (Array.isArray(source.backingLinks)) model.backingLinks = source.backingLinks;
   if (typeof source.notes === "string" && source.notes) model.notes = source.notes;
   return model;
 }
@@ -424,6 +427,9 @@ Deno.serve(async (request: Request) => {
       ...(Array.isArray(model.dataSources) && model.dataSources.length ? { dataSources: model.dataSources } : {}),
       ...(Array.isArray(model.sections)    && model.sections.length    ? { sections:    model.sections }    : {}),
       ...(Array.isArray(model.exposedParams) && model.exposedParams.length ? { exposedParams: model.exposedParams } : {}),
+      ...(Array.isArray(model.evidence)    && model.evidence.length    ? { evidence:    model.evidence }    : {}),
+      ...(Array.isArray(model.assumptions) && model.assumptions.length ? { assumptions: model.assumptions } : {}),
+      ...(Array.isArray(model.backingLinks) && model.backingLinks.length ? { backingLinks: model.backingLinks } : {}),
       ...(typeof model.notes === "string" && model.notes ? { notes: model.notes } : {}),
     },
     owner_id: user.id,
