@@ -24,8 +24,12 @@ import { runReplications } from "../../engine/replication-runner.js";
 import { summarizeReplicationResults } from "../../engine/statistics.js";
 import { estimateMaxCycles } from "../../engine/complexity-estimator.js";
 import { checkPublishedRun } from "../../engine/published-run-check.js";
-import { CI_METRICS, makeBatchResult } from "../execute/executeHelpers.js";
-import { SummaryCardGrid } from "../results/ResultsWorkspace.jsx";
+import { buildGoalGapsFromResults } from "../../llm/prompts.js";
+import {
+  CI_METRICS, TIME_SERIES_GRID_POINTS, buildGoalOutcomes, buildRunModelSnapshot,
+  makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator,
+} from "../execute/executeHelpers.js";
+import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
 import { Btn } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { downloadTextFile } from "../shared/utils.js";
@@ -94,6 +98,11 @@ export function PublicSimulator({ payload, onClose }) {
     setRunning(true);
 
     const runId = ++runIdRef.current;
+    // The charts in the results need the time series, which the tier drops for
+    // a model too large to chart cheaply.
+    const collectTimeSeries = admission.effectiveSettings?.collectTimeSeries !== false;
+    const tsAccumulator = collectTimeSeries ? makeTimeSeriesAccumulator(TIME_SERIES_GRID_POINTS, maxSimTime) : null;
+    const startedAt = Date.now();
     try {
       const handle = runReplications({
         model: patched,
@@ -104,14 +113,27 @@ export function PublicSimulator({ payload, onClose }) {
         terminationCondition,
         maxCycles: estimateMaxCycles(complexityEstimate),
         maxCEventScans: admission.effectiveSettings?.maxCEventScans,
-        collectTimeSeries: false,
+        collectTimeSeries,
         schedulesMap,
+        onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
+        timeSeriesGridPoints: tsAccumulator && Number.isFinite(maxSimTime) && maxSimTime > 0 ? TIME_SERIES_GRID_POINTS : null,
         onProgress: p => { if (runId === runIdRef.current) setProgress(p); },
         onComplete: reps => {
           if (runId !== runIdRef.current) return;
           const stats = summarizeReplicationResults(reps, CI_METRICS);
-          const batch = makeBatchResult(reps, stats, maxSimTime, warmupPeriod);
-          setOutcome({ batch: { ...batch, aggregateStats: stats }, reps, model: patched });
+          const batch = {
+            ...makeBatchResult(reps, stats, maxSimTime, warmupPeriod, tsAccumulator?.getResult()),
+            runtimeMetrics: makeBatchRuntimeMetrics(reps, reps.length, Date.now() - startedAt),
+            aggregateStats: stats,
+          };
+          // Same extras the Run page stores, so the results view reads them the same way.
+          batch._experiment_config = {
+            maxSimTime, warmupPeriod, replications: reps.length, terminationMode: settings.terminationMode,
+            terminationCondition, seed,
+          };
+          batch._model_snapshot = buildRunModelSnapshot(patched, batch._experiment_config);
+          batch.goalOutcomes = buildGoalOutcomes(buildGoalGapsFromResults(patched, batch));
+          setOutcome({ batch, reps, model: patched });
           setRunning(false);
           cancelRef.current = null;
         },
@@ -258,7 +280,7 @@ export function PublicSimulator({ payload, onClose }) {
               Some runs reached a safety limit or could not finish all events. Treat these results as incomplete.
             </div>
           )}
-          <SummaryCardGrid results={outcome.batch} replicationResults={outcome.reps} model={outcome.model} />
+          <ResultsWorkspace results={outcome.batch} replicationResults={outcome.reps} model={outcome.model} />
           <Btn variant="ghost" onClick={downloadReport} disabled={reporting}>
             {reporting ? "Preparing report…" : "Download report"}
           </Btn>
