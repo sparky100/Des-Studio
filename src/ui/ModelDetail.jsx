@@ -51,6 +51,7 @@ import { slugifyModelName, modelJsonFromModel, buildModelExportPayload, hydrateR
 import { useConfirm } from "./shared/useConfirm.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
+const DATA_SOURCES_TAB_ENABLED = import.meta.env.VITE_ENABLE_DATA_SOURCES_TAB === "true";
 
 const AuthoringWorkflowShell = ({ mode, children }) => (
   <section aria-label={`${mode.label} authoring shell`} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -604,7 +605,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
     ...(isOwner?[{id:"versions",label:"Versions"}]:[]),
   ];
-  const selectableTabs = TABS.filter(t => !t.disabled);
+  const selectableTabs = TABS.filter(t => !t.disabled && (t.id !== "state" || DATA_SOURCES_TAB_ENABLED));
   // Single source of truth for tab labels — previously a second hard-coded
   // map here disagreed with TABS (e.g. "Design"/"AI Designer" vs the tab
   // bar's "Draw"/"Describe"), showing users two different names for the
@@ -676,6 +677,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   );
 
   useEffect(()=>{
+    if(tab === "state" && !DATA_SOURCES_TAB_ENABLED) setTab("overview");
     if(isMobileLayout && !DISPLAY_MODES.some(mode => mode.tabs.includes(tab))) setTab("overview");
   },[isMobileLayout, tab]);
 
@@ -1002,7 +1004,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             onClose={()=>setShowSimPyExport(false)}
           />
         )}
-        {tab==="state"&&renderAuthoringShell(
+        {DATA_SOURCES_TAB_ENABLED&&tab==="state"&&renderAuthoringShell(
           <div style={{maxWidth:920,margin:"0 auto",display:"flex",flexDirection:"column",gap:14}}>
             <TabErrors tabId="state" validation={validation}/>
             <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
