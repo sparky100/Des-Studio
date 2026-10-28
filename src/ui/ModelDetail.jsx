@@ -13,6 +13,7 @@ import { ScheduleManager } from "./editors/ScheduleManager.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
 import { GoalsEditor } from "./editors/GoalsEditor.jsx";
 import { EvidenceEditor } from "./editors/EvidenceEditor.jsx";
+import { mergeAiRegisters } from "../model/aiRegisters.js";
 import { ExecutePanel } from "./execute/index.jsx";
 import { AiAssistantPanel } from "./execute/AiAssistantPanel.jsx";
 import { LogViewer } from "./execute/LogViewer.jsx";
@@ -258,11 +259,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     // Owner curation for the stakeholder view — never AI-generated, always
     // preserved from the current model (same rationale as sections above).
     exposedParams: current.exposedParams || [],
-    // Evidence and assumptions are the modeller's own registers, never AI-generated;
-    // keep them from the current model so an AI rebuild cannot drop them.
-    evidence: current.evidence || [],
-    assumptions: current.assumptions || [],
-    backingLinks: current.backingLinks || [],
+    // Evidence is never AI-generated (the AI has no sources): keep the modeller's
+    // own. The AI may add assumptions and link them; nothing existing is overwritten.
+    ...mergeAiRegisters(current, nextModel),
   });
   const applyGeneratedModel=(nextModel)=>{
     const merged=mergeGeneratedModel(model,nextModel);

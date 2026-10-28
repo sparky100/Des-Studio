@@ -10,7 +10,7 @@ vi.mock("../../../src/engine/replication-runner.js", () => ({
   },
 }));
 vi.mock("../../../src/ui/results/ResultsWorkspace.jsx", () => ({
-  SummaryCardGrid: ({ model, results }) => <div>
+  ResultsWorkspace: ({ model, results }) => <div>
     <span>Results with {model.entityTypes.find(entity => entity.id === "et_srv").count} servers</span>
     <span>Average served: {results.aggregateStats?.["summary.served"]?.mean}</span>
   </div>,
@@ -41,6 +41,14 @@ describe("public simulation", () => {
     ]));
     expect(screen.getByText("Average served: 15")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Treat these results as incomplete");
+  });
+  it("asks for chart data and hands the full results view what the Run page does", () => {
+    render(<PublicSimulator payload={makePayload()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Run the simulation" }));
+    expect(runner.options.collectTimeSeries).toBe(true);
+    expect(typeof runner.options.onTimeSeriesSample).toBe("function");
+    act(() => runner.options.onComplete([{ result: { summary: { served: 10, total: 10 } } }]));
+    expect(screen.getByText("Average served: 10")).toBeInTheDocument();
   });
   it("clamps curated inputs and keeps results tied to the settings used for the run", () => {
     render(<PublicSimulator payload={makePayload()} />);

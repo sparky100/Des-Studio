@@ -56,6 +56,9 @@ function unwrapProposedModel(proposedModel = {}) {
     bEvents,
     cEvents: Array.isArray(source.cEvents) ? source.cEvents.map(normalizeCEvent) : [],
     queues,
+    // Assumptions and their links only. Evidence is never taken from the AI.
+    ...(Array.isArray(source.assumptions) ? { assumptions: source.assumptions } : {}),
+    ...(Array.isArray(source.backingLinks) ? { backingLinks: source.backingLinks } : {}),
   };
 }
 
