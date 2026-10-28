@@ -6,6 +6,8 @@
 import { describe, expect, it } from "vitest";
 import {
   BACKING_TARGET_TYPES,
+  EVIDENCE_TYPES,
+  recordDisplayName,
   backingStatus,
   buildBackableUnits,
   buildTargetIndex,
@@ -304,5 +306,29 @@ describe("buildTargetIndex", () => {
     expect(index.get("b_event").get("b1").label).toBe("Patient Arrives");
     expect(index.get("goal").get("0").label).toBe("Average wait");
     expect(index.get("container_type").get("tank")).toBeTruthy();
+  });
+});
+
+describe("record names", () => {
+  it("uses the name when there is one", () => {
+    expect(recordDisplayName({ id: "ev_1", name: "ED audit", description: "Long text" })).toBe("ED audit");
+    expect(recordDisplayName({ id: "as_1", name: "FIFO", text: "We assume FIFO." })).toBe("FIFO");
+  });
+
+  it("falls back to the description or text, then the id", () => {
+    expect(recordDisplayName({ id: "ev_1", name: "", description: "Hourly arrivals" })).toBe("Hourly arrivals");
+    expect(recordDisplayName({ id: "as_1", text: "We assume no balking." })).toBe("We assume no balking.");
+    expect(recordDisplayName({ id: "ev_9" })).toBe("ev_9");
+  });
+
+  it("shortens long fallbacks to 60 characters", () => {
+    const long = "x".repeat(200);
+    const shown = recordDisplayName({ id: "ev_1", description: long });
+    expect(shown.length).toBeLessThanOrEqual(58);
+    expect(shown.endsWith("…")).toBe(true);
+  });
+
+  it("exposes the four evidence types in one list", () => {
+    expect(EVIDENCE_TYPES.map(t => t.value)).toEqual(["data", "literature", "expert_judgment", "anecdote"]);
   });
 });

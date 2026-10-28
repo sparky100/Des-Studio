@@ -8,8 +8,8 @@
 //
 // The shape is a single generic join array:
 //
-//   evidence:     [{ id, type, description, source, strength, dateCaptured, ... }]
-//   assumptions:  [{ id, text, contested, confidence }]
+//   evidence:     [{ id, name, type, description, source, strength, dateCaptured, lastVerified?, dataPoints? }]
+//   assumptions:  [{ id, name, text, contested, confidence }]
 //   backingLinks: [{ id, recordType, recordId, targetType, targetId, targetPath? }]
 //
 // A link is purely a connector. Content lives once, so one source can back a
@@ -66,6 +66,33 @@ export const BACKING_TARGET_TYPES = Object.freeze([
   { type: "distance",        label: "Distance",      plural: "Distances" },
   { type: "data_source",     label: "Data source",   plural: "Data sources" },
 ]);
+
+/**
+ * Evidence types, shared by the editor, the public page and the MCP server.
+ * Stored as the value; shown as the label.
+ */
+export const EVIDENCE_TYPES = Object.freeze([
+  { value: "data", label: "Data" },
+  { value: "literature", label: "Literature" },
+  { value: "expert_judgment", label: "Expert judgement" },
+  { value: "anecdote", label: "Anecdote" },
+]);
+
+/**
+ * The name shown for an evidence or assumption record: its `name`, else the
+ * start of its description or text, else its id. Older and imported records
+ * may have no name.
+ * @param {any} record
+ * @returns {string}
+ */
+export function recordDisplayName(record) {
+  if (!record || typeof record !== "object") return "";
+  const name = String(record.name ?? "").trim();
+  if (name) return name;
+  const text = String(record.description ?? record.text ?? "").trim();
+  if (text) return text.length > 60 ? `${text.slice(0, 57).trimEnd()}…` : text;
+  return String(record.id ?? "");
+}
 
 const TARGET_TYPE_BY_VALUE = new Map(BACKING_TARGET_TYPES.map(t => [t.type, t]));
 

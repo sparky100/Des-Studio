@@ -92,6 +92,15 @@ If a tool named here isn't available (an older version of the server), do that s
 26. **`defaultQueueName` does nothing without a routing table** on the same B-event; entities silently stall.
 27. **Large models** (≥ 8 queues or ≥ 3 stages) need `sections[]` using `memberIds`, and every queue, entity type, B-event and C-event belongs to exactly one section.
 
+## 4a. Evidence and assumptions
+
+As you model, record what backs each parameter. Use `flow_get_schema` section 16 for the record shapes.
+
+- **Cite evidence only when the user gave you the source.** Copy the source as the user stated it. Never invent a source, reference, date, sample size or data series.
+- **Everything else is an assumption.** Each value the user did not source, and each value you chose, goes in `assumptions` (what was assumed, and why), attached to the parameter it sets. Mark it `contested` where stakeholders disagree.
+- **Ask about the figures that matter.** If a value drives the result and has no source, ask the user whether they have one before presenting it as settled.
+- **Report the gaps.** After a run, say which results depend on assumptions and which are backed by a source.
+
 ## 5. Reporting results
 
 - **Charts.** When the person wants a chart, or one would make the answer clearer, get the numbers from the tools rather than reading them off text: `flow_run_over_time` with `periods` of 50–100 (CSV, one row per period) or `format: "json"` for queues, utilisation and WIP over time; `flow_run_model` with `detail: true` (or `format: "json"`) for the spread across replications and each queue's wait-time percentiles and histogram.
