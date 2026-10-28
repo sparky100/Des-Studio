@@ -12,7 +12,7 @@
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods, createStreamRegistry } from "./distributions.js";
 import { buildWaitDistEntry, finalizeWeightedStats, summarizeEntitySummary } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
-import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, endTurnaround, turnaroundSpecFor, isCarriedClaim, isInSystem, setServerStatus, serverCountsOfType, serversOfType } from "./entities.js";
+import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers, pruneTerminalEntities, createQueueIndex, indexBucket, indexJoinCount, indexTrackEntity, indexUntrackEntity, findEntityById, endTurnaround, turnaroundSpecFor, isCarriedClaim, isInSystem, setServerStatus, serverCountsOfType, serversOfType } from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent, applyShiftChange } from "./phases.js";
 import { setStageRecordSink } from "./macros.js";
@@ -3034,6 +3034,10 @@ const cycleLog = [];
     getSnap:              () => snap(clock),
     getFelSize:           () => fel.length,
     getCycleCount:        () => _cycleCount,
+    getClock:             () => clock,
+    // Cheap per-step probes for run-time pause rules (no snapshot needed).
+    getQueueDepth:        (/** @type {string} */ queueName) => (indexBucket(queueIndex, queueName) || []).length,
+    getQueueJoins:        (/** @type {string} */ queueName) => indexJoinCount(queueIndex, queueName),
     getProgress:          (overrides = {}) => getProgressSnapshot(overrides),
     getSummary,
     getRuntimeMetrics,

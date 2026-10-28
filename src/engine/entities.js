@@ -26,6 +26,7 @@ import { sample } from "./distributions.js";
  *   serversByType: Map<string, Record<string, any>[]>|null,
  *   serverCountsByType: Map<string, ServerTypeCounts>|null,
  *   inSystem: number,
+ *   joinsByQueue: Map<string, number>,
  * }} QueueIndex
  */
 
@@ -169,7 +170,7 @@ export function sortWaitingEntities(waiting, discipline = "FIFO") {
 // same object reference, so no add/remove bookkeeping is needed for those.
 /** @returns {QueueIndex} */
 export function createQueueIndex() {
-  return { waitingByQueue: new Map(), servers: [], fifoSortedByQueue: new Map(), byId: new Map(), serversByType: null, serverCountsByType: null, inSystem: 0 };
+  return { waitingByQueue: new Map(), servers: [], fifoSortedByQueue: new Map(), byId: new Map(), serversByType: null, serverCountsByType: null, inSystem: 0, joinsByQueue: new Map() };
 }
 
 // O(1) replacement for the dozens of `entities.find(e => e.id === id)` call
@@ -455,6 +456,28 @@ export function indexRemove(index, queueName, entity) {
   if (i !== -1) bucket.splice(i, 1);
 }
 
+// Cumulative joins per queue, for "pause when an entity enters" run rules.
+// Counted at the two join chokepoints (markEntityWaiting and MATCH's parent),
+// never in rebuildQueueIndex, which re-files entities that already joined.
+/**
+ * @param {QueueIndex|null} index
+ * @param {string|null|undefined} queueName
+ * @param {number} [delta]
+ */
+export function noteQueueJoin(index, queueName, delta = 1) {
+  if (!index || !queueName) return;
+  const key = norm(queueName);
+  index.joinsByQueue.set(key, (index.joinsByQueue.get(key) || 0) + delta);
+}
+
+/**
+ * @param {QueueIndex|null} index
+ * @param {string} queueName
+ */
+export function indexJoinCount(index, queueName) {
+  return index?.joinsByQueue.get(norm(queueName)) || 0;
+}
+
 /**
  * @param {QueueIndex|null} index
  * @param {string} queueName
@@ -602,12 +625,16 @@ export function markEntityWaiting(entity, clock, queueName = entity.queue ?? ent
   // between the two, so the stale bucket entry must be dropped here.
   if (index && entity.status === "waiting" && entity.queue) {
     indexRemove(index, entity.queue, entity);
+    // A same-instant re-route means the first join was only provisional.
+    if (entity.waitingSince === clock && norm(entity.queue) !== norm(queueName)) noteQueueJoin(index, entity.queue, -1);
   }
+  const rejoinSameQueue = entity.status === "waiting" && norm(entity.queue) === norm(queueName);
   entity.status = "waiting";
   entity.queue = queueName;
   entity.waitingSince = clock;
   entity.waitingFor = waitingSnapshot(entity, clock, queueName);
   indexAdd(index, queueName, entity);
+  if (!rejoinSameQueue) noteQueueJoin(index, queueName);
   return true;
 }
 

@@ -34,7 +34,7 @@ import { enumerateSweepableParams, applySweepValues, generate2DSweepValues, MAX_
 import { runSweep, runSweepOffthread } from "../../engine/sweep-runner.js";
 import { computeSensitivityRanking } from "../../engine/sweep-sensitivity.js";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
-import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, sweepGoalKpiOptions, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, TIME_SERIES_GRID_POINTS, buildParameterOverrideRecord, buildRunModelSnapshot, buildGoalOutcomes, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, sweepGoalKpiOptions, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, TIME_SERIES_GRID_POINTS, buildParameterOverrideRecord, buildRunModelSnapshot, buildGoalOutcomes, buildEntityJourneys, buildResultsExportPayload, buildResultsCsv, buildResultsXlsx, downloadTextFile, makeDefaultRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { SampledParamRangeList, SampledResultsTable, SensitivityPanel } from "./StudyPlanViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
@@ -53,6 +53,7 @@ import { RunReadinessPanel } from "./RunReadinessPanel.jsx";
 import { RunStatusBanners } from "./RunStatusBanners.jsx";
 import { BatchResultsPanel } from "./BatchResultsPanel.jsx";
 import { RunningToolbar, ScheduleSelector, SpeedControl, runSettingsText } from "./RunToolbars.jsx";
+import { PauseHitBanner, PauseRulesControl, createPauseWatcher, usePauseRules } from "./PauseRulesControl.jsx";
 
 
 const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, savedSignal = 0, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, onRunStateChange = null, schedulesVersion = 0, visible = true, studyProposalTrigger = null }) => {
@@ -198,6 +199,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const autoRef = useRef(null);
   const autoRunningRef = useRef(false);
   const startAutoAfterInitRef = useRef(false);
+  const { rules: pauseRules, setRules: setPauseRules, rulesRef: pauseRulesRef } = usePauseRules(modelId);
+  const pauseWatcherRef = useRef(null); // rebuilt (re-baselined) whenever Auto Run starts
+  const [pauseHit, setPauseHit] = useState(null);
+  const pauseControl = <PauseRulesControl model={model} rules={pauseRules} setRules={next => { setPauseRules(next); pauseWatcherRef.current = null; }} />;
   const liveHistThrottleRef = useRef(0);
   const runnerRef = useRef(null);
   const singleRunCancelRef = useRef(false);
@@ -369,6 +374,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (sweepRunnerRef.current) { sweepRunnerRef.current.cancel(); sweepRunnerRef.current = null; }
     if (autoRef.current) { clearTimeout(autoRef.current); autoRef.current = null; }
     autoRunningRef.current = false;
+    pauseWatcherRef.current = null; setPauseHit(null);
     setHideRunReadiness(true);
     setExecuteSection("run");
     runSeedRef.current = seed;
@@ -426,6 +432,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
   const stopAuto = useCallback(() => {
     autoRunningRef.current = false;
+    pauseWatcherRef.current = null;
     if (autoRef.current) {
       clearTimeout(autoRef.current);
       autoRef.current = null;
@@ -619,12 +626,15 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     let finalStep = null;
     const batchLog = [];
     const batchStateChanges = [];
+    if (!pauseWatcherRef.current && pauseRulesRef.current.length) pauseWatcherRef.current = createPauseWatcher(pauseRulesRef.current, engineRef.current);
+    let pauseAt = null;
     for (let i = 0; i < stepsPerTick; i++) {
       const r = engineRef.current.step({ captureSnap: false });
       recordTruncationResult(r);
       if (r.cycleLog?.length) batchLog.push(...r.cycleLog);
       if (r.stateChanges?.length) batchStateChanges.push(...r.stateChanges);
       if (r.done) { completed = true; finalStep = r; break; }
+      if ((pauseAt = pauseWatcherRef.current?.check() ?? null)) break;
     }
     if (batchStateChanges.length) {
       stateChangesRef.current = [...stateChangesRef.current, ...batchStateChanges];
@@ -642,13 +652,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       return;
     }
     updateLiveMetrics(snap);
+    if (pauseAt) { stopAuto(); setPauseHit(pauseAt); return; }
     if (!autoRunningRef.current) return;
     if (turbo) {
       autoRef.current = setTimeout(tickAuto, 0);
     } else {
       autoRef.current = setTimeout(tickAuto, 40);
     }
-  }, [speedMultiplier, recordTruncationResult, updateLiveMetrics, finalizeSteppedRun]);
+  }, [speedMultiplier, recordTruncationResult, updateLiveMetrics, finalizeSteppedRun, stopAuto, pauseRulesRef]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -1056,6 +1067,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       stopAuto();
     } else {
       setHideRunReadiness(true);
+      setPauseHit(null);
       if (batchStatus !== "idle" || replicationResults.length > 0) {
         setBatchStatus("idle");
         setReplicationResults([]);
@@ -1158,21 +1170,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     terminationCondition: terminationMode === "condition" ? terminationCondition : null,
   }), [modelId, effectiveRunLabel, replications, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
   const exportPartial = partialBatchStatus && replicationResults.length > 0;
-  const comparisonRuns = useMemo(() => {
-    const savedRuns = savedRunHistory.map(row => ({
-      id: `saved-${row.id}`,
-      label: row.run_label || row.runLabel || `Saved ${(row.ran_at || row.createdAt) ? new Date(row.ran_at || row.createdAt).toLocaleString() : row.id}`,
-      payload: row,
-      source: "saved",
-    }));
-    const currentReplications = replicationResults.map(payload => ({
-      id: `rep-${payload.replicationIndex}`,
-      label: makeRunLabel(payload),
-      payload,
-      source: "session",
-    }));
-    return [...savedRuns, ...currentReplications];
-  }, [savedRunHistory, replicationResults]);
   const recentSavedRuns = useMemo(
     () => savedRunHistory.slice(0, 3).map(row => ({
       id: row.id,
@@ -2570,6 +2567,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasValidationErrors || runBusy}> Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || runBusy}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <SpeedControl speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier} />
+        {pauseControl}
         <Btn variant="ghost" onClick={doRunAll} disabled={hasAdmissionErrors || runBusy || saveStatus?.state === 'saving' || saveInProgressRef.current}
           title="Runs all replications at full speed without canvas animation — use Auto Run to watch entities move">
           {hasAdmissionErrors ? `✕ ${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length !== 1 ? "s" : ""}` : "⚡ Batch Run"}
@@ -2657,7 +2655,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         <RunningToolbar doStep={doStep} mode={mode} runBusy={runBusy} autoRunning={autoRunning} toggleAuto={toggleAuto}
           hasValidationErrors={hasValidationErrors} speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}
           liveFlags={liveFlags} batchActive={batchActive} cancelBatch={cancelBatch} batchStatus={batchStatus}
-          singleRunActive={singleRunActive} cancelSingleRun={cancelSingleRun} singleRunStatus={singleRunStatus} settings={runSettings}
+          singleRunActive={singleRunActive} cancelSingleRun={cancelSingleRun} singleRunStatus={singleRunStatus} settings={runSettings} pauseControl={pauseControl}
           onCancel={() => {
             stopAuto();
             if (batchActive) cancelBatch();
@@ -2669,6 +2667,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
       {executeSection === "run" && (
         <>
+      <PauseHitBanner hit={pauseHit} onDismiss={() => setPauseHit(null)} />
       {!hideRunReadiness && !isRunning && (
         <RunReadinessPanel runAdmission={runAdmission} complexityEstimate={complexityEstimate} runLabel={runLabel}
           lastRunEstimateAccuracy={lastRunEstimateAccuracy} readinessExpanded={readinessExpanded} setReadinessExpanded={setReadinessExpanded}
