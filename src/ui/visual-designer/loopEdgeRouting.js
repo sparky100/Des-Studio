@@ -27,7 +27,7 @@ export const LOOP_LANE_SPACING = 28;  // vertical gap between stacked lanes
  * treat their absence in the map as "no special routing").
  */
 export function computeLoopRailYById(nodes, edges) {
-  const loopEdges = (edges || []).filter(e => e.loop === true);
+  const loopEdges = (edges || []).filter(e => e.loop === true || e.returning === true);
   if (!loopEdges.length) return new Map();
   const maxBottom = (nodes || []).reduce((max, n) => Math.max(max, (n.y || 0) + NODE_HEIGHT), 0);
   const baseY = maxBottom + LOOP_LANE_GAP;

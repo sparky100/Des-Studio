@@ -489,7 +489,7 @@ describe('FlowDiagramReactFlow collapsed submodels', () => {
     act(() => screen.getByRole('button', { name: 'Summarise section: Acquisition' }).click());
     expect(screen.queryByText('Queue 1')).not.toBeInTheDocument();
     expect(screen.getByText('Queue 2')).toBeInTheDocument();
-    expect(screen.getByText('2 connections')).toBeInTheDocument();
+    expect(screen.getByText('2 links')).toBeInTheDocument();
     expect(latestFlowProps.current.nodes.find(n => n.id === 'submodel:sec-a').data.sublabel).toMatch(/^\d+ \w+/);
     expect(latestFlowProps.current.nodes.find(n => n.id === 'submodel:sec-a')).toMatchObject({ selectable: false, draggable: false, connectable: false });
     act(() => screen.getByRole('button', { name: 'Show detail: Acquisition' }).click());
@@ -530,6 +530,20 @@ describe('FlowDiagramReactFlow collapsed submodels', () => {
     expect(screen.getByText('Queue 1')).toBeInTheDocument();
     expect(screen.getByText('Queue 2')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Layout/ })).toBeInTheDocument();
+  });
+
+  it('remembers the Detail | Sections choice per model', () => {
+    localStorage.removeItem('des.sections.view.m1');
+    const first = render(<FlowDiagramReactFlow graph={sectionGraph()} viewStorageKey="des.sections.view.m1" />);
+    act(() => screen.getByRole('button', { name: 'Sections' }).click());
+    expect(localStorage.getItem('des.sections.view.m1')).toBe('sections');
+    first.unmount();
+    render(<FlowDiagramReactFlow graph={sectionGraph()} viewStorageKey="des.sections.view.m1" />);
+    expect(screen.queryByText('Queue 1')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show detail: Acquisition' })).toBeInTheDocument();
+    act(() => screen.getByRole('button', { name: 'Detail' }).click());
+    expect(localStorage.getItem('des.sections.view.m1')).toBe('detail');
+    localStorage.removeItem('des.sections.view.m1');
   });
 
   it('allows read-only viewers to collapse and search focus to reveal a hidden member', () => {

@@ -1418,6 +1418,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
             <FlowDiagramReactFlow
               key={flowKey}
               graph={graphWithViewport}
+              viewStorageKey={model?.id ? `des.sections.view.${model.id}` : null}
               canEdit={canEdit}
               selectedNodeId={inspectorNodeId}
               selectedNodeIds={selectedNodeIds}
