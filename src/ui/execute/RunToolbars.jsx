@@ -67,13 +67,14 @@ function LiveFlagsButton({ liveFlags }) {
 }
 
 /** Toolbar shown while a run is in progress: step, auto run, speed, live warnings, cancel. */
-export function RunningToolbar({ doStep, mode, runBusy, autoRunning, toggleAuto, hasValidationErrors, speedMultiplier, setSpeedMultiplier, liveFlags, onCancel, batchActive, cancelBatch, batchStatus, singleRunActive, cancelSingleRun, singleRunStatus, settings }) {
+export function RunningToolbar({ doStep, mode, runBusy, autoRunning, toggleAuto, hasValidationErrors, speedMultiplier, setSpeedMultiplier, liveFlags, onCancel, batchActive, cancelBatch, batchStatus, singleRunActive, cancelSingleRun, singleRunStatus, settings, pauseControl = null }) {
   const { C, FONT } = useTheme();
   return (
     <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
       <Btn variant="success" onClick={doStep} disabled={mode === "done" || runBusy}> Step</Btn>
       <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || runBusy}>{autoRunning ? "⏹ Stop Auto" : "Auto Run"}</Btn>
       <SpeedControl speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier} />
+      {pauseControl}
       {liveFlags.length > 0 ? <LiveFlagsButton liveFlags={liveFlags} /> : null}
       <Btn variant="danger" onClick={onCancel}>✕ Cancel</Btn>
       {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}

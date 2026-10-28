@@ -13,7 +13,7 @@
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
 import { PREEMPT_ASSIGN_PATTERN, applyPreemptAssign } from "./preemptAssign.js";
-import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, noteShiftCompletion, selectVictimServer, noteServiceInterrupted, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim, noteServerClaim, mayHoldOtherServers, markTerminal, setServerStatus } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers, attemptQueueJoin, indexRemove, indexAdd, noteQueueJoin, indexRemoveServer, indexBucket, indexTrackEntity, indexUntrackEntity, findEntityById, flushRetiredServerStats, noteShiftCompletion, selectVictimServer, noteServiceInterrupted, setOutcome, beginTurnaround, endTurnaround, isCarriedClaim, consumeLostClaim, noteServerClaim, mayHoldOtherServers, markTerminal, setServerStatus } from "./entities.js";
 
 // ctx is an intentionally loose bag — see the EXTENDING note above and the
 // per-macro usages below for the (large, and macro-specific) set of fields
@@ -1862,6 +1862,7 @@ export const MACROS = [
       // parent is born directly into "waiting" status (bypassing markEntityWaiting/
       // attemptQueueJoin), so the index must be updated explicitly here too.
       indexAdd(ctx.index, targetQueue, parent);
+      noteQueueJoin(ctx.index, targetQueue);
       indexTrackEntity(ctx.index, parent);
 
       clearWaitingState(entityA, ctx.index);
