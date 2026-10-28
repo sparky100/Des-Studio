@@ -1,5 +1,21 @@
 # simmodlr — Engineering Specification
 
+## Published releases
+
+The publication boundary is `src/db/published.js`. Owner settings remain under
+model-owner RLS. `publish_model(uuid)` checks the authenticated model owner and
+pins a version belonging to that model, then writes the public model, metadata,
+curated parameters and timetable rows into `published_models.public_payload`
+in one transaction. `get_published_model(uuid)` and the public gallery read only
+that snapshot while the row is published. They do not fall back to live data.
+Both migrations and deployment checks are documented in `supabase/migrations/README.md`.
+
+The anonymous simulator reuses parameter resolution, sweep-value application,
+run admission, the replication worker, batch summaries and report generation.
+Admission and complexity estimation use the visitor's actual patched model.
+Closing the simulator cancels its worker. Public report generation sets
+`includeAi: false`; other report callers retain the existing default.
+
 **Version:** 7.5.0  
 **Date:** 2026-06-17  
 **Note:** package.json version is 0.9.0-Beta; this document uses an internal engineering version number.  

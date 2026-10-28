@@ -1,5 +1,29 @@
 # simmodlr — User Guide
 
+## Publishing a model
+
+Owners can open **Access → Set up publishing** to create a separate public page.
+Choose a title, description and saved version, then select the parameters visitors
+may change. Each parameter can have a visitor-friendly label and minimum and maximum
+values. Confirm the disclosure and choose **Publish**. Without a selected version,
+Flow saves the current model as a named release first.
+
+The public page and **Explore published** gallery can be opened without an account.
+Visitors can run replications in their own browser, see the standard DES result
+summary and download an HTML report. Public reports do not contact an AI service.
+Visitor runs do not change the author's model or run history.
+
+Saving publication settings prepares the next release. Choose **Publish again** to
+replace the public release. The published definition and timetable rows stay frozen
+until then, even if the working model or saved timetable is edited or deleted.
+**Withdraw** or **Unpublish** removes public access. Library visibility and
+collaborator permissions continue to work independently of publishing.
+
+Publishing makes the simulation definition readable by anyone with the link.
+External data-source configuration is omitted; public simulations use the released
+values and do not refresh external data. An optional evidence register is shown only
+when it exists in the selected version and the author includes it.
+
 **Version:** 7.9.0  
 **Date:** 2026-08-27  
 **Sprint baseline:** Sprint 89, plus the 2026-08 expert-review remediation work (named scenarios, Business view, Visual Designer alignment guides, Run-canvas scale parity and layout density)  

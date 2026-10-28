@@ -27,6 +27,7 @@ const mockQuery = {
   order: vi.fn().mockReturnThis(),
   limit: vi.fn().mockReturnThis(),
   single: vi.fn().mockResolvedValue({ data: null, error: null }), // Default single return
+  maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
 };
 
 const mockSupabase = {

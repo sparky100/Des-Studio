@@ -54,6 +54,13 @@ const runMeta = {
 };
 
 describe('generateReport', () => {
+  test('creates an anonymous report without contacting an AI provider', async () => {
+    vi.clearAllMocks();
+    const report = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta, { includeAi: false });
+    expect(report).toContain('Test Clinic');
+    expect(report).toContain('195');
+    expect(callLLMOnce).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

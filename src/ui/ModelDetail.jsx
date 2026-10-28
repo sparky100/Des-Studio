@@ -1401,7 +1401,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             onPersistAccess={persistAccess}
             onExportJson={exportJson}
             onExportSimPy={()=>setShowSimPyExport(true)}
-            setField={setField} dirty={dirty}
+            setField={setField} dirty={dirty} validation={validation}
           />
         )}
         {tab==="versions"&&isOwner&&(

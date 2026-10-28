@@ -593,6 +593,9 @@ export function ModelLibrary({
           <p style={{ fontSize: 12, color: C.muted }}>Build and share discrete-event simulation models.</p>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <Btn variant="ghost" onClick={() => { window.location.hash = "#/published"; }} title="Browse models their authors have published — no account needed">
+            Explore published
+          </Btn>
           <Btn variant="ghost" onClick={() => downloadTextFile(buildLLMSchemaPromptPack(), "flow-ai-prompt-pack.md", "text/markdown")}>↓ AI Prompt Pack</Btn>
           <Btn variant="ghost" onClick={() => setShowAiConnect(true)} title="Let your desktop AI app build, check and run Flow models">Connect AI app</Btn>
           <Btn variant="primary" onClick={() => { pendingTemplateDraftRef.current = null; setShowNew(true); }}>+ New Model</Btn>
