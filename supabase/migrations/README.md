@@ -10,7 +10,8 @@ UI with only the first migration.
 
 The second migration aborts if an existing published row does not pin a version
 belonging to its own model. Review and correct those rows before retrying. Valid
-legacy public payloads are frozen as they stand at migration time.
+legacy public payloads are frozen at migration time after removing external
+data-source configuration.
 
 Before release, verify with separate owner, collaborator and anonymous sessions:
 only the owner can publish; direct anonymous table access is denied; public RPCs
