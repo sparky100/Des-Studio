@@ -21,6 +21,7 @@ const versions = vi.hoisted(() => ({
   listVersions: vi.fn(),
   getNextVersion: vi.fn(),
   createVersion: vi.fn(),
+  fetchModelSchedules: vi.fn(),
 }));
 
 vi.mock('../../src/db/published.js', async () => {
@@ -58,6 +59,7 @@ beforeEach(() => {
   publish.listPublishedModelsForOwner.mockResolvedValue([]);
   versions.listVersions.mockResolvedValue([]);
   versions.getNextVersion.mockResolvedValue(1);
+  versions.fetchModelSchedules.mockResolvedValue([]);
   versions.createVersion.mockResolvedValue({ id: "v1", version: 1, name: "Published release v1" });
   publish.savePublishedSettings.mockImplementation(async (id, uid, s) => ({
     id: "pm1", modelId: id, ownerId: uid, status: "draft", exposedParams: [], ...s,
@@ -206,5 +208,20 @@ describe("PublishPanel", () => {
     await waitFor(() => expect(screen.getByText("YOUR OTHER PUBLISHED MODELS")).toBeInTheDocument(), { timeout: 5000 });
     fireEvent.click(screen.getByRole("button", { name: /withdraw a&e model/i }));
     await waitFor(() => expect(publish.withdrawPublishedModel).toHaveBeenCalledWith("m2", "u1"));
+  });
+});
+
+describe("PublishPanel — can a visitor run it?", () => {
+  it("says so when the model runs at its default settings", async () => {
+    renderPanel();
+    const check = await screen.findByTestId("visitor-run-check");
+    expect(check.textContent).toMatch(/Visitors can run this model at its default settings/);
+  });
+
+  it("warns before publishing when a visitor could not run the model", async () => {
+    renderPanel({ model: { ...model, experimentDefaults: { replications: 500, maxSimTime: 100 } } });
+    const check = await screen.findByTestId("visitor-run-check");
+    expect(check.textContent).toMatch(/would not be able to run this model at its default settings/);
+    expect(check.textContent).toMatch(/Number of runs exceeds the published tier limit/);
   });
 });

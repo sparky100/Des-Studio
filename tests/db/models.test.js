@@ -931,36 +931,43 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       );
     });
 
-    it('getShareLink fetches run and model data by token', async () => {
-      const q = supabase.from('share_links');
-      q.single.mockResolvedValueOnce({
-        data: { id: 'link-1', run_id: 'run-1', config: { pinnedWidgets: [] }, created_at: '2026-05-09T12:00:00Z', revoked_at: null },
-        error: null,
-      });
-      supabase.from('simulation_runs').single.mockResolvedValueOnce({
-        data: { id: 'run-1', ran_at: '2026-05-09T11:00:00Z', replications: 1, seed: 42, total_arrived: 100, total_served: 95, total_reneged: 5, avg_wait_time: 8.2, avg_service_time: 1.1, max_simulation_time: 500, warmup_period: 0, results_json: { summary: { avgWait: 8.2 } } },
-        error: null,
-      });
-      supabase.from('des_models').single.mockResolvedValueOnce({
-        data: { name: 'Test Model', entity_types: [{ id: 'et_1', name: 'Customer' }], queues: [{ id: 'q_1', name: 'Queue' }] },
+    it('getShareLink reads the dashboard through get_shared_dashboard, not the tables', async () => {
+      supabase.rpc.mockResolvedValueOnce({
+        data: {
+          status: 'ok',
+          link: { id: 'link-1', config: { pinnedWidgets: [] }, created_at: '2026-05-09T12:00:00Z' },
+          run: { id: 'run-1', ran_at: '2026-05-09T11:00:00Z', replications: 1, seed: 42, total_arrived: 100, total_served: 95, total_reneged: 5, avg_wait_time: 8.2, avg_service_time: 1.1, max_simulation_time: 500, warmup_period: 0, results_json: { summary: { avgWait: 8.2 } } },
+          model: { name: 'Test Model', entity_types: [{ id: 'et_1', name: 'Customer' }], queues: [{ id: 'q_1', name: 'Queue' }], graph: { nodes: [] } },
+        },
         error: null,
       });
 
       const result = await getShareLink('abc-123');
 
+      expect(supabase.rpc).toHaveBeenCalledWith('get_shared_dashboard', { p_token: 'abc-123' });
+      expect(supabase.from).not.toHaveBeenCalledWith('share_links');
+      expect(supabase.from).not.toHaveBeenCalledWith('simulation_runs');
+      expect(supabase.from).not.toHaveBeenCalledWith('des_models');
       expect(result.share.token).toBe('abc-123');
       expect(result.run.avgWaitTime).toBe(8.2);
       expect(result.model.name).toBe('Test Model');
       expect(result.model.entityTypes).toHaveLength(1);
+      expect(result.model.graph).toEqual({ nodes: [] });
     });
 
     it('getShareLink throws when share link is revoked', async () => {
-      supabase.from('share_links').single.mockResolvedValueOnce({
-        data: { id: 'link-1', run_id: 'run-1', config: {}, created_at: '2026-05-09T12:00:00Z', revoked_at: '2026-05-09T13:00:00Z' },
-        error: null,
-      });
-
+      supabase.rpc.mockResolvedValueOnce({ data: { status: 'revoked' }, error: null });
       await expect(getShareLink('revoked-token')).rejects.toThrow('revoked');
+    });
+
+    it('getShareLink throws when share link has expired', async () => {
+      supabase.rpc.mockResolvedValueOnce({ data: { status: 'expired' }, error: null });
+      await expect(getShareLink('old-token')).rejects.toThrow('expired');
+    });
+
+    it('getShareLink throws when the token matches nothing', async () => {
+      supabase.rpc.mockResolvedValueOnce({ data: null, error: null });
+      await expect(getShareLink('nope')).rejects.toThrow('not found');
     });
 
     it('fetchRunHistory does not select or depend on results_json for list rows', async () => {
