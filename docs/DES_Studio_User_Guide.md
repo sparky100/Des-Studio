@@ -328,6 +328,13 @@ Scenarios store only the parameter changes, not a copy of the model, so they alw
 
 **Voice input.** The AI chat dialogs — Help Assistant, Simulation Assistant, and AI Diagnostics — each include a microphone button. Clicking it activates the browser's Speech Recognition API so you can dictate questions or describe changes verbally instead of typing.
 
+**Run assistant.** In **Run → ✦ AI**, choose **Design** for model questions,
+**Diagnose** to investigate a completed run, or **Debug** for a conversation about
+the run trace. In the side panel, compact overlay and phone view, the title,
+close button and mode controls stay above the scrolling content. Scroll the
+active mode to read longer findings or conversations. Diagnose and Debug need
+a completed run; switching back to Design retains your unsent model question.
+
 **Live warnings during runs.** While a simulation is running in Step or Auto Run mode, a compact **⚠** badge appears in the run bar. This badge monitors real-time conditions — resource utilisation exceeding safe thresholds, server starvation, and queue capacity warnings — and updates as the run progresses. Click the badge to expand a panel showing each active warning with the affected resource or queue and the current value. Warnings are only active during execution and disappear once the run completes. They are designed to help you spot problems early without waiting for the full results analysis.
 
 **Key Findings.** After a run completes, the Results workspace surfaces critical health flags in a **Key Findings** section above all other results. These flags automatically detect:
