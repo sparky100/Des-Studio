@@ -789,7 +789,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     selectNode(nodeId);
     const node = graph.nodes.find(n => n.id === nodeId);
     focusSectionRef.current?.(node?.sectionId);
-    fitNodeRef.current?.(nodeId);
+    requestAnimationFrame(() => fitNodeRef.current?.(nodeId));
   };
 
   // Jump to a node picked from the search results dropdown, then clear the query.

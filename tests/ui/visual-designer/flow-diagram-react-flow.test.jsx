@@ -467,3 +467,79 @@ describe('FlowDiagramReactFlow — auto-fill height (F9C.9)', () => {
     expect(wrapper.style.height).toBe('1176px'); // 1200 - 0 - 24
   });
 });
+
+describe('FlowDiagramReactFlow collapsed submodels', () => {
+  function sectionGraph() {
+    const graph = makeSectionedGraph();
+    graph.sectionPanels = [
+      { id: 'panel-a', sectionId: 'sec-a', name: 'Acquisition', x: -24, y: -46, width: 208, height: 225 },
+      { id: 'panel-b', sectionId: 'sec-b', name: 'Billing', x: 76, y: -46, width: 208, height: 225 },
+    ];
+    graph.edges = [
+      { id: 'ab1', from: graph.nodes[0].id, to: graph.nodes[1].id },
+      { id: 'ab2', from: graph.nodes[0].id, to: graph.nodes[1].id },
+    ];
+    return graph;
+  }
+
+  it('collapses a section, shows counted links, and expands back to exact positions', () => {
+    const graph = sectionGraph();
+    const before = structuredClone(graph);
+    render(<FlowDiagramReactFlow graph={graph} canEdit />);
+    act(() => screen.getByRole('button', { name: 'Collapse section: Acquisition' }).click());
+    expect(screen.queryByText('Queue 1')).not.toBeInTheDocument();
+    expect(screen.getByText('Queue 2')).toBeInTheDocument();
+    expect(screen.getByText('2 connections')).toBeInTheDocument();
+    expect(latestFlowProps.current.nodes.find(n => n.id === 'submodel:sec-a')).toMatchObject({ selectable: false, draggable: false, connectable: false });
+    act(() => screen.getByRole('button', { name: 'Expand to edit Acquisition' }).click());
+    expect(screen.getByText('Queue 1')).toBeInTheDocument();
+    expect(latestFlowProps.current.nodes.filter(n => n.type === 'desNode').map(n => n.position)).toEqual(graph.nodes.map(n => ({ x: n.x, y: n.y })));
+    expect(graph).toEqual(before);
+  });
+
+  it('makes compact overview read-only for synthetic objects and excludes view layout from persistence', () => {
+    const onNodeSelect = vi.fn(), onEdgeSelect = vi.fn(), onNodesMove = vi.fn(), onConnectNodes = vi.fn(), onViewportChange = vi.fn(), onNodeMeasure = vi.fn();
+    render(<FlowDiagramReactFlow graph={sectionGraph()} canEdit onNodeSelect={onNodeSelect} onEdgeSelect={onEdgeSelect} onNodesMove={onNodesMove} onConnectNodes={onConnectNodes} onViewportChange={onViewportChange} onNodeMeasure={onNodeMeasure} onResetLayout={vi.fn()} />);
+    act(() => screen.getByRole('button', { name: 'Compact overview' }).click());
+    onNodeSelect.mockClear(); onEdgeSelect.mockClear();
+    const props = latestFlowProps.current;
+    const summary = props.nodes.find(n => n.data?.virtual);
+    const aggregate = props.edges[0];
+    expect(screen.queryByRole('button', { name: /Layout/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Queue 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Queue 2')).not.toBeInTheDocument();
+    expect(aggregate).toMatchObject({ selectable: false, focusable: false });
+    expect(aggregate.data.onDelete).toBeNull();
+    act(() => {
+      props.onNodeClick({}, summary);
+      props.onEdgeClick({}, aggregate);
+      props.onNodeDragStop({}, summary, [summary]);
+      props.onConnect({ source: summary.id, target: 'queue:queue-2' });
+      props.onMoveEnd({}, { x: 2, y: 3, zoom: 0.3 });
+      props.onMoveEnd({}, { x: 4, y: 5, zoom: 0.4 });
+      props.onNodesChange([{ type: 'dimensions', id: summary.id, dimensions: { width: 160, height: 155 } }]);
+    });
+    expect(onNodeSelect).not.toHaveBeenCalled();
+    expect(onEdgeSelect).not.toHaveBeenCalled();
+    expect(onNodesMove).not.toHaveBeenCalled();
+    expect(onConnectNodes).not.toHaveBeenCalled();
+    expect(onViewportChange).not.toHaveBeenCalled();
+    expect(onNodeMeasure).not.toHaveBeenCalled();
+    act(() => screen.getByRole('button', { name: 'Expand all' }).click());
+    expect(screen.getByText('Queue 1')).toBeInTheDocument();
+    expect(screen.getByText('Queue 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Layout/ })).toBeInTheDocument();
+  });
+
+  it('allows read-only viewers to collapse and search focus to reveal a hidden member', () => {
+    const focusSectionRef = { current: null };
+    render(<FlowDiagramReactFlow graph={sectionGraph()} focusSectionRef={focusSectionRef} matchedNodeIds={new Set(['queue:queue-1'])} errorNodeIds={new Map([['queue:queue-1', ['Check queue']]])} />);
+    act(() => screen.getByRole('button', { name: 'Compact overview' }).click());
+    const summary = latestFlowProps.current.nodes.find(n => n.id === 'submodel:sec-a');
+    expect(summary.style.opacity).toBe(1);
+    expect(screen.getByTitle('Check queue')).toBeInTheDocument();
+    act(() => focusSectionRef.current('sec-a'));
+    expect(screen.getByText('Queue 1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand to edit Billing' })).toBeInTheDocument();
+  });
+});

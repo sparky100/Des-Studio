@@ -93,6 +93,7 @@ These are non-negotiable. Removing any one of them makes simmodlr no longer a si
 | M11 | **Define editors** | Structured UI editors for all model element types, accessed via the **Define** button in the Design toolbar. Sub-sections: Entity Types, Queues, Bound Events, Conditional Events, Schedules, Model Data. No free-text logic fields. |
 | M12 | **Run history** | Every run saved (summary + model snapshot). Reproducible via stored seed and schedule reference. |
 | M13 | **Supabase persistence** | Models, runs, schedules, and user accounts stored in PostgreSQL with Row-Level Security. |
+| M14 | **Collapsible sub-models** | Existing sections can collapse individually or form a compact Draw overview. Directed cross-section connections carry graph-link counts. Expand to edit restores exact detailed positions. Temporary view state leaves the canonical model and simulation unchanged. |
 
 ### Should-have
 

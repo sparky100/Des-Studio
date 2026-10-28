@@ -499,6 +499,8 @@ The effect reads e.g. `ASSIGN(TraumaQueue, Doctor, PREEMPT, PRIORITY(priority))`
 Once sections are defined:
 - Every table editor (Entity Types, Queues, Bound Events, Conditional Events) shows a coloured filter tab strip — click a section name to see only its elements.
 - The Visual Designer shows a small coloured dot on each node that belongs to a section.
+- In Draw, use **Collapse** on a section panel to replace its members with a sub-model card. **Compact overview** collapses all populated sections and arranges the overview automatically; ungrouped nodes stay visible. Arrows between cards show the number of directed graph connections, not customers, probabilities, or simulation throughput. Opposite directions remain separate.
+- Choose **Expand to edit** on a card or **Expand all** to return to the detailed nodes at their exact original positions. Collapse state and overview positions are temporary. Layout reset and canvas dragging are unavailable while sections are collapsed; expand all before arranging the detailed canvas. Search and validation navigation reveal the relevant section. Read-only viewers can also collapse and expand sections. The **Sections** toggle hides the section view and reveals the detailed diagram.
 - Sections are pure metadata: the simulation engine is unchanged and all elements remain part of the same flat model.
 
 ### 4.8 Export results for external analysis

@@ -1,0 +1,423 @@
+{
+  "name": "UK Electricity Supplier — Customer Lifecycle (DES)",
+  "description": "Granular discrete-event layer over the Loop supplier model. Gain: quote, credit, 14-day cooling-off, objection. Bill/Collect: monthly pass per segment with payment miss. Debt chain: Overdue (0-90d) -> Arrears 90+ -> Repayment plan -> 3-year write-off, with per-entity £ balance as exposure-at-default and realised bad debt via COST. Loss: mid-contract churn, term-end departure, bad-debt write-off. Sections separate Acquisition, Billing & Payment, Collections & Arrears, Loss. 5-year warm-up then 5 years measured. ~2,500-entity sample = 1/100 of the 250k book.",
+  "visibility": "private",
+  "timeUnit": "days",
+  "epoch": "2026-10-01T00:00:00",
+  "skills": [],
+  "entityTypes": [
+    {
+      "id": "et_customer",
+      "name": "Customer",
+      "role": "customer",
+      "count": 0,
+      "attrDefs": [
+        { "name": "creditScore", "valueType": "number", "defaultValue": 50, "mutable": false,
+          "dist": "Uniform", "distParams": { "min": "0", "max": "100" } },
+        { "name": "objectionRisk", "valueType": "number", "defaultValue": 0.5, "mutable": false,
+          "dist": "Uniform", "distParams": { "min": "0", "max": "1" } },
+        { "name": "segment", "valueType": "string", "defaultValue": "Fixed", "mutable": false,
+          "dist": "Categorical", "distParams": { "options": [
+            { "value": "Default", "weight": 12 },
+            { "value": "Fixed", "weight": 65 },
+            { "value": "Prepay", "weight": 8 },
+            { "value": "SmartToU", "weight": 15 }
+          ] } },
+        { "name": "usageProfile", "valueType": "string", "defaultValue": "Standard", "mutable": false,
+          "dist": "Categorical", "distParams": { "options": [
+            { "value": "Standard", "weight": 72 },
+            { "value": "Economy7", "weight": 8 },
+            { "value": "EV", "weight": 10 },
+            { "value": "HeatPump", "weight": 5 },
+            { "value": "Solar", "weight": 5 }
+          ] } },
+        { "name": "vintage", "valueType": "number", "defaultValue": 0, "mutable": true },
+        { "name": "balance", "valueType": "number", "defaultValue": 0, "mutable": true },
+        { "name": "monthlyBill", "valueType": "number", "defaultValue": 70, "mutable": true }
+      ]
+    }
+  ],
+  "queues": [
+    { "id": "q_quote", "name": "Quote Queue", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_cooling", "name": "CoolingOff Queue", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_default", "name": "Default Active", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_fixed", "name": "Fixed Active", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_prepay", "name": "Prepay Active", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_tou", "name": "SmartToU Active", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_od_default", "name": "Default Overdue", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_od_fixed", "name": "Fixed Overdue", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_od_prepay", "name": "Prepay Overdue", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_od_tou", "name": "SmartToU Overdue", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_arr90", "name": "Arrears 90 Plus", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_plan", "name": "Repayment Plan", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_exit", "name": "Exit Queue", "customerType": "Customer", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_writeoff", "name": "WriteOff Queue", "customerType": "Customer", "capacity": "", "discipline": "FIFO" }
+  ],
+  "bEvents": [
+    {
+      "id": "b_arrive",
+      "name": "Prospect Requests Quote",
+      "description": "A prospective switcher requests a quote; stamps vintage to the clock.",
+      "scheduledTime": "0",
+      "effect": ["ARRIVE(Customer, Quote Queue)", "SET_ATTR(vintage, clock)"],
+      "schedules": [ { "eventId": "b_arrive", "dist": "Exponential", "distParams": { "mean": "0.745" } } ]
+    },
+    {
+      "id": "b_credit_pass",
+      "name": "Credit Passed",
+      "description": "Credit check passed; route into the cooling-off period.",
+      "scheduledTime": "9999",
+      "effect": [],
+      "probabilisticRouting": [ { "probability": 1.0, "queueName": "CoolingOff Queue" } ],
+      "schedules": []
+    },
+    {
+      "id": "b_credit_fail",
+      "name": "Credit Rejected",
+      "description": "Credit check failed; the prospect never becomes a customer.",
+      "scheduledTime": "9999",
+      "effect": ["COMPLETE()"],
+      "schedules": []
+    },
+    {
+      "id": "b_cooling_done",
+      "name": "CoolingOff Survived",
+      "description": "Cooling-off ended without objection; switch in to the segment they signed up for.",
+      "scheduledTime": "9999",
+      "effect": [],
+      "routing": [
+        { "condition": { "variable": "Entity.segment", "operator": "==", "value": "Default" }, "queueName": "Default Active" },
+        { "condition": { "variable": "Entity.segment", "operator": "==", "value": "Fixed" }, "queueName": "Fixed Active" },
+        { "condition": { "variable": "Entity.segment", "operator": "==", "value": "Prepay" }, "queueName": "Prepay Active" },
+        { "condition": { "variable": "Entity.segment", "operator": "==", "value": "SmartToU" }, "queueName": "SmartToU Active" }
+      ],
+      "defaultQueueName": "Default Active",
+      "schedules": []
+    },
+    {
+      "id": "b_objection",
+      "name": "Objection Cancel",
+      "description": "The customer objected during cooling-off; the switch is cancelled.",
+      "scheduledTime": "9999",
+      "effect": ["COMPLETE()"],
+      "schedules": []
+    },
+    {
+      "id": "b_month_default",
+      "name": "Default Month End",
+      "description": "Monthly pass: bill and collect, then stay, miss, fix, or churn.",
+      "scheduledTime": "9999",
+      "effect": [],
+      "probabilisticRouting": [
+        { "probability": 0.008, "queueName": "Default Overdue" },
+        { "probability": 0.005, "queueName": "Fixed Active" },
+        { "probability": 0.0062, "queueName": "Exit Queue" },
+        { "probability": 0.9808, "queueName": "Default Active" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_month_fixed",
+      "name": "Fixed Month End",
+      "description": "Monthly pass: bill and collect, then stay, miss, churn, or reach term end (depart or lapse).",
+      "scheduledTime": "9999",
+      "effect": [],
+      "probabilisticRouting": [
+        { "probability": 0.003, "queueName": "Fixed Overdue" },
+        { "probability": 0.0125, "queueName": "Default Active" },
+        { "probability": 0.0125, "queueName": "Exit Queue" },
+        { "probability": 0.0029, "queueName": "Exit Queue" },
+        { "probability": 0.9691, "queueName": "Fixed Active" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_month_prepay",
+      "name": "Prepay Month End",
+      "description": "Monthly pass: bill and collect, then stay, miss, fix, or churn.",
+      "scheduledTime": "9999",
+      "effect": [],
+      "probabilisticRouting": [
+        { "probability": 0.011, "queueName": "Prepay Overdue" },
+        { "probability": 0.0017, "queueName": "Fixed Active" },
+        { "probability": 0.0046, "queueName": "Exit Queue" },
+        { "probability": 0.9827, "queueName": "Prepay Active" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_month_tou",
+      "name": "SmartToU Month End",
+      "description": "Monthly pass: bill and collect, then stay, miss, or churn.",
+      "scheduledTime": "9999",
+      "effect": [],
+      "probabilisticRouting": [
+        { "probability": 0.002, "queueName": "SmartToU Overdue" },
+        { "probability": 0.0092, "queueName": "Exit Queue" },
+        { "probability": 0.9888, "queueName": "SmartToU Active" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_od_default",
+      "name": "Default Overdue Resolved",
+      "description": "After the 90-day cure window: record exposure and cure or age to 90+.",
+      "scheduledTime": "9999",
+      "effect": ["SET_ATTR(balance, Entity.monthlyBill * 3)"],
+      "probabilisticRouting": [
+        { "probability": 0.5, "queueName": "Default Active" },
+        { "probability": 0.5, "queueName": "Arrears 90 Plus" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_od_fixed",
+      "name": "Fixed Overdue Resolved",
+      "description": "After the 90-day cure window: record exposure and cure or age to 90+.",
+      "scheduledTime": "9999",
+      "effect": ["SET_ATTR(balance, Entity.monthlyBill * 3)"],
+      "probabilisticRouting": [
+        { "probability": 0.6, "queueName": "Fixed Active" },
+        { "probability": 0.4, "queueName": "Arrears 90 Plus" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_od_prepay",
+      "name": "Prepay Overdue Resolved",
+      "description": "After the 90-day cure window: record exposure and cure or age to 90+.",
+      "scheduledTime": "9999",
+      "effect": ["SET_ATTR(balance, Entity.monthlyBill * 3)"],
+      "probabilisticRouting": [
+        { "probability": 0.4, "queueName": "Prepay Active" },
+        { "probability": 0.6, "queueName": "Arrears 90 Plus" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_od_tou",
+      "name": "SmartToU Overdue Resolved",
+      "description": "After the 90-day cure window: record exposure and cure or age to 90+.",
+      "scheduledTime": "9999",
+      "effect": ["SET_ATTR(balance, Entity.monthlyBill * 3)"],
+      "probabilisticRouting": [
+        { "probability": 0.65, "queueName": "SmartToU Active" },
+        { "probability": 0.35, "queueName": "Arrears 90 Plus" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_arr90",
+      "name": "Arrears 90 Plus Resolved",
+      "description": "After a year in 90+ arrears: most go onto a repayment plan, a few are written off.",
+      "scheduledTime": "9999",
+      "effect": [],
+      "probabilisticRouting": [
+        { "probability": 0.48, "queueName": "Repayment Plan" },
+        { "probability": 0.52, "queueName": "WriteOff Queue" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_plan",
+      "name": "Repayment Plan Resolved",
+      "description": "After a year on a plan: most repay, some break back into arrears.",
+      "scheduledTime": "9999",
+      "effect": [],
+      "probabilisticRouting": [
+        { "probability": 0.67, "queueName": "Default Active" },
+        { "probability": 0.33, "queueName": "Arrears 90 Plus" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_exit",
+      "name": "Customer Lost",
+      "description": "A customer leaves voluntarily (churn or term-end departure).",
+      "scheduledTime": "9999",
+      "effect": ["COMPLETE()"],
+      "schedules": []
+    },
+    {
+      "id": "b_writeoff",
+      "name": "Debt Written Off",
+      "description": "A customer's arrears are written off; the exposure is a realised bad-debt loss.",
+      "scheduledTime": "9999",
+      "effect": ["COST(Entity.balance)", "COMPLETE()"],
+      "schedules": []
+    }
+  ],
+  "cEvents": [
+    {
+      "id": "c_credit",
+      "name": "Credit Check",
+      "description": "Assess credit; pass if the credit score clears the threshold, otherwise reject.",
+      "priority": 1,
+      "condition": "queue(Quote Queue).length > 0",
+      "effect": ["DELAY(Quote Queue)"],
+      "cSchedules": [
+        { "eventId": "b_credit_pass", "dist": "Fixed", "distParams": { "value": "0" }, "useEntityCtx": true,
+          "when": { "variable": "Entity.creditScore", "operator": ">=", "value": 40 } },
+        { "eventId": "b_credit_fail", "dist": "Fixed", "distParams": { "value": "0" }, "useEntityCtx": true }
+      ]
+    },
+    {
+      "id": "c_cooling",
+      "name": "CoolingOff",
+      "description": "Hold the customer for the 14-day cooling-off period, during which a fraction object.",
+      "priority": 1,
+      "condition": "queue(CoolingOff Queue).length > 0",
+      "effect": ["DELAY(CoolingOff Queue)"],
+      "cSchedules": [
+        { "eventId": "b_objection", "dist": "Fixed", "distParams": { "value": "7" }, "useEntityCtx": true,
+          "when": { "variable": "Entity.objectionRisk", "operator": "<", "value": 0.15 } },
+        { "eventId": "b_cooling_done", "dist": "Fixed", "distParams": { "value": "14" }, "useEntityCtx": true }
+      ]
+    },
+    {
+      "id": "c_month_default",
+      "name": "Default Monthly Cycle",
+      "description": "Advance a default-tariff customer one month (billing cadence).",
+      "priority": 1,
+      "condition": "queue(Default Active).length > 0",
+      "effect": ["DELAY(Default Active)"],
+      "cSchedules": [ { "eventId": "b_month_default", "dist": "Fixed", "distParams": { "value": "30" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_month_fixed",
+      "name": "Fixed Monthly Cycle",
+      "description": "Advance a fixed-term customer one month (billing cadence).",
+      "priority": 1,
+      "condition": "queue(Fixed Active).length > 0",
+      "effect": ["DELAY(Fixed Active)"],
+      "cSchedules": [ { "eventId": "b_month_fixed", "dist": "Fixed", "distParams": { "value": "30" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_month_prepay",
+      "name": "Prepay Monthly Cycle",
+      "description": "Advance a prepayment customer one month (billing cadence).",
+      "priority": 1,
+      "condition": "queue(Prepay Active).length > 0",
+      "effect": ["DELAY(Prepay Active)"],
+      "cSchedules": [ { "eventId": "b_month_prepay", "dist": "Fixed", "distParams": { "value": "30" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_month_tou",
+      "name": "SmartToU Monthly Cycle",
+      "description": "Advance a time-of-use customer one month (billing cadence).",
+      "priority": 1,
+      "condition": "queue(SmartToU Active).length > 0",
+      "effect": ["DELAY(SmartToU Active)"],
+      "cSchedules": [ { "eventId": "b_month_tou", "dist": "Fixed", "distParams": { "value": "30" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_od_default",
+      "name": "Default Overdue Window",
+      "description": "Hold a default customer in arrears for the 90-day cure window.",
+      "priority": 1,
+      "condition": "queue(Default Overdue).length > 0",
+      "effect": ["DELAY(Default Overdue)"],
+      "cSchedules": [ { "eventId": "b_od_default", "dist": "Fixed", "distParams": { "value": "90" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_od_fixed",
+      "name": "Fixed Overdue Window",
+      "description": "Hold a fixed customer in arrears for the 90-day cure window.",
+      "priority": 1,
+      "condition": "queue(Fixed Overdue).length > 0",
+      "effect": ["DELAY(Fixed Overdue)"],
+      "cSchedules": [ { "eventId": "b_od_fixed", "dist": "Fixed", "distParams": { "value": "90" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_od_prepay",
+      "name": "Prepay Overdue Window",
+      "description": "Hold a prepayment customer in arrears for the 90-day cure window.",
+      "priority": 1,
+      "condition": "queue(Prepay Overdue).length > 0",
+      "effect": ["DELAY(Prepay Overdue)"],
+      "cSchedules": [ { "eventId": "b_od_prepay", "dist": "Fixed", "distParams": { "value": "90" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_od_tou",
+      "name": "SmartToU Overdue Window",
+      "description": "Hold a time-of-use customer in arrears for the 90-day cure window.",
+      "priority": 1,
+      "condition": "queue(SmartToU Overdue).length > 0",
+      "effect": ["DELAY(SmartToU Overdue)"],
+      "cSchedules": [ { "eventId": "b_od_tou", "dist": "Fixed", "distParams": { "value": "90" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_arr90",
+      "name": "Arrears 90 Plus Hold",
+      "description": "Hold a customer in 90+ arrears for a year before plan or write-off.",
+      "priority": 1,
+      "condition": "queue(Arrears 90 Plus).length > 0",
+      "effect": ["DELAY(Arrears 90 Plus)"],
+      "cSchedules": [ { "eventId": "b_arr90", "dist": "Fixed", "distParams": { "value": "365" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_plan",
+      "name": "Repayment Plan Hold",
+      "description": "Hold a customer on a repayment plan for a year before repay or break.",
+      "priority": 1,
+      "condition": "queue(Repayment Plan).length > 0",
+      "effect": ["DELAY(Repayment Plan)"],
+      "cSchedules": [ { "eventId": "b_plan", "dist": "Fixed", "distParams": { "value": "365" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_exit",
+      "name": "Lose Customer",
+      "description": "A voluntarily-leaving customer exits the system.",
+      "priority": 0,
+      "condition": "queue(Exit Queue).length > 0",
+      "effect": ["DELAY(Exit Queue)"],
+      "cSchedules": [ { "eventId": "b_exit", "dist": "Fixed", "distParams": { "value": "0" }, "useEntityCtx": true } ]
+    },
+    {
+      "id": "c_writeoff",
+      "name": "Write Off Debt",
+      "description": "A written-off customer exits the system; the exposure is a realised loss.",
+      "priority": 0,
+      "condition": "queue(WriteOff Queue).length > 0",
+      "effect": ["DELAY(WriteOff Queue)"],
+      "cSchedules": [ { "eventId": "b_writeoff", "dist": "Fixed", "distParams": { "value": "0" }, "useEntityCtx": true } ]
+    }
+  ],
+  "stateVariables": [],
+  "containerTypes": [],
+  "goals": [],
+  "experimentDefaults": {
+    "maxSimTime": 3650,
+    "warmupPeriod": 1825,
+    "replications": 10,
+    "liveDataMode": null,
+    "terminationCondition": null
+  },
+  "dataSources": [],
+  "sections": [
+    {
+      "id": "sec_acquisition",
+      "name": "Acquisition",
+      "color": "#4A90D9",
+      "memberIds": ["et_customer", "q_quote", "q_cooling", "b_arrive", "c_credit", "b_credit_pass", "b_credit_fail", "c_cooling", "b_cooling_done", "b_objection"]
+    },
+    {
+      "id": "sec_billing",
+      "name": "Billing & Payment",
+      "color": "#27AE60",
+      "memberIds": ["q_default", "q_fixed", "q_prepay", "q_tou", "c_month_default", "b_month_default", "c_month_fixed", "b_month_fixed", "c_month_prepay", "b_month_prepay", "c_month_tou", "b_month_tou"]
+    },
+    {
+      "id": "sec_collections",
+      "name": "Collections & Arrears",
+      "color": "#F1C40F",
+      "memberIds": ["q_od_default", "q_od_fixed", "q_od_prepay", "q_od_tou", "q_arr90", "q_plan", "q_writeoff", "c_od_default", "b_od_default", "c_od_fixed", "b_od_fixed", "c_od_prepay", "b_od_prepay", "c_od_tou", "b_od_tou", "c_arr90", "b_arr90", "c_plan", "b_plan", "c_writeoff", "b_writeoff"]
+    },
+    {
+      "id": "sec_loss",
+      "name": "Loss",
+      "color": "#E67E22",
+      "memberIds": ["q_exit", "c_exit", "b_exit"]
+    }
+  ]
+}

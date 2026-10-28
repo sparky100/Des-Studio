@@ -522,6 +522,7 @@ export function validateVisualConnection(graph, from, to) {
 }
 
 export function updateGraphLayout(model, derivedGraph, patch = {}) {
+  if (derivedGraph.displayProjection) return model;
   return {
     ...model,
     graph: graphLayoutFromDerivedGraph({
