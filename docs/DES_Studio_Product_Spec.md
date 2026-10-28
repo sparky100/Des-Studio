@@ -124,7 +124,7 @@ Valuable additions already partially implemented or planned for near-term sprint
 
 | # | Feature | Description |
 |---|---------|-------------|
-| C1 | **Real-time data adapters** | REST and schedule-feed adapters that bind live data to distribution parameters. |
+| C1 | **Real-time data adapters (partial)** | REST and schedule-feed adapters resolve inputs before a run. The experimental Data Sources tab is hidden by default pending integration review; `VITE_ENABLE_DATA_SOURCES_TAB=true` restores it after restart/rebuild. Stored configurations and existing execution paths are preserved. Streaming primitives are not connected to normal execution. |
 | C2 | **Actuals tracking** | Plan vs actual deviation per entity. `avgPlanDeviation` in run summary. |
 | C3 | **Magic-link model import** | Encode a model as a URL. Opening the link shows a pre-flight preview and saves to the library with one click. |
 | C4 | **Community gallery** | Browse, tag, fork, and import public models shared by other users. Tag-filter UI and text search shipped for My Models, Public Library, and Community tabs; curator/fork workflow not yet built. |
