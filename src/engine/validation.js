@@ -14,6 +14,7 @@ import { extractQueueNamesFromCondition, hasConditionDefinition, isMeaningfulRou
 import { getPatternInitialCapacity } from "./schedule-pattern.js";
 import { evaluatePredicate, isResolvableExpression } from "./conditions.js";
 import { applyEntityInheritance } from "./entity-inheritance.js";
+import { backingRegisterWarnings } from "./backing-warnings.js";
 import { PREEMPT_ASSIGN_PATTERN, parsePreemptOptions, preemptRankAttrs } from "./preemptAssign.js";
 
 export const DEFAULT_MAX_SIM_TIME = 500;
@@ -2338,6 +2339,9 @@ export function validateModel(model) {
       }
     });
   });
+
+  // V-BACK-01 to V-BACK-05: evidence and assumptions registers (warnings only).
+  for (const w of backingRegisterWarnings(model)) warnings.push(w);
 
   return { errors, warnings };
 }
