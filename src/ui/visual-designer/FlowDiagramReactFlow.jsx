@@ -314,7 +314,7 @@ function toFlowNode(node) {
 }
 
 function toFlowEdge(edge, C, FONT) {
-  const isLoop          = edge.loop === true;
+  const isLoop          = edge.loop === true || edge.returning === true;
   const isFallback      = edge.label === "fallback";
   const isOverflow      = edge.label === "overflow";
   const isProbabilistic = typeof edge.label === "string" && edge.label.endsWith("%");
@@ -323,9 +323,11 @@ function toFlowEdge(edge, C, FONT) {
   const isSpecial   = isLoop || isFallback || isOverflow;
   const strokeColor = isSpecial ? C.amber : C.muted;
 
-  const label = isLoop
-    ? `↻ rework (max ${edge.maxLoopCount || 3}x)`
-    : edge.label || undefined;
+  const label = edge.returning
+    ? edge.label
+    : isLoop
+      ? `↻ rework (max ${edge.maxLoopCount || 3}x)`
+      : edge.label || undefined;
 
   return {
     id: edge.id,
@@ -489,6 +491,7 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
 
 export function FlowDiagramReactFlow({
   graph: canonicalGraph,
+  viewStorageKey = null,
   canEdit = false,
   selectedNodeId = null,
   selectedNodeIds = [],
@@ -514,8 +517,11 @@ export function FlowDiagramReactFlow({
   const [dragOver, setDragOver] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [focusedSectionId, setFocusedSectionId] = useState(null);
-  const [collapsedIds, setCollapsedIds] = useState(new Set());
-  const [compact, setCompact] = useState(false);
+  const savedView = useMemo(() => {
+    try { return viewStorageKey ? localStorage.getItem(viewStorageKey) : null; } catch { return null; }
+  }, [viewStorageKey]);
+  const [collapsedIds, setCollapsedIds] = useState(() => savedView === "sections" ? new Set((canonicalGraph.sectionPanels || []).map(p => p.sectionId)) : new Set());
+  const [compact, setCompact] = useState(() => savedView === "sections" && (canonicalGraph.sectionPanels?.length ?? 0) > 0);
   const graph = useMemo(() => projectCollapsedSections(canonicalGraph, showSections ? collapsedIds : new Set(), { compact }), [canonicalGraph, collapsedIds, showSections, compact]);
   const projected = graph !== canonicalGraph;
   const changeCollapse = useCallback((ids, overview = false) => {
@@ -525,11 +531,13 @@ export function FlowDiagramReactFlow({
     onEdgeSelect?.(null);
     setCollapsedIds(ids);
     setCompact(overview);
-  }, [onNodeSelect, onNodeSelectionChange, onEdgeSelect]);
+    try { if (viewStorageKey) localStorage.setItem(viewStorageKey, overview ? "sections" : "detail"); } catch { /* storage unavailable (private mode) — non-critical */ }
+  }, [onNodeSelect, onNodeSelectionChange, onEdgeSelect, viewStorageKey]);
   const expandSection = useCallback(id => {
     setCollapsedIds(prev => new Set([...prev].filter(value => value !== id)));
     setCompact(false);
-  }, []);
+    try { if (viewStorageKey) localStorage.setItem(viewStorageKey, "detail"); } catch { /* storage unavailable (private mode) — non-critical */ }
+  }, [viewStorageKey]);
   const [alignmentGuides, setAlignmentGuides] = useState([]);
   // Live positions for nodes mid-drag. Nodes are fully controlled (positions
   // derive from the graph), so without echoing React Flow's position changes

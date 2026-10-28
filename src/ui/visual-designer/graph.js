@@ -101,7 +101,7 @@ function withLayout(nodes, edges, graph = {}) {
   // Exclude loop (back) edges — dagre handles them poorly and they're
   // already styled separately in the renderer.
   edges.forEach(edge => {
-    if (!edge.loop && g.hasNode(edge.from) && g.hasNode(edge.to)) {
+    if (!edge.loop && !edge.returning && g.hasNode(edge.from) && g.hasNode(edge.to)) {
       g.setEdge(edge.from, edge.to);
     }
   });
@@ -648,6 +648,28 @@ export function summarizeSectionContents(nodes = []) {
     .join(" · ");
 }
 
+// Depth-first walk from the entry nodes (sources, or cards holding one). An edge
+// that points back at a node still on the walk's stack goes against the flow of
+// entities: the Sections view draws it as a dashed return arrow and lays cards
+// out as if it were absent, so stages read left to right in process order.
+export function findReturnEdges(nodes, edges, isEntry) {
+  const out = new Map(nodes.map(n => [n.id, []]));
+  edges.forEach(e => { if (out.has(e.from) && out.has(e.to)) out.get(e.from).push(e); });
+  const state = new Map();
+  const back = new Set();
+  const visit = id => {
+    state.set(id, 1);
+    for (const e of out.get(id)) {
+      if (state.get(e.to) === 1) back.add(e.id);
+      else if (!state.has(e.to)) visit(e.to);
+    }
+    state.set(id, 2);
+  };
+  nodes.filter(isEntry).forEach(n => { if (!state.has(n.id)) visit(n.id); });
+  nodes.forEach(n => { if (!state.has(n.id)) visit(n.id); });
+  return back;
+}
+
 export function projectCollapsedSections(graph, collapsedIds = new Set(), { compact = false } = {}) {
   const panels = (graph.sectionPanels || []).filter(p => collapsedIds.has(p.sectionId));
   if (!panels.length) return graph;
@@ -687,12 +709,15 @@ export function projectCollapsedSections(graph, collapsedIds = new Set(), { comp
     aggregate.count++;
     aggregate.memberEdgeIds.push(edge.id);
   });
-  aggregates.forEach(edge => edges.push({ ...edge, label: `${edge.count} connection${edge.count === 1 ? "" : "s"}` }));
+  aggregates.forEach(edge => edges.push({ ...edge, label: `${edge.count} link${edge.count === 1 ? "" : "s"}` }));
+  const hasSource = new Set(panels.filter(p => memberNodes.get(p.sectionId).some(n => n.type === VISUAL_NODE_TYPES.SOURCE)).map(p => `submodel:${p.sectionId}`));
+  const returning = compact ? findReturnEdges(nodes, edges, node => node.type === VISUAL_NODE_TYPES.SOURCE || hasSource.has(node.id)) : new Set();
+  const flowEdges = compact ? edges.map(edge => returning.has(edge.id) ? { ...edge, returning: true, label: `↩ ${edge.label}` } : edge) : edges;
   return {
     ...graph,
     displayProjection: true,
-    nodes: compact ? withLayout(nodes, edges) : nodes,
-    edges,
+    nodes: compact ? withLayout(nodes, flowEdges) : nodes,
+    edges: flowEdges,
     sectionPanels: (graph.sectionPanels || []).filter(p => !collapsedIds.has(p.sectionId)),
   };
 }

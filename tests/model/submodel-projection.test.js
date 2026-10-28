@@ -41,10 +41,33 @@ describe('collapsed section display projection', () => {
   it('aggregates directed links, hides internal links and retains ungrouped nodes', () => {
     const projected = projectCollapsedSections(graph, new Set(['a', 'b']));
     expect(projected.nodes.map(n => n.id)).toEqual(['outside', 'submodel:a', 'submodel:b']);
-    expect(projected.edges.find(e => e.from === 'submodel:a' && e.to === 'submodel:b')).toMatchObject({ count: 2, label: '2 connections', memberEdgeIds: ['forward1', 'forward2'] });
+    expect(projected.edges.find(e => e.from === 'submodel:a' && e.to === 'submodel:b')).toMatchObject({ count: 2, label: '2 links', memberEdgeIds: ['forward1', 'forward2'] });
     expect(projected.edges.find(e => e.from === 'submodel:b' && e.to === 'submodel:a')).toMatchObject({ count: 1 });
     expect(projected.edges.some(e => e.from === e.to)).toBe(false);
     expect(projected.edges.find(e => e.from === 'outside' && e.to === 'submodel:a')).toMatchObject({ count: 1 });
+  });
+
+  it('lays stages out in flow order and draws backward links as return arrows', () => {
+    const flow = freeze({
+      nodes: [
+        { id: 'end', type: 'sink', sectionId: 'c', x: 0, y: 0 },
+        { id: 'work', type: 'activity', sectionId: 'b', x: 0, y: 0 },
+        { id: 'in', type: 'source', sectionId: 'a', x: 0, y: 0 },
+      ],
+      edges: [
+        { id: 'fwd1', from: 'in', to: 'work' },
+        { id: 'fwd2', from: 'work', to: 'end' },
+        { id: 'back', from: 'work', to: 'in' },
+      ],
+      sectionPanels: ['a', 'b', 'c'].map(sectionId => ({ sectionId, name: sectionId.toUpperCase(), x: 0, y: 0 })),
+    });
+    const compact = projectCollapsedSections(flow, new Set(['a', 'b', 'c']), { compact: true });
+    const x = id => compact.nodes.find(n => n.id === `submodel:${id}`).x;
+    expect(x('a')).toBeLessThan(x('b'));
+    expect(x('b')).toBeLessThan(x('c'));
+    expect(compact.edges.filter(e => e.returning).map(e => e.from + '>' + e.to)).toEqual(['submodel:b>submodel:a']);
+    expect(compact.edges.find(e => e.returning).label).toBe('↩ 1 link');
+    expect(compact.nodes.find(n => n.id === 'submodel:a').sublabel).toBe('1 source');
   });
 
   it('supports partial collapse and exact nonmutating expansion after compact layout', () => {
