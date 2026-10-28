@@ -34,6 +34,12 @@ const FULL = {
   timeUnit: "days",
   epoch: "2026-01-01T00:00:00.000Z",
   notes: "## Notes\n\nKeep me.",
+  evidence: [{ id: "ev_arrivals", name: "ED audit", type: "data", description: "Hourly arrivals", source: "Trust BI 4471", strength: 0.6, dateCaptured: "2025-11-03", lastVerified: "2026-09-01", dataPoints: [{ time: 0, value: 4 }] }],
+  assumptions: [{ id: "as_fifo", name: "FIFO triage", text: "No clinical prioritisation.", contested: true, confidence: 0.3 }],
+  backingLinks: [
+    { id: "bl_1", recordType: "evidence", recordId: "ev_arrivals", targetType: "b_event", targetId: "b1", targetPath: "schedules[0].distParams.mean" },
+    { id: "bl_2", recordType: "assumption", recordId: "as_fifo", targetType: "queue", targetId: "q1" },
+  ],
 };
 
 it("the test model sets every listed field", () => {
@@ -41,6 +47,27 @@ it("the test model sets every listed field", () => {
     expect(FULL[field], field).toBeTruthy();
     if (MODEL_JSON_ARRAY_FIELDS.includes(field)) expect(FULL[field].length, field).toBeGreaterThan(0);
   }
+});
+
+describe("evidence and assumptions are optional", () => {
+  beforeEach(() => { vi.clearAllMocks(); __resetDesModelsSchemaModeForTests(); });
+
+  it("a model without records saves no register keys and reads back empty", async () => {
+    supabase.from("des_models").update.mockReturnThis();
+    supabase.from("des_models").eq.mockReturnThis();
+    supabase.from("des_models").select.mockResolvedValueOnce({ data: [{ id: "m1", owner_id: "u1" }], error: null });
+    const { evidence: _e, assumptions: _a, backingLinks: _b, ...bare } = FULL;
+
+    await saveModel(bare, "u1");
+    const row = supabase.from("des_models").update.mock.calls.at(-1)[0];
+    expect(row.model_json).not.toHaveProperty("evidence");
+    expect(row.model_json).not.toHaveProperty("assumptions");
+    expect(row.model_json).not.toHaveProperty("backingLinks");
+    const loaded = norm(JSON.parse(JSON.stringify({ ...row, id: "m1" })));
+    expect(loaded.evidence).toEqual([]);
+    expect(loaded.assumptions).toEqual([]);
+    expect(loaded.backingLinks).toEqual([]);
+  });
 });
 
 describe("every model_json field survives", () => {

@@ -2898,6 +2898,55 @@ For full integration guidance see `docs/simmodlr_RealTime_Integration_Guide.md`.
 
 ---
 
+## 16. Evidence and Assumptions (Optional)
+
+A model can record what backs each of its parameters. This is documentation: nothing in the engine reads it, and a model runs identically with or without it. It is also what separates a model that *looks* sourced from one that *is*, so treat it with care.
+
+### 16.1 The three arrays
+
+```
+evidence:     [{ id, name, type, description, source, strength, dateCaptured, lastVerified? }]
+assumptions:  [{ id, name, text, contested, confidence }]
+backingLinks: [{ id, recordType, recordId, targetType, targetId, targetPath? }]
+```
+
+- `evidence.type` is `data`, `literature`, `expert_judgment` or `anecdote`. `strength` and `confidence` are numbers from 0 to 1 (Low 0.3, Medium 0.6, High 0.9).
+- `name` is a short title. `description` (evidence) or `text` (assumption) is the detail.
+- `recordType` is `evidence` or `assumption`; `recordId` names a record in the matching array.
+- `targetType` is one of the backable element types: `entity_type`, `queue`, `b_event`, `c_event`, `state_variable`, `container_type`, `distance`, `goal`, `data_source`. A goal is addressed by its index as a string.
+- `targetPath` narrows a link to one parameter, for example `schedules[0].distParams.mean` on a B-event, or `capacity` on a queue. Omit it to back the whole element. Use a path only where the schema defines it (see the parameter names in each section).
+
+Limitations are recorded as assumptions. Set `contested: true` on one where stakeholders disagree.
+
+### 16.2 The rule that governs all of this
+
+**Cite evidence only when you have a real source. Otherwise record an assumption.**
+
+- Use `evidence` only when the source is one the user gave you in this conversation (a named dataset, report, audit, or the user's own figures), or a published reference the user can check by name. Copy the source as the user stated it. Do not add a page number, a date, a sample size or a dataset name you have not been given.
+- Never invent a source, a reference, a date, a sample size or a data series. A fabricated citation is worse than none, because it looks checked.
+- Any number that is not from a source is an assumption: record it in `assumptions` with `text` saying what was assumed and why, and attach it to the parameter it sets.
+- Use `dataPoints` only when the user supplied the observed values.
+- If the user gives no source for a value, say so in the reply and ask them whether they have one.
+
+### 16.3 Example
+
+A B-event `Arrive` schedules arrivals at a mean of 12 per hour. The user said this came from last year's audit log.
+
+```json
+{
+  "evidence": [{ "id": "ev_audit", "name": "Audit log, last year", "type": "data",
+    "description": "Arrival rate as the user supplied it.", "source": "Last year's audit log (as named by the user)",
+    "strength": 0.6, "dateCaptured": "" }],
+  "assumptions": [{ "id": "as_fifo", "name": "First come, first served", "text": "Patients are seen in arrival order; no clinical prioritisation.", "contested": true, "confidence": 0.3 }],
+  "backingLinks": [
+    { "id": "bl_arrival", "recordType": "evidence", "recordId": "ev_audit", "targetType": "b_event", "targetId": "arrive", "targetPath": "schedules[0].distParams.mean" },
+    { "id": "bl_fifo", "recordType": "assumption", "recordId": "as_fifo", "targetType": "queue", "targetId": "q_triage" }
+  ]
+}
+```
+
+The arrival rate has a source. The triage order is an assumption, and it is contested, so the model should say so when it reports results.
+
 ## Core Principle
 
 An LLM generating a simmodlr model is **not done** when it has written JSON —

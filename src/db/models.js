@@ -133,6 +133,9 @@ export function norm(r) {
     dataSources:    modelJson.dataSources ?? [],
     sections:       modelJson.sections ?? [],
     exposedParams:  modelJson.exposedParams ?? [],
+    evidence:       modelJson.evidence ?? [],
+    assumptions:    modelJson.assumptions ?? [],
+    backingLinks:   modelJson.backingLinks ?? [],
     owner_id:       r.owner_id,
     owner:          r.owner_id,
     createdAt:      r.created_at,
@@ -164,6 +167,9 @@ function modelJsonFromModel(model = {}) {
   if (model.dataSources?.length) json.dataSources = model.dataSources;
   if (model.sections?.length) json.sections = model.sections;
   if (model.exposedParams?.length) json.exposedParams = model.exposedParams;
+  if (model.evidence?.length) json.evidence = model.evidence;
+  if (model.assumptions?.length) json.assumptions = model.assumptions;
+  if (model.backingLinks?.length) json.backingLinks = model.backingLinks;
   if (model.notes) json.notes = model.notes;
   return json;
 }
