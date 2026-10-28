@@ -28,6 +28,33 @@ export const PUBLISH_STATUS = Object.freeze({
   WITHDRAWN: "withdrawn",
 });
 
+/** The licences an owner can publish under. */
+export const PUBLISH_LICENCES = Object.freeze([
+  { value: "all-rights-reserved", label: "All rights reserved" },
+  { value: "cc-by-4.0",           label: "Creative Commons Attribution 4.0" },
+  { value: "cc-by-sa-4.0",        label: "Creative Commons Attribution-ShareAlike 4.0" },
+  { value: "mit",                 label: "MIT licence" },
+  { value: "cc0-1.0",             label: "Public domain (CC0)" },
+]);
+
+/**
+ * A licence's readable name. The stored value is a slug; people should never
+ * be shown "cc-by-sa-4.0".
+ * @param {string|null|undefined} value
+ */
+export function licenceLabel(value) {
+  return PUBLISH_LICENCES.find(l => l.value === value)?.label || value || "All rights reserved";
+}
+
+/**
+ * Escape a typed search for use inside ILIKE: `%` and `_` are wildcards and
+ * `\` is its escape character, and someone searching "50%" means the text.
+ * @param {string} text
+ */
+export function escapeLikePattern(text) {
+  return String(text).replace(/[\\%_]/g, ch => `\\${ch}`);
+}
+
 /** The categories a published model can be listed under. */
 export const PUBLISH_CATEGORIES = Object.freeze([
   { value: "healthcare",    label: "Healthcare" },
@@ -263,7 +290,7 @@ export async function fetchPublishedModel(modelId) {
 export async function fetchPublishedModelList(options = {}) {
   const { data, error } = await supabase.rpc("list_published_models", {
     p_category: options.category || null,
-    p_search: options.search || null,
+    p_search: options.search ? escapeLikePattern(options.search) : null,
     p_limit: options.limit || 50,
   });
   if (error) throw error;

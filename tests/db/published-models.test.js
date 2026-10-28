@@ -19,9 +19,11 @@ import { MODEL_JSON_FIELDS } from "../../src/model/modelJsonFields.js";
 import {
   PUBLISH_STATUS,
   deletePublishedModel,
+  escapeLikePattern,
   fetchPublishedModel,
   fetchPublishedModelList,
   getPublishedSettings,
+  licenceLabel,
   listPublishedModelsForOwner,
   normalizePublished,
   publishModel,
@@ -336,5 +338,39 @@ describe("the published_models migration", () => {
     expect(fn).toMatch(/nullif\(pub\.released_schedules,\s*'\[\]'::jsonb\)/i);
     // The snapshot column exists.
     expect(MIGRATION).toMatch(/released_schedules\s+jsonb\s+not null default '\[\]'::jsonb/i);
+  });
+});
+
+describe("the gallery search", () => {
+  it("escapes ILIKE wildcards so a search means the text it contains", () => {
+    expect(escapeLikePattern("50%")).toBe("50\\%");
+    expect(escapeLikePattern("a_b")).toBe("a\\_b");
+    expect(escapeLikePattern("a\\b")).toBe("a\\\\b");
+    expect(escapeLikePattern("plain text")).toBe("plain text");
+  });
+
+  it("sends the escaped search to the listing function", async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: [], error: null });
+    await fetchPublishedModelList({ search: "100%_done" });
+    expect(supabase.rpc).toHaveBeenCalledWith("list_published_models", expect.objectContaining({ p_search: "100\\%\\_done" }));
+  });
+
+  it("sends no search when there is none", async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: [], error: null });
+    await fetchPublishedModelList({});
+    expect(supabase.rpc).toHaveBeenCalledWith("list_published_models", expect.objectContaining({ p_search: null }));
+  });
+});
+
+describe("licenceLabel", () => {
+  it("never shows a slug for a known licence", () => {
+    expect(licenceLabel("cc-by-sa-4.0")).toBe("Creative Commons Attribution-ShareAlike 4.0");
+    expect(licenceLabel("mit")).toBe("MIT licence");
+    expect(licenceLabel("all-rights-reserved")).toBe("All rights reserved");
+  });
+
+  it("falls back to the stored text for an unknown licence and to all rights reserved for none", () => {
+    expect(licenceLabel("custom-terms")).toBe("custom-terms");
+    expect(licenceLabel(null)).toBe("All rights reserved");
   });
 });

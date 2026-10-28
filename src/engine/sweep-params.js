@@ -171,6 +171,11 @@ export function enumerateSweepableParams(model) {
   }
 
   // 4. C-Event distribution parameters
+  // One row per (activity, parameter): the path has no schedule index, and
+  // applySweepValues sets the key on every one of the activity's schedules, so
+  // an activity that starts several follow-on events (e.g. pass / fail) would
+  // otherwise list the same control, with the same path, once per schedule.
+  const seenCEventParams = new Set();
   for (const c of (model.cEvents || [])) {
     (c.cSchedules || []).forEach((/** @type {any} */ s, /** @type {number} */ si) => {
       if (!s.distParams) return;
@@ -196,6 +201,9 @@ export function enumerateSweepableParams(model) {
         });
       } else {
         for (const [paramKey, paramValue] of Object.entries(s.distParams)) {
+          const seenKey = `${c.id}\u0000${paramKey}`;
+          if (seenCEventParams.has(seenKey)) continue;
+          seenCEventParams.add(seenKey);
           params.push({
             type: "cEventDistParam",
             targetId: c.id,

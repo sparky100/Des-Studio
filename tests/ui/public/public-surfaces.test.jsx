@@ -18,7 +18,7 @@ vi.mock('../../../src/db/published.js', async () => {
   return { ...actual, ...published };
 });
 
-import { PublicModelPage } from '../../../src/ui/public/PublicModelPage.jsx';
+import { PublicModelPage, summariseSections } from '../../../src/ui/public/PublicModelPage.jsx';
 import { PublicGallery } from '../../../src/ui/public/PublicGallery.jsx';
 
 const modelJson = {
@@ -88,11 +88,62 @@ describe('PublicModelPage', () => {
     expect(screen.getAllByText(/by A Consultant/).length).toBeGreaterThan(0);
   });
 
-  it('leads with where the numbers come from', async () => {
+  it('says where the numbers come from, without making the score the headline', async () => {
     render(<PublicModelPage modelId="m1" onBack={vi.fn()} />);
     await waitFor(() => expect(screen.getByText(/where the numbers come from/i)).toBeInTheDocument());
-    // The coverage percentage is the headline claim.
     expect(screen.getByText(/backed by a source you can check/i)).toBeInTheDocument();
+  });
+
+  it('shows the model and lets a visitor run it before it explains anything', async () => {
+    render(<PublicModelPage modelId="m1" onBack={vi.fn()} />);
+    await screen.findByRole('button', { name: /run this model/i }, { timeout: 5000 });
+    const text = document.body.textContent;
+    const at = label => text.indexOf(label);
+    expect(at('THE MODEL')).toBeGreaterThan(-1);
+    expect(at('THE MODEL')).toBeLessThan(at('RUN IT'));
+    expect(at('RUN IT')).toBeLessThan(at('WHAT THIS MODEL IS'));
+    expect(at('WHAT THIS MODEL IS')).toBeLessThan(at('WHERE THE NUMBERS COME FROM'));
+  });
+
+  it('draws the model as a diagram a visitor can read', async () => {
+    render(<PublicModelPage modelId="m1" onBack={vi.fn()} />);
+    const diagram = await screen.findByRole('img', { name: /diagram of the model/i });
+    expect(diagram.textContent).toMatch(/Waiting Room/);
+    // Counted in plain English, singular and plural.
+    expect(diagram.getAttribute('aria-label')).toMatch(/1 queue\b/);
+    expect(diagram.getAttribute('aria-label')).not.toMatch(/activitys|1 arrivals/);
+  });
+
+  it('does not show a 0% score when no sources have been recorded', async () => {
+    published.fetchPublishedModel.mockResolvedValue({ ...payload, registers: { evidence: [], assumptions: [], backingLinks: [] } });
+    render(<PublicModelPage modelId="m1" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('A&E department, 24 hours')).toBeInTheDocument());
+    expect(screen.queryByText(/backed by a source you can check/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0%/)).not.toBeInTheDocument();
+  });
+
+  it('shows the licence by name, once', async () => {
+    render(<PublicModelPage modelId="m1" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText(/cite this model/i)).toBeInTheDocument());
+    expect(screen.queryByText(/cc-by-4\.0/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Creative Commons Attribution 4\.0/)).toHaveLength(1);
+  });
+
+  it('explains how the model is organised when it has sections', async () => {
+    published.fetchPublishedModel.mockResolvedValue({
+      ...payload,
+      model: { ...modelJson, sections: [{ id: 's1', name: 'Arrival and waiting', color: '#4A90D9', description: 'Where patients arrive and wait.', memberIds: ['q1', 'b1'] }] },
+    });
+    render(<PublicModelPage modelId="m1" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText(/how it.s organised/i)).toBeInTheDocument());
+    expect(screen.getByText('Where patients arrive and wait.')).toBeInTheDocument();
+    expect(screen.getByText('1 queue · 1 arrival or event')).toBeInTheDocument();
+  });
+
+  it('leaves out the organisation panel when the model has no sections', async () => {
+    render(<PublicModelPage modelId="m1" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('A&E department, 24 hours')).toBeInTheDocument());
+    expect(screen.queryByText(/how it.s organised/i)).not.toBeInTheDocument();
   });
 
   it('shows the evidence and assumption register', async () => {
@@ -188,5 +239,20 @@ describe('PublicGallery', () => {
     published.fetchPublishedModelList.mockResolvedValue([]);
     render(<PublicGallery onBack={vi.fn()} onOpenModel={vi.fn()} />);
     await waitFor(() => expect(screen.getByText(/nothing published here yet/i)).toBeInTheDocument());
+  });
+});
+
+describe('summariseSections', () => {
+  it('counts a section\'s members by kind and passes its description through', () => {
+    const out = summariseSections({
+      queues: [{ id: 'q1' }, { id: 'q2' }], cEvents: [{ id: 'c1' }], bEvents: [{ id: 'b1' }], entityTypes: [{ id: 'et1' }],
+      sections: [{ id: 's', name: 'Intake', description: 'd', memberIds: ['q1', 'q2', 'c1', 'et1', 'unknown'] }],
+    });
+    expect(out).toEqual([{ id: 's', name: 'Intake', color: undefined, description: 'd', counts: '2 queues · 1 activity · 1 resource type' }]);
+  });
+
+  it('ignores unnamed sections and a missing list', () => {
+    expect(summariseSections({ sections: [{ id: 'x', memberIds: [] }] })).toEqual([]);
+    expect(summariseSections(undefined)).toEqual([]);
   });
 });
