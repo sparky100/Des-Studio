@@ -656,6 +656,52 @@ describe("deriveGraphFromModel — back-edge detection (F12.6)", () => {
     expect(graph.edges.find(e => e.from === "queue:q-b" && e.to === "activity:activity2").loop).toBeFalsy();
   });
 
+  describe("loops inside a section", () => {
+    const reworkModel = sections => ({
+      queues: [
+        { id: "q-a", name: "Queue A", customerType: "Patient", discipline: "FIFO" },
+        { id: "q-b", name: "Queue B", customerType: "Patient", discipline: "FIFO" },
+      ],
+      bEvents: [
+        { id: "b1-complete", name: "B1 Complete", scheduledTime: "9999", effect: "RELEASE(Server1, Queue B)", schedules: [] },
+        { id: "b2-complete", name: "B2 Complete", scheduledTime: "9999", effect: "RELEASE(Server2, Queue A)", schedules: [] },
+      ],
+      cEvents: [
+        { id: "activity1", name: "Activity 1", priority: 1,
+          condition: "queue(Queue A).length > 0 AND idle(Server1).count > 0",
+          effect: "ASSIGN(Queue A, Server1)",
+          cSchedules: [{ eventId: "b1-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+        { id: "activity2", name: "Activity 2", priority: 2,
+          condition: "queue(Queue B).length > 0 AND idle(Server2).count > 0",
+          effect: "ASSIGN(Queue B, Server2)",
+          cSchedules: [{ eventId: "b2-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+      ],
+      sections,
+    });
+
+    it("labels a loop edge with its activity name and loop limit", () => {
+      const loop = deriveGraphFromModel(reworkModel([])).edges.find(e => e.loop);
+      expect(loop.loopLabel).toBe("\u21bb Activity 2 (up to 3\u00d7)");
+    });
+
+    it("gives a loop inside one section a lane within the section box", () => {
+      const members = ["q-a", "q-b", "activity1", "activity2"];
+      const graph = deriveGraphFromModel(reworkModel([{ id: "s", name: "S", color: "#f00", memberIds: members }]));
+      const loop = graph.edges.find(e => e.loop);
+      const panel = graph.sectionPanels.find(p => p.sectionId === "s");
+      expect(loop.railY).toBeGreaterThan(panel.y);
+      expect(loop.railY).toBeLessThan(panel.y + panel.height);
+    });
+
+    it("leaves a loop that crosses sections to the shared rail", () => {
+      const graph = deriveGraphFromModel(reworkModel([
+        { id: "s1", name: "One", color: "#f00", memberIds: ["q-a", "activity1"] },
+        { id: "s2", name: "Two", color: "#0f0", memberIds: ["q-b", "activity2"] },
+      ]));
+      expect(graph.edges.find(e => e.loop).railY).toBeUndefined();
+    });
+  });
+
   it("does not mark a diamond's join edges even when an unrelated cycle exists elsewhere in the same model", () => {
     const model = {
       queues: [

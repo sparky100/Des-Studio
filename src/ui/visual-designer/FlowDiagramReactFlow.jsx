@@ -326,7 +326,7 @@ function toFlowEdge(edge, C, FONT) {
   const label = edge.returning
     ? edge.label
     : isLoop
-      ? `↻ rework (max ${edge.maxLoopCount || 3}x)`
+      ? edge.loopLabel || `↻ rework (max ${edge.maxLoopCount || 3}x)`
       : edge.label || undefined;
 
   return {
@@ -684,7 +684,7 @@ export function FlowDiagramReactFlow({
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
 
-  const loopRailYById = useMemo(() => computeLoopRailYById(graph.nodes, graph.edges), [graph.nodes, graph.edges]);
+  const loopRailYById = useMemo(() => computeLoopRailYById(graph.nodes, graph.edges, graph.sectionPanels), [graph.nodes, graph.edges, graph.sectionPanels]);
 
   const edges = useMemo(() => {
     return (graph.edges || []).map(e => {

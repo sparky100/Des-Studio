@@ -585,9 +585,27 @@ export function deriveGraphFromModel(model = {}) {
 
   const layoutedNodes = withLayout(dedupedNodes, dedupedEdges, graph);
 
+  // A loop that starts and ends inside one section is drawn inside that section's box:
+  // each gets its own lane under the members, and the box grows to hold the lanes.
+  // Every loop is also named for the activity that repeats.
+  const placed = new Map(layoutedNodes.map(n => [n.id, n]));
+  const internalLoops = new Map();
+  dedupedEdges.forEach(edge => {
+    if (!edge.loop) return;
+    const from = placed.get(edge.from);
+    const to = placed.get(edge.to);
+    edge.loopLabel = `\u21bb ${from?.label || "Loop"} (up to ${edge.maxLoopCount || 3}\u00d7)`;
+    if (from?.sectionId && from.sectionId === to?.sectionId) {
+      if (!internalLoops.has(from.sectionId)) internalLoops.set(from.sectionId, []);
+      internalLoops.get(from.sectionId).push(edge);
+    }
+  });
+
   // Compute bounding-box panel metadata for each section that has placed members.
   const SECTION_PAD = 24;
   const SECTION_LABEL_H = 22;
+  const LOOP_LANE_H = 28;
+  const LOOP_LANE_FIRST = 18;
   const sectionPanels = sections.map(sec => {
     const members = layoutedNodes.filter(n => n.sectionId === sec.id);
     if (!members.length) return null;
@@ -595,6 +613,8 @@ export function deriveGraphFromModel(model = {}) {
     const minY = Math.min(...members.map(n => n.y));
     const maxX = Math.max(...members.map(n => n.x + NODE_WIDTH));
     const maxY = Math.max(...members.map(n => n.y + NODE_HEIGHT));
+    const loops = internalLoops.get(sec.id) || [];
+    loops.forEach((edge, i) => { edge.railY = maxY + LOOP_LANE_FIRST + i * LOOP_LANE_H; });
     return {
       id: `section-panel:${sec.id}`,
       sectionId: sec.id,
@@ -604,7 +624,7 @@ export function deriveGraphFromModel(model = {}) {
       x: minX - SECTION_PAD,
       y: minY - SECTION_PAD - SECTION_LABEL_H,
       width: (maxX - minX) + SECTION_PAD * 2,
-      height: (maxY - minY) + SECTION_PAD * 2 + SECTION_LABEL_H,
+      height: (maxY - minY) + SECTION_PAD * 2 + SECTION_LABEL_H + loops.length * LOOP_LANE_H,
     };
   }).filter(Boolean);
 

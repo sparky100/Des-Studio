@@ -508,13 +508,15 @@ function toFlowNode(node) {
 
 function toFlowEdge(edge, C) {
   // Sections view: one arrow per pair of stages; links back to an earlier stage are dashed.
-  const returning = edge.returning === true;
+  // Loops and return links share Draw's dashed amber look, so a customer coming back reads the same in both.
+  const returning = edge.returning === true || edge.loop === true;
   const stroke = returning ? C.amber : C.muted;
+  const label = edge.virtual ? edge.label : edge.loop ? edge.loopLabel : undefined;
   return {
     id: edge.id,
     source: edge.from,
     target: edge.to,
-    ...(edge.virtual ? { label: edge.label, labelStyle: { fill: C.text, fontSize: 10 }, labelBgStyle: { fill: C.bg } } : {}),
+    ...(label ? { label, labelStyle: { fill: C.text, fontSize: 10 }, labelBgStyle: { fill: C.bg } } : {}),
     markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
     style: { stroke, strokeWidth: returning ? 2 : 1.5, strokeDasharray: returning ? "8,4" : undefined },
   };
