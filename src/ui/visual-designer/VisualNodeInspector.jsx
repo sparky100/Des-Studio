@@ -11,6 +11,7 @@ import { summarizeBEventEffect } from "../../model/effectSummary.js";
 import { summarizePattern } from "../../engine/schedule-pattern.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { disciplineAttr, disciplineBase } from "../shared/utils.js";
+import { NodeEvidenceSection } from "./NodeEvidenceSection.jsx";
 
 function SelectField({ label, value, onChange, children, disabled }) {
   const { C, FONT } = useTheme();
@@ -275,6 +276,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
         )}
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+        <NodeEvidenceSection model={model} node={node} />
 
       {node.type === VISUAL_NODE_TYPES.SOURCE && bEvent && (
         <>
