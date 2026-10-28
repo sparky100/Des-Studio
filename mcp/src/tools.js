@@ -16,6 +16,8 @@ import { validateModel } from '../../src/engine/validation.js';
 import { estimateRunComplexity, estimateMaxCycles } from '../../src/engine/complexity-estimator.js';
 import { confidenceInterval95, summarizeReplicationResults, SUMMARY_METRICS, pairedTConfidenceInterval, bonferroniCI, buildWaitDistEntry, buildHistogram } from '../../src/engine/statistics.js';
 import { pickModelJsonFields } from '../../src/model/modelJsonFields.js';
+import { backingStatus, buildBackableUnits, coverageSummary, recordDisplayName } from '../../src/engine/backing-links.js';
+import { backingRegisterWarnings } from '../../src/engine/backing-warnings.js';
 import { buildImportLink } from '../../src/utils/importLink.js';
 import { buildKpis, buildGoalGapsFromResults } from '../../src/llm/prompts.js';
 import { enumerateSweepableParams, applySweepValue, isIntegerParamType } from '../../src/engine/sweep-params.js';
@@ -149,6 +151,44 @@ export function validationReport(model) {
 export async function validate(args, folder) {
   const { model } = await modelFrom(args, folder);
   return validationReport(model).text;
+}
+
+// What the model's evidence and assumptions cover, as text: the headline
+// coverage, the arrival and capacity parameters nothing backs, the contested
+// assumptions, and the V-BACK warnings. Read-only.
+export async function evidenceCoverage(args, folder) {
+  const { model } = await modelFrom(args, folder);
+  const opts = { schedules: model.schedules || [] };
+  const summary = coverageSummary(model, opts);
+  const links = model.backingLinks || [];
+  const units = buildBackableUnits(model, opts);
+  const keyUnbacked = units.filter(u => u.kind === 'parameter'
+    && (u.impact === 'arrival' || u.impact === 'capacity')
+    && backingStatus(links, u.targetType, u.targetId, u.targetPath) === 'unbacked');
+  const contested = (model.assumptions || []).filter(a => a.contested);
+  const warnings = backingRegisterWarnings(model);
+  const hasRecords = (model.evidence || []).length + (model.assumptions || []).length > 0;
+
+  const lines = [
+    `Evidence coverage: ${summary.evidenced} of ${summary.total} elements and parameters evidenced (${summary.percentEvidenced}%), ${summary.assumed} assumption only, ${summary.unbacked} unbacked.`,
+  ];
+  if (!hasRecords) {
+    lines.push('', 'Nothing is recorded yet. Give each arrival rate, capacity and routing choice that was not sourced from the user an assumption, and attach it to its parameter in the model JSON (see flow_get_schema section 16).');
+  }
+  if (keyUnbacked.length) {
+    lines.push('', 'Arrival and capacity parameters with no evidence or assumption:');
+    for (const u of keyUnbacked.slice(0, 20)) lines.push(`- ${u.label} · ${u.paramLabel}`);
+    if (keyUnbacked.length > 20) lines.push(`- and ${keyUnbacked.length - 20} more`);
+  }
+  if (contested.length) {
+    lines.push('', 'Contested assumptions:');
+    for (const a of contested) lines.push(`- ${recordDisplayName(a)}: ${a.text || ''}`.trimEnd());
+  }
+  if (warnings.length) {
+    lines.push('', 'Warnings:');
+    for (const w of warnings) lines.push(`- ${w.code}: ${w.message}`);
+  }
+  return lines.join('\n');
 }
 
 // ── Running ────────────────────────────────────────────────────────────────
