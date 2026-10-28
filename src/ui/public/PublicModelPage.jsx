@@ -10,12 +10,13 @@
 // much of it is evidenced. Every other tool publishes parameters; this
 // publishes the provenance of those parameters.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchPublishedModel } from "../../db/published.js";
+import { fetchPublishedModel, licenceLabel } from "../../db/published.js";
 import { coverageSummary } from "../../engine/backing-links.js";
 import { Btn } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { PublicNotFound, PublicShell } from "./publicChrome.jsx";
 import { PublicSimulator } from "./PublicSimulator.jsx";
+import { PublicDiagram } from "./PublicDiagram.jsx";
 
 const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
@@ -38,6 +39,30 @@ const EVIDENCE_TYPE_LABELS = {
   expert_judgment: "Expert judgement",
   anecdote: "Anecdote",
 };
+
+/**
+ * Each section's name, its description when it has one, and what is in it.
+ * Members are element ids; they are counted by kind rather than listed, since
+ * the diagram above already names every element.
+ * @param {Record<string, any>|undefined} model
+ */
+export function summariseSections(model) {
+  const sections = Array.isArray(model?.sections) ? model.sections : [];
+  const kinds = [
+    ["queue", "queues", new Set((model?.queues || []).map(q => q.id))],
+    ["activity", "activities", new Set((model?.cEvents || []).map(c => c.id))],
+    ["arrival or event", "arrivals and events", new Set((model?.bEvents || []).map(b => b.id))],
+    ["resource type", "resource types", new Set((model?.entityTypes || []).map(t => t.id))],
+  ];
+  return sections.filter(sec => sec?.name).map(sec => {
+    const members = sec.memberIds || [];
+    const parts = kinds
+      .map(([one, many, ids]) => [one, many, members.filter(id => ids.has(id)).length])
+      .filter(([, , n]) => n > 0)
+      .map(([one, many, n]) => `${n} ${n === 1 ? one : many}`);
+    return { id: sec.id, name: sec.name, color: sec.color, description: sec.description || "", counts: parts.join(" · ") };
+  });
+}
 
 export function PublicModelPage({ modelId, onBack, onOpenInFlow }) {
   const { C, FONT } = useTheme();
@@ -97,13 +122,13 @@ export function PublicModelPage({ modelId, onBack, onOpenInFlow }) {
   const evidence = registers?.evidence || [];
   const assumptions = registers?.assumptions || [];
   const contested = assumptions.filter(a => a.contested);
+  const sectionSummaries = summariseSections(p.model);
   const publishedDate = p.published_at ? new Date(p.published_at) : null;
 
   const citation = [
     `${p.title}${p.released_version ? `, release v${p.released_version}` : ""}.`,
     p.author ? `Published by ${p.author}.` : null,
     publishedDate ? `Published ${publishedDate.toISOString().slice(0, 10)}.` : null,
-    p.licence && p.licence !== "all-rights-reserved" ? `Licence: ${p.licence}.` : null,
   ].filter(Boolean).join(" ");
 
   const panel = {
@@ -158,34 +183,34 @@ export function PublicModelPage({ modelId, onBack, onOpenInFlow }) {
           </div>
         </div>
 
-        {/* The provenance claim — the thing no competitor publishes */}
-        {coverage && coverage.total > 0 && (
-          <div style={{
-            ...panel,
-            borderColor: coverage.percentEvidenced > 0 ? `${C.green}55` : C.border,
-            display: "flex", flexDirection: "column", gap: 8,
-          }}>
-            <div style={{ fontSize: 10, color: C.muted, fontFamily: SANS, letterSpacing: 1.2, fontWeight: 700 }}>
-              WHERE THE NUMBERS COME FROM
-            </div>
-            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "baseline" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                <span style={{
-                  fontSize: 30, fontWeight: 700, fontFamily: SANS,
-                  color: coverage.percentEvidenced > 0 ? C.green : C.muted,
-                }}>{coverage.percentEvidenced}%</span>
-                <span style={{ fontSize: 12, color: C.muted, fontFamily: SANS }}>
-                  of this model is backed by a source you can check
-                </span>
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 11, color: C.muted, fontFamily: SANS }}>
-              <span style={{ color: C.green }}>{coverage.evidenced} evidenced</span>
-              <span style={{ color: C.amber }}>{coverage.assumed} assumption only</span>
-              <span>{coverage.unbacked} not backed</span>
-            </div>
+        {/* The model at a glance, then run it */}
+        <div style={panel}>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: SANS, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
+            THE MODEL
           </div>
-        )}
+          <PublicDiagram model={p.model} />
+        </div>
+
+        {/* Run it */}
+        <div style={panel}>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: SANS, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
+            RUN IT
+          </div>
+          {simulating ? (
+            <PublicSimulator
+              payload={p}
+              onClose={() => setSimulating(false)}
+            />
+          ) : (
+            <>
+              <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, lineHeight: 1.6, marginBottom: 10 }}>
+                The model runs in your browser — nothing is sent to the publisher, and your changes to the
+                settings below do not affect their copy.
+              </div>
+              <Btn variant="primary" onClick={() => setSimulating(true)}>Run this model</Btn>
+            </>
+          )}
+        </div>
 
         {/* What this model is */}
         {p.description && (
@@ -195,6 +220,45 @@ export function PublicModelPage({ modelId, onBack, onOpenInFlow }) {
             </div>
             <div style={{ fontSize: 13, color: C.text, fontFamily: SANS, lineHeight: 1.75, whiteSpace: "pre-wrap" }}>
               {p.description}
+            </div>
+          </div>
+        )}
+
+        {/* How it's organised */}
+        {sectionSummaries.length > 0 && (
+          <div style={panel}>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: SANS, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>
+              HOW IT&apos;S ORGANISED
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {sectionSummaries.map(sec => (
+                <div key={sec.id} style={{ borderLeft: `3px solid ${sec.color || C.accent}`, paddingLeft: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: SANS }}>{sec.name}</div>
+                  {sec.description && (
+                    <div style={{ fontSize: 12, color: C.text, fontFamily: SANS, lineHeight: 1.6, marginTop: 2 }}>
+                      {sec.description}
+                    </div>
+                  )}
+                  {sec.counts && (
+                    <div style={{ fontSize: 11, color: C.muted, fontFamily: SANS, marginTop: 2 }}>{sec.counts}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Where the numbers come from — a fact about the model, not its headline */}
+        {coverage && coverage.total > 0 && (evidence.length > 0 || assumptions.length > 0) && (
+          <div style={{ ...panel, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: SANS, letterSpacing: 1.2, fontWeight: 700 }}>
+              WHERE THE NUMBERS COME FROM
+            </div>
+            <div style={{ fontSize: 13, color: C.text, fontFamily: SANS, lineHeight: 1.6 }}>
+              {coverage.percentEvidenced}% of this model is backed by a source you can check
+              <span style={{ color: C.muted }}>
+                {" "}({coverage.evidenced} evidenced, {coverage.assumed} assumption only, {coverage.unbacked} not backed).
+              </span>
             </div>
           </div>
         )}
@@ -263,27 +327,6 @@ export function PublicModelPage({ modelId, onBack, onOpenInFlow }) {
           </div>
         )}
 
-        {/* Run it */}
-        <div style={panel}>
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: SANS, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
-            RUN IT
-          </div>
-          {simulating ? (
-            <PublicSimulator
-              payload={p}
-              onClose={() => setSimulating(false)}
-            />
-          ) : (
-            <>
-              <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, lineHeight: 1.6, marginBottom: 10 }}>
-                The model runs in your browser — nothing is sent to the publisher, and your changes to the
-                settings below do not affect their copy.
-              </div>
-              <Btn variant="primary" onClick={() => setSimulating(true)}>Run this model</Btn>
-            </>
-          )}
-        </div>
-
         {/* Release notes */}
         {p.release_notes && (
           <div style={panel}>
@@ -310,7 +353,7 @@ export function PublicModelPage({ modelId, onBack, onOpenInFlow }) {
           <div style={{ fontSize: 11, color: C.muted, fontFamily: SANS, marginTop: 8 }}>
             {p.licence === "all-rights-reserved"
               ? "All rights reserved."
-              : `Licence: ${p.licence}.`}
+              : `Licence: ${licenceLabel(p.licence)}.`}
           </div>
         </div>
       </div>

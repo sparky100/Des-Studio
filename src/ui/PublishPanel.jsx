@@ -19,6 +19,7 @@ import { validateModel } from "../engine/validation.js";
 import { createVersion, fetchModelSchedules, getNextVersion, listVersions } from "../db/models.js";
 import {
   PUBLISH_CATEGORIES,
+  PUBLISH_LICENCES,
   PUBLISH_STATUS,
   buildPublishedSchedulesMap,
   deletePublishedModel,
@@ -29,14 +30,6 @@ import {
   unpublishPublishedModel,
   withdrawPublishedModel,
 } from "../db/published.js";
-
-const LICENCES = [
-  { value: "all-rights-reserved", label: "All rights reserved" },
-  { value: "cc-by-4.0",           label: "Creative Commons Attribution 4.0" },
-  { value: "cc-by-sa-4.0",        label: "Creative Commons Attribution-ShareAlike 4.0" },
-  { value: "mit",                 label: "MIT licence" },
-  { value: "cc0-1.0",             label: "Public domain (CC0)" },
-];
 
 const inputStyle = (C) => ({
   background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4,
@@ -135,7 +128,9 @@ export function PublishPanel({ model, modelId, userId, validation, onClose }) {
         exposedParams: settings.exposedParams,
       });
       setSettings(saved);
-      toastRef.current.success("Publish settings saved");
+      toastRef.current.success(isPublished
+        ? "Settings saved. Press Publish again to show them on the public page."
+        : "Publish settings saved");
     } catch (err) {
       toastRef.current.error(err?.message || "Could not save the publish settings");
     } finally {
@@ -289,7 +284,8 @@ export function PublishPanel({ model, modelId, userId, validation, onClose }) {
         <InfoBox color={C.green}>
           Published {new Date(settings.publishedAt).toLocaleString()}. The public page shows
           release {settings.releasedVersionId ? "pinned to your chosen release" : "of the model as saved"}.
-          Editing the model afterwards does not change what the public sees until you publish again.
+          Editing the model, or changing the title, summary, description, licence, release notes or
+          visitor settings here, does not change what the public sees until you press Publish again.
         </InfoBox>
       )}
 
@@ -365,7 +361,7 @@ export function PublishPanel({ model, modelId, userId, validation, onClose }) {
               aria-label="Published licence"
               style={inputStyle(C)}
             >
-              {LICENCES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+              {PUBLISH_LICENCES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
             </select>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 220px" }}>

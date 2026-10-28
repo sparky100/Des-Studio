@@ -752,3 +752,28 @@ describe("generate2DSweepValues", () => {
     ).toThrow(/2,000 points x 2 replications each/);
   });
 });
+
+describe("enumerateSweepableParams — an activity with several follow-on events", () => {
+  const model = {
+    entityTypes: [{ id: "et_c", name: "Customer", role: "customer", attrDefs: [] }],
+    queues: [], bEvents: [], stateVariables: [],
+    cEvents: [{
+      id: "c_check", name: "Check", priority: 1, condition: "true", effect: "",
+      cSchedules: [
+        { eventId: "b_pass", dist: "Fixed", distParams: { value: "5" }, useEntityCtx: true },
+        { eventId: "b_fail", dist: "Fixed", distParams: { value: "9" }, useEntityCtx: true },
+      ],
+    }],
+  };
+
+  it("lists the activity's parameter once, not once per schedule", () => {
+    const rows = enumerateSweepableParams(model).filter(p => p.targetId === "c_check");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].path).toBe("cEvents.c_check.cSchedules.distParams.value");
+  });
+
+  it("has no two parameters with the same path", () => {
+    const paths = enumerateSweepableParams(model).map(p => p.path);
+    expect(new Set(paths).size).toBe(paths.length);
+  });
+});
