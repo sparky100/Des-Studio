@@ -10,6 +10,7 @@ import { buildProposeStudyPrompt } from "../../llm/prompts.js";
 import { validateStudyProposal } from "../../contracts/study";
 import { enumerateSweepableParams } from "../../engine/sweep-params.js";
 import { saveDiagnosis } from "../../db/models.js";
+import { SPACE } from "../shared/tokens.js";
 
 function getProxyUrl() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -196,7 +197,7 @@ function ChatMessage({ msg }) {
   );
 }
 
-export function DiagnosticsTab({ model, results, onGoToNode, mode = "full", runId = null, userId = null, versionId = null, onProposeStudy = null }) {
+export function DiagnosticsTab({ model, results, onGoToNode, mode = "full", runId = null, userId = null, versionId = null, onProposeStudy = null, inAssistant = false }) {
   const { C, FONT } = useTheme();
   const hasRun = Boolean(results?.summary);
 
@@ -380,7 +381,7 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full", runI
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, ...(inAssistant ? { flexShrink: 0, minWidth: 0, overflowWrap: "anywhere" } : {}) }}>
 
       {/* ── F69.3: Diagnosis panel — hidden in debug mode ── */}
       {mode !== "debug" && <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -463,7 +464,7 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full", runI
               </div>
             )}
 
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Btn variant="ghost" small onClick={() => { setDiagnosisState("idle"); setDiagnosisResult(null); }}>
                 Re-diagnose
               </Btn>
@@ -498,7 +499,7 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full", runI
 
         {/* Message history */}
         {chatMessages.length > 0 && (
-          <div style={{ maxHeight: 360, overflowY: "auto", padding: "4px 0" }}>
+          <div style={inAssistant ? { padding: `${SPACE.xs}px 0` } : { maxHeight: 360, overflowY: "auto", padding: "4px 0" }}>
             {chatMessages.map((msg, i) => <ChatMessage key={i} msg={msg} />)}
             {chatLoading && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
@@ -549,6 +550,7 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full", runI
             rows={2}
             style={{
               flex: 1,
+              minWidth: 0,
               background: C.bg,
               border: `1px solid ${C.border}`,
               borderRadius: 6,

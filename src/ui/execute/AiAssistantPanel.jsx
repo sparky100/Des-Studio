@@ -11,6 +11,7 @@ import { getRunResultsJson } from "../../db/models.js";
 import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { MarkdownContent } from "../shared/MarkdownContent.jsx";
+import { SPACE, RADIUS, TYPO } from "../shared/tokens.js";
 
 function ConfidenceBadge({ confidence }) {
   const { C, FONT } = useTheme();
@@ -1069,6 +1070,7 @@ export const AiAssistantPanel = ({
     : overlay
     ? { flex: 1, minHeight: 0, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
     : { display: "contents" };
+  const containedRun = isRunContext && (sidebar || overlay || mobileFullscreen);
 
   return (
     <aside aria-label="Simulation Assistant" style={overlayStyle}>
@@ -1099,8 +1101,8 @@ export const AiAssistantPanel = ({
           }} />
         </div>
       )}
-      <div style={innerStyle}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
+      <div style={containedRun ? { ...innerStyle, overflowY: "hidden", minWidth: 0 } : innerStyle}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10, ...(isRunContext ? { flexShrink: 0 } : {}) }}>
         <div>
           <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{panelTitle}</div>
           {(sidebar || mobileFullscreen) && !focusedAction && <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.4 }}>{panelSubtitle}</div>}
@@ -1115,6 +1117,24 @@ export const AiAssistantPanel = ({
           >✕</button>
         )}
       </div>
+
+      {isRunContext && (
+        <div role="group" aria-label="Run assistant modes" style={{ display: "flex", flexWrap: "wrap", flexShrink: 0, gap: SPACE.xs, borderBottom: `1px solid ${C.border}`, paddingBottom: SPACE.sm }}>
+          {["design", "diagnose", "debug"].map(mode => (
+            <button key={mode} type="button"
+              aria-pressed={runModeToggle === mode} onClick={() => setRunModeToggle(mode)}
+              style={{ ...TYPO.caption, fontFamily: FONT, fontWeight: 700, cursor: "pointer",
+                background: runModeToggle === mode ? C.accent + "22" : "transparent",
+                border: `1px solid ${runModeToggle === mode ? C.accent : C.border}`,
+                borderRadius: RADIUS.md, color: runModeToggle === mode ? C.accent : C.muted,
+                padding: `${SPACE.xs}px ${SPACE.md}px` }}>
+              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+            </button>
+          ))}
+          {onOpenOptimise && <Btn small variant="ghost" onClick={onOpenOptimise}>{"\u26A1"} Optimise</Btn>}
+        </div>
+      )}
+      <div style={containedRun ? { flex: 1, minHeight: 0, minWidth: 0, overflowY: "auto", overflowWrap: "anywhere", display: "flex", flexDirection: "column", gap: SPACE.md } : { display: "contents" }}>
 
       {/* Starter prompt chips — context-aware, shown in all non-results modes (hidden in run when not design toggle) */}
       {!isResultsContext && (!isRunContext || runModeToggle === "design") && conversationHistory.length === 0 && !isStreaming && (() => {
@@ -1177,7 +1197,7 @@ export const AiAssistantPanel = ({
       {/* Model Q&A — shown in all non-results modes (hidden in run when not design toggle) */}
       {!isResultsContext && (!isRunContext || runModeToggle === "design") && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {onOpenOptimise && (
+          {onOpenOptimise && !isRunContext && (
             <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
               <Btn small variant="ghost" onClick={onOpenOptimise}>{"\u26A1"} Optimise</Btn>
             </div>
@@ -1195,6 +1215,7 @@ export const AiAssistantPanel = ({
               placeholder="e.g. How many queues does this model have?"
               style={{
                 flex: 1, background: C.bg, border: `1px solid ${C.border}`,
+                ...(isRunContext ? { minWidth: 0 } : {}),
                 borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12,
                 padding: "7px 8px", resize: "none", 
                 opacity: isStreaming ? 0.6 : 1,
@@ -1251,38 +1272,14 @@ export const AiAssistantPanel = ({
         </div>
       )}
 
-      {/* Run mode — toggle bar + conditional content */}
-      {isRunContext && (
-        <>
-          <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${C.border}`, paddingBottom: 8, marginBottom: 4 }}>
-            {["design", "diagnose", "debug"].map(mode => (
-              <button key={mode} type="button" onClick={() => setRunModeToggle(mode)}
-                style={{
-                  background: runModeToggle === mode ? C.accent + "22" : "transparent",
-                  border: `1px solid ${runModeToggle === mode ? C.accent : C.border}`,
-                  borderRadius: 5, color: runModeToggle === mode ? C.accent : C.muted,
-                  fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "5px 12px",
-                  cursor: "pointer", letterSpacing: 0.5,
-                }}>
-                {mode.charAt(0).toUpperCase() + mode.slice(1)}
-              </button>
-            ))}
-            {onOpenOptimise && <button type="button" onClick={onOpenOptimise}
-              style={{
-                background: "transparent", border: `1px solid ${C.border}`,
-                borderRadius: 5, color: C.accent, fontFamily: FONT, fontSize: 11, fontWeight: 700,
-                padding: "5px 12px", cursor: "pointer", letterSpacing: 0.5,
-              }}>{"\u26A1"} Optimise</button>}
-          </div>
-          {runModeToggle !== "design" && (
-            <DiagnosticsTab
-              mode={runModeToggle} model={model} results={results}
-              onGoToNode={onDiagnosticsNodeSelect || (() => {})}
-              runId={runId} userId={userId} versionId={currentVersionId}
-              onProposeStudy={onProposeStudy}
-            />
-          )}
-        </>
+      {isRunContext && runModeToggle !== "design" && (
+        <DiagnosticsTab
+          mode={runModeToggle} model={model} results={results}
+          inAssistant={containedRun}
+          onGoToNode={onDiagnosticsNodeSelect || (() => {})}
+          runId={runId} userId={userId} versionId={currentVersionId}
+          onProposeStudy={onProposeStudy}
+        />
       )}
 
       {/* Explain/Analyse — results context only */}
@@ -1328,7 +1325,7 @@ export const AiAssistantPanel = ({
         </div>
       )}
 
-      {!(isResultsContext && activeMode === "refine" && refineStatus !== "loading") && <div ref={responseAreaRef} aria-live="polite" aria-label="AI analysis response" style={{
+      {(!isRunContext || runModeToggle === "design") && !(isResultsContext && activeMode === "refine" && refineStatus !== "loading") && <div ref={responseAreaRef} aria-live="polite" aria-label="AI analysis response" style={{
         flex: 1,
         minHeight: 0,
         background: C.bg,
@@ -1464,6 +1461,7 @@ export const AiAssistantPanel = ({
             )}
           </div>
       </div>}
+      </div>
       </div>
       {!isRunContext && (isStreaming || status === "complete") && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "8px 14px", borderTop: `1px solid ${C.border}` }}>
