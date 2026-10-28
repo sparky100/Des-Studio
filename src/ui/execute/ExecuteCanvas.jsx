@@ -30,6 +30,9 @@ import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { formatReadout } from "../shared/utils.js";
 import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
+import { DockedSidePanel } from "../shared/DockedSidePanel.jsx";
+import { useResizableWidth } from "../shared/ResizeHandle.jsx";
+import { useViewport, BP } from "../shared/hooks.js";
 import { buildServerTypeIndex, deriveActivityLiveData } from "./activityLiveData.js";
 import { effectText } from "../../model/macroParser.js";
 import { computeRoutingBranchStates, computeRoutingSwitchDeps } from "../../model/predicateEvaluate.js";
@@ -655,6 +658,8 @@ export function ExecuteCanvas({
   // Height: auto-fill the viewport by default; a manual drag overrides and is
   // remembered (des.canvas.height), matching how BottomPanel persists its height.
   const canvasWrapRef = useRef(null);
+  const inspectorSize = useResizableWidth({ storageKey: "flow.runInspectorWidth", defaultWidth: 340, min: 280, max: 560 });
+  const isNarrowViewport = useViewport().width < BP.mobile;
   const [autoFillHeight, setAutoFillHeight] = useState(null);
   const [userCanvasHeight, setUserCanvasHeight] = useState(() => {
     try {
@@ -1110,78 +1115,89 @@ export function ExecuteCanvas({
         flashNames={flashSwitches}
       />
 
-      <div
-        ref={canvasWrapRef}
-        aria-label="Execute canvas"
-        style={{
-          height: canvasHeight,
-          width: "100%",
-          background: C.bg,
-          border: `1px solid ${C.border}`,
-          borderRadius: 6,
-          overflow: "hidden",
-        }}
-      >
-        <ReactFlow
-          nodes={flowNodes}
-          edges={flowEdges}
-          nodeTypes={liveNodeTypes}
-          edgeTypes={edgeTypes}
-          {...(drawViewport
-            ? { defaultViewport: drawViewport }
-            : { fitView: true, fitViewOptions: { padding: 0.18, duration: 0 } })}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          elementsSelectable
-          panOnScroll
-          minZoom={0.1}
-          maxZoom={2}
-          proOptions={{ hideAttribution: true }}
-          onNodeClick={(_, node) => {
-            if (node.type === "sectionPanel") return;
-            onNodeSelect?.(node.data?.label ?? null);
-            if (node.type === "queueNode" || node.type === "activityNode" || node.type === "queue" || node.type === "activity") {
-              onNodeDetailSelect?.({
-                nodeType: node.type === "queue" ? "queueNode" : node.type === "activity" ? "activityNode" : node.type,
-                label: node.data?.label ?? node.label ?? null,
-                refId: node.refId ?? node.data?.refId ?? null,
-              });
-            }
-          }}
-          onPaneClick={() => { setFocusedSectionId(null); onNodeSelect?.(null); onNodeDetailSelect?.(null); }}
+      <div style={{
+        display: "flex",
+        position: "relative",
+        height: canvasHeight,
+        width: "100%",
+        background: C.bg,
+        border: `1px solid ${C.border}`,
+        borderRadius: 6,
+        overflow: "hidden",
+      }}>
+        <div
+          ref={canvasWrapRef}
+          aria-label="Execute canvas"
+          style={{ flex: 1, minWidth: 0, height: "100%" }}
         >
-          <Background color={C.border} gap={24} size={1} />
-          <Controls showInteractive={false} />
-          <ExecuteCanvasToolbar
-            fitNodeRef={fitNodeRef}
-            nodeSearchQuery={nodeSearchQuery}
-            onSearchChange={ev => setNodeSearchQuery(ev.target.value)}
-            onSearchKeyDown={ev => {
-              if (ev.key === "Enter" && searchMatches.length === 1) {
-                selectSearchResult(searchMatches[0]);
-              } else if (ev.key === "Escape") {
-                setNodeSearchQuery("");
+          <ReactFlow
+            nodes={flowNodes}
+            edges={flowEdges}
+            nodeTypes={liveNodeTypes}
+            edgeTypes={edgeTypes}
+            {...(drawViewport
+              ? { defaultViewport: drawViewport }
+              : { fitView: true, fitViewOptions: { padding: 0.18, duration: 0 } })}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable
+            panOnScroll
+            minZoom={0.1}
+            maxZoom={2}
+            proOptions={{ hideAttribution: true }}
+            onNodeClick={(_, node) => {
+              if (node.type === "sectionPanel") return;
+              onNodeSelect?.(node.data?.label ?? null);
+              if (node.type === "queueNode" || node.type === "activityNode" || node.type === "queue" || node.type === "activity") {
+                onNodeDetailSelect?.({
+                  nodeType: node.type === "queue" ? "queueNode" : node.type === "activity" ? "activityNode" : node.type,
+                  label: node.data?.label ?? node.label ?? null,
+                  refId: node.refId ?? node.data?.refId ?? null,
+                });
               }
             }}
-            searchMatches={searchMatches}
-            onSelectResult={selectSearchResult}
-            hasSections={(model.sections?.length ?? 0) > 0}
-            showSections={showSections}
-            onToggleSections={() => setShowSections(prev => {
-              const next = !prev;
-              try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch { /* storage unavailable (private mode) — non-critical */ }
-              return next;
-            })}
+            onPaneClick={() => { setFocusedSectionId(null); onNodeSelect?.(null); onNodeDetailSelect?.(null); }}
+          >
+            <Background color={C.border} gap={24} size={1} />
+            <Controls showInteractive={false} />
+            <ExecuteCanvasToolbar
+              fitNodeRef={fitNodeRef}
+              nodeSearchQuery={nodeSearchQuery}
+              onSearchChange={ev => setNodeSearchQuery(ev.target.value)}
+              onSearchKeyDown={ev => {
+                if (ev.key === "Enter" && searchMatches.length === 1) {
+                  selectSearchResult(searchMatches[0]);
+                } else if (ev.key === "Escape") {
+                  setNodeSearchQuery("");
+                }
+              }}
+              searchMatches={searchMatches}
+              onSelectResult={selectSearchResult}
+              hasSections={(model.sections?.length ?? 0) > 0}
+              showSections={showSections}
+              onToggleSections={() => setShowSections(prev => {
+                const next = !prev;
+                try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch { /* storage unavailable (private mode) — non-critical */ }
+                return next;
+              })}
+            />
+          </ReactFlow>
+        </div>
+        <DockedSidePanel
+          open={Boolean(selectedNodeDetail)}
+          size={inspectorSize}
+          resizeLabel="Resize inspector"
+          overlay={isNarrowViewport}
+        >
+          <NodeDetailSidebar
+            selectedNode={selectedNodeDetail}
+            onClose={() => onNodeDetailSelect?.(null)}
+            onEntitySelect={onEntitySelect}
+            snap={snap}
+            serverTypeIndex={serverTypeIndex}
+            model={model}
           />
-        </ReactFlow>
-        <NodeDetailSidebar
-          selectedNode={selectedNodeDetail}
-          onClose={() => onNodeDetailSelect?.(null)}
-          onEntitySelect={onEntitySelect}
-          snap={snap}
-          serverTypeIndex={serverTypeIndex}
-          model={model}
-        />
+        </DockedSidePanel>
       </div>
       <div
         role="separator"

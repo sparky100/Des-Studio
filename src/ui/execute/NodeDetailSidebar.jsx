@@ -3,12 +3,9 @@ import { useEffect, useCallback, useMemo } from "react";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { deriveActivityLiveData } from "./activityLiveData.js";
 
-// Spacing, radius, and z-index tokens (mirrors tokens.js for test compatibility)
+// Spacing and radius tokens (mirrors tokens.js for test compatibility)
 const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 const RADIUS = { sm: 4, md: 6, lg: 10 };
-const Z = { dropdown: 100, tooltip: 150, overlay: 180, modal: 200 };
-
-const SIDEBAR_WIDTH = 380;
 
 function deriveQueueLiveData(snap, label, model) {
   if (!snap) return null;
@@ -372,7 +369,21 @@ function DelayActivityDetail({ label, typeStats, clock, onEntitySelect }) {
 
 export function ActivityDetail({ label, liveData, onEntitySelect }) {
   const { C, FONT } = useTheme();
-  const blocks = liveData?.perType?.length > 1 ? liveData.perType : [liveData || {}];
+
+  // No snapshot until the run is reset or stepped; there are no resource
+  // stats to show yet.
+  if (!liveData) {
+    return (
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: FONT, marginBottom: SPACE.sm }}>{label}</div>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic", padding: SPACE.lg, textAlign: "center" }}>
+          No live data yet. Step or run the model to see this activity.
+        </div>
+      </div>
+    );
+  }
+
+  const blocks = liveData.perType?.length > 1 ? liveData.perType : [liveData];
   const single = blocks.length === 1 ? blocks[0] : null;
 
   if (single?.isDelay) {
@@ -431,21 +442,10 @@ export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect, snap,
 
   return (
     <div style={{
-      position: "absolute", top: 0, right: 0, bottom: 0,
-      width: SIDEBAR_WIDTH, background: C.panel,
-      borderLeft: `1px solid ${C.border}`,
-      boxShadow: "-8px 0 32px rgba(0,0,0,0.4)",
-      zIndex: Z.overlay,
+      flex: 1, minHeight: 0, background: C.panel,
       display: "flex", flexDirection: "column",
       overflow: "hidden",
-      animation: "slideIn 200ms ease",
     }}>
-      <style>{`
-        @keyframes slideIn {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-      `}</style>
       {/* Header — matches VisualNodeInspector */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",

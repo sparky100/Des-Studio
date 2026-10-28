@@ -409,4 +409,32 @@ describe("NodeDetailSidebar", () => {
     fireEvent.click(customerLink);
     expect(onEntitySelect).toHaveBeenCalledWith(10);
   });
+
+  test("shows a no-data message for an activity before the run has a snapshot", () => {
+    renderWithTheme(
+      <NodeDetailSidebar
+        selectedNode={{ nodeType: "activityNode", label: "ServiceActivity", refId: "ce-1" }}
+        onClose={vi.fn()}
+        snap={null}
+        serverTypeIndex={mockServerTypeIndex}
+        model={mockModel}
+      />
+    );
+    expect(screen.getByText("ServiceActivity")).toBeInTheDocument();
+    expect(screen.getByText(/No live data yet/)).toBeInTheDocument();
+  });
+
+  test("fills its container rather than positioning itself over the page", () => {
+    const { container } = renderWithTheme(
+      <NodeDetailSidebar
+        selectedNode={{ nodeType: "queueNode", label: "Queue" }}
+        onClose={vi.fn()}
+        snap={makeQueueSnap()}
+        model={mockModel}
+      />
+    );
+    const panel = container.firstChild;
+    expect(panel.style.position).toBe("");
+    expect(panel.style.flex).toContain("1");
+  });
 });

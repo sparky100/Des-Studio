@@ -11,7 +11,8 @@ import { validateModel } from "../../engine/validation.js";
 import { renameEntityType } from "../../engine/queue-refs.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { NumberInput } from "../shared/NumberInput.jsx";
-import { ResizeHandle, useResizableWidth } from "../shared/ResizeHandle.jsx";
+import { useResizableWidth } from "../shared/ResizeHandle.jsx";
+import { DockedSidePanel } from "../shared/DockedSidePanel.jsx";
 
 // Small 14x14 glyph for each align/distribute action in the Arrange menu.
 // Uses currentColor so it inherits the theme's text/accent color.
@@ -344,7 +345,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   });
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const inspectorSize = useResizableWidth({ storageKey: "flow.drawInspectorWidth", defaultWidth: 280, min: 240, max: 640 });
-  const [inspectorDragging, setInspectorDragging] = useState(false);
   // Measured sizes reported by ReactFlow (dimensions changes) keyed by node id —
   // used by align/distribute as the authoritative node size, falling back to
   // the fixed NODE_* constants before the first measurement arrives.
@@ -1481,32 +1481,18 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
         </div>
 
         {/* ── Inspector (width-animated, auto-hides when no node selected) ── */}
-        <div style={{
-          flexShrink: 0,
-          position: "relative",
-          width: inspectorOpen ? inspectorSize.width : 0,
-          transition: inspectorDragging ? "none" : "width 220ms cubic-bezier(0.4,0,0.2,1)",
-          overflow: "hidden",
-        }}>
-          {inspectorOpen && (
-            <div style={{ position: "absolute", left: 4, top: 0, bottom: 0 }}>
-              <ResizeHandle {...inspectorSize} label="Resize inspector" onDragChange={setInspectorDragging} />
-            </div>
-          )}
-          {/* Fixed inner width prevents content reflow during the slide animation */}
-          <div style={{ width: inspectorSize.width, borderLeft: `1px solid ${C.border}`, height: "100%", display: "flex", flexDirection: "column" }}>
-            <VisualNodeInspector
-              model={model}
-              graph={graph}
-              selectedNodeId={inspectorNodeId}
-              canEdit={canEdit}
-              onPatchNode={patchNode}
-              onDeleteNode={canEdit ? deleteNode : null}
-              onClose={() => setInspectorCollapsed(true)}
-              onGoToDefine={onGoToDefine}
-            />
-          </div>
-        </div>
+        <DockedSidePanel open={inspectorOpen} size={inspectorSize} resizeLabel="Resize inspector">
+          <VisualNodeInspector
+            model={model}
+            graph={graph}
+            selectedNodeId={inspectorNodeId}
+            canEdit={canEdit}
+            onPatchNode={patchNode}
+            onDeleteNode={canEdit ? deleteNode : null}
+            onClose={() => setInspectorCollapsed(true)}
+            onGoToDefine={onGoToDefine}
+          />
+        </DockedSidePanel>
 
         {/* Inspector re-open handle — visible when a node is selected but the inspector is dismissed */}
         {inspectorNodeId && inspectorCollapsed && (
