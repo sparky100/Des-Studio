@@ -14,11 +14,13 @@ import { useTheme } from "./shared/ThemeContext.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { enumerateSweepableParams } from "../engine/sweep-params.js";
 import { coverageSummary } from "../engine/backing-links.js";
+import { checkPublishedRun } from "../engine/published-run-check.js";
 import { validateModel } from "../engine/validation.js";
-import { createVersion, getNextVersion, listVersions } from "../db/models.js";
+import { createVersion, fetchModelSchedules, getNextVersion, listVersions } from "../db/models.js";
 import {
   PUBLISH_CATEGORIES,
   PUBLISH_STATUS,
+  buildPublishedSchedulesMap,
   deletePublishedModel,
   getPublishedSettings,
   listPublishedModelsForOwner,
@@ -54,6 +56,7 @@ export function PublishPanel({ model, modelId, userId, validation, onClose }) {
 
   const [settings, setSettings] = useState(null);
   const [versions, setVersions] = useState([]);
+  const [schedules, setSchedules] = useState([]);
   const [otherPublished, setOtherPublished] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -67,12 +70,14 @@ export function PublishPanel({ model, modelId, userId, validation, onClose }) {
     if (!modelId) return;
     setLoading(true);
     try {
-      const [row, vs] = await Promise.all([
+      const [row, vs, sch] = await Promise.all([
         getPublishedSettings(modelId),
         listVersions(modelId).catch(() => []),
+        fetchModelSchedules(modelId).catch(() => []),
       ]);
       setSettings(row);
       setVersions(vs);
+      setSchedules(sch || []);
     } catch (err) {
       toastRef.current.error(err?.message || "Could not load the publish settings");
     } finally {
@@ -91,6 +96,16 @@ export function PublishPanel({ model, modelId, userId, validation, onClose }) {
 
   const releaseModel = versions.find(version => version.id === settings?.releasedVersionId)?.modelJson || model;
   const coverage = useMemo(() => coverageSummary(releaseModel || {}), [releaseModel]);
+  // The check a visitor's browser will apply, made now, so the owner learns
+  // BEFORE publishing that a visitor could not run the model as it stands.
+  const visitorRun = useMemo(() => {
+    if (!releaseModel) return null;
+    try {
+      return checkPublishedRun(releaseModel, buildPublishedSchedulesMap(schedules));
+    } catch {
+      return null;
+    }
+  }, [releaseModel, schedules]);
   const sweepable = useMemo(() => enumerateSweepableParams(releaseModel || {}), [releaseModel]);
   const liveDataSources = useMemo(() => model?.dataSources || [], [model]);
 
@@ -427,6 +442,36 @@ export function PublishPanel({ model, modelId, userId, validation, onClose }) {
           When included, the register lets visitors read the sources and assumptions behind the published version.
         </InfoBox>
       </div>
+
+      {/* Can a visitor run it? */}
+      {visitorRun && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }} data-testid="visitor-run-check">
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, fontFamily: FONT, letterSpacing: 1 }}>
+            CAN A VISITOR RUN IT?
+          </div>
+          {visitorRun.admission.hardErrors.length > 0 ? (
+            <InfoBox color={C.red}>
+              A visitor would not be able to run this model at its default settings
+              ({visitorRun.settings.replications} runs
+              {visitorRun.settings.maxSimTime ? ` of ${visitorRun.settings.maxSimTime} time units` : ""}):
+              {" "}{visitorRun.admission.hardErrors[0].message} Change the run length or the number of runs
+              in the model's experiment defaults, then save a new version.
+            </InfoBox>
+          ) : visitorRun.admission.warnings.some(w => w.code === "RA8") ? (
+            <InfoBox color={C.amber}>
+              Visitors can run this model at its default settings, but it is heavy
+              (about {Math.round(visitorRun.complexityEstimate.estimatedCEventScans).toLocaleString()} scans
+              per run, {visitorRun.settings.replications} runs), so it may take a while in their browser.
+            </InfoBox>
+          ) : (
+            <InfoBox color={C.accent}>
+              Visitors can run this model at its default settings
+              ({visitorRun.settings.replications} runs
+              {visitorRun.settings.maxSimTime ? ` of ${visitorRun.settings.maxSimTime} time units` : ""}).
+            </InfoBox>
+          )}
+        </div>
+      )}
 
       {/* What a visitor can change */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

@@ -22,8 +22,8 @@ import { resolveExposedParams, clampExposedValue } from "../../engine/exposed-pa
 import { applySweepValues } from "../../engine/sweep-params.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { summarizeReplicationResults } from "../../engine/statistics.js";
-import { estimateRunComplexity, estimateMaxCycles } from "../../engine/complexity-estimator.js";
-import { getRunAdmission } from "../../engine/run-admission.js";
+import { estimateMaxCycles } from "../../engine/complexity-estimator.js";
+import { checkPublishedRun } from "../../engine/published-run-check.js";
 import { CI_METRICS, makeBatchResult } from "../execute/executeHelpers.js";
 import { SummaryCardGrid } from "../results/ResultsWorkspace.jsx";
 import { Btn } from "../shared/components.jsx";
@@ -71,32 +71,11 @@ export function PublicSimulator({ payload, onClose }) {
     return deltas.length ? applySweepValues(model, deltas) : model;
   }, [model, resolved, values]);
 
-  const experimentDefaults = model.experimentDefaults || {};
-  const terminationMode = experimentDefaults.terminationMode === "condition" ? "condition" : "time";
-  const warmupPeriod = experimentDefaults.warmupPeriod ?? 0;
-  const maxSimTime = terminationMode === "condition" ? null : (experimentDefaults.maxSimTime ?? 500);
-  const terminationCondition = terminationMode === "condition" ? experimentDefaults.terminationCondition : null;
-  const desiredReplications = Math.max(1, Number.parseInt(String(experimentDefaults.replications ?? 10), 10) || 10);
-
-  // The estimate is computed WITH the schedules map and handed to the
-  // admission check, the same way the Execute panel does it. Estimating
-  // without the map under-counts a schedule-driven model's arrivals, which
-  // would cap the run short.
-  const complexityEstimate = useMemo(() => estimateRunComplexity(patched, {
-    terminationMode,
-    maxSimTime,
-    replications: desiredReplications,
-    schedulesMap,
-  }), [patched, terminationMode, maxSimTime, desiredReplications, schedulesMap]);
-
-  const admission = useMemo(() => getRunAdmission(patched, {
-    warmupPeriod,
-    maxSimTime,
-    terminationMode,
-    terminationCondition,
-    replications: desiredReplications,
-    complexityEstimate,
-  }), [patched, warmupPeriod, maxSimTime, terminationMode, terminationCondition, desiredReplications, complexityEstimate]);
+  const { settings, complexityEstimate, admission } = useMemo(
+    () => checkPublishedRun(patched, schedulesMap),
+    [patched, schedulesMap]
+  );
+  const { warmupPeriod, maxSimTime, terminationCondition, seed, replications: desiredReplications } = settings;
 
   const blocked = admission.hardErrors.length > 0;
 
@@ -119,7 +98,7 @@ export function PublicSimulator({ payload, onClose }) {
       const handle = runReplications({
         model: patched,
         replications: desiredReplications,
-        baseSeed: experimentDefaults.seed ?? 0,
+        baseSeed: seed,
         warmupPeriod,
         maxSimTime,
         terminationCondition,
@@ -162,7 +141,7 @@ export function PublicSimulator({ payload, onClose }) {
       const report = await generateReport(
         { ...outcome.model, name: payload.title, description: payload.description },
         outcome.batch,
-        { maxSimTime, warmupPeriod, replications: outcome.reps.length, seed: experimentDefaults.seed ?? 0 },
+        { maxSimTime, warmupPeriod, replications: outcome.reps.length, seed },
         { modelDescriptionText: payload.description || payload.summary || "", version: payload.released_version },
         { format: "html", includeAi: false, aggregateStats: outcome.batch.aggregateStats }
       );
@@ -234,7 +213,7 @@ export function PublicSimulator({ payload, onClose }) {
 
       {blocked && (
         <div style={{ ...panel, borderColor: `${C.amber}55`, fontSize: 13, color: C.amber, fontFamily: SANS, lineHeight: 1.6 }}>
-          These settings cannot be run. Reset your changes or ask the author to review the published model.
+          These settings cannot be run{admission.hardErrors[0] ? `: ${admission.hardErrors[0].message}` : "."} Reset your changes or ask the author to review the published model.
         </div>
       )}
 

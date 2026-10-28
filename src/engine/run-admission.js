@@ -22,6 +22,20 @@ export const RUN_ADMISSION_TIERS = Object.freeze({
     maxSimTime: 50000,
     disableTimeSeriesAt: "large",
   }),
+  // A published model runs in the VISITOR's browser, so the cost is the
+  // visitor's machine, not the platform's — the owner's plan is irrelevant and
+  // the free tier (sized to protect the platform) would block ordinary models.
+  // The limits sit at the top of the range so a realistic model runs at its
+  // default settings; the runtime scan cap still stops a runaway replication.
+  published: Object.freeze({
+    id: "published",
+    label: "Published",
+    maxReplications: 30,
+    maxScans: 1000000,
+    maxPlannedRows: 50000,
+    maxSimTime: 200000,
+    disableTimeSeriesAt: "large",
+  }),
   pro: Object.freeze({
     id: "pro",
     label: "Pro",

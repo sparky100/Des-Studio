@@ -767,39 +767,23 @@ export async function createShareLink(runId, userId, config = {}) {
   return { id: data.id, token: data.token, createdAt: data.created_at, expiresAt: data.expires_at };
 }
 
-/** @param {string} token */
+/**
+ * A shared dashboard, by its token. Read through get_shared_dashboard() so a
+ * visitor needs no access to the share_links, simulation_runs or des_models
+ * tables — the function returns exactly what the page shows, and the tables
+ * are not readable by anonymous visitors (or by other users' share links).
+ * @param {string} token
+ */
 export async function getShareLink(token) {
-  const { data: link, error: linkError } = await supabase
-    .from("share_links")
-    .select("id, run_id, config, created_at, revoked_at, expires_at")
-    .eq("token", token)
-    .single();
-  if (linkError) throw linkError;
-  if (!link) throw new Error("Share link not found.");
-  if (link.revoked_at) throw new Error("This share link has been revoked.");
-  if (link.expires_at && new Date(link.expires_at) <= new Date()) throw new Error("This share link has expired.");
+  const { data, error } = await supabase.rpc("get_shared_dashboard", { p_token: token });
+  if (error) throw error;
+  if (!data) throw new Error("Share link not found.");
+  if (data.status === "revoked") throw new Error("This share link has been revoked.");
+  if (data.status === "expired") throw new Error("This share link has expired.");
+  const { link, run, model } = data;
 
   // Fire-and-forget: record the view (non-blocking, best-effort)
   supabase.rpc("increment_share_view", { p_token: token }).then(() => {}, () => {});
-
-  const { data: run, error: runError } = await supabase
-    .from("simulation_runs")
-    .select("id, model_id, ran_at, replications, seed, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, max_simulation_time, warmup_period, results_json, ai_insights, narrative_text, model_description_text")
-    .eq("id", link.run_id)
-    .single();
-  if (runError) throw runError;
-  if (!run) throw new Error("Run not found.");
-
-  const { data: model, error: modelError } = await runDesModelsSelect((selectClause) =>
-    supabase
-      .from("des_models")
-      .select(selectClause)
-      .eq("id", run.model_id)
-      .single()
-  );
-  if (modelError) throw modelError;
-
-  const modelGraph = model.model_json?.graph || null;
 
   return {
     share: {
@@ -829,7 +813,7 @@ export async function getShareLink(token) {
       name: model.name,
       entityTypes: model.entity_types || [],
       queues: model.queues || [],
-      graph: modelGraph,
+      graph: model.graph || null,
     },
   };
 }
