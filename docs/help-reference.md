@@ -1,9 +1,30 @@
-# simmodlr Help Reference
+# Flow Help Reference
 
 **Purpose:** System context for Help Assistant LLM responses  
 **Audience:** LLM consuming as prompt context (machine-readable)  
-**Maintenance:** Updated at end of each sprint alongside core documents  
-**Last updated:** 2026-08-31
+**Maintenance:** Updated whenever a user-visible feature changes, alongside `docs/DES_Studio_User_Guide.md`  
+**Last updated:** 2026-10-29 (covers everything merged up to PR #613)
+
+The app is called **Flow** (shown as "flow" in the header). It is part of the simmodlr family; older documents call it DES Studio or simmodlr.
+
+## Where Things Are
+
+| Area | How to reach it | What is there |
+|------|-----------------|---------------|
+| Model Library | Home screen after sign-in, or **← Back** from a model | Tabs **My Models**, **Templates**, **Public Library**, **Community**; header buttons **Explore published**, **↓ AI Prompt Pack**, **Connect AI app**, **+ New Model** |
+| Model header | Top of an open model | **← Back**, model name, visibility and version chips, **↩ Undo**, **↪ Redo**, **Save** / **Discard** when there are unsaved changes |
+| Mode bar | Below the model header | **Overview**, **Design**, **Run**, **Results**, and for owners **Access** and **Versions**; then **✨ Simulation Assistant** |
+| Overview | Mode bar → Overview | Getting-started cards, notes, last run and recent runs, **Named Scenarios**, scenario copies |
+| Design | Mode bar → Design | **Draw**, **Describe**, **Define**, **Model Health** (only when there are issues) and **View definition** (a printable model document) |
+| Define sub-tabs | Design → Define | **Entity Types**, **Queues**, **Model Data** (Skills, Containers, Distances, State Variables), **Bound Events**, **Conditional Events**, **Sections**, **Time & Schedules**, **Goals**, **Evidence**; **Data Sources** only when the experimental flag is on |
+| Run | Mode bar → Run | Views **Run**, **Experiments**, **Studies**; run controls, Run canvas, docked inspector, bottom panel |
+| Results | Mode bar → Results | Views **Summary**, **Log**, **Entities**, **History** |
+| Access (owners) | Mode bar → Access | **Sharing** (Private/Public, Copy link), **Export** (Export Model, Export SimPy), **Publish**, **Collaborators**, **Business view** |
+| Versions (owners) | Mode bar → Versions | **+ Create version**, **Compare to current**, restore |
+| Help Assistant | **?** icon in the top header, or press **?** outside a text field | This assistant |
+| Settings | Gear icon in the top header | Your user settings |
+| Account menu | **•••** in the top header | Feedback, About, **Keyboard shortcuts**, **Admin panel** (admins), sign out |
+| Published models | **Explore published** in the library, or `#/published` | Public gallery and each published model's page; no account needed |
 
 ---
 
@@ -114,7 +135,7 @@ Level-based resource pools. Defined in `containerTypes[]` array.
 
 Edited in the UI via the **Model Data** tab, which also holds Skills, the **Distances** registry, and State Variables.
 
-**Capacity and initial level as run-time parameters:** Container `capacity` and initial `level` are adjustable and sweepable like any other parameter — via the Execute canvas's **Adjust Parameters** panel, the Scenario Manager, a parametric sweep, or (for Business view sharing) Access-tab owner curation — not only via the Model Data tab.
+**Capacity and initial level as run-time parameters:** Container `capacity` and initial `level` are adjustable and sweepable like any other parameter — via the Run tab's **🎛 Adjust parameters** panel, the Scenario Manager, a parametric sweep, or (for Business view sharing) Access-tab owner curation — not only via the Model Data tab.
 
 ### Distances
 
@@ -126,7 +147,7 @@ Named, undirected distances between queue pairs. Defined in the `distances[]` ar
 
 ### Goals
 
-Performance targets. Defined in `goals[]` array.
+Performance targets. Defined in `goals[]` array. Edited in Design → Define → **Goals**.
 
 **Purpose:** Drive AI suggestion prioritisation, colour sweep charts (green=feasible, red=infeasible), display pass/fail on KPI cards.
 
@@ -140,7 +161,7 @@ Performance targets. Defined in `goals[]` array.
 
 ## Macros
 
-All 24 effect macros. Syntax is exact — case-sensitive, parentheses required.
+The effect macros: ARRIVE, ASSIGN, BATCH, CANCEL, COMPLETE, COSEIZE, COST, DELAY, DRAIN, DRAIN_PARTIAL, FAIL, FILL, FINISH, JOIN, MATCH, PREEMPT, RELEASE, RELEASE_COSEIZED, RENEGE, RENEGE_OLDEST, REPAIR, ROUND_ROBIN, SET, SET_ATTR, SPLIT, UNBATCH. Syntax is exact — case-sensitive, parentheses required.
 
 **Entering effects in the UI (Effect picker):** Effects are added from a structured picker, never free text. The picker has a type-ahead search box to filter the option list. Quantity-bearing macros (BATCH, SPLIT, DRAIN, FILL, FAIL, REPAIR) are entered via a composer — pick the operand from a dropdown and type the quantity into a validated number field (no preset quantity lists); FAIL/REPAIR also keep an enumerated "all servers" quick pick alongside the composer. COSEIZE has its own composer for picking any number of server types, each with an optional skill and an optional quantity (seize 2 of one type + 1 of another in the same call). JOIN has a two-dropdown composer (rendezvous queue → "then route to" target; the target must differ from the rendezvous queue). MATCH and COSEIZE stop enumerating ready-made combinations above 50 options and fall back to their composers.
 
@@ -261,7 +282,7 @@ Some resources need time away after each job before they can take the next one: 
 
 ## Distributions
 
-All 12 distribution types. Parameter values must be strings (e.g., "5" not 5).
+Parameter values must be strings (e.g., "5" not 5).
 
 ### Parametric Distributions
 
@@ -279,7 +300,8 @@ All 12 distribution types. Parameter values must be strings (e.g., "5" not 5).
 
 | Distribution | Parameters | Constraints | Typical Use |
 |-------------|------------|-------------|-------------|
-| Piecewise | `{ periods: [{ startTime, dist, distParams }, ...] }` | First period at time 0; sorted ascending | Arrival rates changing at breakpoints |
+| Piecewise | `{ periods: [{ startTime, dist, distParams }, ...], cycleLength? }` | First period at time 0; sorted ascending. Optional `cycleLength` wraps the clock so the periods repeat (e.g. 10080 = one week); it must be positive (V71) and every startTime must be below it (V72) | Arrival rates changing at breakpoints; a repeating daily or weekly pattern |
+| SchedulePattern | `{ schedulePattern: { type: "weekly", mode: "absolute", periods: [{ dayOfWeek, start, end, capacity }], defaultCapacity } }` | Requires the model epoch; each period's `capacity` is read as **arrivals per hour** (a number ≥ 0, V73; 0 means closed, V74 warning); multiplier mode is not supported for arrivals (V75); date exceptions are ignored | Arrival rates drawn on the same weekly grid used for staff schedules |
 | Schedule | `{ times: [N, N, ...] }` or `{ rows: [{ time, attrs }, ...] }` | Times ascending; exhausts and stops | Planned arrivals from timetable or CSV import |
 
 ### From-Data Distributions
@@ -310,7 +332,53 @@ All 6 queue disciplines.
 
 ## Experiment Controls
 
-### Run Readiness and the Execute Canvas
+### Run Tab Layout and Controls
+
+The Run tab has three views: **Run**, **Experiments** and **Studies**. On the **Run** view the toolbar holds, in order: the run readiness status, **Check Model** (structural checks), **⟳ Reset**, **Step**, **Auto Run** (**Stop Auto** while running), the speed control, **⏸ Pause when…**, **⚡ Batch Run**, **View Results →** (after a run), **Export ▾**, then the run settings summary, **🎛 Adjust parameters** and **⚙ Setup**. During a batch or single run, **Cancel Batch** / **Cancel Run** appear. If the model has more than one named timetable, a **Timetable:** picker appears.
+
+**⚙ Setup** opens **Run setup** (values are saved as the model's experiment defaults):
+
+| Field in the UI | Meaning |
+|-----------------|---------|
+| Run name | Label for the saved run (placeholder "Baseline") |
+| Ignore early results | Warm-up period. **Suggest a value** (after a batch run) runs Welch's method and offers **Use this suggestion** |
+| Number of runs | Replications |
+| Random starting point | Seed; **Randomise** picks a new one |
+| When should the run stop? | **Run for** a run duration, or **Stop when this becomes true** (a condition) |
+| Extra options | **Show entity movement (Step and Auto Run)**; **Keep chart data during the run**; **Force event trace (debug, slower)** (only when a large run switched the trace off); **Let in-flight entities complete** (the purge period) |
+| Archive detail | **Minimal**, **Standard** or **Full** — how much of each saved run is stored (`resultDetailLevel`); Full keeps the full event log |
+
+**Bottom panel tabs:** **Step Log** (filter by phase: All phases, B-Events, C-Events, A-phase, Warmup, Errors; a debug-detail toggle), **Entity Details** (entity tracking, attributes and stage history), **Resources** (per server, filter by busy/failed/suspended/idle), **Charts**, **Live Metrics** (collapsible Queues, Servers, Journey Outcomes, Journey Paths, Sections, B-Events, C-Events), **State Variables** (current values and a history of each change with the event that made it; single runs only) and **Future Events** (the FEL, first 100 rows).
+
+### Pause When… (Auto Run)
+
+**⏸ Pause when…** (next to the speed control, and in the compact run bar) stops Auto Run when a condition becomes true. **+ Add condition**, then choose:
+
+- **An entity enters a queue** (pick the queue);
+- **A queue reaches a length** (pick the queue and a number N: N or more waiting);
+- **Simulation time reaches** a value.
+
+Each condition has a tick box to turn it on or off; **Clear all** removes them. The button shows how many are active, e.g. "⏸ Pause when… (2)". Conditions are checked after every event cycle; Auto Run stops on the first that becomes true and a banner says which and when. Press **Auto Run** to carry on. A condition already true when Auto Run starts waits for the next change: a queue-length condition fires again only after the queue drops below N and climbs back; a time condition fires once. Conditions are stored in this browser per model (`flow.pauseRules.<modelId>`), are not part of the model, and do not affect Step or Batch Run.
+
+### Run Inspector (docked)
+
+Clicking a node on the Run canvas opens its inspector **docked beside the canvas**, like the Draw inspector — it never covers the page header or the Simulation Assistant. Drag its left edge to resize (or focus the edge and use ←/→; double-click resets); the width is remembered. On phone-sized screens it overlays the right of the canvas.
+
+- **Queue:** summary cards (waiting, capacity, longest wait, average wait), a fill bar when the queue has a capacity, and one card per waiting entity.
+- **Delay activity:** summary cards (how many are held, longest and average time held) and one card per held entity.
+- **Resourced activity:** utilisation bar and one card per server, with the entity it is serving.
+- **Section card** (in the Sections view): the section's description and its live numbers.
+- Before the run starts, an activity's inspector says there is no live data yet.
+- Underlined entity ids open that entity in the bottom panel's **Entity Details** tab.
+
+### Run Canvas Readouts
+
+- **Switches**: state variables shown as pills — 0 = OFF, 1 = ON, any other number as its value. A pill flashes when it changes. Hide a variable from it with **Show on run canvas** in Model Data → State Variables. Activities whose routing depends on a switch carry a badge naming it.
+- **Preemption**: an activity whose jobs were interrupted shows "N interrupted" and a running preempt count.
+- **Containers**: the container node shows a fill gauge and a 0–capacity level trend.
+- **Sections**: the **Detail | Sections** switch at the top left (see Sections below); **Outlines** toggles section outlines in the Detail view. Loops are drawn as dashed amber lines labelled with the activity and its loop limit.
+
+### Run Readiness and the Run Canvas
 
 **Run readiness** collapses to one line by default ("Ready to run" or "Needs attention" plus an advisory count when there are any); click **Details ▸** to see the full breakdown (blocking issues, advisories, and the workload estimate). A genuine blocking issue always shows full detail automatically — it never collapses to a one-line "Blocked" with no explanation.
 
@@ -320,13 +388,13 @@ All 6 queue disciplines.
 - **More than 2× the limit** — blocked (RA7). The message shows the estimate and its basis.
 - **At run time**, any replication that reaches 2× the limit stops early and is flagged (Key Finding H16), whatever the estimate said.
 
-**Canvas scale parity with Draw:** the Execute canvas opens at the same pan and zoom you last used on the Draw canvas for this model (both canvases share coordinates), rather than always zooming out to fit everything. First-time viewing of a model (or opening it on a different browser/device, since this is a local per-browser setting) falls back to fitting the whole model.
+**Canvas scale parity with Draw:** the Run canvas opens at the same pan and zoom you last used on the Draw canvas for this model (both canvases share coordinates), rather than always zooming out to fit everything. First-time viewing of a model (or opening it on a different browser/device, since this is a local per-browser setting) falls back to fitting the whole model.
 
-**Maximised canvas:** the Execute canvas fills the available window height by default and recalculates on resize/rotation; drag its bottom edge to set a manual height instead, which is then remembered. The Bottom Panel (Log/Entities/Charts/Live Metrics/Future Events) stays collapsed by default so the canvas gets the space; expanding it is remembered for next time.
+**Maximised canvas:** the Run canvas fills the available window height by default and recalculates on resize/rotation; drag its bottom edge to set a manual height instead, which is then remembered. The bottom panel stays collapsed by default so the canvas gets the space; expanding it is remembered for next time.
 
-**Watching entities move:** entity animation (coloured dots travelling the edges — arrivals, seizes, routing hops including probabilistic branches, and completions) runs during **Step** and **Auto Run** only. **⚡ Batch Run** computes replications at full speed without animation. The "Show entity movement (Step and Auto Run)" checkbox in Run Setup controls it and the choice is remembered; it defaults off when the operating system requests reduced motion.
+**Watching entities move:** entity animation (coloured dots travelling the edges — arrivals, seizes, routing hops including probabilistic branches, and completions) runs during **Step** and **Auto Run** only. **⚡ Batch Run** computes replications at full speed without animation. The "Show entity movement (Step and Auto Run)" checkbox in **⚙ Setup → Extra options** controls it and the choice is remembered; it defaults off when the operating system requests reduced motion.
 
-**Live node visual language:** Activity nodes flash a start-of-service pulse and hold a persistent border colour for busy/idle/failed state, so status is visible even between animation frames. Source nodes show a running arrival count (mirroring Sink's "served" count). Queue nodes show a colour-coded label per entity type waiting and a simplified "N waiting" caption. Balking and reneging are animated rather than silent: declined/abandoning entities render as distinctly coloured tokens, the destination Sink shows running "N balked"/"N reneged" totals, and the Queue node pulses when a balk or renege occurs. All Execute canvas node types render at a fixed height; rows beyond the first three collapse to a "+N more" indicator instead of growing the node.
+**Live node visual language:** Activity nodes flash a start-of-service pulse and hold a persistent border colour for busy/idle/failed state, so status is visible even between animation frames. Source nodes show a running arrival count (mirroring Sink's "served" count). Queue nodes show a colour-coded label per entity type waiting and a simplified "N waiting" caption. Balking and reneging are animated rather than silent: declined/abandoning entities render as distinctly coloured tokens, the destination Sink shows running "N balked"/"N reneged" totals, and the Queue node pulses when a balk or renege occurs. All Run canvas node types render at a fixed height; rows beyond the first three collapse to a "+N more" indicator instead of growing the node.
 
 **Adjust parameters (quick, ad-hoc run):** the **🎛 Adjust parameters** button next to the run settings summary opens the same searchable, grouped parameter browser used by the Business view curation and Scenario manager (`ParamBrowserPanel`) — but over the full set of sweepable parameters, not an owner-curated subset. Pick a parameter, type a new value, and it patches the model for every run mode (Step, Auto Run, Batch Run) via the same `effectiveModel`/`applySweepValues` mechanism a loaded Experiment already used — no Experiment or Scenario has to exist first. Changes are ad-hoc: they reset when you switch models or reload the page, and are never written to the database. **Reset all** clears them immediately; **Save as Experiment…** carries the current overrides and run settings into a new saved Experiment, if you decide to keep them. If a saved Experiment is also loaded, an ad-hoc change to the same parameter takes priority over the loaded value.
 
@@ -357,7 +425,7 @@ All 6 queue disciplines.
 
 **Purpose:** Reproducibility — replaying a run with the same seed produces bit-identical results.
 
-**Behaviour:** Integer seed set in the Execute panel before running. Stored with the run record so any past run can be exactly reproduced.
+**Behaviour:** Integer seed set in **⚙ Setup → Random starting point** before running. Stored with the run record so any past run can be exactly reproduced.
 
 ### PRNG Stream Isolation (Sprint 84)
 
@@ -410,9 +478,11 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 
 ### Purge Period
 
-**Purpose:** Remove entities that have exceeded a maximum dwell age in a queue.
+**UI:** **⚙ Setup → Extra options → Let in-flight entities complete**.
 
-**Behaviour:** Configured as a Bound event with a fixed or periodic interval. At each purge event, entities older than the configured threshold are removed from the target queue. Unlike reneging (entity-driven, patience-timer per entity), purge is a global sweep fired on a timer — useful for batch/job queues with SLA deadlines where wholesale queue clearing is required.
+**Purpose:** A run-down phase after the run length — for end-of-day or end-of-shift questions such as "how long until everyone already here is seen?"
+
+**Behaviour:** When the clock reaches the run length, new arrivals stop but the simulation carries on so entities already in the system can finish. It ends when the system is empty or after an extra time limit (by default twice the run length, at most 5,000 time units). Results record that the purge period was used (`purgePeriodUsed`).
 
 ### Shift-change Behavior (Sprint 84)
 
@@ -424,11 +494,22 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 | Preempt | Service interrupted immediately; entity re-queues with remaining service time preserved |
 | Suspend | Service paused at shift boundary; resumes automatically when the next shift starts |
 
-### Parametric Sweep
+### Studies (Parametric Sweeps and Other Plans)
 
-**1D sweep:** One parameter varied across range. Full replication batch at each point.
+**Access:** Run → **Studies**. Every completed study is saved automatically when signed in and listed under **Past studies** (**Load** to reopen it); signed out, results last only for the session.
 
-**2D sweep:** Two parameters varied across a grid (capped at 50 points). Heatmap rendering with feasibility colouring (green = all goals met, red = at least one goal violated).
+| Mode | What it does |
+|------|-------------|
+| **1D Sweep** | One parameter varied across a range (min, max, step). Full replication batch at each point; line chart |
+| **2D Sweep** | Two parameters varied across a grid (capped at 50 points). Heatmap with feasibility colouring (green = all goals met, red = at least one goal violated) |
+| **Sampled** | Several parameters, each with a range, sampled at a chosen number of points; a results table plus **Sensitivity — which parameters matter most** |
+| **Sequential** | **Seed from** a saved Experiment or a point from an earlier Study, then narrow the ranges around it |
+
+Each study has a **Study name**, an **Objective** KPI and a **Direction** (minimise or maximise). Two points can be compared as scenarios (**Scenario comparison**, Cell A vs Cell B in 2D). On Sampled and Sequential results, **Promote to Experiment** turns a point into a saved Experiment. The Simulation Assistant can propose a study; it loads here with **AI proposal loaded** and its rationale.
+
+### Experiments
+
+**Access:** Run → **Experiments** ("Saved run configurations to replay or compare"). **+ New Experiment** takes a **Name**, **Description** and **Parameter overrides**. Each saved experiment has **Load** (apply it to the Run view), **Run**, **Edit** and **Clone**. **Save as Experiment…** in **🎛 Adjust parameters** seeds a new one from the current ad-hoc changes. Requires sign-in.
 
 ### Named Scenarios (Scenario Manager)
 
@@ -443,7 +524,7 @@ This gives 6 staff day shift, 4 staff night shift (6 × 0.67 = 4.02 → 4).
 - **Exactly 2 groups** → paired-t comparison table (mean difference with confidence interval per KPI).
 - **3+ groups** → one-way ANOVA significance test plus Tukey HSD pairwise comparisons, showing which specific pairs differ.
 
-**Limits:** Comparison runs are computed on demand and not saved to Run History. Models using named/shared schedules (ADR-016) may not reflect shared-schedule timing in scenario runs.
+**Limits:** Comparison runs are computed on demand and not saved to the run history. Models using named/shared schedules (ADR-016) may not reflect shared-schedule timing in scenario runs.
 
 ---
 
@@ -611,10 +692,14 @@ Per-skill utilisation stats, aggregated correctly across multi-replication batch
 | V67 | `parentTypeId` is self-referential, references an unknown entity type, references a different-role entity type, or creates a circular inheritance chain | Point `parentTypeId` at a real entity type of the same role, with no cycle |
 | V68 | An entry in `requiredSequence` doesn't match any declared queue (blocking), or the model's routing sends this entity type backward through the declared stages (warning — intentional rework loops can be ignored) | Correct the queue name; or review the routing edge and confirm the backward jump is intentional |
 | V69 | A `distances[]` entry has an empty/duplicate id, `fromQueue`/`toQueue` doesn't match a declared queue or the two are the same, a non-positive `distance`, or a duplicate entry for the same undirected pair | Fix the id, queue names, distance value, or remove the duplicate pair |
+| V70 | A `Distance`-typed schedule has an invalid `from`/`to`/`speedSource`/`speedAttr` (blocking), or references a pair/attribute that isn't declared (warning — falls back to a duration of 0) | Correct the distParams; or declare the missing distance/attribute |
+| V71 | Piecewise `cycleLength` is set but is not a positive number | Use a positive number (e.g. 10080 for one week in minutes), or clear it |
+| V72 | A Piecewise period's `startTime` is not less than `cycleLength` | That period would never be reached — lower its start time or raise `cycleLength` |
+| V73 | A SchedulePattern arrival period's rate is not a number ≥ 0 | Enter arrivals per hour as a number ≥ 0 |
+| V75 | A SchedulePattern arrival distribution uses multiplier mode | Use absolute arrival rates for arrivals |
 | V77 | `ASSIGN(..., SCAN)` has no skill argument, or `SCAN:N` is not a positive whole number | Put the skill (`"Skill"` or `Entity.attr`) before SCAN; use e.g. `SCAN:10` |
 | V78 | An entity type's `quantityAttr` names an attribute it doesn't have, a non-number attribute, or is set on a server type | Pick a number attribute of that customer type, or clear the quantity attribute |
 | V80 | Turnaround time set on a non-server type, only one of `turnaroundDist`/`turnaroundDistParams` set, a non-sampling distribution, or numeric (non-string) parameter values | Set turnaround only on resources, with both fields and string parameters such as `{ "value": "20" }` |
-| V70 | A `Distance`-typed schedule has an invalid `from`/`to`/`speedSource`/`speedAttr` (blocking), or references a pair/attribute that isn't declared (warning — falls back to a duration of 0) | Correct the distParams; or declare the missing distance/attribute |
 
 Gaps in the numbering (e.g. no V7) are intentional — codes were retired or renumbered during development and are not reused.
 
@@ -643,7 +728,14 @@ Gaps in the numbering (e.g. no V7) are intentional — codes were retired or ren
 | V-SKILL-2 (ANY variant) | `ASSIGN(Q, ANY, "Skill")` references a skill no registered server type actually has | The cross-type pool is guaranteed empty — add the skill to a server type, or correct the skill name |
 | V76 | A condition compares a numeric value with non-numeric text that is not a state variable or dynamic reference (e.g. `clock >= closureStrat`) | The clause is always false — fix the spelling, or declare the name as a state variable |
 | V79 | A `quantityAttr` attribute has no default value and no distribution | Every entity's quantity is 0 unless an effect sets it |
+| V74 | A SchedulePattern arrival period has a rate of 0 | No arrivals during that window (fine for a closed period) |
 | V81 | `ASSIGN(…, PREEMPT, …)` with an unknown option, a queue that doesn't rank entities (FIFO/LIFO, no `PRIORITY(attr)`), a rank attribute the entity type lacks, or a `DROP:` queue that doesn't exist; or a Conditional event that fires `PREEMPT(Type)` without checking `idle(Type)` | The preemption never happens, or it interrupts a job while a resource is idle |
+| V82 | An element is in more than one section | Keep it in one section so section views and results stay unambiguous (Define → Sections; ticking it in one section removes it from the other) |
+| V-BACK-01 | A backing link points at a missing record, element or parameter | Evidence → Coverage → **Remove broken links**, or reattach |
+| V-BACK-02 | An evidence or assumption record backs nothing | Attach it, or delete it |
+| V-BACK-03 | Evidence was last verified more than 12 months ago | Re-check the source and update **Last verified** |
+| V-BACK-04 | A contested assumption sets an arrival or capacity parameter | Find evidence, or test the result's sensitivity to it |
+| V-BACK-05 | Arrival or capacity parameters have no evidence or assumption (one warning listing them; only when the model has any records) | Attach evidence or an assumption on the Evidence tab |
 | W-CAP-01 | Two or more Conditional events SEIZE/ASSIGN the same server type | Results may be sensitive to Conditional event priority ordering |
 | W-CAP-02 | Bound event schedule has an Exponential mean interval < 0.001 | simmodlr models discrete entities — consider SD Studio for continuous flow |
 
@@ -790,7 +882,7 @@ First-match semantics: engine evaluates `when` in order, uses first match. Last 
 
 **How:** In the Condition Builder, a number-type clause has a small "Number / Dynamic" toggle next to its value field. Switch it to **Dynamic** to compare against another `queue(...).length`, `idle(...).count`, `busy(...).count`, `container(...).level`, or `attr(...)` value instead of typing a fixed number. This works in Conditional event conditions, `routing[]` tables, `balkCondition`, and `cSchedules[].when`.
 
-**Gotcha:** Only those five function-style values resolve dynamically on the right-hand side. A plain state-variable name or `Entity.<attr>` typed into the value field is still always treated as a literal — see the Validation Rules and Common Mistakes sections above.
+**Gotcha:** On the right-hand side, only those function-style values and **state variables** (bare name or `state.<name>`) are read dynamically. `Entity.<attr>` and any other text typed into the value field is a literal — see "What the right-hand side of a condition can be" under Conditional Events, and V76.
 
 ### Queue Growing Without Bound
 
@@ -862,9 +954,15 @@ First-match semantics: engine evaluates `when` in order, uses first match. Last 
 
 ## Model Library
 
+### Library Tabs and Header
+
+Tabs: **My Models**, **Templates** (search, domain chips, **Patterns Guide**; click a card to open a copy), **Public Library** and **Community**. My Models, Public Library and Community have a search bar, a sort menu (Last modified, Name A→Z, Most runs, Version) and tag chips (OR filter, **Clear tags**). Owners add tags on their cards with the **+ tag** field.
+
+Header buttons: **Explore published** (public gallery of published models, no account needed), **↓ AI Prompt Pack** (downloads `flow-ai-prompt-pack.md`), **Connect AI app** (Flow MCP downloads, see below) and **+ New Model**.
+
 ### Model Cards
 
-Each model in the library displays a card showing name, description, visibility (public/private), health status, run count, owner, and last updated date.
+Each model in the library displays a card showing name, description, visibility (public/private), health status, run count, owner, and last updated date. Scenario copies show **Scenario**; a model with scenario copies shows how many.
 
 **Version badge:** When a model has at least one saved version, the card shows a purple **V{n}** badge indicating the latest version number. The badge updates immediately after creating a version — no page refresh required.
 
@@ -872,21 +970,21 @@ Each model in the library displays a card showing name, description, visibility 
 
 ### Creating a New Model
 
-Open the New Model dialog from the **+ New Model** button. Enter a name and optional description, then choose a starting method:
+Open the New Model dialog from the **+ New Model** button and choose a starting method:
 
 | Option | Behaviour |
 |--------|-----------|
-| **Draw** | Opens the Visual designer with a starter flow pre-placed on the canvas |
-| **Describe** | Opens the AI generator (the **Describe** button in the Design toolbar); the model name and description are passed as context to the AI |
-| **Use a template** | Browse pre-built scenario templates |
-| **Import a file** | Upload a `.json` model file |
-| **Paste model** | Paste raw model JSON from clipboard |
+| **Model assistant** (Recommended) | Asks for a name (required) and description, then opens Design → **Describe** to build the model in conversation; the name and description are passed as context to the AI |
+| **Draw** | Asks for a name, then opens Draw with a starter flow pre-placed on the canvas |
+| **Use a template** | Opens the Templates tab |
+| **Import a file** | Upload a `.json` model file — keeps its name |
+| **Paste model** | Paste model JSON from the clipboard — keeps its name |
 
-**Tip:** The description you enter in the New Model dialog is used by the Describe panel as context. Write a sentence describing the system you want to model ("A two-stage manufacturing line with a shared inspector") to get better initial AI output.
+**Tip:** The description you enter for **Model assistant** is used by the Describe panel as context. Write a sentence describing the system you want to model ("A two-stage manufacturing line with a shared inspector") to get better initial AI output.
 
 ### Model Versioning
 
-Create named version snapshots of your model from the **Versions** tab (visible to model owners). Versions capture the full model JSON at a point in time and can be compared (Diff) or restored.
+Create named version snapshots of your model from the **Versions** tab (visible to model owners). Versions capture the full model JSON at a point in time; each can be compared with the current model (**Compare to current**) or restored (the restored model is marked unsaved until you click Save). A published model's release can be pinned to a version (see Publishing).
 
 **Creating a version:** Click **+ Create version**, optionally name it and add notes. The version number is auto-assigned. Structural changes (entity types, queues, events) are detected and flagged automatically.
 
@@ -912,7 +1010,7 @@ Each model has an **Access** tab (visible to owners) with a **Sharing** section 
 - If the recipient is signed out, the target model ID is held (via `sessionStorage`) through sign-in/sign-up and resolved immediately afterwards.
 - If the model does not exist, was deleted, or the recipient has no access, the link silently falls through to the recipient's normal Model Library — no error is shown.
 
-This is purely a client-side routing shortcut into the same `fetchModels()` query and Supabase RLS policies that already gate the Model Library — it does not create a new token, table, or anonymous-access mode. It is unrelated to the separate run-level share-link feature (Run History → **Share**), which creates a `share_links` row for anonymous, read-only viewing of one simulation run's results dashboard — that feature requires no login and works even for users with no model access at all.
+This is purely a client-side routing shortcut into the same `fetchModels()` query and Supabase RLS policies that already gate the Model Library — it does not create a new token, table, or anonymous-access mode. It is unrelated to the separate run-level share link (Results → **History** → the run's **⋯** menu → **🔗 Create share link**; **✕ Unshare** removes it), which creates a `share_links` row for anonymous, read-only viewing of one simulation run's results dashboard — that feature requires no login and works even for users with no model access at all.
 
 If a private model has no collaborators and isn't public yet, the Access tab shows a hint that the link won't open it for anyone else until the model is made public or a collaborator is added.
 
@@ -934,13 +1032,91 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 - The viewer's changes apply to a temporary in-memory copy; the shared model itself is never modified, and viewer runs are **not** saved anywhere (results exist only for that visit).
 - If the model has a blocking validation problem, the viewer sees a friendly "only its owner can fix this" message — never raw validation codes.
 
-**Current limits:** no animated run view on this page (the Execute tab's animation is editor-only for now); no saved or owner-visible history of what a viewer ran; queue-capacity settings floor viewer input at 1 (0 would mean an unlimited queue).
+**Current limits:** no animated run view on this page (the Run tab's animation is editor-only for now); no saved or owner-visible history of what a viewer ran; queue-capacity settings floor viewer input at 1 (0 would mean an unlimited queue).
+
+---
+
+## Publishing a Model
+
+**What it is:** a frozen release of a model with its own public page. Anyone with the link can read it and run it in their own browser, without an account. Separate from Private/Public visibility and from Business view collaborators. Needs a signed-in owner (not available for models stored only on this device).
+
+**Owner setup:** Access → **Publish** → **Set up publishing**. The panel shows a status chip (**Not published**, **Published**, **Withdrawn**) and these groups:
+
+| Group | Fields |
+|-------|--------|
+| What the public sees | **Title** (required), **One-line summary** (gallery card), **Description**, **Category**, **Licence**, **Cover image URL** (optional) |
+| The release | **Which version the public sees** — a saved version, or **Snapshot the model as it is now (taken when you publish)**; **Release notes** |
+| Provenance | **Show the evidence and assumption register on the public page** (shows the model's current % evidenced) |
+| Can a visitor run it? | Whether a visitor's run at the model's experiment defaults fits the published limits, or is heavy |
+| What a visitor can change | Tick parameters to expose; each has **Visitor label**, **Minimum**, **Maximum**. Separate from Business view settings |
+
+Then tick **I understand this model becomes publicly readable** and click **Publish**. Buttons: **Publish** / **Publish again** (replace the public release), **Save settings** (keep changes for the next release), **Withdraw** (page stops resolving and looks like it never existed), **Copy public link**, **Unpublish** (back to draft, settings kept), **Remove publish settings** (delete the publication; the model is untouched). **Your other published models** lists the owner's other publications with **Withdraw**.
+
+**Rules:**
+- Publishing is blocked while the model has Model Health errors. A warning appears if the model reads live data sources (visitors cannot reach them; external data-source settings are stripped from the published copy).
+- What the public sees changes only when you press **Publish again** — editing the model or the settings does not change it. The released definition and timetable rows stay frozen.
+- Visitor runs use the model's own experiment defaults (number of runs, run length, warm-up, seed) and the **Published** run limits: up to 30 runs, a run length up to 200,000, and up to 1,000,000 condition checks per replication (a runaway replication is still stopped at run time). The owner's plan does not matter, because visitor runs use the visitor's computer. To change the settings, change the experiment defaults and save a new version.
+
+**Public surfaces:** **Explore published** (`#/published`) is the gallery: search, a category filter and **Show more**. A model's page (`#/published/<model id>`) shows title, summary, category, author, publication date and release, then **The model** (read-only diagram), **Run it** (**Run this model** → exposed settings with standard values and bounds → **Run the simulation**, progress, **Cancel**; afterwards the full Results view — per-section numbers, pathways, queue and resource tables, charts, statistics — and **Download report** as HTML), **What this model is** (description), **How it's organised** (sections and descriptions), **Where the numbers come from** and **The register** (when the author included them). Visitor runs never contact the author, never change the author's model or history, and never call an AI service. **Open in Flow** in the page header opens `#model/<id>` in the app, which works only if the visitor has access to the model itself.
+
+---
+
+## Evidence and Assumptions
+
+**Access:** Design → Define → **Evidence**. Stored in the model as `evidence[]`, `assumptions[]` and `backingLinks[]`, so they travel with exports and versions.
+
+The header reads e.g. "12 of 30 elements and parameters evidenced, 8 assumption only, 10 unbacked." Three views:
+
+| View | Contents |
+|------|----------|
+| **Evidence (n)** | Records with a source: **Name**, **Type** (Data, Literature, Expert judgement, Anecdote), **Source**, **Strength** (Low, Medium, High), **Date captured**, **Last verified**, **Description** |
+| **Assumptions (n)** | **Name**, **Assumption** text, **Confidence** (Low, Medium, High), **Contested (stakeholders disagree)** |
+| **Coverage** | Every backable element and its parameters with status **Evidenced**, **Assumption only** or **Unbacked**; **Show** filter; **Attach a record…** on each row; **Remove broken links** when links point at deleted things |
+
+**Attaching:** open a record, choose a target under **Attached to** and click **Attach**. Targets are whole elements — entity type, queue, Bound event, Conditional event, state variable, container, schedule, goal, distance, data source — or one of an element's parameters (e.g. an arrival event's mean, a server type's count). One record can back many targets. **Remove** detaches; **Delete** removes the record and its links. A target is Evidenced if any evidence backs it, Assumption only if only assumptions do.
+
+**Draw inspector:** a selected queue, activity or container shows an **Evidence** block — status, "N of M parameters backed", the attached records' names, and **Open in Evidence tab**.
+
+**Model Health:** warnings V-BACK-01 … V-BACK-05 (see Validation Rules). Evidence never blocks a run, and models with no records get no evidence warnings.
+
+**Elsewhere:** reports add an **Evidence and assumptions** section; a published page can show the register and coverage; the Describe builder adds AI-recorded assumptions (never AI evidence, never overwriting existing records); the Flow MCP's `flow_record_evidence` adds named records from sources the user gives, and `flow_evidence_coverage` reports coverage.
+
+---
+
+## Sections
+
+**Access:** Design → Define → **Sections** → **+ Add Section**. Each section has a name, a **description** (up to 500 characters), a colour and members (Queues, Entity Types, B-Events, C-Events). An element belongs to at most one section — ticking it in another section moves it (V82 warns about older overlaps). Editors for Entity Types, Queues, Bound Events and Conditional Events gain a coloured section filter strip.
+
+**Draw:** **Detail | Sections** switch at the top left of the canvas.
+- **Detail**: all nodes. **Outlines** shows/hides coloured section boxes. A loop that stays inside a section is drawn on a lane inside its box, labelled e.g. "↻ Review (up to 3×)"; loops that leave a section use the shared lane below.
+- **Sections**: one card per populated section, with what it holds ("2 queues · 3 activities · 1 exit") and its description on hover, ordered left to right by flow; ungrouped nodes stay visible; one arrow per pair of stages labelled with the number of graph links (not customers); links to an earlier stage are dashed ↩ return arrows.
+- The **▾** chevron by a section name collapses just that section to a card; **Show detail** (or double-click) restores its nodes in place. Layout reset and dragging are off while cards are shown. The view choice is remembered per model in this browser (`des.sections.view.<modelId>`); read-only viewers can switch too.
+
+**Run:** the same switch shows live section cards — in the section now, entered, left, average time of finished stays so far, busiest resource — and arrows showing customers moved between sections. Clicking a card opens it in the docked inspector; **Show detail** returns to the nodes with that section highlighted. Numbers match the **Sections** block in Results, which also shows **Entity pathways across sections**.
+
+Sections never change how the model runs.
+
+---
+
+## Flow MCP (Connect AI App)
+
+**Access:** Model Library header → **Connect AI app**. For Claude Desktop, **↓ Download flow.mcpb** and double-click it to install. For Claude Code, Cursor, VS Code and other MCP apps, **↓ Download flow-mcp.mjs** (needs Node.js 20+) and add it to the app's MCP settings; Claude Code: `claude mcp add flow -- node /path/to/flow-mcp.mjs`.
+
+Everything runs on the user's computer; models are JSON files in `Documents/Flow models` by default. The assistant needs no Flow sign-in. It checks Flow's website for a newer version at start-up and says when one is available (no personal data sent).
+
+**Flow MCP 0.6 tools:** `flow_get_guide` (modelling method), `flow_get_schema`, `flow_list_models`, `flow_read_model`, `flow_validate_model`, `flow_run_model`, `flow_compare_models`, `flow_run_over_time`, `flow_sweep_parameter`, `flow_trace_run`, `flow_edit_model`, `flow_save_model`, `flow_open_in_app`, `flow_evidence_coverage` (what backs the model, unbacked arrival and capacity parameters, contested assumptions, V-BACK warnings) and `flow_record_evidence` (add named evidence with a user-named source, or assumptions, and attach them to an element or one parameter by name; unknown or ambiguous names are reported, never guessed).
+
+**Bringing a model into Flow:** `flow_open_in_app` opens a preview in the browser; choose **Save to my models**, or for a file exported from Flow (Access → **Export Model**) **Update "<model>"** (saves a version first, then replaces; owners and editors only) or **Save as a new model**. Or use **+ New Model → Import a file**.
+
+**Compared with the AI Prompt Pack:** the Prompt Pack is a document you paste into any chat; the MCP lets the assistant validate, run and fix the model itself.
 
 ---
 
 ## Authoring Modes
 
-### Forms/Tabs Editors
+### Define Editors
+
+**Access:** Design → **Define**, then a sub-tab (see Where Things Are).
 
 **Purpose:** Precise, field-by-field configuration.
 
@@ -954,9 +1130,11 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 
 **When to use:** New model from scenario description; unfamiliar domain.
 
-**Access:** Design mode → **Describe** sub-tab. Also available from the New Model dialog via **Describe**.
+**Access:** Design → **Describe**. Also the **Model assistant** option in the New Model dialog.
 
-**Behaviour:** Three-phase conversation (Discover → Confirm → Generate). Asks targeted questions; confirms understanding before generating JSON. Uses the model's name and description as context from the first message — set these on the Overview tab for best results. When editing an existing model, the current model structure is also provided as context.
+**Behaviour:** Conversation (Discover → Confirm → Generate). Asks targeted questions one at a time; shows what it understood and waits for confirmation before building. Enter sends, Shift+Enter adds a new line; a microphone button allows voice input. Uses the model's name and description as context from the first message. When editing an existing model, the current model structure is also provided as context, so a request like "add another doctor to triage" edits rather than rebuilds.
+
+**Reviewing the result:** **Review proposal** (the **Proposal** pane on narrow screens) shows a diff of every element as Added, Removed, Modified or Unchanged. Buttons: **Apply model**, **Apply & Save All**, **Apply Selected** / **Apply & Save Selected** (ticked elements only), **Refine this**, **Discard**. Applying takes any assumptions the AI recorded into the Evidence tab, but never AI evidence and never overwriting existing records.
 
 **Strengths:** Fast scaffolding; suggests realistic parameters; refines incrementally.
 
@@ -966,7 +1144,7 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 
 **When to use:** Reviewing flow; presenting to stakeholders; connection verification.
 
-**Access:** Design mode → **Visual** sub-tab. Also available from the New Model dialog via **Draw**.
+**Access:** Design → **Draw**. Also available from the New Model dialog via **Draw**.
 
 **Strengths:** Visual flow; node badges show advanced config (`feed` for a live data source on an arrival, `when` for attribute-conditional completion schedules) plus at-a-glance design detail — a Source/Activity's distribution label, a Queue's discipline and capacity badge, an edge's "N routes" badge for multi-way routing, and a Container node's capacity/initial-level; bidirectional sync with Forms/Tabs. New blank models open with a starter flow pre-placed on the canvas — no unsaved changes until you make your first edit. Multi-select nodes (Shift/Ctrl-click or box-drag) to bulk-move or bulk-delete; copy/paste (Ctrl+C/Ctrl+V) or duplicate in place (Ctrl+D). Selecting an edge for a probabilistic-routing branch shows an inline `%` input on the edge label — edit the split without leaving the canvas or opening the Bound Events editor.
 
@@ -976,15 +1154,19 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 
 **Rework and loop-back edges:** Edges that route an entity backward to an earlier stage (rework/retry loops) are drawn through a dedicated lane below the main canvas instead of crossing over unrelated nodes, keeping the primary flow readable.
 
-**Editing without leaving Draw:** The inspector supports inline description editing directly on Queue, Source, Sink, and Activity nodes. Where a field can only be edited in a Define tab, the inspector's "Edit in the X tab" pointer is a clickable jump link that opens the corresponding tab with the exact card already expanded.
+**Editing without leaving Draw:** The inspector is resizable (drag its left edge; the width is remembered) and supports inline description editing directly on Queue, Source, Sink, and Activity nodes. It also has an **Evidence** block (see Evidence and Assumptions). A time-varying (piecewise) distribution lists its periods collapsed to one-line summaries; click one, or **Expand all**, to edit. Where a field can only be edited in a Define tab, the inspector's "Edit in the X tab" pointer is a clickable jump link that opens the corresponding tab with the exact card already expanded.
 
 **Advanced effects and the canvas:** Layout edits (dragging, aligning, panning) never change model logic — they only save positions. Structural canvas edits that would overwrite an advanced effect (COSEIZE, skill-gated ASSIGN, BATCH, MATCH, multi-macro effects, attribute-conditional `when` schedules) are refused with a message pointing at the Define editors — the Conditional Events/Bound Events editors remain the home of the advanced macro vocabulary. Simpler edits near advanced constructs are surgical: switching a sink between COMPLETE and RENEGE, changing a source's queue, or deleting a queue preserves any co-located macros (COST, SET, …) instead of rewriting the whole effect.
+
+**Sections:** the **Detail | Sections** switch and **Outlines** button (see Sections).
 
 **Alignment guides:** While dragging a single node, dashed guide lines appear whenever the dragged node's edges or centre line up with another node's edges or centre. Release while a guide is showing and the node snaps exactly into alignment. Guides don't appear for multi-node drags — use the selection toolbar's align/distribute tools for those. Placement is otherwise free: nodes don't snap to a background grid, so the alignment snap is the only snap.
 
 ---
 
 ## Explain Panel
+
+The **Explain** button on a run in Results → **History** opens that run's results with the Simulation Assistant's analysis; the same actions are under **Analyse**, **Compare** and the question box in the Simulation Assistant on the Results tab.
 
 ### Interpret Results
 
@@ -1000,7 +1182,7 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 
 **When to use:** Scenario comparison; before/after change analysis.
 
-**Access:** Results → **History**. Select exactly two runs, then click **Compare selected**.
+**Access:** Results → **History**. Tick two runs, then click **Compare selected**. (The Simulation Assistant's **Compare** action gives an AI narrative of the same comparison.)
 
 **Output:** KPI differences in a side-by-side comparison table.
 
@@ -1019,7 +1201,7 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 | Aspect | Help Assistant | Explain |
 |--------|---------------|-------------|
 | **Purpose** | Answers "How do I use simmodlr?" | Answers "What do my results mean?" |
-| **When available** | Any screen (via ? button) | After completed run (Results → Explain) |
+| **When available** | Any screen (the **?** icon in the top header, or the **?** key) | After a completed run (Results → History → **Explain**, or the Simulation Assistant on the Results tab) |
 | **Knowledge base** | Curated help articles, validation rules, macro syntax, distribution guidance | Run results, model JSON, confidence intervals, goal gaps |
 | **Knowledge source** | This help-reference document (curated, versioned alongside docs) | Run results + model JSON passed live at query time |
 | **Example questions** | "What does ARRIVE do?", "How do I set up reneging?", "What does V8 mean?" | "Why is wait time so high?", "Should I add more servers?", "Are these results reliable?" |
@@ -1043,7 +1225,7 @@ Shows all schedules for the model: name, total row count, which Bound events use
 
 ### Selecting a schedule for a run
 
-When a model has more than one schedule, a **Timetable:** dropdown appears in the Execute panel above the Run button. Select the timetable you want before clicking Run.
+When a model has more than one schedule, a **Timetable:** picker appears on the Run tab. Select the timetable you want before starting the run.
 
 ### Creating a schedule
 
@@ -1059,7 +1241,7 @@ Open a schedule and click **Export CSV** to download all rows for editing extern
 
 ### Export and portability
 
-When you export a model as JSON (toolbar → Export Model), schedule rows are automatically embedded in the exported file. The export is self-contained and can be imported to another simmodlr instance.
+When you export a model as JSON (Access → **Export Model**), schedule rows are automatically embedded in the exported file. The export is self-contained and can be imported to another simmodlr instance.
 
 ### Bound event schedule link
 
@@ -1089,12 +1271,12 @@ If a Bound event still has rows embedded directly in the model JSON (legacy form
 
 ### Accessing Optimise
 
-Click the **⚡ Optimise** button inside the Simulation Assistant sidebar. The button is visible when you are in the Results mode and the model has no validation errors. If the model has errors, fix them in the **Model Health** tab first.
+Click **⚡ Optimise** inside the Simulation Assistant — in Design (under the quick-start questions), on the Run tab (next to the Design / Diagnose / Debug modes) and on the Results tab. The panel is titled **Explore**. If the model has errors, fix them in **Model Health** first.
 
 ### Pre-flight confirmation
 
 Before any simulation starts, a confirmation dialog shows:
-- **Replications limit** — your plan's maximum (Free: 10, Standard: 30, Pro: 100)
+- **Replications limit** — your run tier's maximum (defaults: Free 10, Standard 30, Pro 500)
 - **Model complexity** — Low / Medium / High / Very high based on Conditional event scan estimate
 - **Run duration and warmup** — taken from the model's experiment defaults
 - **Target CI** — ±5% of the mean (95% confidence)
@@ -1105,7 +1287,7 @@ Click **Proceed** (or **Proceed anyway** if warnings are present) to start. Clic
 
 ### How the adaptive batch works
 
-1. Starts with 5 replications (or fewer if the tier max is lower)
+1. Starts with 10 replications (or fewer if the tier max is lower)
 2. Computes the 95% CI relative half-width: `halfWidth / |mean| × 100`
 3. If half-width < 5% of the mean → **converged**, stops
 4. Otherwise adds another batch (step size = `max(5, tierMax ÷ 5)`) and repeats
@@ -1140,11 +1322,14 @@ Click **View Results** to jump directly to the Results › Summary tab for the s
 
 ### Plan limits
 
-| Plan | Max replications |
-|------|-----------------|
-| Free | 10 |
-| Standard | 30 |
-| Pro | 100 |
+| Run tier | Max replications | Max run length | Condition checks per replication |
+|----------|-----------------|----------------|----------------------------------|
+| Free | 10 | 10,000 | 50,000 |
+| Standard | 30 | 50,000 | 250,000 |
+| Pro | 500 | 200,000 | 1,000,000 |
+| Published (visitors to a published model) | 30 | 200,000 | 1,000,000 |
+
+These are defaults; an administrator can change the limits and which tier each plan gets (out of the box: Free → Free, Standard and Pro → Standard, Enterprise and Pro Plus → Pro; administrators always get Pro).
 
 If the model is complex or high-variance, the Free tier may not achieve the ±5% CI target. The amber badge tells you the CI achieved within your limit so you can judge whether the results are sufficient for your purpose.
 
@@ -1152,27 +1337,27 @@ If the model is complex or high-variance, the Free tier may not achieve the ±5%
 
 ## Simulation Assistant
 
-The Simulation Assistant is the AI panel available from any model editing, run, or results view. Click the **✦ AI** button in the mode bar to open it. It adapts to your current context:
+The Simulation Assistant is the AI panel available from any model view. Click **✨ Simulation Assistant** at the right of the mode bar to open it. It adapts to your current context:
 
 | Context | What it shows |
 |---------|--------------|
 | **Design tabs** (entities, queues, Bound events, Conditional events, etc.) | Suggested questions about the current tab's content. A free-text **ASK ABOUT THIS MODEL** input for any question about the model's structure. The assistant receives the full model definition (entity attributes, queue configurations, Conditional event logic, sections, goals) and can reason about whether conditions and effects are correctly wired. |
-| **Run tab** (Execute) | A **Diagnostics** panel showing entity inspection and event log overlays on the Execute canvas. The same **ASK ABOUT THIS MODEL** input is available so you can ask questions about the model while watching it run. After a run completes, a second **ASK A QUESTION** input appears for results-specific queries. |
+| **Run tab** | Three modes: **Design** (questions about the model; an unsent question is kept when you switch), **Diagnose** (investigate a completed run, with a **Diagnose** button) and **Debug** (a conversation about the run trace). Diagnose and Debug need a completed run. **⚡ Optimise** sits next to the modes. The title, close button and mode buttons stay fixed while the content scrolls. |
 | **Results tab** | Three focused tabs: **Analyse** (plain-language narrative of results), **Compare** (side-by-side comparison with a saved run), and **Refine Plan** (schedule adjustment suggestions — only when the model has a timetable). A **FOLLOW-UP QUESTION** input lets you ask specific questions about the results. No action fires automatically — click the button to trigger analysis. |
 
 ### Opening the Simulation Assistant
 
-Click the **✦ AI** button in the mode bar to toggle the Simulation Assistant. On desktop it opens as a resizable sidebar. On compact layouts (720–1024px) the panel floats as an overlay. On mobile (<720px), it opens full-screen.
+Click **✨ Simulation Assistant** in the mode bar to toggle it; press Esc to close it. On desktop it opens as a resizable sidebar. On compact layouts (720–1024px) the panel floats as an overlay. On mobile (<720px), it opens full-screen.
 
 ### Design and Run tabs — Model Q&A
 
 The **ASK ABOUT THIS MODEL** textarea is always available in design and run tabs. Type any question about the model — the assistant has full knowledge of your entity types, attributes, queue configurations, Conditional event conditions, sections, and goals. Examples: "Review my entity types", "Are my Conditional event conditions correctly wired?", "What can this model simulate?"
 
-Quick-start chips suggest context-specific questions based on the tab you're viewing.
+Quick-start chips suggest context-specific questions based on the tab you're viewing (for example "Explain the sections" on the Sections tab, "Review skills, containers, distances, and state variables" on Model Data).
 
-### Run tab — Diagnostics
+### Run tab — Design, Diagnose, Debug
 
-When you open the Simulation Assistant on the Run tab, it shows the **Diagnostics** panel: entity inspector overlays on the Execute canvas, event log filtering by phase, and node status indicators. This replaces the full analysis interface — results-focused actions (Analyse, Compare, Refine Plan) only appear in the Results tab.
+On the Run tab the assistant has three modes (see the table above). Results-focused actions (Analyse, Compare, Refine Plan) appear only on the Results tab.
 
 ### Results tab — Focused actions
 
@@ -1194,12 +1379,12 @@ The LLM Bundle is a structured Markdown file that combines model definition and 
 
 ### Where to find Export ▾
 
-The unified **Export ▾** popover is available across all results views: the **Execute/Run** panel toolbar (after a run completes), the **Results** workspace tab, and per-run in **Run History** via the ⋯ (More actions) menu.
+The unified **Export ▾** popover is available across all results views: the **Run** tab toolbar (after a run completes), the **Results** workspace, and per-run in Results → **History** (**Export results ▾**).
 
 ### How to download
 
 1. Complete a run (any number of replications).
-2. Open **Export ▾** in the toolbar of the Execute panel, Results workspace, or the Run History ⋯ menu.
+2. Open **Export ▾** on the Run tab toolbar or in the Results workspace, or **Export results ▾** on a run in Results → History.
 3. Under the **AI & Reports** section, click **LLM Bundle (.md)**.
 4. The file downloads immediately. Paste its contents into any LLM interface.
 
@@ -1273,7 +1458,7 @@ The generated script contains a `RUN_MODE` constant near the top of the configur
 
 ### Accessing the export
 
-Click **⬇ SimPy** in the model header bar, or go to the **Access** tab and click **Export SimPy**.
+Go to the **Access** tab (owners) and click **Export SimPy** in the **Export** section.
 
 ---
 
@@ -1322,4 +1507,4 @@ run$results$replications[, c("replicationIndex", "seed")]
 
 ### Event log availability
 
-At the default storage level, the event log is condensed to a 4-field `logSummary`. Full event logs are only retained at `resultDetailLevel = "full"` (no UI control). The response includes `_trimmed_fields` listing condensed sections.
+At the default storage level, the event log is condensed to a 4-field `logSummary`. Full event logs are only retained when **⚙ Setup → Archive detail** is **Full** (`resultDetailLevel = "full"`). The response includes `_trimmed_fields` listing condensed sections.

@@ -107,6 +107,19 @@ describe("help assistant prompt", () => {
     expect(message).toMatch(/1 queue\(s\)/);
   });
 
+  it("prompt covers the features added in October 2026", () => {
+    const prompt = buildHelpAssistantSystemPrompt();
+    expect(prompt).toMatch(/## Publishing a Model/);
+    expect(prompt).toMatch(/Explore published/);
+    expect(prompt).toMatch(/## Evidence and Assumptions/);
+    expect(prompt).toMatch(/V-BACK-05/);
+    expect(prompt).toMatch(/Pause when/);
+    expect(prompt).toMatch(/Detail \| Sections/);
+    expect(prompt).toMatch(/V82/);
+    expect(prompt).toMatch(/flow_record_evidence/);
+    expect(prompt).toMatch(/Connect AI app/);
+  });
+
   it("buildHelpUserMessage handles empty context", () => {
     const message = buildHelpUserMessage("General question", {});
     expect(typeof message).toBe("string");
