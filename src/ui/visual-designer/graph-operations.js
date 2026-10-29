@@ -1,4 +1,4 @@
-import { deriveGraphFromModel, graphLayoutFromDerivedGraph, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from "./graph.js";
+import { deriveGraphFromModel, graphLayoutFromDerivedGraph, sectionBlockLayout, VISUAL_NODE_TYPES, NODE_WIDTH, NODE_HEIGHT } from "./graph.js";
 import { extractQueueNamesFromCondition } from "../../model/conditionFormat.js";
 import { renameQueue, renameContainer, renameServerInEvent } from "../../engine/queue-refs.js";
 import { classifyActivityEffect, effectText, extractReleaseTarget, macroCalls, replaceMacroCall, stripReleaseTarget, withReleaseTarget } from "../../model/macroParser.js";
@@ -534,6 +534,13 @@ export function updateGraphLayout(model, derivedGraph, patch = {}) {
       viewport: patch.viewport || derivedGraph.viewport,
     }),
   };
+}
+
+// Re-places every node so each section is a non-overlapping block (positions only).
+export function tidySectionsModel(model, derivedGraph) {
+  const blocks = sectionBlockLayout(derivedGraph.nodes || [], derivedGraph.edges || []);
+  const nodes = (derivedGraph.nodes || []).map(node => ({ id: node.id, ...blocks.get(node.id) }));
+  return updateGraphLayout(model, derivedGraph, { nodes });
 }
 
 // Pure layout helpers for the selection actions bar. Both return an array of

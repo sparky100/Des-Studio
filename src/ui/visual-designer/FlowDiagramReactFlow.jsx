@@ -17,7 +17,7 @@ import {
 } from "../shared/xyflow.js";
 import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
-import { isActivityRouteEdge, NODE_WIDTH, NODE_HEIGHT, projectCollapsedSections } from "./graph.js";
+import { isActivityRouteEdge, NODE_WIDTH, NODE_HEIGHT, findOverlappingSections, projectCollapsedSections } from "./graph.js";
 // Pure layout utility shared with the Execute canvas (see executeLayout.js's
 // own comment) — importing from this constants-only module, not from
 // ExecuteCanvas.jsx itself, keeps ADR-020's Draw/Execute component boundary intact.
@@ -399,7 +399,7 @@ function SelectionRectSuppressor() {
   return null;
 }
 
-function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId, onOverview, onExpandAll, sectionsView, detailView = !sectionsView }) {
+function CanvasControls({ canEdit, onResetLayout, onTidySections, overlappingSections = [], hasSections, connecting, fitNodeRef, fitAllRef, focusSectionRef, setFocusedSectionId, onOverview, onExpandAll, sectionsView, detailView = !sectionsView }) {
   const { C, FONT } = useTheme();
   const [showShortcuts, setShowShortcuts] = useState(false);
   const panelBtnStyle = {
@@ -430,6 +430,21 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
         >
           ⊡ Fit
         </button>
+        {canEdit && onTidySections && hasSections && (
+          <button
+            type="button"
+            style={panelBtnStyle}
+            title="Re-lay out sections so their boxes don't overlap (undo with Ctrl+Z)"
+            onClick={onTidySections}
+          >
+            ⊞ Tidy sections
+          </button>
+        )}
+        {overlappingSections.length > 0 && (
+          <span role="status" style={{ ...panelBtnStyle, color: C.amber, cursor: "default" }}>
+            ⚠ {overlappingSections.length} overlapping section{overlappingSections.length === 1 ? "" : "s"}: {overlappingSections.map(p => `${p.a} / ${p.b}`).join(", ")}
+          </span>
+        )}
         {canEdit && onResetLayout && (
           <button
             type="button"
@@ -512,6 +527,7 @@ export function FlowDiagramReactFlow({
   onConnectNodes,
   onDropNode,
   onResetLayout,
+  onTidySections,
 }) {
   const { C, FONT } = useTheme();
   const [dragOver, setDragOver] = useState(false);
@@ -529,6 +545,7 @@ export function FlowDiagramReactFlow({
   const effectiveCompact = compact || allCollapsed;
   const graph = useMemo(() => projectCollapsedSections(canonicalGraph, showSections ? collapsedIds : new Set(), { compact: effectiveCompact }), [canonicalGraph, collapsedIds, showSections, effectiveCompact]);
   const projected = graph !== canonicalGraph;
+  const overlappingSections = useMemo(() => findOverlappingSections(canonicalGraph.sectionPanels || []), [canonicalGraph.sectionPanels]);
   const changeCollapse = useCallback((ids, overview = false) => {
     setFocusedSectionId(null);
     onNodeSelect?.(null);
@@ -909,6 +926,9 @@ export function FlowDiagramReactFlow({
         <CanvasControls
           canEdit={canEdit}
           onResetLayout={projected ? null : onResetLayout}
+          onTidySections={projected ? null : onTidySections}
+          hasSections={canonicalGraph.sectionPanels?.length > 0}
+          overlappingSections={overlappingSections}
           connecting={connecting}
           fitNodeRef={fitNodeRef}
           fitAllRef={fitAllRef}

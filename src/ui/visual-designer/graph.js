@@ -880,3 +880,18 @@ export async function exportCanvasToPng(fitViewFn) {
 export async function getModelImageDataUrl() {
   return exportCanvasToPng();
 }
+
+// Returns [{ a, b }] for each pair of section panels whose boxes overlap, so the
+// canvas can warn that a section sits on top of another. Touching edges don't count.
+export function findOverlappingSections(sectionPanels = []) {
+  const overlaps = [];
+  for (let i = 0; i < sectionPanels.length; i += 1) {
+    for (let j = i + 1; j < sectionPanels.length; j += 1) {
+      const a = sectionPanels[i];
+      const b = sectionPanels[j];
+      const intersects = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+      if (intersects) overlaps.push({ a: a.name, b: b.name });
+    }
+  }
+  return overlaps;
+}

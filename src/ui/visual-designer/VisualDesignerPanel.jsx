@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, searchGraphNodes, VISUAL_NODE_TYPES, isActivityRouteEdge, NODE_WIDTH, ALIGN_GAP } from "./graph.js";
 import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
-import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, alignNodes, distributeNodes, VISUAL_PATTERNS, ADVANCED_EFFECT_BLOCK_MESSAGE } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, duplicateVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, tidySectionsModel, validateVisualConnection, alignNodes, distributeNodes, VISUAL_PATTERNS, ADVANCED_EFFECT_BLOCK_MESSAGE } from "./graph-operations.js";
 import { classifyActivityEffect } from "../../model/macroParser.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
@@ -782,6 +782,10 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     if (!canEdit) return;
     applyModel({ ...model, graph: model.graph ? { ...model.graph, nodes: [] } : undefined });
   };
+  const tidySections = () => {
+    if (!canEdit) return;
+    applyModel(tidySectionsModel(model, graph));
+  };
 
   // Pan/zoom the canvas to a node and open its inspector.
   // Also expands the node's section overlay (if any) so it's guaranteed visible.
@@ -1441,6 +1445,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               onConnectNodes={connectNodes}
               onDropNode={addNode}
               onResetLayout={canEdit ? resetLayout : null}
+              onTidySections={canEdit ? tidySections : null}
             />
             {isStarterBlank && canEdit && (
               <div style={{
