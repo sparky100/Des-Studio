@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeSectionLiveStats } from "../../../src/ui/execute/sectionLiveStats.js";
+import { computeSectionFlowCounts, computeSectionLiveStats } from "../../../src/ui/execute/sectionLiveStats.js";
 
 const nodes = [
   { id: "queue:q1", type: "queue", label: "Waiting", sectionId: "a" },
@@ -38,5 +38,26 @@ describe("computeSectionLiveStats", () => {
   it("reports no average time until someone has finished a stay", () => {
     const stats = computeSectionLiveStats({ nodes, snap: { entities: [customer(2, { status: "waiting", queue: "Waiting" })] } });
     expect(stats.get("a")).toMatchObject({ inNow: 1, entered: 1, left: 0, avgTime: null });
+  });
+});
+
+describe("computeSectionFlowCounts", () => {
+  it("counts customers moving between sections, and a loop back as a move to an earlier section", () => {
+    const snap = {
+      entities: [
+        customer("c1", { stages: [{ queueName: "Waiting" }, { queueName: "Review" }] }),
+        customer("c2", { stages: [{ queueName: "Waiting" }, { queueName: "Review" }, { queueName: "Waiting" }] }),
+        customer("c3", { stages: [{ queueName: "Waiting" }, { queueName: "Waiting" }] }),
+        { id: "srv", role: "server", stages: [{ queueName: "Waiting" }, { queueName: "Review" }] },
+      ],
+    };
+    const counts = computeSectionFlowCounts({ nodes, snap });
+    expect(counts.get("a->b")).toBe(2);
+    expect(counts.get("b->a")).toBe(1);
+    expect(counts.has("a->a")).toBe(false);
+  });
+
+  it("returns nothing before a run starts", () => {
+    expect(computeSectionFlowCounts({ nodes, snap: null }).size).toBe(0);
   });
 });

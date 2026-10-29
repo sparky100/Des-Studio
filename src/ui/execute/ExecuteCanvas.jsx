@@ -17,7 +17,7 @@ import { TOKEN_COLORS } from "../shared/tokens.js";
 import { useFitNodeRef } from "../shared/useFitNodeRef.js";
 import { deriveGraphFromModel, searchGraphNodes, projectCollapsedSections } from "../visual-designer/graph.js";
 import { SectionCardNode } from "./SectionCardNode.jsx";
-import { computeSectionLiveStats } from "./sectionLiveStats.js";
+import { computeSectionFlowCounts, computeSectionLiveStats } from "./sectionLiveStats.js";
 import { ExecuteSourceNode }   from "./ExecuteSourceNode.jsx";
 import { ExecuteQueueNode }    from "./ExecuteQueueNode.jsx";
 import { ExecuteActivityNode } from "./ExecuteActivityNode.jsx";
@@ -954,6 +954,12 @@ export function ExecuteCanvas({
     return computeSectionLiveStats({ nodes: baseGraph.nodes, snap, activityLive });
   }, [sectionsView, snap, baseGraph.nodes, serverTypeIndex, model]);
 
+  // Customers moved between each pair of sections so far; drawn on the aggregated arrows.
+  const sectionFlowCounts = useMemo(
+    () => (sectionsView && snap ? computeSectionFlowCounts({ nodes: baseGraph.nodes, snap }) : new Map()),
+    [sectionsView, snap, baseGraph.nodes]
+  );
+
   const flowNodes = useMemo(() => {
     const entities = snap?.entities || [];
     const waiting = entities.filter(e => e.status === "waiting");
@@ -1121,8 +1127,12 @@ export function ExecuteCanvas({
   }, [switchValues]);
 
   const flowEdges = useMemo(() => activeGraph.edges.map(edge => {
+    const liveMoves = edge.virtual && sectionsView && snap
+      ? sectionFlowCounts.get(`${edge.from.replace("submodel:", "")}->${edge.to.replace("submodel:", "")}`) ?? 0
+      : undefined;
     const base = {
       ...toFlowEdge(edge, C),
+      ...(liveMoves != null ? { label: `${liveMoves} ${liveMoves === 1 ? "customer" : "customers"} so far` } : {}),
       type: animationEnabled && !edge.virtual ? "animatedEdge" : undefined,
       data: animationEnabled && !edge.virtual ? { tokens: edgeTokens[edge.id] || [] } : undefined,
     };
@@ -1144,7 +1154,7 @@ export function ExecuteCanvas({
       }
     }
     return base;
-  }), [activeGraph.edges, animationEnabled, edgeTokens, C, showSections, focusedSectionId, nodeById, branchStates]);
+  }), [activeGraph.edges, animationEnabled, edgeTokens, C, showSections, focusedSectionId, nodeById, branchStates, sectionFlowCounts, sectionsView, snap]);
 
   // No derivable nodes — caller renders VisualView fallback
   if (!baseGraph.nodes.length) return null;
