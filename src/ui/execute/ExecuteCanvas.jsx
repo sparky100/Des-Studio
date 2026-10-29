@@ -946,13 +946,24 @@ export function ExecuteCanvas({
   // Live numbers for the Sections view's cards. Activity utilisation comes from the
   // same live data the detail nodes show, so the two views never disagree.
   const sectionStats = useMemo(() => {
-    if (!sectionsView || !snap) return new Map();
+    if (!snap || (!sectionsView && selectedNodeDetail?.nodeType !== "sectionNode")) return new Map();
     const activityLive = new Map();
     for (const node of baseGraph.nodes) {
       if (node.type === "activity") activityLive.set(node.id, deriveActivityLiveData(snap, node.refId, serverTypeIndex, model));
     }
     return computeSectionLiveStats({ nodes: baseGraph.nodes, snap, activityLive });
-  }, [sectionsView, snap, baseGraph.nodes, serverTypeIndex, model]);
+  }, [sectionsView, snap, baseGraph.nodes, serverTypeIndex, model, selectedNodeDetail]);
+
+  // The section card picked for the inspector: its description and live numbers.
+  const selectedSectionDetail = useMemo(() => {
+    if (selectedNodeDetail?.nodeType !== "sectionNode") return null;
+    const panel = (baseGraph.sectionPanels || []).find(p => p.sectionId === selectedNodeDetail.refId);
+    return {
+      description: panel?.description || "",
+      stats: sectionStats.get(selectedNodeDetail.refId) ?? null,
+      timeUnit: model.timeUnit,
+    };
+  }, [selectedNodeDetail, baseGraph.sectionPanels, sectionStats, model.timeUnit]);
 
   const flowNodes = useMemo(() => {
     const entities = snap?.entities || [];
@@ -1226,6 +1237,10 @@ export function ExecuteCanvas({
             proOptions={{ hideAttribution: true }}
             onNodeClick={(_, node) => {
               if (node.type === "sectionPanel") return;
+              if (node.type === "sectionCard") {
+                onNodeDetailSelect?.({ nodeType: "sectionNode", label: node.data?.label ?? null, refId: node.data?.sectionId ?? null });
+                return;
+              }
               onNodeSelect?.(node.data?.label ?? null);
               if (node.type === "queueNode" || node.type === "activityNode" || node.type === "queue" || node.type === "activity") {
                 onNodeDetailSelect?.({
@@ -1277,6 +1292,7 @@ export function ExecuteCanvas({
             snap={snap}
             serverTypeIndex={serverTypeIndex}
             model={model}
+            sectionDetail={selectedSectionDetail}
           />
         </DockedSidePanel>
       </div>

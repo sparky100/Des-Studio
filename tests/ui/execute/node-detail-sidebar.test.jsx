@@ -437,4 +437,40 @@ describe("NodeDetailSidebar", () => {
     expect(panel.style.position).toBe("");
     expect(panel.style.flex).toContain("1");
   });
+
+  test("shows a section card's description and live numbers in the inspector", () => {
+    renderWithTheme(
+      <NodeDetailSidebar
+        selectedNode={{ nodeType: "sectionNode", label: "Billing", refId: "sec-b" }}
+        onClose={() => {}}
+        snap={makeSnap()}
+        serverTypeIndex={new Map()}
+        model={mockModel}
+        sectionDetail={{
+          description: "Takes payment",
+          stats: { inNow: 3, entered: 7, left: 4, avgTime: 2.5, busiest: { name: "Clerk", utilisation: 80 } },
+          timeUnit: "min",
+        }}
+      />
+    );
+    expect(screen.getByText("Section")).toBeTruthy();
+    expect(screen.getByText("Takes payment")).toBeTruthy();
+    expect(screen.getByText("In section now")).toBeTruthy();
+    expect(screen.getByText("2.5 min")).toBeTruthy();
+    expect(screen.getByText("Clerk 80%")).toBeTruthy();
+  });
+
+  test("a section card with no completed stays yet says so", () => {
+    renderWithTheme(
+      <NodeDetailSidebar
+        selectedNode={{ nodeType: "sectionNode", label: "Billing", refId: "sec-b" }}
+        onClose={() => {}}
+        snap={null}
+        serverTypeIndex={new Map()}
+        model={mockModel}
+        sectionDetail={{ description: "", stats: null, timeUnit: "" }}
+      />
+    );
+    expect(screen.getByText("no completed stays yet")).toBeTruthy();
+  });
 });
