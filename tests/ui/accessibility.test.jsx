@@ -235,7 +235,10 @@ describe('accessibility pass', () => {
   it('keeps Execute Run All discoverable and disabled with validation errors', () => {
     render(<ExecutePanel model={{ ...validModel, entityTypes: [{ id: 'bad', name: '', role: 'customer' }] }} modelId="model-1" userId="user-1" />);
 
-    expect(screen.getAllByRole('button', { name: /blocker/i }).every(button => button.disabled)).toBe(true);
+    // Batch Run stays disabled; the status chip stays clickable so the
+    // blockers can be opened from it.
+    expect(screen.getByRole('button', { name: /✕ \d+ blockers?/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^\d+ blockers?$/i })).not.toBeDisabled();
     expect(screen.getByRole('alert')).toHaveTextContent(/needs attention/i);
     expect(screen.getByRole('alert')).toHaveTextContent(/blockers to resolve before running/i);
   });

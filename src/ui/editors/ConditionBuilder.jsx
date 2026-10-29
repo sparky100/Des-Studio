@@ -271,15 +271,18 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
             background:C.bg,border:`1px solid ${C.cEvent}22`,
             borderRadius:6,padding:'8px 10px'}}>
             {/* Token dropdown */}
+            {/* Takes the whole first line so long labels ("Number of Customer in
+                Queue …") stay readable in narrow dialogs; the rest wraps below. */}
             <select value={row.token} onChange={e=>updRow(idx,{token:e.target.value})}
-              style={{...sel(),flex:2,minWidth:180}}>
+              title={selectedToken?.label}
+              style={{...sel(),flex:'1 1 100%',minWidth:0,maxWidth:'100%'}}>
               {tokens.map(t=>(
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
             {/* Operator dropdown — filtered by valueType */}
             <select value={row.operator} onChange={e=>updRow(idx,{operator:e.target.value})}
-              style={{...sel(),width:60}}>
+              style={{...sel(),width:64}}>
               {allowedOps.map(op=><option key={op} value={op}>{op}</option>)}
             </select>
             {/* Value input — widget depends on valueType. Number-type rows can compare
@@ -293,14 +296,15 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
                   {numberTokens.length > 0 && (
                     <select value={isDynamic ? '__dynamic__' : '__literal__'}
                       onChange={e => updRow(idx, { value: e.target.value === '__dynamic__' ? (numberTokens[0]?.value || '0') : '0' })}
-                      style={{...sel(), width:75}}>
+                      style={{...sel(), width:96}}>
                       <option value="__literal__">Number</option>
                       <option value="__dynamic__">Dynamic</option>
                     </select>
                   )}
                   {isDynamic ? (
                     <select value={row.value} onChange={e=>updRow(idx,{value:e.target.value})}
-                      style={{...sel(), flex:1, minWidth:160}}>
+                      title={numberTokens.find(t => t.value === row.value)?.label}
+                      style={{...sel(), flex:'1 1 100%', minWidth:0, maxWidth:'100%'}}>
                       {numberTokens.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
                   ) : (

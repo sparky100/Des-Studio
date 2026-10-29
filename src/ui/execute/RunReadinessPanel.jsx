@@ -1,5 +1,5 @@
 // Moved verbatim out of execute/index.jsx (max-lines ratchet, expert review C-11).
-import { Tag } from "../shared/components.jsx";
+import { Btn, Tag } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { formatEstimate } from "./runHelpers.js";
 
@@ -35,6 +35,7 @@ export function RunReadinessPanel({ runAdmission, complexityEstimate, runLabel, 
   return (
     <div
       role={hasAdmissionErrors ? "alert" : "status"}
+      data-run-readiness=""
       style={{
         background: C.panel,
         border: `1px solid ${readinessBorder}`,
@@ -146,7 +147,7 @@ export function RunReadinessPanel({ runAdmission, complexityEstimate, runLabel, 
       )}
       {runAdmission.warnings.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {runAdmission.warnings.slice(0, 3).map((issue, index) => (
+          {runAdmission.warnings.map((issue, index) => (
             <div
               key={`warn-${issue.code}-${index}`}
               style={{
@@ -231,5 +232,38 @@ export function RunReadinessPanel({ runAdmission, complexityEstimate, runLabel, 
       </>
       )}
     </div>
+  );
+}
+
+/** Status chip at the start of the Run toolbar (blockers / warnings / ready).
+ * It used to be a disabled button, so it looked greyed out and did nothing;
+ * clicking it now opens the readiness strip's details and scrolls to them. */
+export function RunReadinessStatusButton({ runAdmission, onShowDetails }) {
+  const blockers = runAdmission.hardErrors.length;
+  const warnings = runAdmission.warnings.length;
+  const showDetails = () => {
+    onShowDetails?.();
+    requestAnimationFrame(() => {
+      document.querySelector("[data-run-readiness]")?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+    });
+  };
+  if (blockers > 0) {
+    return (
+      <Btn variant="danger" onClick={showDetails} title={`${blockers} blocker(s) must be resolved before running. Click to see them.`}>
+        {blockers} blocker{blockers !== 1 ? "s" : ""}
+      </Btn>
+    );
+  }
+  if (warnings > 0) {
+    return (
+      <Btn variant="amber" onClick={showDetails} title={`${warnings} warning(s): the model can run, but they are worth checking. Click to see them.`}>
+        {warnings} warning{warnings !== 1 ? "s" : ""}
+      </Btn>
+    );
+  }
+  return (
+    <Btn variant="success" onClick={showDetails} title="Model is valid and ready to run. Click for run readiness details.">
+      ✓ Ready
+    </Btn>
   );
 }

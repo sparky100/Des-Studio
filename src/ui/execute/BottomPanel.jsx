@@ -1,7 +1,7 @@
 // ui/execute/BottomPanel.jsx — collapsible tabbed detail area below the Execute canvas
 // Tabs: Step Log | Entity Details | Charts | Live Metrics
 // F9C.8 + F9C.9 + F9C.11 node-filtered log
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 ;
 import { Tag, PhaseTag } from "../shared/components.jsx";
 import { QueueDepthTimePlot, QueueWaitTimePlot, QueueHistogram, ContainerLevelTimePlot } from "./SweepViews.jsx";
@@ -1352,7 +1352,7 @@ function StateVariablesTab({ snap, model, stateChanges = [] }) {
 
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
-export function BottomPanel({ log, snap, model, hasResults = false, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries, waitDist, stateChanges = [] }) {
+export function BottomPanel({ log, snap, model, hasResults = false, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, entityFocusRequest = 0, onNodeSelect, timeSeries, waitDist, stateChanges = [] }) {
   const { C, FONT } = useTheme();
   const [activeTab, setActiveTab] = useState(() => {
     try { const t = localStorage.getItem("des.bottomPanel.tab"); return TABS.some(tab => tab.id === t) ? t : "log"; } catch { return "log"; }
@@ -1386,7 +1386,9 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
       if (!dragStateRef.current) return;
       event.preventDefault();
       const clientY = event.touches ? event.touches[0].clientY : event.clientY;
-      const delta = dragStateRef.current.startY - clientY;
+      // The handle sits on the panel's bottom edge, so the body grows as the
+      // pointer moves down and shrinks as it moves up.
+      const delta = clientY - dragStateRef.current.startY;
       const newH = Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, dragStateRef.current.startHeight + delta));
       setBodyHeight(newH);
       try { localStorage.setItem("des.bottomPanel.height", String(newH)); } catch { /* storage unavailable (private mode) — non-critical */ }
@@ -1405,6 +1407,24 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
       window.removeEventListener("touchend", handlePointerUp);
     };
   }, []);
+
+  // An entity picked outside the Entities tab (the Run inspector, the step
+  // log) only sets the selection, which is invisible unless the Entity Details tab
+  // is open. Open it, expanded, and bring the panel into view.
+  const panelRef = useRef(null);
+  const showEntitiesTab = useCallback(() => {
+    setActiveTab("entities");
+    setCollapsed(false);
+    try { localStorage.setItem("des.bottomPanel.tab", "entities"); localStorage.setItem("des.bottomPanel.collapsed", "0"); } catch { /* storage unavailable (private mode) — non-critical */ }
+    requestAnimationFrame(() => panelRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }));
+  }, []);
+  useEffect(() => {
+    if (entityFocusRequest > 0) showEntitiesTab();
+  }, [entityFocusRequest, showEntitiesTab]);
+  const inspectEntityFromLog = (id) => {
+    onEntitySelect?.(id);
+    if (id != null) showEntitiesTab();
+  };
 
   const startResize = (event) => {
     event.preventDefault();
@@ -1444,7 +1464,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
     : `${Math.max(bodyHeight, activeTab === "stagekpis" ? STAGE_KPI_BODY_MIN_HEIGHT : bodyHeight)}px`;
 
   return (
-    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8 }}>
+    <div ref={panelRef} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8 }}>
       {/* Header: tabs + collapse toggle */}
       <div style={{
         display: "flex",
@@ -1494,7 +1514,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, selectedNode
             overflowX: "hidden",
           }}
         >
-          {activeTab === "log"       && <LogTab log={log.slice(-50)} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
+          {activeTab === "log"       && <LogTab log={log.slice(-50)} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={inspectEntityFromLog} onNodeSelect={onNodeSelect} model={model} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
           {activeTab === "resources" && <ResourcesTab snap={snap} model={model} />}
           {activeTab === "fel"       && <FelTab snap={snap} model={model} />}

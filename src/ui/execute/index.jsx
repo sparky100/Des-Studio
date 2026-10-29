@@ -49,7 +49,7 @@ import { useConfirm } from "../shared/useConfirm.jsx";
 import { ExportPopover } from "../shared/ExportPopover.jsx";
 import { ResponsivePanel } from "../shared/ResponsivePanel.jsx";
 import { resolveLiveDataModel, numberDefault, intDefault, nowPerf, doCloudSave, yieldToBrowser } from "./runHelpers.js";
-import { RunReadinessPanel } from "./RunReadinessPanel.jsx";
+import { RunReadinessPanel, RunReadinessStatusButton } from "./RunReadinessPanel.jsx";
 import { RunStatusBanners } from "./RunStatusBanners.jsx";
 import { BatchResultsPanel } from "./BatchResultsPanel.jsx";
 import { RunningToolbar, ScheduleSelector, SpeedControl, runSettingsText } from "./RunToolbars.jsx";
@@ -231,7 +231,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     speedMultiplier, setSpeedMultiplier,
     selectedNodeLabel, setSelectedNodeLabel,
     selectedNodeDetail, setSelectedNodeDetail,
-    selectedEntityId, setSelectedEntityId,
+    selectedEntityId, setSelectedEntityId, entityFocusRequest, inspectEntity,
   } = useVisualizationSettings(userId);
   const [latestRunId, setLatestRunId] = useState(null);
   const [showExportPopover, setShowExportPopover] = useState(false);
@@ -364,7 +364,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const effectiveCollectTrace = forceTraceCollection ? true : runAdmission.effectiveSettings.collectTrace;
   const traceAutoDisabled = traceWouldAutoDisable && !forceTraceCollection;
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
-  const hasAdmissionWarnings = runAdmission.warnings.length > 0;
   const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : saveDetailLevel === "minimal" ? "minimal" : "compact";
 
   const initEngine = useCallback(async () => {
@@ -2542,19 +2541,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       {executeSection === "run" && !isRunning && (
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {/* Validation status indicator — informational only, positioned first */}
-        {hasAdmissionErrors ? (
-          <Btn variant="danger" disabled={true} title={`${runAdmission.hardErrors.length} blocker(s) must be resolved before running`}>
-             {runAdmission.hardErrors.length} blocker{runAdmission.hardErrors.length !== 1 ? "s" : ""}
-          </Btn>
-        ) : hasAdmissionWarnings ? (
-          <Btn variant="ghost" disabled={true} title={`${runAdmission.warnings.length} warning(s) — model can run but worth checking`}>
-             {runAdmission.warnings.length} warning{runAdmission.warnings.length !== 1 ? "s" : ""}
-          </Btn>
-        ) : (
-          <Btn variant="success" disabled={true} title="Model is valid — ready to run">
-            ✓ Ready
-          </Btn>
-        )}
+        <RunReadinessStatusButton runAdmission={runAdmission} onShowDetails={() => { setHideRunReadiness(false); setReadinessExpanded(true); }} />
         <Btn variant="ghost" onClick={() => {
           const issues = checkModel(model);
           setModelCheckerIssues(issues);
@@ -2700,7 +2687,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   onNodeSelect={setSelectedNodeLabel}
                   selectedNodeDetail={selectedNodeDetail}
                   onNodeDetailSelect={setSelectedNodeDetail}
-                  onEntitySelect={setSelectedEntityId}
+                  onEntitySelect={inspectEntity}
                   batchActive={batchActive}
                 />
               </Suspense>
@@ -2713,6 +2700,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 onClearFilter={() => setSelectedNodeLabel(null)}
                 selectedEntityId={selectedEntityId}
                 onEntitySelect={setSelectedEntityId}
+                entityFocusRequest={entityFocusRequest}
                 onNodeSelect={setSelectedNodeLabel}
                 timeSeries={liveTimeSeries ?? results?.timeSeries}
                 waitDist={liveWaitDist ?? results?.waitDist}
