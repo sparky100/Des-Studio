@@ -1,5 +1,5 @@
 // ui/execute/NodeDetailSidebar.jsx — Detail sidebar for queue and activity nodes
-import { useEffect, useCallback, useMemo } from "react";
+import { Fragment, useEffect, useCallback, useMemo } from "react";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { deriveActivityLiveData } from "./activityLiveData.js";
 
@@ -455,7 +455,38 @@ export function ActivityDetail({ label, liveData, onEntitySelect }) {
   );
 }
 
-export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect, snap, serverTypeIndex, model }) {
+const fmtNumber = n => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+
+// A section card's inspector: what the section is for, and its live numbers. Entities and
+// resource lists stay with the detail nodes, which the Detail view shows.
+function SectionDetail({ name, description, stats, timeUnit }) {
+  const { C, FONT } = useTheme();
+  const rows = [
+    ["In section now", stats ? stats.inNow : "—"],
+    ["Entered so far", stats ? stats.entered : "—"],
+    ["Left so far", stats ? stats.left : "—"],
+    ["Average stay", stats?.avgTime != null ? `${fmtNumber(stats.avgTime)} ${timeUnit || ""}`.trim() : "no completed stays yet"],
+    ["Busiest resource", stats?.busiest ? `${stats.busiest.name} ${Math.round(stats.busiest.utilisation)}%` : "—"],
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: SPACE.md, fontFamily: FONT }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{name}</div>
+        {description && <p style={{ margin: `${SPACE.xs}px 0 0`, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{description}</p>}
+      </div>
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto 1fr", gap: `${SPACE.xs}px ${SPACE.md}px`, fontSize: 12 }}>
+        {rows.map(([label, value]) => (
+          <Fragment key={label}>
+            <dt style={{ color: C.muted }}>{label}</dt>
+            <dd style={{ margin: 0, color: C.text, fontWeight: 600 }}>{value}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect, snap, serverTypeIndex, model, sectionDetail = null }) {
   const { C, FONT } = useTheme();
 
   const liveData = useMemo(() => {
@@ -480,8 +511,9 @@ export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect, snap,
   if (!selectedNode) return null;
 
   const { nodeType, label } = selectedNode;
-  const nodeTypeTag = nodeType === "queueNode" ? "Queue" : "Activity";
-  const nodeTagColor = nodeType === "queueNode" ? C.cEvent : C.purple;
+  const isSection = nodeType === "sectionNode";
+  const nodeTypeTag = isSection ? "Section" : nodeType === "queueNode" ? "Queue" : "Activity";
+  const nodeTagColor = isSection ? C.accent : nodeType === "queueNode" ? C.cEvent : C.purple;
 
   return (
     <div style={{
@@ -536,7 +568,9 @@ export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect, snap,
       <div style={{
         flex: 1, overflowY: "auto", padding: 14,
       }}>
-        {nodeType === "queueNode" ? (
+        {isSection ? (
+          <SectionDetail name={label} description={sectionDetail?.description} stats={sectionDetail?.stats} timeUnit={sectionDetail?.timeUnit} />
+        ) : nodeType === "queueNode" ? (
           <QueueDetail label={label} liveData={liveData} onEntitySelect={onEntitySelect} />
         ) : nodeType === "activityNode" ? (
           <ActivityDetail label={label} liveData={liveData} onEntitySelect={onEntitySelect} />

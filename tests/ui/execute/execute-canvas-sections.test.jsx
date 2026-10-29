@@ -78,4 +78,13 @@ describe("ExecuteCanvas — Sections view", () => {
     render(<ExecuteCanvas model={model} snap={null} />);
     expect(flowProps.current.nodes.find(n => n.type === "sectionCard").data.liveData).toBeNull();
   });
+
+  test("clicking a section card selects it for the inspector", () => {
+    localStorage.setItem(KEY, "sections");
+    const onNodeDetailSelect = vi.fn();
+    render(<ExecuteCanvas model={model} snap={snap} onNodeDetailSelect={onNodeDetailSelect} />);
+    const card = flowProps.current.nodes.find(n => n.data.sectionId === "intake");
+    act(() => flowProps.current.onNodeClick(null, card));
+    expect(onNodeDetailSelect).toHaveBeenCalledWith({ nodeType: "sectionNode", label: "Intake", refId: "intake" });
+  });
 });
