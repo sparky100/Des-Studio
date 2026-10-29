@@ -63,14 +63,25 @@ describe("ExecuteCanvas — Sections view", () => {
     expect(flowProps.current.edges.some(e => e.source === "submodel:intake" && e.target === "submodel:service")).toBe(true);
   });
 
-  test("opens in the remembered view, and Show detail returns to that section's nodes", () => {
+  test("Show detail on one card expands only that section; the others stay cards", () => {
     localStorage.setItem(KEY, "sections");
     render(<ExecuteCanvas model={model} snap={snap} />);
     expect(flowProps.current.nodes.filter(n => n.type === "sectionCard")).toHaveLength(2);
 
     act(() => flowProps.current.nodes.find(n => n.data.sectionId === "service").data.onShowDetail());
+    const cards = flowProps.current.nodes.filter(n => n.type === "sectionCard");
+    expect(cards.map(c => c.data.sectionId)).toEqual(["intake"]);
+    expect(flowProps.current.nodes.some(n => n.data.sectionId === "service" && n.type !== "sectionCard")).toBe(true);
+    expect(localStorage.getItem(KEY)).toBe("sections");
+  });
+
+  test("expanding every card returns to the Detail view", () => {
+    localStorage.setItem(KEY, "sections");
+    render(<ExecuteCanvas model={model} snap={snap} />);
+    act(() => flowProps.current.nodes.find(n => n.data.sectionId === "service").data.onShowDetail());
+    act(() => flowProps.current.nodes.find(n => n.data.sectionId === "intake").data.onShowDetail());
     expect(flowProps.current.nodes.some(n => n.type === "sectionCard")).toBe(false);
-    expect(localStorage.getItem(KEY)).toBe("detail");
+    expect(screen.getByRole("button", { name: "Detail" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   test("cards say the run has not started before the first snapshot", () => {
