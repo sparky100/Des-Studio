@@ -1,6 +1,6 @@
-# Getting Started with simmodlr
+# Getting Started with Flow
 
-**simmodlr** is a browser-based discrete-event simulation tool. You describe entities (customers, jobs, patients), the queues they wait in, and the events that move them through your system — no code required.
+**Flow** (part of the simmodlr family) is a browser-based discrete-event simulation tool. You describe entities (customers, jobs, patients), the queues they wait in, and the events that move them through your system — no code required.
 
 ---
 
@@ -16,17 +16,19 @@
 
 ---
 
-## Four Ways to Build a Model
+## Five Ways to Build a Model
 
-People work differently. simmodlr supports four authoring approaches, all producing the same model format so you can mix and match:
+People work differently. Flow supports five authoring approaches, all producing the same model format so you can mix and match:
 
-**1. Forms & Tabs** — Step-by-step structured entry. Define entity types, queues, events, and distributions through dedicated editors. Good for precise control and iterative refinement.
+**1. Define (forms)** — Step-by-step structured entry under **Design → Define**. Define entity types, queues, events, and distributions through dedicated editors. Good for precise control and iterative refinement.
 
-**2. Visual Designer** — Drag-and-drop canvas. Draw your process as a flow diagram; nodes and connections translate directly into the simulation model. Good for communicating structure to stakeholders.
+**2. Draw** — Drag-and-drop canvas (the Visual Designer). Draw your process as a flow diagram; nodes and connections translate directly into the simulation model. Good for communicating structure to stakeholders.
 
-**3. AI Model Builder** — Describe the system in plain language inside simmodlr; the built-in AI generates a first model for you to review, adjust, and run. Good for rapid prototyping from a problem description.
+**3. Describe** — Choose **Model assistant** in the New Model dialog and describe the system in plain language inside Flow; the built-in AI generates a first model for you to review, adjust, and run. Good for rapid prototyping from a problem description.
 
-**4. External LLM Import** — simmodlr publishes its full model schema. You can paste that schema into any external AI (ChatGPT, Claude, Gemini, or similar), ask it to build a model, and import the resulting JSON directly. This is particularly powerful when you already have detailed domain knowledge in a document you can share with the AI alongside the schema.
+**4. External LLM Import** — Flow publishes its full model schema as the **↓ AI Prompt Pack** (Model Library header). You can paste that pack into any external AI (ChatGPT, Claude, Gemini, or similar), ask it to build a model, and import the resulting JSON directly. This is particularly powerful when you already have detailed domain knowledge in a document you can share with the AI alongside the schema.
+
+**5. Desktop AI app (Flow MCP)** — **Connect AI app** in the Model Library header installs Flow's MCP server in Claude Desktop, Claude Code, Cursor or another MCP app. The assistant can then build, validate, run and fix the model on your computer, record the evidence you give it, and open the result in Flow.
 
 ---
 
@@ -44,21 +46,21 @@ Regardless of whether you use the Visual Designer, type a description for the AI
 
 **Routing** — how entities move between stages. Fixed next-step, conditional (first-match predicate), or probabilistic (weighted split).
 
-The Visual Designer shows all of this as a flow diagram as you build. Forms & Tabs give you fine-grained control over each element. AI modes generate the structure for you to review. The underlying model is the same either way.
+Draw shows all of this as a flow diagram as you build. The Define editors give you fine-grained control over each element. AI modes generate the structure for you to review. The underlying model is the same either way.
 
 ---
 
 ## Step 2 — Run
 
-Click **Run** to execute a single replication. Watch entities move through the system on the Execute canvas, inspect the step log, and check entity state mid-run.
+Open **Run** and use **Step** or **Auto Run** to watch a single replication: entities move across the Run canvas, the step log fills, and clicking a queue or activity opens its live inspector beside the canvas. Add **⏸ Pause when…** conditions to stop Auto Run when, say, a queue reaches 10. **⚡ Batch Run** runs all the replications at full speed.
 
-Use a single run to verify the model behaves as expected before investing time in a full experiment.
+Use a watched run to verify the model behaves as expected before investing time in a full experiment.
 
 ---
 
 ## Step 3 — Experiment
 
-Once the model is validated, move to an **Experiment** (or **Study**). Experiments let you test what happens when you vary a parameter — server capacity, inter-arrival rate, batch size — across a defined range. simmodlr runs multiple replications for each parameter value, averages the results with confidence intervals, and surfaces where differences are statistically significant.
+Once the model is validated, move to **Run → Studies**. A Study tests what happens when you vary a parameter — server capacity, inter-arrival rate, batch size — across a defined range (1D, 2D, Sampled or Sequential). **Run → Experiments** saves named parameter sets you can re-run. Flow runs multiple replications for each parameter value, averages the results with confidence intervals, and surfaces where differences are statistically significant.
 
 This is where simulation earns its value: not one answer, but a map of how the system responds to change.
 
@@ -75,4 +77,12 @@ Key outputs per resource and queue:
 
 The **Simulation Assistant** lets you ask plain-language questions about your results: *"Which queue is the main bottleneck?"*, *"What happens to utilisation if I add a second server?"* Answers are grounded in the actual run data.
 
-Use the **Report** button to generate a formatted summary (Senior Management or Technical depth, HTML or Markdown).
+Use **Export ▾ → Create Report…** to generate a formatted summary (Senior Management or Technical depth, HTML or Markdown).
+
+---
+
+## Step 5 — Back It Up and Share It
+
+- **Evidence** (Design → Define → Evidence) records where your numbers come from and which are assumptions, and shows what is still unbacked.
+- **Sections** group a large model into described stages, shown as cards in Draw and Run.
+- **Access → Publish** gives the model a public page that anyone can open and run in their own browser, with only the settings you choose to expose.
