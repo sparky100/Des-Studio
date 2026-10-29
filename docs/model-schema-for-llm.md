@@ -2949,6 +2949,8 @@ A B-event `Arrive` schedules arrivals at a mean of 12 per hour. The user said th
 
 The arrival rate has a source. The triage order is an assumption, and it is contested, so the model should say so when it reports results.
 
+**Recording with the MCP.** `flow_record_evidence` adds named evidence or assumptions to a saved model and attaches them, by element name and optionally by parameter name. It refuses evidence without a source the user named, and it never guesses an element: an unknown or ambiguous name is reported and nothing is attached to it. `flow_evidence_coverage` shows what is now backed.
+
 ## Core Principle
 
 An LLM generating a simmodlr model is **not done** when it has written JSON —

@@ -276,7 +276,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
         )}
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-        <NodeEvidenceSection model={model} node={node} />
+        <NodeEvidenceSection model={model} node={node} onOpenEvidence={onGoToDefine ? () => onGoToDefine("evidence") : undefined} />
 
       {node.type === VISUAL_NODE_TYPES.SOURCE && bEvent && (
         <>

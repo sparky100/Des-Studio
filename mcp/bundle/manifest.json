@@ -73,6 +73,14 @@
     {
       "name": "flow_open_in_app",
       "description": "Open a model file in Flow in your browser: add it as a new model, or update the model it was exported from."
+    },
+    {
+      "name": "flow_evidence_coverage",
+      "description": "Show what backs a model: the share of elements and parameters with evidence or an assumption, the arrival and capacity parameters nothing backs, contested assumptions, and the evidence warnings."
+    },
+    {
+      "name": "flow_record_evidence",
+      "description": "Add named evidence (from a source the user gave) or assumptions, and attach them to an element or one of its parameters, in a saved model. Never invents a source."
     }
   ],
   "user_config": {

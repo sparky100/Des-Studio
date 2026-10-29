@@ -8,6 +8,7 @@ import {
   buildGoalGaps,
 } from '../llm/prompts.js';
 import { simToWall, formatWallTime } from '../engine/clockUtils.js';
+import { recordDisplayName } from '../engine/backing-links.js';
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
 
@@ -1052,6 +1053,27 @@ function buildAppendix(model) {
 
 // ── HTML report builder ────────────────────────────────────────────────────────
 
+// The evidence and assumptions behind the model. Nothing is shown when the
+// model records none, so reports for models without a register stay as they were.
+function levelWord(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'Medium';
+  if (value < 0.45) return 'Low';
+  if (value < 0.75) return 'Medium';
+  return 'High';
+}
+
+function buildEvidenceSection(model) {
+  const evidence = model.evidence || [];
+  const assumptions = model.assumptions || [];
+  if (!evidence.length && !assumptions.length) return '';
+  const evRows = evidence.map(ev => `<tr><td>${esc(recordDisplayName(ev))}</td><td>${esc(ev.source || '')}</td><td>${esc(levelWord(ev.strength))}</td><td>${esc(ev.dateCaptured || '')}</td></tr>`).join('');
+  const asRows = assumptions.map(a => `<tr><td>${esc(recordDisplayName(a))}</td><td>${esc(a.text && a.text !== recordDisplayName(a) ? a.text : '')}</td><td>${esc(levelWord(a.confidence))}</td><td>${a.contested ? 'Contested' : ''}</td></tr>`).join('');
+  return `<section><h2>Evidence and assumptions</h2>
+    ${evidence.length ? `<h3>Evidence (${evidence.length})</h3><table><thead><tr><th>Name</th><th>Source</th><th>Strength</th><th>Captured</th></tr></thead><tbody>${evRows}</tbody></table>` : ''}
+    ${assumptions.length ? `<h3>Assumptions (${assumptions.length})</h3><table><thead><tr><th>Name</th><th>Assumption</th><th>Confidence</th><th>Status</th></tr></thead><tbody>${asRows}</tbody></table>` : ''}
+  </section>`;
+}
+
 function buildHtmlReport({ model, results, experimentConfig, runMeta, aggregateStats, type, narrativeText, modelDescription, recommendations, modelImageDataUrl }) {
   const isTechnical = type === 'technical';
   const title = esc(`${model.name || 'Simulation'} — ${isTechnical ? 'Technical' : 'Management'} Report`);
@@ -1061,6 +1083,7 @@ function buildHtmlReport({ model, results, experimentConfig, runMeta, aggregateS
     buildExecutiveSummary(model, results, recommendations, aggregateStats, modelDescription),
     buildModelImage(modelImageDataUrl),
     buildMethodology(model, results, experimentConfig, aggregateStats, type),
+    buildEvidenceSection(model),
     buildResults(model, results, aggregateStats, type),
     narrativeText ? buildSeniorMgmtAnalysis(narrativeText) : '',
     buildRecommendations(recommendations),
