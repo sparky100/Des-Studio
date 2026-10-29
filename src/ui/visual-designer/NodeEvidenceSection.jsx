@@ -28,9 +28,9 @@ export function backingTargetForNode(model, node) {
 }
 
 /**
- * @param {{ model: Record<string, any>, node: { refId?: string } }} props
+ * @param {{ model: Record<string, any>, node: { refId?: string }, onOpenEvidence?: () => void }} props
  */
-export function NodeEvidenceSection({ model, node }) {
+export function NodeEvidenceSection({ model, node, onOpenEvidence }) {
   const { C, FONT } = useTheme();
   const target = useMemo(() => backingTargetForNode(model, node), [model, node]);
   if (!target) return null;
@@ -70,6 +70,15 @@ export function NodeEvidenceSection({ model, node }) {
         <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>
           Nothing backs this yet. Attach evidence or an assumption in the Evidence tab under Design.
         </div>
+      )}
+      {onOpenEvidence && (
+        <button
+          type="button"
+          onClick={onOpenEvidence}
+          style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, color: C.accent, textDecoration: "underline", fontFamily: FONT }}
+        >
+          Open in Evidence tab
+        </button>
       )}
     </div>
   );

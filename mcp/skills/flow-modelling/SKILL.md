@@ -100,6 +100,7 @@ As you model, record what backs each parameter. Use `flow_get_schema` section 16
 - **Everything else is an assumption.** Each value the user did not source, and each value you chose, goes in `assumptions` (what was assumed, and why), attached to the parameter it sets. Mark it `contested` where stakeholders disagree.
 - **Ask about the figures that matter.** If a value drives the result and has no source, ask the user whether they have one before presenting it as settled.
 - **Report the gaps.** After a run, say which results depend on assumptions and which are backed by a source.
+- **Record it with `flow_record_evidence`.** Give each record a name, add evidence only with the named source the user gave, and attach each record to its element, or to one parameter of it. Check the result with `flow_evidence_coverage`.
 
 ## 5. Reporting results
 

@@ -11,7 +11,7 @@
 // publishes the provenance of those parameters.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchPublishedModel, licenceLabel } from "../../db/published.js";
-import { coverageSummary } from "../../engine/backing-links.js";
+import { coverageSummary, recordDisplayName } from "../../engine/backing-links.js";
 import { Btn } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { PublicNotFound, PublicShell } from "./publicChrome.jsx";
@@ -280,9 +280,14 @@ export function PublicModelPage({ modelId, onBack, onOpenInFlow }) {
                     <div key={ev.id} style={{
                       borderLeft: `2px solid ${C.green}66`, paddingLeft: 10,
                     }}>
-                      <div style={{ fontSize: 12, color: C.text, fontFamily: SANS, lineHeight: 1.6 }}>
-                        {ev.description}
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.text, fontFamily: SANS, lineHeight: 1.6 }}>
+                        {recordDisplayName(ev)}
                       </div>
+                      {ev.description && ev.description !== recordDisplayName(ev) && (
+                        <div style={{ fontSize: 12, color: C.text, fontFamily: SANS, lineHeight: 1.6 }}>
+                          {ev.description}
+                        </div>
+                      )}
                       <div style={{ fontSize: 11, color: C.muted, fontFamily: SANS, marginTop: 3 }}>
                         {EVIDENCE_TYPE_LABELS[ev.type] || ev.type}
                         {ev.source ? ` · ${ev.source}` : ""}
@@ -304,9 +309,14 @@ export function PublicModelPage({ modelId, onBack, onOpenInFlow }) {
                     <div key={a.id} style={{
                       borderLeft: `2px solid ${a.contested ? C.amber : C.border}`, paddingLeft: 10,
                     }}>
-                      <div style={{ fontSize: 12, color: C.text, fontFamily: SANS, lineHeight: 1.6 }}>
-                        {a.text}
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.text, fontFamily: SANS, lineHeight: 1.6 }}>
+                        {recordDisplayName(a)}
                       </div>
+                      {a.text && a.text !== recordDisplayName(a) && (
+                        <div style={{ fontSize: 12, color: C.text, fontFamily: SANS, lineHeight: 1.6 }}>
+                          {a.text}
+                        </div>
+                      )}
                       {a.contested && (
                         <div style={{ fontSize: 11, color: C.amber, fontFamily: SANS, marginTop: 3, fontWeight: 700 }}>
                           Contested — reasonable people could disagree

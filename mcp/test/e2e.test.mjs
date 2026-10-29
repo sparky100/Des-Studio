@@ -34,10 +34,10 @@ const call = async (name, args = {}) => {
   return { text: res.content.map(c => c.text).join('\n'), isError: !!res.isError };
 };
 
-test('lists the thirteen tools and the build_model prompt, with workflow instructions', async () => {
+test('lists the fourteen tools and the build_model prompt, with workflow instructions', async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map(t => t.name).sort(), [
-    'flow_compare_models', 'flow_edit_model', 'flow_evidence_coverage', 'flow_get_guide', 'flow_get_schema', 'flow_list_models', 'flow_open_in_app', 'flow_read_model', 'flow_run_model', 'flow_run_over_time',
+    'flow_compare_models', 'flow_edit_model', 'flow_evidence_coverage', 'flow_get_guide', 'flow_get_schema', 'flow_list_models', 'flow_open_in_app', 'flow_read_model', 'flow_record_evidence', 'flow_run_model', 'flow_run_over_time',
     'flow_save_model', 'flow_sweep_parameter', 'flow_trace_run', 'flow_validate_model',
   ]);
   const { prompts } = await client.listPrompts();

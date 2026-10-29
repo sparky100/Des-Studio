@@ -15,7 +15,7 @@ import { checkForUpdate } from './update-check.js';
 import {
   VERSION, BUILD, MAX_REPLICATIONS, DEFAULT_REPLICATIONS, DEFAULT_PERIODS, MAX_PERIODS, MAX_SWEEP_POINTS, MAX_SWEEP_RUNS, DEFAULT_SWEEP_REPLICATIONS,
   DEFAULT_TRACE_LINES, MAX_TRACE_LINES, MAX_EDIT_CHANGES,
-  ToolError, listModels, readModel, validate, evidenceCoverage, run, compare, runOverTime, sweep, traceRun, editModel, save, openInApp,
+  ToolError, listModels, readModel, validate, evidenceCoverage, recordEvidence, run, compare, runOverTime, sweep, traceRun, editModel, save, openInApp,
 } from './tools.js';
 
 function modelsFolder(argv = process.argv.slice(2)) {
@@ -107,6 +107,35 @@ server.registerTool('flow_evidence_coverage', {
   inputSchema: { model: modelArg, file: fileArg },
   annotations: { readOnlyHint: true },
 }, handler(args => evidenceCoverage(args, FOLDER)));
+
+server.registerTool('flow_record_evidence', {
+  title: 'Record evidence and assumptions',
+  description: 'Add evidence (a named source the user gave) or assumptions (a stated working value, limitation or judgement), and attach them to bound events, conditional events, queues or model data, or to one parameter of them. Use it only for sources the user named in this conversation, or figures they pasted themselves. Never invent a source: when the user has none, record an assumption. Names are matched without case. Refuses to save a model with errors unless allowErrors is true.',
+  inputSchema: {
+    file: z.string().describe('The model file, e.g. "GP surgery.json"'),
+    add: z.array(z.object({
+      kind: z.enum(['evidence', 'assumption']),
+      name: z.string(),
+      source: z.string().optional().describe('Evidence only: where the figure came from, as the user named it'),
+      description: z.string().optional().describe('Evidence only: what the source says'),
+      type: z.string().optional().describe('Evidence only: e.g. literature, data, expert'),
+      strength: z.enum(['low', 'medium', 'high']).optional().describe('Evidence only'),
+      dateCaptured: z.string().optional().describe('Evidence only: YYYY-MM-DD'),
+      text: z.string().optional().describe('Assumption only: the assumption, in full'),
+      confidence: z.enum(['low', 'medium', 'high']).optional().describe('Assumption only'),
+      contested: z.boolean().optional().describe('Assumption only: true when the user is not sure of it'),
+    })).optional(),
+    attach: z.array(z.object({
+      record: z.string().describe('The name or id of an evidence record or assumption'),
+      kind: z.enum(['evidence', 'assumption']).optional().describe('Leave out to find the record by name'),
+      element: z.string().describe('The name of a bound event, conditional event, queue or model data item'),
+      parameter: z.string().optional().describe('A parameter of that element, by its name in the Evidence tab; leave out to back the whole element'),
+    })).optional(),
+    dryRun: z.boolean().optional(),
+    allowErrors: z.boolean().optional(),
+  },
+  annotations: { destructiveHint: true, idempotentHint: false },
+}, handler(args => recordEvidence(args, FOLDER)));
 
 server.registerTool('flow_validate_model', {
   title: 'Validate a Flow model',

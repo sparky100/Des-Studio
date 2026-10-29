@@ -17,6 +17,7 @@ import { estimateRunComplexity, estimateMaxCycles } from '../../src/engine/compl
 import { confidenceInterval95, summarizeReplicationResults, SUMMARY_METRICS, pairedTConfidenceInterval, bonferroniCI, buildWaitDistEntry, buildHistogram } from '../../src/engine/statistics.js';
 import { pickModelJsonFields } from '../../src/model/modelJsonFields.js';
 import { backingStatus, buildBackableUnits, coverageSummary, recordDisplayName } from '../../src/engine/backing-links.js';
+import { addEvidence, addAssumption, attach, LEVEL_VALUES } from '../../src/ui/editors/evidenceModelOps.js';
 import { backingRegisterWarnings } from '../../src/engine/backing-warnings.js';
 import { buildImportLink } from '../../src/utils/importLink.js';
 import { buildKpis, buildGoalGapsFromResults } from '../../src/llm/prompts.js';
@@ -1054,6 +1055,99 @@ export async function editModel(args, folder) {
   const envelope = exportEnvelope({ name: name || path.basename(full, '.json'), description, model: edited, graph, sourceModelId });
   await writeFile(full, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
   return [...lines, '', `Saved over ${full}. To see the change in Flow, use flow_open_in_app${sourceModelId ? ' (it offers to update the model it was exported from)' : ''}, or import the file (+ New Model → Import a file).`].join('\n');
+}
+
+// ── Recording evidence and assumptions ─────────────────────────────────────
+
+const BACKING_LISTS = { b_event: 'bEvents', c_event: 'cEvents', queue: 'queues', container_type: 'containerTypes' };
+const LEVEL_NAMES = { low: LEVEL_VALUES.low, medium: LEVEL_VALUES.medium, high: LEVEL_VALUES.high };
+
+// Find a model element by name or id across the element lists a link can
+// back, and return its backing target. Names are matched without case.
+function findBackingElement(model, name) {
+  const wanted = String(name ?? '').trim().toLowerCase();
+  if (!wanted) return null;
+  const matches = [];
+  for (const [targetType, listName] of Object.entries(BACKING_LISTS)) {
+    for (const item of model[listName] || []) {
+      const label = String(item.name ?? '').trim().toLowerCase();
+      if (label === wanted || String(item.id).toLowerCase() === wanted) matches.push({ targetType, targetId: String(item.id), label: item.name || item.id });
+    }
+  }
+  return matches;
+}
+
+// Record new evidence or assumptions and attach them to elements or to one
+// parameter. It writes only what the caller names: it never invents a source,
+// and an attach that matches nothing is reported rather than guessed.
+export async function recordEvidence(args, folder) {
+  if (!args.file) throw new ToolError('Give the `file` to change (a model in your Flow models folder).');
+  const adds = Array.isArray(args.add) ? args.add : [];
+  const attaches = Array.isArray(args.attach) ? args.attach : [];
+  if (!adds.length && !attaches.length) throw new ToolError('Give records to add in `add`, or links to make in `attach`.');
+  const { full, name, description, sourceModelId, model } = await readModelFile(folder, args.file);
+  const original = JSON.parse(await readFile(full, 'utf8'));
+  const graph = (original?.model_json ?? original)?.graph ?? null;
+  let edited = structuredClone(model);
+  const lines = [`Changes to "${name || args.file}":`];
+  const problems = [];
+  // Records are added first so an attach in the same call can name them.
+  for (const rec of adds) {
+    if (!rec?.name || !String(rec.name).trim()) { problems.push('A record without a name was skipped. Every evidence and assumption needs a name.'); continue; }
+    if (rec.kind === 'assumption') {
+      if (!rec.text) { problems.push(`Assumption "${rec.name}" was skipped: it needs the text of the assumption.`); continue; }
+      const level = LEVEL_NAMES[rec.confidence] ?? LEVEL_VALUES.medium;
+      const out = addAssumption(edited, { name: rec.name, text: rec.text, contested: !!rec.contested, confidence: level });
+      edited = out.model;
+      lines.push(`- Added assumption "${rec.name}" (confidence ${rec.confidence || 'medium'}${rec.contested ? ', contested' : ''}).`);
+    } else {
+      if (!rec.source) { problems.push(`Evidence "${rec.name}" was skipped: it needs a source the user named. Record an assumption instead if there is no source.`); continue; }
+      const strength = LEVEL_NAMES[rec.strength] ?? LEVEL_VALUES.medium;
+      const out = addEvidence(edited, { name: rec.name, description: rec.description, source: rec.source, type: rec.type, strength, dateCaptured: rec.dateCaptured });
+      edited = out.model;
+      lines.push(`- Added evidence "${rec.name}" from ${rec.source} (strength ${rec.strength || 'medium'}).`);
+    }
+  }
+  for (const link of attaches) {
+    const wanted = String(link.record ?? '').trim().toLowerCase();
+    const findIn = (list) => (edited[list] || []).find(r => String(r.id).toLowerCase() === wanted || String(r.name ?? '').trim().toLowerCase() === wanted);
+    const kinds = link.kind ? [link.kind] : ['evidence', 'assumption'];
+    let recordType = null;
+    let record = null;
+    for (const kind of kinds) {
+      const hit = findIn(kind === 'evidence' ? 'evidence' : 'assumptions');
+      if (hit) { recordType = kind; record = hit; break; }
+    }
+    if (!record) { problems.push(`No evidence or assumption named "${link.record}" in the model, so nothing was attached to ${link.element}.`); continue; }
+    const hits = findBackingElement(edited, link.element);
+    if (!hits.length) { problems.push(`No element named "${link.element}" (checked bound events, conditional events, queues and model data).`); continue; }
+    if (hits.length > 1) { problems.push(`"${link.element}" matches more than one element. Use the element id instead.`); continue; }
+    const target = hits[0];
+    let targetPath;
+    if (link.parameter) {
+      const units = buildBackableUnits(edited, { schedules: edited.schedules || [] });
+      const want = String(link.parameter).trim().toLowerCase();
+      const unit = units.find(u => u.kind === 'parameter' && u.targetType === target.targetType && u.targetId === target.targetId
+        && (String(u.paramLabel).toLowerCase() === want || String(u.targetPath).toLowerCase() === want));
+      if (!unit) { problems.push(`"${link.element}" has no parameter "${link.parameter}". Parameter names are shown in the Evidence tab.`); continue; }
+      targetPath = unit.targetPath;
+    }
+    edited = attach(edited, { recordType, recordId: record.id, targetType: target.targetType, targetId: target.targetId, ...(targetPath ? { targetPath } : {}) });
+    lines.push(`- Attached ${recordType} "${record.name || record.id}" to ${target.label}${targetPath ? ` (parameter ${link.parameter})` : ' (whole element)'}.`);
+  }
+  if (lines.length === 1) return [...lines, ...problems.map(p => `- ${p}`), '', 'Nothing was changed, so nothing was saved.'].join('\n');
+  if (problems.length) lines.push('', 'Not done:', ...problems.map(p => `- ${p}`));
+  const before = validateModel(model);
+  const after = validationReport(edited);
+  const errs = issueDiff(before.errors, after.errors);
+  if (errs.added.length) lines.push('', 'New errors:', ...errs.added.map(issueLine));
+  if (args.dryRun) return [...lines, '', 'Dry run: nothing was saved.'].join('\n');
+  if (after.errors.length && !args.allowErrors) {
+    return [...lines, '', 'Not saved — the model has errors after this change. Pass allowErrors: true to save anyway.'].join('\n');
+  }
+  const envelope = exportEnvelope({ name: name || path.basename(full, '.json'), description, model: edited, graph, sourceModelId });
+  await writeFile(full, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
+  return [...lines, '', `Saved over ${full}. Use flow_evidence_coverage to see what is now backed.`].join('\n');
 }
 
 // ── Saving ─────────────────────────────────────────────────────────────────
