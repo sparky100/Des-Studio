@@ -89,3 +89,33 @@ export function computeSectionLiveStats({ nodes = [], snap, activityLive = new M
   }
   return out;
 }
+
+/**
+ * Customers that have moved from one section to another, keyed "fromSectionId->toSectionId".
+ * Counted from each customer's finished stages in order: every time the section of one
+ * queue stage differs from the section of the next, that move is counted once. Loops
+ * therefore count as moves back to an earlier section.
+ *
+ * @param {{ nodes: Array<Record<string, any>>, snap: Record<string, any> | null }} args
+ * @returns {Map<string, number>}
+ */
+export function computeSectionFlowCounts({ nodes = [], snap }) {
+  const counts = new Map();
+  if (!snap) return counts;
+  const sectionByQueue = new Map();
+  for (const node of nodes) {
+    if (node.sectionId && node.type === "queue") sectionByQueue.set(key(node.label), node.sectionId);
+  }
+  for (const e of snap.entities || []) {
+    if (e.role === "server") continue;
+    const sections = (e.stages || [])
+      .map(stage => sectionByQueue.get(key(stage.queueName)))
+      .filter(Boolean);
+    for (let i = 1; i < sections.length; i++) {
+      if (sections[i - 1] === sections[i]) continue;
+      const move = `${sections[i - 1]}->${sections[i]}`;
+      counts.set(move, (counts.get(move) || 0) + 1);
+    }
+  }
+  return counts;
+}
