@@ -81,7 +81,7 @@ export function RouteEdgeDialog({ edgeId, model, graph, canEdit, onApply, onClos
     >
       <div style={{
         background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20,
-        maxWidth: 520, width: "92%", maxHeight: "80vh", overflowY: "auto",
+        maxWidth: 640, width: "92%", maxHeight: "80vh", overflowY: "auto",
         display: "flex", flexDirection: "column", gap: 12, fontFamily: FONT,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

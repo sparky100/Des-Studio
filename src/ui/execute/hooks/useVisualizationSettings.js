@@ -16,6 +16,13 @@ export function useVisualizationSettings(userId) {
   const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
   const [selectedNodeDetail, setSelectedNodeDetail] = useState(null);
   const [selectedEntityId, setSelectedEntityId] = useState(null);
+  // Bumped on every entity picked from the Run inspector, so BottomPanel can
+  // open its Entities tab even when the same entity is picked twice.
+  const [entityFocusRequest, setEntityFocusRequest] = useState(0);
+  const inspectEntity = useCallback((id) => {
+    setSelectedEntityId(id);
+    if (id != null) setEntityFocusRequest(n => n + 1);
+  }, []);
 
   const effectiveAutoSpeed = useMemo(
     () => Math.max(40, Math.round(400 / speedMultiplier)),
@@ -72,5 +79,6 @@ export function useVisualizationSettings(userId) {
     selectedNodeLabel, setSelectedNodeLabel,
     selectedNodeDetail, setSelectedNodeDetail,
     selectedEntityId, setSelectedEntityId,
+    entityFocusRequest, inspectEntity,
   };
 }
