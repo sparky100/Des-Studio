@@ -123,6 +123,93 @@ function withLayout(nodes, edges, graph = {}) {
   });
 }
 
+// Section-aware automatic layout. Each section's members are laid out together in
+// their own block, and the blocks are then placed with the same flow layout, so
+// section boxes can't cross one another. Blocks are padded the way the section
+// boxes are drawn (buildSectionPanels), so the boxes keep clear of each other.
+const SECTION_BLOCK_PAD_X = 24;
+const SECTION_BLOCK_PAD_TOP = 46;   // box padding plus the section label
+const SECTION_BLOCK_PAD_BOTTOM = 24;
+const LOOP_LANE_BLOCK_H = 28;
+
+function dagreLayout(nodes, edges, sizes) {
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: "LR", ranksep: DAGRE_RANK_SEP, nodesep: DAGRE_NODE_SEP, marginx: 0, marginy: 0, acyclicer: "greedy", ranker: "network-simplex" });
+  g.setDefaultEdgeLabel(() => ({}));
+  nodes.forEach(id => g.setNode(id, { ...sizes.get(id) }));
+  edges.forEach(([from, to]) => { if (from !== to) g.setEdge(from, to); });
+  dagre.layout(g);
+  const out = new Map();
+  nodes.forEach(id => {
+    const pos = g.node(id);
+    const size = sizes.get(id);
+    out.set(id, { x: pos.x - size.width / 2, y: pos.y - size.height / 2 });
+  });
+  return out;
+}
+
+// Returns Map<nodeId, {x, y}> (top-left) for every node.
+export function sectionBlockLayout(nodes, edges) {
+  const groups = new Map();
+  nodes.forEach(node => {
+    const key = node.sectionId ? `section:${node.sectionId}` : `node:${node.id}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(node);
+  });
+  const groupOf = new Map();
+  groups.forEach((members, key) => members.forEach(node => groupOf.set(node.id, key)));
+
+  const inner = new Map();   // nodeId -> offset inside its block
+  const blockSize = new Map();
+  groups.forEach((members, key) => {
+    if (!key.startsWith("section:")) {
+      const box = layoutBoxSize();
+      inner.set(members[0].id, { x: 0, y: 0 });
+      blockSize.set(key, box);
+      return;
+    }
+    const ids = members.map(n => n.id);
+    const internal = edges
+      .filter(e => !e.loop && !e.returning && groupOf.get(e.from) === key && groupOf.get(e.to) === key)
+      .map(e => [e.from, e.to]);
+    const sizes = new Map(members.map(n => [n.id, layoutBoxSize()]));
+    const pos = dagreLayout(ids, internal, sizes);
+    const minX = Math.min(...ids.map(id => pos.get(id).x));
+    const minY = Math.min(...ids.map(id => pos.get(id).y));
+    const maxX = Math.max(...ids.map(id => pos.get(id).x + NODE_WIDTH));
+    const maxY = Math.max(...ids.map(id => pos.get(id).y + NODE_HEIGHT));
+    const loopLanes = edges.filter(e => e.loop && groupOf.get(e.from) === key && groupOf.get(e.to) === key).length;
+    ids.forEach(id => inner.set(id, { x: pos.get(id).x - minX + SECTION_BLOCK_PAD_X, y: pos.get(id).y - minY + SECTION_BLOCK_PAD_TOP }));
+    blockSize.set(key, {
+      width: (maxX - minX) + SECTION_BLOCK_PAD_X * 2,
+      height: (maxY - minY) + SECTION_BLOCK_PAD_TOP + SECTION_BLOCK_PAD_BOTTOM + loopLanes * LOOP_LANE_BLOCK_H,
+    });
+  });
+
+  const blockEdges = [];
+  const seen = new Set();
+  edges.forEach(e => {
+    if (e.loop || e.returning) return;
+    const a = groupOf.get(e.from), b = groupOf.get(e.to);
+    if (!a || !b || a === b) return;
+    const k = `${a}->${b}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    blockEdges.push([a, b]);
+  });
+  const blockTopLeft = dagreLayout([...groups.keys()], blockEdges, blockSize);
+
+  const out = new Map();
+  groups.forEach((members, key) => {
+    const origin = blockTopLeft.get(key);
+    members.forEach(node => {
+      const off = inner.get(node.id);
+      out.set(node.id, { x: Math.round(origin.x + off.x), y: Math.round(origin.y + off.y) });
+    });
+  });
+  return out;
+}
+
 // Re-exported for existing callers (this module used to define it directly;
 // it now lives in model/conditionFormat.js so the model-layer balking
 // formatter can use it too without src/model importing back into src/ui).
@@ -583,7 +670,16 @@ export function deriveGraphFromModel(model = {}) {
     if (color.get(node.id) === WHITE) visit(node.id);
   });
 
-  const layoutedNodes = withLayout(dedupedNodes, dedupedEdges, graph);
+  // Nodes with no saved position get the section-aware layout; saved positions are kept as they are.
+  const savedLayout = layoutById(graph);
+  const anySaved = dedupedNodes.some(node => Number.isFinite(savedLayout.get(node.id)?.x));
+  let layoutedNodes;
+  if (anySaved) {
+    layoutedNodes = withLayout(dedupedNodes, dedupedEdges, graph);
+  } else {
+    const blocks = sectionBlockLayout(dedupedNodes, dedupedEdges);
+    layoutedNodes = dedupedNodes.map(node => ({ ...node, ...blocks.get(node.id) }));
+  }
 
   // A loop that starts and ends inside one section is drawn inside that section's box:
   // each gets its own lane under the members, and the box grows to hold the lanes.
