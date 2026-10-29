@@ -10,6 +10,7 @@ Connects an AI assistant on your computer to Flow. The assistant can then:
 - **edit** a saved model a few values at a time;
 - **save** the model as a file;
 - **open** it in Flow in your browser, as a new model or as an update to the model it was exported from.
+- **record evidence**: add the sources and assumptions you give it, attach them to the parts of the model they back, and report what is still unbacked.
 
 Everything runs on your computer. Models are plain JSON files in one folder, `Documents/Flow models` by default. Your models are never sent anywhere, and the assistant doesn't need your Flow sign-in: when it opens a model in Flow, the model travels in the link's `#` part, which your browser keeps to itself, and you save it there yourself.
 
@@ -96,6 +97,8 @@ If your app shows MCP prompts, there is also a **build_model** prompt that asks 
 | `flow_edit_model` | Changes to a saved file by path, e.g. `entityTypes/Nurse/count` = 3 (set, remove, append); shows errors added or fixed, refuses to save errors unless asked, keeps the canvas layout |
 | `flow_save_model` | Saves a Flow export file; refuses a model with errors unless asked; never overwrites unless asked (an overwrite keeps the file's link to the Flow model it was exported from) |
 | `flow_open_in_app` | Opens a model file in Flow in the browser through a compressed `#import` link (written to a local page, so there's no length limit from the command line). A file exported from Flow opens as an update to that model; `asNew` adds a new model instead |
+| `flow_evidence_coverage` | What backs a model: the share of elements and parameters with evidence or an assumption, the arrival and capacity parameters nothing backs, contested assumptions and the evidence warnings (V-BACK) |
+| `flow_record_evidence` | Adds named evidence (from a source you named) or assumptions to a saved model and attaches them to an element, or one of its parameters, by name. Unknown or ambiguous names are reported and nothing is attached to them; it never invents a source |
 
 ## For maintainers
 
