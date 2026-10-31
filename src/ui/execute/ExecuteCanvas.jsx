@@ -714,12 +714,27 @@ export function ExecuteCanvas({
     try { return viewStorageKey ? localStorage.getItem(viewStorageKey) === "sections" : false; } catch { return false; }
   });
   const hasModelSections = (baseGraph.sectionPanels?.length ?? 0) > 0;
-  const sectionsView = sectionsViewChoice && showSections && hasModelSections;
+  // Sections whose card has been expanded to its detail nodes while the Sections view is on.
+  // Any other section stays a card, so the canvas can mix cards and detail (as Draw does).
+  const [expandedSectionIds, setExpandedSectionIds] = useState(() => new Set());
+  const sectionIds = useMemo(() => (baseGraph.sectionPanels || []).map(p => p.sectionId), [baseGraph.sectionPanels]);
+  const collapsedIds = useMemo(
+    () => (sectionsViewChoice && showSections && hasModelSections ? sectionIds.filter(id => !expandedSectionIds.has(id)) : []),
+    [sectionsViewChoice, showSections, hasModelSections, sectionIds, expandedSectionIds]
+  );
+  const anyCollapsed = collapsedIds.length > 0;
+  // Every section is a card: the Sections view proper, laid out in flow order.
+  const sectionsView = anyCollapsed && collapsedIds.length === sectionIds.length;
   const changeView = useCallback((id, focusSectionId = null) => {
     setSectionsViewChoice(id === "sections");
+    setExpandedSectionIds(new Set());
     setFocusedSectionId(focusSectionId);
     try { if (viewStorageKey) localStorage.setItem(viewStorageKey, id); } catch { /* storage unavailable (private mode) — non-critical */ }
   }, [viewStorageKey]);
+  const expandSection = useCallback(id => {
+    setExpandedSectionIds(prev => new Set([...prev, id]));
+    setFocusedSectionId(id);
+  }, []);
   const dragStateRef = useRef(null);
 
   useEffect(() => { if (!showSections) setFocusedSectionId(null); }, [showSections]);
@@ -876,10 +891,10 @@ export function ExecuteCanvas({
 
   // Sections view: one live card per section (flow-ordered, laid out by the projection).
   const activeGraph = useMemo(
-    () => sectionsView
-      ? projectCollapsedSections(baseGraph, new Set(baseGraph.sectionPanels.map(p => p.sectionId)), { compact: true })
+    () => anyCollapsed
+      ? projectCollapsedSections(baseGraph, new Set(collapsedIds), { compact: sectionsView })
       : baseGraph,
-    [sectionsView, baseGraph]
+    [anyCollapsed, collapsedIds, sectionsView, baseGraph]
   );
   const layoutedNodes = useMemo(
     () => computeExecuteLayout(activeGraph.nodes, activeGraph.edges),
@@ -895,8 +910,8 @@ export function ExecuteCanvas({
     if (!showSections || sectionsView || !(model.sections?.length)) return [];
     const SECTION_PAD = 24;
     const SECTION_LABEL_H = 22;
-    return model.sections.map(sec => {
-      const members = layoutedNodes.filter(n => n.sectionId === sec.id);
+    return model.sections.filter(sec => !collapsedIds.includes(sec.id)).map(sec => {
+      const members = layoutedNodes.filter(n => n.sectionId === sec.id && !n.virtual);
       if (!members.length) return null;
       const minX = Math.min(...members.map(n => n.x));
       const minY = Math.min(...members.map(n => n.y));
@@ -913,7 +928,7 @@ export function ExecuteCanvas({
         height: (maxY - minY) + SECTION_PAD * 2 + SECTION_LABEL_H,
       };
     }).filter(Boolean);
-  }, [showSections, sectionsView, model.sections, layoutedNodes]);
+  }, [showSections, sectionsView, model.sections, layoutedNodes, collapsedIds]);
 
   // Current value of every declared state variable (snapshot scalar, falling
   // back to the declared initial value before the first step).
@@ -946,13 +961,13 @@ export function ExecuteCanvas({
   // Live numbers for the Sections view's cards. Activity utilisation comes from the
   // same live data the detail nodes show, so the two views never disagree.
   const sectionStats = useMemo(() => {
-    if (!snap || (!sectionsView && selectedNodeDetail?.nodeType !== "sectionNode")) return new Map();
+    if (!snap || (!anyCollapsed && selectedNodeDetail?.nodeType !== "sectionNode")) return new Map();
     const activityLive = new Map();
     for (const node of baseGraph.nodes) {
       if (node.type === "activity") activityLive.set(node.id, deriveActivityLiveData(snap, node.refId, serverTypeIndex, model));
     }
     return computeSectionLiveStats({ nodes: baseGraph.nodes, snap, activityLive });
-  }, [sectionsView, snap, baseGraph.nodes, serverTypeIndex, model, selectedNodeDetail]);
+  }, [anyCollapsed, snap, baseGraph.nodes, serverTypeIndex, model, selectedNodeDetail]);
 
   // The section card picked for the inspector: its description and live numbers.
   const selectedSectionDetail = useMemo(() => {
@@ -1069,7 +1084,7 @@ export function ExecuteCanvas({
             ...node,
             liveData: sectionStats.get(node.sectionId) ?? null,
             timeUnit: model.timeUnit || "minutes",
-            onShowDetail: () => changeView("detail", node.sectionId),
+            onShowDetail: () => expandSection(node.sectionId),
           },
           style: { opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms" },
         };
@@ -1106,7 +1121,7 @@ export function ExecuteCanvas({
     }
 
     return mapped;
-  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels, matchedNodeIds, queuePulses, switchDeps, switchValues, sectionStats, changeView, model.timeUnit]);
+  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels, matchedNodeIds, queuePulses, switchDeps, switchValues, sectionStats, expandSection, model.timeUnit]);
 
   // Live conditional-routing branch state (state-variable-driven diversion).
   // Evaluated from the snapshot so the canvas can show which branch is live.

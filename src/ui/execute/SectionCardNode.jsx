@@ -23,7 +23,16 @@ export function SectionCardNode({ data }) {
       }}
     >
       <Handle type="target" position={Position.Left} isConnectable={false} />
-      <strong title={data.label} style={{ ...TYPO.body, overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflowWrap: "anywhere" }}>{data.label}</strong>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: SPACE.xs }}>
+        <strong title={data.label} style={{ ...TYPO.body, flex: 1, minWidth: 0, overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflowWrap: "anywhere" }}>{data.label}</strong>
+        <button
+          type="button"
+          aria-label={`Show ${data.label} in detail`}
+          title={`Show ${data.label} in detail`}
+          onClick={e => { e.stopPropagation(); data.onShowDetail?.(); }}
+          style={{ flexShrink: 0, background: "none", border: "none", padding: 0, color: C.muted, fontFamily: FONT, fontSize: 14, lineHeight: 1, cursor: "pointer" }}
+        >▸</button>
+      </div>
       <p style={{ ...muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{data.sublabel}</p>
       {live ? (
         <>
@@ -35,12 +44,6 @@ export function SectionCardNode({ data }) {
       ) : (
         <p style={muted}>Starts when the run does</p>
       )}
-      <button
-        type="button"
-        aria-label={`Show detail: ${data.label}`}
-        onClick={e => { e.stopPropagation(); data.onShowDetail?.(); }}
-        style={{ marginTop: "auto", padding: 2, background: C.panel, color: C.text, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, fontFamily: FONT, ...TYPO.caption, cursor: "pointer" }}
-      >Show detail</button>
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
   );
