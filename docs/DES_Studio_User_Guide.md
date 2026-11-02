@@ -1,5 +1,21 @@
 # Flow — User Guide
 
+## Saving your work
+
+Model edits, including canvas changes, show one **Unsaved changes** indicator in
+the top header. Choose **Save model** or press **Ctrl+S** (Mac: **⌘S**). The status
+shows **Saving model…**, then **Saved** after success. If saving fails, your edits
+remain in place; choose **Retry**. Hover over the error for its technical detail.
+**Discard…** asks for confirmation before reverting changes. Leaving the model
+or closing the browser tab also warns about unsaved changes. During a simulation,
+the same save controls appear in a compact strip at the top.
+
+**Apply to model** on an AI suggestion updates the working model; use **Save model**
+to keep it. **Save schedule**, **Save experiment**, and **Save settings** save their
+respective items separately. **Results saved** refers to automatic run-history
+storage and does not mean unsaved model edits have been saved.
+
+
 **Version:** 8.0.0  
 **Date:** 2026-10-29  
 **App version:** Flow 0.9.0 (beta)  
@@ -153,7 +169,7 @@ When a batch run finishes, a summary appears on the Run tab. Click **View Result
 
 ### Step 5 — Change one parameter and re-run
 
-Go to **Design**, click **Define**, then select **Bound Events**. Find the arrival Bound Event and lower the inter-arrival mean (faster arrivals). Click **Save** in the header. Go to **Run** and click **⚡ Batch Run** again. To compare the two runs, open **Results → History**, tick both runs and click **Compare selected**.
+Go to **Design**, click **Define**, then select **Bound Events**. Find the arrival Bound Event and lower the inter-arrival mean (faster arrivals). Click **Save model** in the header. Go to **Run** and click **⚡ Batch Run** again. To compare the two runs, open **Results → History**, tick both runs and click **Compare selected**.
 
 For a quick what-if that you do not want to save, use **🎛 Adjust parameters** on the Run tab instead of editing the model.
 
@@ -244,7 +260,7 @@ The **Templates** tab has its own search box, domain filter chips and a **Patter
    | **Data Sources** | Hidden by default while external-data integration is reviewed. Existing source configurations and models are preserved. |
 
 4. The **Model Health** button in the Design toolbar appears whenever there are validation issues. Click it to see each issue with its rule code; click an issue to jump to the editor that fixes it. Errors (red) block running; warnings (amber) let you run with a caution.
-5. Click **Save** in the header (or press Ctrl+S). **↩ Undo** and **↪ Redo** in the header step through your edits.
+5. Click **Save model** in the header (or press Ctrl+S). **↩ Undo** and **↪ Redo** in the header step through your edits.
 
 **Tips:**
 - Use descriptive names for entity types (e.g. "Patient" not "Entity1").

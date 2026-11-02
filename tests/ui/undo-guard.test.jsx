@@ -48,7 +48,7 @@ describe('ModelDetail — Ctrl+Z editable-element guard', () => {
 
     // The model-level undo must not have fired: the edit survives (dirty UI stays).
     expect(input.value).toBe('Changed Name');
-    expect(screen.getByText(/Unsaved changes in this model/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Unsaved changes$/i)).toBeInTheDocument();
   });
 
   it('still undoes the model edit when Ctrl+Z fires with focus outside editable elements', () => {

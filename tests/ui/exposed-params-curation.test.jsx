@@ -72,7 +72,7 @@ describe('Business view curation (exposedParams)', () => {
       target: { value: '1' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save model$/i }));
     // The minimal fixture has validation errors, so save() asks "Save anyway?"
     // via the shared ConfirmDialog — accept it.
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));

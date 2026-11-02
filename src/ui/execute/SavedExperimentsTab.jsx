@@ -182,7 +182,7 @@ export function SavedExperimentsTab({
             <OverrideChipList overrides={expFormOverrides} setOverrides={setExpFormOverrides} sweepParams={sweepParams}
               pickerOpen={expFormPickerOpen} setPickerOpen={setExpFormPickerOpen} />
             <div style={{ display: "flex", gap: 8 }}>
-              <Btn small variant="primary" disabled={!expFormName.trim() || expFormSaving} onClick={handleCreate}>{expFormSaving ? "Saving…" : "Save"}</Btn>
+              <Btn small variant="primary" disabled={!expFormName.trim() || expFormSaving} onClick={handleCreate}>{expFormSaving ? "Saving…" : "Save experiment"}</Btn>
               <Btn small variant="ghost" onClick={() => setExpFormOpen(false)}>Cancel</Btn>
             </div>
         </div>
@@ -280,7 +280,7 @@ export function SavedExperimentsTab({
                           <OverrideChipList overrides={expFormOverrides} setOverrides={setExpFormOverrides} sweepParams={sweepParams}
                             pickerOpen={expFormPickerOpen} setPickerOpen={setExpFormPickerOpen} />
                           <div style={{ display: "flex", gap: 8 }}>
-                            <Btn small variant="primary" disabled={!expFormName.trim() || expFormSaving} onClick={() => handleUpdate(exp.id)}>{expFormSaving ? "Saving…" : "Save"}</Btn>
+                            <Btn small variant="primary" disabled={!expFormName.trim() || expFormSaving} onClick={() => handleUpdate(exp.id)}>{expFormSaving ? "Saving…" : "Save experiment"}</Btn>
                             <Btn small variant="ghost" onClick={() => { setExpEditId(null); setExpFormPickerOpen(false); }}>Cancel</Btn>
                           </div>
                         </>

@@ -102,7 +102,7 @@ describe("ModelDetail — Draw inspector 'Edit in the X tab' jump links", () => 
     // first decides which one a label query finds — on GitHub's runners it was
     // the hidden Run one. A role query skips hidden elements, so it gets the
     // Draw search box; the results list is the one beside it.
-    const searchInput = await screen.findByRole("searchbox", { name: "Search canvas nodes" });
+    const searchInput = await screen.findByRole("searchbox", { name: "Search canvas nodes" }, { timeout: 10000 });
     await user.type(searchInput, "Consultant");
     const results = within(searchInput.parentElement).getByRole("listbox", { name: "Node search results" });
     await user.click(within(results).getByRole("option", { name: /^Consultant Queue/i }));

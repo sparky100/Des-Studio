@@ -1,5 +1,15 @@
 # simmodlr — Product Specification
 
+## Model save feedback
+
+The model header provides one shared save-status area across workspaces, with a
+compact replacement during active runs. Form and canvas edits use **Unsaved
+changes** and **Save model**. Saving, saved, and persistent failure/retry states
+share that location. Discard requires confirmation. AI suggestions use **Apply to
+model** for changes to the working copy. Separate schedule, experiment, settings,
+and automatic result saves identify what is being saved.
+
+
 ## Roadmap addition: published model releases
 
 Publishing is independent of library visibility and collaboration. Owners release

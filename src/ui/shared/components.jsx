@@ -414,13 +414,13 @@ const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
     if(attrHeaders.length>0){
       updDp({rows,times:undefined});
       setRowsMode(true);
-      setImportNotice(`✓ ${rows.length} arrival${rows.length!==1?"s":""} imported with ${attrHeaders.length} attribute${attrHeaders.length!==1?"s":""} — save the model to keep this data.`);
+      setImportNotice(`✓ ${rows.length} arrival${rows.length!==1?"s":""} imported with ${attrHeaders.length} attribute${attrHeaders.length!==1?"s":""}.`);
     } else {
       const flat=rows.map(r=>r.time);
       setRawText(flat.join(", "));
       updDp({times:flat,rows:undefined});
       setRowsMode(false);
-      setImportNotice(`✓ ${flat.length} arrival time${flat.length!==1?"s":""} imported — save the model to keep this data.`);
+      setImportNotice(`✓ ${flat.length} arrival time${flat.length!==1?"s":""} imported.`);
     }
     setCsvPreview(null);
   };

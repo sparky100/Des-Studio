@@ -12,7 +12,7 @@ The app is called **Flow** (shown as "flow" in the header). It is part of the si
 | Area | How to reach it | What is there |
 |------|-----------------|---------------|
 | Model Library | Home screen after sign-in, or **← Back** from a model | Tabs **My Models**, **Templates**, **Public Library**, **Community**; header buttons **Explore published**, **↓ AI Prompt Pack**, **Connect AI app**, **+ New Model** |
-| Model header | Top of an open model | **← Back**, model name, visibility and version chips, **↩ Undo**, **↪ Redo**, **Save** / **Discard** when there are unsaved changes |
+| Model header | Top of an open model | **← Back**, model name, visibility and version chips, **↩ Undo**, **↪ Redo**, **Save model** / **Discard…** when there are unsaved changes |
 | Mode bar | Below the model header | **Overview**, **Design**, **Run**, **Results**, and for owners **Access** and **Versions**; then **✨ Simulation Assistant** |
 | Overview | Mode bar → Overview | Getting-started cards, notes, last run and recent runs, **Named Scenarios**, scenario copies |
 | Design | Mode bar → Design | **Draw**, **Describe**, **Define**, **Model Health** (only when there are issues) and **View definition** (a printable model document) |
@@ -29,6 +29,19 @@ The app is called **Flow** (shown as "flow" in the header). It is part of the si
 ---
 
 ## Core Concepts
+
+### Saving model changes
+
+One **Unsaved changes** indicator and **Save model** action appear in the model
+header for both form and canvas edits. Ctrl+S (Mac: ⌘S) also saves. The same
+controls remain at the top in a compact strip during runs. Status changes to
+**Saving model…**, then **Saved**. Failed saves retain edits and offer **Retry**;
+hover over the error for technical detail. **Discard…** requires confirmation.
+Leaving a model or closing the tab warns about unsaved edits. AI **Apply to model**
+updates the working copy and still needs **Save model**. Schedules, experiments,
+and settings have separate save actions. Automatic **Results saved** messages
+describe run-history persistence, not model saving.
+
 
 ### Three-Phase Method
 
@@ -1023,7 +1036,7 @@ The Business view is what a **viewer-role** collaborator gets when they open a s
 1. Add the person as a collaborator with the **viewer** role.
 2. In the Business view section, click **+ Add adjustable setting** and pick from the searchable browser — parameters are grouped by category (Servers & Capacity, Arrival Distributions, Service Distributions, State Variables, Queue Capacity) with a filter box, and already-exposed settings show greyed out. The list is the model's sweepable parameters (the same list the parameter-sweep feature uses).
 3. Per setting, optionally give it a plain-English name (e.g. "How many tellers on shift") and min/max bounds. Leave the list empty to let viewers run the model exactly as-is.
-4. **Save** — the curation is stored on the model (`exposedParams` in `model_json`). If a curated setting's target is later deleted or renamed, the section flags it as no longer existing so the owner can remove it; viewers never see broken entries.
+4. **Save model** — the curation is stored on the model (`exposedParams` in `model_json`). If a curated setting's target is later deleted or renamed, the section flags it as no longer existing so the owner can remove it; viewers never see broken entries.
 
 **Viewer experience:**
 

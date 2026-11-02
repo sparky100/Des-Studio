@@ -267,7 +267,7 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
           <div style={{ marginTop: 8, padding: "8px 10px", background: `${C.accent}11`, borderRadius: 4, border: `1px solid ${C.accent}33` }}>
             <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
               This run used a temporary copy of your model. The results above show what would happen with this change.
-              To make it permanent, save the change to your model.
+              Apply this change to update your model.
             </div>
           </div>
           {canSave && verifyStatus !== "saved" && (
@@ -277,13 +277,13 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
               onClick={handleSave}
               style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
             >
-              Save this change to model
+              Apply to model
             </Btn>
           )}
           {verifyStatus === "saved" && (
             <div style={{ marginTop: 8, padding: "8px 10px", background: `${C.green}15`, borderRadius: 4, border: `1px solid ${C.green}44` }}>
               <div style={{ fontSize: 11, color: C.green, fontFamily: FONT, fontWeight: 600 }}>
-                Change applied to model. Save the model to persist.
+                Change applied to model.
               </div>
             </div>
           )}

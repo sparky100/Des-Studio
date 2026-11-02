@@ -41,8 +41,8 @@ describe('model input', () => {
 
 describe('files', () => {
   test('only files inside the models folder', () => {
-    expect(resolveInFolder('/m', 'a.json')).toBe('/m/a.json');
-    expect(resolveInFolder('/m', 'a')).toBe('/m/a.json');
+    expect(resolveInFolder('/m', 'a.json')).toBe(path.resolve('/m/a.json'));
+    expect(resolveInFolder('/m', 'a')).toBe(path.resolve('/m/a.json'));
     expect(() => resolveInFolder('/m', '../x.json')).toThrow(/inside your Flow models folder/);
     expect(() => resolveInFolder('/m', '/etc/passwd')).toThrow(ToolError);
   });
@@ -457,7 +457,7 @@ describe('version and update check', () => {
 describe('modelling guide', () => {
   test('is the flow-modelling skill without its YAML header', () => {
     const raw = readFileSync(new URL('../../mcp/skills/flow-modelling/SKILL.md', import.meta.url), 'utf8');
-    expect(raw).toMatch(/^---\nname: flow-modelling\n/);
+    expect(raw).toMatch(/^---\r?\nname: flow-modelling\r?\n/);
     const guide = loadGuideText();
     expect(guide).toMatch(/^# Modelling with Flow/);
     expect(guide).not.toMatch(/^name: /m);
