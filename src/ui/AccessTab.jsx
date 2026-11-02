@@ -22,7 +22,7 @@ export function AccessTab({
   model, modelId, profiles, userId,
   onChangeVisibility, onPersistAccess,
   onExportJson, onExportSimPy,
-  setField, dirty,
+  setField,
   validation,
 }) {
   const { C, FONT } = useTheme();
@@ -286,9 +286,6 @@ export function AccessTab({
                       <div style={{fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>
                         Tip: for queue-size or container-capacity settings, viewers' entries are kept at 1 or above (0 would mean unlimited).
                       </div>
-                    )}
-                    {dirty&&exposed.length>0&&(
-                      <div style={{fontSize:10,color:C.amber,fontFamily:FONT}}>Changes here are saved with the model — use Save when you're done.</div>
                     )}
                   </div>
                 );

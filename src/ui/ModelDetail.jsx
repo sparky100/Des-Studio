@@ -1,6 +1,6 @@
 // ui/ModelDetail.jsx
 import { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { RADIUS, Z, alpha } from "./shared/tokens.js";
+import { RADIUS, Z, SPACE, alpha } from "./shared/tokens.js";
 import { csvEscape, downloadTextFile, downloadJsonFile, buildRunHistoryExportPayload, buildRunHistoryCsv } from "./shared/utils.js";
 import { Tag, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
 import { MarkdownContent } from "./shared/MarkdownContent.jsx";
@@ -275,13 +275,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     pushSnapshot();
     setModel(merged);
     setSaving(true);
+    setSaveError(null);
     try{
       await overrides.onSave?.(merged);
-      setDirty(false);
+      setDirty(false); setVisualPending(false); setDiscardConfirm(false);
+      setSaveSeq(s => s + 1);
       toast.success("Model saved");
       await onRefresh?.();
     }catch(error){
       setDirty(true);
+      setSaveError(error?.message || "Save failed");
       toast.error(error?.message || "Save failed");
       throw error;
     }finally{
@@ -337,6 +340,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[]);
 
   const save=async ()=>{
+    if (saving) return;
     const v = validateModel(model);
     if (v.errors.length) {
       const plural = v.errors.length > 1 ? 's' : '';
@@ -348,7 +352,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     overrides.onSave?.(model)
       .then(saved => {
         setDirty(false);
-        setVisualPending(false);
+        setVisualPending(false); setDiscardConfirm(false);
         setSaveSeq(s => s + 1);
         if (v.errors.length) {
           toast.warning(`Model saved with ${v.errors.length} validation error${v.errors.length > 1 ? 's' : ''} — check Model Health`);
@@ -381,8 +385,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       experimentDefaults: modelData.experimentDefaults || {},
       access:        modelData.access         || {},
     }));
-    setDirty(false);
-    setVisualPending(false);
+    setDirty(false); setVisualPending(false);
+    setSaveError(null); setDiscardConfirm(false);
     resetUndo();
     setDiscardKey(k=>k+1);
   };
@@ -753,6 +757,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       <>
       <ModelDetailHeader
         model={model} canEdit={canEdit} dirty={dirty} visualPending={visualPending} saving={saving}
+        saved={saveSeq > 0} saveError={saveError} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm}
         canUndo={canUndo} canRedo={canRedo} currentVersion={currentVersion}
         onBack={handleBack} onUndo={undo} onRedo={redo} onSave={save} onDiscard={discard}
         onHelpOpen={overrides.onHelpOpen}
@@ -784,10 +789,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       />
       </>
       )}
+      {executeRunning && <div style={{ padding: SPACE.sm, background: C.surface }}>
+        <SaveBanner canEdit={canEdit} dirty={dirty} visualPending={visualPending} saving={saving} saved={saveSeq > 0} saveError={saveError} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
+      </div>}
       <div style={{flex:1,display:"flex",flexDirection:"row",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
-        <SaveBanner canEdit={canEdit} dirty={dirty} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
-        {saveError&&<div role="alert" style={{background:C.errorBg,border:`1px solid ${C.danger}`,borderRadius:6,padding:'8px 12px',color:C.error,fontFamily:FONT,fontSize:12,marginBottom:8}}>{saveError}</div>}
         {["overview","execute","results"].includes(tab)&&(
           <ModelHealthPanel
             validation={healthValidation}

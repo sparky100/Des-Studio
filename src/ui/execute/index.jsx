@@ -254,7 +254,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     logRef.current = log;
   }, [log]);
   // Close the Run Setup panel once a save the user triggered from it completes,
-  // instead of leaving it open after the SaveBanner's "Save Changes" succeeds.
+  // instead of leaving it open after the header's "Save model" succeeds.
   useEffect(() => {
     if (savedSignal > 0) setShowRunSetup(false);
   }, [savedSignal]);

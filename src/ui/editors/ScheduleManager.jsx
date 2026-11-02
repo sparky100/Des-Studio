@@ -357,7 +357,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, dataSources =
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <Btn size="sm" onClick={handleSave} disabled={saving || !name.trim()}>
-              {saving ? "Saving…" : "Save changes"}
+              {saving ? "Saving…" : "Save schedule"}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={onBack}>Cancel</Btn>
           </div>

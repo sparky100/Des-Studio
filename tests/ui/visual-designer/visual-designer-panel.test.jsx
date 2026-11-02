@@ -229,14 +229,12 @@ describe('Visual Designer shell', () => {
     await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /add queue/i }));
 
-    // A layout-only change surfaces exactly one pending-changes indicator, in
-    // the header — SaveBanner used to also render a second, duplicate one in
-    // the content area at the same time (reported as "very distracting").
-    expect(screen.getAllByText(/Unsaved layout changes/)).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: /^save$/i }).length).toBeGreaterThanOrEqual(1);
+    // Canvas authoring uses the same single header prompt as form edits.
+    expect(screen.getAllByText(/^Unsaved changes$/)).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^save model$/i }).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('keeps a Draw layout change as "Unsaved layout changes" after switching to another Define tab, instead of promoting it to a full "Unsaved changes" state', async () => {
+  it('keeps one consistent save prompt when switching from Draw to Define', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue({});
 
@@ -253,17 +251,14 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /^design$/i }));
     await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /add queue/i }));
-    expect(screen.getAllByText(/Unsaved layout changes/)).toHaveLength(1);
+    expect(screen.getAllByText(/^Unsaved changes$/)).toHaveLength(1);
 
-    // Leaving Draw for another Define sub-tab must not upgrade a layout-only
-    // pending change into the heavier "genuine edit" dirty state — that was
-    // reported as the banner reappearing on an unrelated tab even though
-    // nothing there was ever edited.
+    // Switching workspaces must not introduce another save prompt.
     await user.click(screen.getByRole('button', { name: /^define$/i }));
     await user.click(screen.getByRole('button', { name: /conditional events/i }));
-    expect(screen.getAllByText(/Unsaved layout changes/)).toHaveLength(1);
+    expect(screen.getAllByText(/^Unsaved changes$/)).toHaveLength(1);
     expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /discard/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /discard/i })).toBeInTheDocument();
   });
 
   it('auto-links a newly added queue from the currently selected source when the connection is valid', async () => {
@@ -284,7 +279,7 @@ describe('Visual Designer shell', () => {
     await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /mock select source/i }));
     await user.click(screen.getByRole('button', { name: /add queue/i }));
-    await user.click(screen.getAllByRole('button', { name: /^save$/i })[0]);
+    await user.click(screen.getAllByRole('button', { name: /^save model$/i })[0]);
 
     // The freshly added queue leaves the model with blocking validation
     // errors, so save() now confirms via the shared ConfirmDialog before
@@ -350,7 +345,7 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /^design$/i }));
     await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /mock move first node/i }));
-    await user.click(screen.getAllByRole('button', { name: /^save$/i })[0]);
+    await user.click(screen.getAllByRole('button', { name: /^save model$/i })[0]);
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       graph: expect.objectContaining({
@@ -936,7 +931,7 @@ describe('Visual Designer shell', () => {
     Object.defineProperty(dropEvent, 'clientX', { value: 300 });
     Object.defineProperty(dropEvent, 'clientY', { value: 200 });
     fireEvent(canvas, dropEvent);
-    await user.click(screen.getAllByRole('button', { name: /^save$/i })[0]);
+    await user.click(screen.getAllByRole('button', { name: /^save model$/i })[0]);
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       graph: expect.objectContaining({
